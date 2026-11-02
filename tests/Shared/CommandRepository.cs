@@ -43,6 +43,25 @@ public static class CommandRepository
         repository.CountAsync(Arg.Any<Expression<Func<T, bool>>>(), Arg.Any<CancellationToken>()).Returns(call =>
             original.CountAsync(call.Arg<Expression<Func<T, bool>>>(), call.Arg<CancellationToken>()));
         repository.ReloadAsync(Arg.Any<T>(), Arg.Any<CancellationToken>()).Returns(call => original.ReloadAsync(call.Arg<T>(), call.Arg<CancellationToken>()));
+        repository.ReloadRangeAsync(Arg.Any<IReadOnlyCollection<T>>(), Arg.Any<CancellationToken>()).Returns(call => original.ReloadRangeAsync(call.Arg<IReadOnlyCollection<T>>(), call.Arg<CancellationToken>()));
+        repository.TryRefreshRangeAsync(Arg.Any<IReadOnlyCollection<T>>(), Arg.Any<CancellationToken>()).Returns(call => original.TryRefreshRangeAsync(call.Arg<IReadOnlyCollection<T>>(), call.Arg<CancellationToken>()));
         return repository;
+    }
+}
+
+public static class RepositoryProjections
+{
+    public static void FromFind<T, TResult>(IGenericRepository<T> repository, bool includes = false) where T : Entity
+    {
+        repository.ProjectAsync(Arg.Any<Expression<Func<T, bool>>>(),
+            Arg.Any<Func<IQueryable<T>, IQueryable<TResult>>>(), Arg.Any<CancellationToken>())
+            .Returns(async call =>
+            {
+                var predicate = call.Arg<Expression<Func<T, bool>>>();
+                var ct = call.Arg<CancellationToken>();
+                var rows = includes ? await repository.FindAsync(predicate, query => query, ct)
+                    : await repository.FindAsync(predicate, ct);
+                return (IReadOnlyList<TResult>)call.Arg<Func<IQueryable<T>, IQueryable<TResult>>>()(rows.AsQueryable().Where(predicate)).ToList();
+            });
     }
 }

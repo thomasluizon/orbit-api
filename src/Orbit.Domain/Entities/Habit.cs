@@ -195,6 +195,14 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         _tags.AddRange(tags);
     }
 
+    public void LoadWidgetFieldsForRead(string title, int? position, TimeOnly? dueTime, IReadOnlyList<ChecklistItem> checklistItems)
+    {
+        Title = title;
+        Position = position;
+        DueTime = dueTime;
+        ChecklistItems = checklistItems.ToList();
+    }
+
     public void LoadScheduleFieldsForRead(Habit candidate)
     {
         if (candidate.Id != Id || candidate.UserId != UserId)

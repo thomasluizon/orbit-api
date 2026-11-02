@@ -93,6 +93,51 @@ public class GenericRepository<T>(OrbitDbContext context) : IGenericRepository<T
         return true;
     }
 
+    public async Task ReloadRangeAsync(IReadOnlyCollection<T> entities, CancellationToken cancellationToken = default)
+    {
+        if (entities.Count == 0) return;
+        var ids = entities.Select(entity => entity.Id).ToArray();
+        var rows = await _dbSet.IgnoreQueryFilters().AsNoTracking().Where(entity => ids.Contains(entity.Id))
+            .ToDictionaryAsync(entity => entity.Id, cancellationToken);
+        foreach (var entity in entities)
+        {
+            var entry = context.Entry(entity);
+            if (!rows.TryGetValue(entity.Id, out var row))
+            {
+                entry.State = EntityState.Detached;
+                continue;
+            }
+            entry.CurrentValues.SetValues(row);
+            entry.OriginalValues.SetValues(row);
+            entry.State = EntityState.Unchanged;
+        }
+    }
+
+    public async Task<bool> TryRefreshRangeAsync(IReadOnlyCollection<T> entities, CancellationToken cancellationToken = default)
+    {
+        if (entities.Count == 0) return true;
+        context.ChangeTracker.DetectChanges();
+        var ids = entities.Select(entity => entity.Id).ToArray();
+        var rows = await _dbSet.AsNoTracking().Where(entity => ids.Contains(entity.Id))
+            .ToDictionaryAsync(entity => entity.Id, cancellationToken);
+        foreach (var entity in entities)
+        {
+            var entry = context.Entry(entity);
+            if (entry.State is not (EntityState.Unchanged or EntityState.Modified)
+                || !rows.TryGetValue(entity.Id, out var row)) return false;
+            if (entry.State == EntityState.Modified)
+            {
+                if (row is not ITimestamped timestamped
+                    || entry.OriginalValues.GetValue<DateTime>(nameof(ITimestamped.UpdatedAtUtc)).Ticks / 10
+                        != timestamped.UpdatedAtUtc.Ticks / 10) return false;
+                continue;
+            }
+            entry.CurrentValues.SetValues(row);
+            entry.OriginalValues.SetValues(row);
+        }
+        return true;
+    }
+
     public async Task<IReadOnlyList<T>> FindTrackedAsync(
         Expression<Func<T, bool>> predicate,
         CancellationToken cancellationToken = default)

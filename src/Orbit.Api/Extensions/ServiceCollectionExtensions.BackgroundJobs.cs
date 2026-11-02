@@ -2,6 +2,7 @@ using Hangfire;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Hangfire.PostgreSql;
 using Orbit.Application.Auth.Jobs;
+using Orbit.Application.Gamification.Jobs;
 using Orbit.Application.Marketing.Jobs;
 using Orbit.Application.Referrals.Jobs;
 using Orbit.Domain.Interfaces;
@@ -88,6 +89,7 @@ public static partial class ServiceCollectionExtensions
         });
 
         builder.Services.AddScoped<SendVerificationCodeEmailJob>();
+        builder.Services.AddScoped<SendGamificationPushJob>();
         builder.Services.AddScoped<CompleteSignupJob>();
         builder.Services.AddScoped<SendWelcomeEmailJob>();
         builder.Services.AddScoped<SendAccountDeletionCodeEmailJob>();

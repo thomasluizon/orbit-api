@@ -5,9 +5,8 @@ namespace Orbit.Infrastructure.Tests.Persistence;
 
 /// <summary>
 /// Counts the SQL reader commands EF actually sends to the database so a test can assert a query's
-/// round-trip count is invariant to row volume — the signature of an N+1 regression is a count that
-/// grows with the seed. Only the reader hooks are counted because every read the query-shape tests
-/// exercise resolves through <c>ToListAsync</c>.
+/// round-trip count is invariant to row volume. Captures reader and non-query commands, including
+/// writes that use RETURNING through the reader hooks.
 /// </summary>
 internal sealed class CountingDbCommandInterceptor : DbCommandInterceptor
 {
@@ -18,6 +17,7 @@ internal sealed class CountingDbCommandInterceptor : DbCommandInterceptor
 
     internal int CommandCount => Volatile.Read(ref _commandCount);
     internal int SelectCommandCount => Volatile.Read(ref _selectCommandCount);
+    internal int WriteCommandCount => CommandCount - SelectCommandCount;
     internal IReadOnlyList<CapturedDbCommand> Commands => _commands.ToArray();
 
     internal void Reset()
@@ -34,6 +34,23 @@ internal sealed class CountingDbCommandInterceptor : DbCommandInterceptor
         Interlocked.Increment(ref _commandCount);
         CountSelect(command);
         return base.ReaderExecuting(command, eventData, result);
+    }
+
+    public override InterceptionResult<int> NonQueryExecuting(
+        DbCommand command, CommandEventData eventData, InterceptionResult<int> result)
+    {
+        Interlocked.Increment(ref _commandCount);
+        CountSelect(command);
+        return base.NonQueryExecuting(command, eventData, result);
+    }
+
+    public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(
+        DbCommand command, CommandEventData eventData, InterceptionResult<int> result,
+        CancellationToken cancellationToken = default)
+    {
+        Interlocked.Increment(ref _commandCount);
+        CountSelect(command);
+        return base.NonQueryExecutingAsync(command, eventData, result, cancellationToken);
     }
 
     public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(

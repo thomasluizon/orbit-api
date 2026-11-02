@@ -22,6 +22,8 @@ public record GetHabitsCompletionTrendsQuery(
 /// Loads habits with their in-range logs in one batched query (no N+1) and aggregates in memory.
 /// Pro-gated like the insights surfaces.
 /// </summary>
+public sealed record HabitCompletionDates(Guid Id, IReadOnlyList<DateOnly> Dates);
+
 public class GetHabitsCompletionTrendsQueryHandler(
     IGenericRepository<User> userRepository,
     IGenericRepository<Habit> habitRepository,
@@ -38,19 +40,14 @@ public class GetHabitsCompletionTrendsQueryHandler(
         if (!unlocked)
             return Result.PayGateFailure<HabitsCompletionTrendsResponse>("Insights are a Pro feature. Upgrade to unlock!");
 
-        var habits = await habitRepository.FindAsync(
-            h => h.UserId == request.UserId && !h.IsBadHabit,
-            q => q.Include(h => h.Logs.Where(l => l.Date >= request.DateFrom && l.Date <= request.DateTo)),
-            cancellationToken);
-
-        var topLevelHabits = habits.Where(h => h.ParentHabitId == null).ToList();
-        var activeHabitCount = topLevelHabits.Count;
-
-        var completionsByDate = topLevelHabits
-            .SelectMany(h => h.Logs)
-            .Where(l => l.Value > 0)
-            .GroupBy(l => l.Date)
-            .ToDictionary(g => g.Key, g => g.Count());
+        var habits = await habitRepository.ProjectAsync(
+            h => h.UserId == request.UserId && !h.IsBadHabit && h.ParentHabitId == null,
+            query => query.Select(h => new HabitCompletionDates(h.Id,
+                h.Logs.Where(l => l.Date >= request.DateFrom && l.Date <= request.DateTo && l.Value > 0)
+                    .Select(l => l.Date).ToList())).AsSplitQuery(), cancellationToken);
+        var activeHabitCount = habits.Count;
+        var completionsByDate = habits.SelectMany(h => h.Dates).GroupBy(date => date)
+            .ToDictionary(group => group.Key, group => group.Count());
 
         var points = new List<HabitsCompletionTrendPoint>();
         for (var date = request.DateFrom; date <= request.DateTo; date = date.AddDays(1))

@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using Hangfire;
+using Orbit.Application.Gamification.Jobs;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
 using Orbit.Application.Gamification.Models;
@@ -25,7 +27,7 @@ public record GamificationRepositories(
 
 public partial class GamificationService(
     GamificationRepositories repos,
-    IPushNotificationService pushService,
+    IBackgroundJobClient backgroundJobs,
     IUserDateService userDateService,
     IXpAwarder xpAwarder,
     IUnitOfWork unitOfWork,
@@ -69,7 +71,7 @@ public partial class GamificationService(
                 return outcome.Results;
 
             await unitOfWork.SaveChangesAsync(ct);
-            await FlushPushesAsync(pushes, ct);
+            EnqueuePushes(pushes);
             return outcome.Results;
         }, ct, IsRetryableGamificationConflict);
     }
@@ -313,7 +315,7 @@ public partial class GamificationService(
                 return false;
 
             await unitOfWork.SaveChangesAsync(ct);
-            await FlushPushesAsync(pushes, ct);
+            EnqueuePushes(pushes);
             return true;
         }, ct, IsRetryableGamificationConflict);
     }
@@ -386,7 +388,7 @@ public partial class GamificationService(
                 await unitOfWork.AcquireAdvisoryLockAsync(ClosedMonthRecapLock.ForUser(userId), transactionCt);
                 return await ComputeFoundingReconciliationAsync(userId, pushes, transactionCt);
             }, ct);
-            await FlushPushesAsync(pushes, ct);
+            EnqueuePushes(pushes);
             return granted;
         }, ct, IsRetryableGamificationConflict);
     }
@@ -458,7 +460,7 @@ public partial class GamificationService(
 
             await unitOfWork.SaveChangesAsync(ct);
 
-            await FlushPushesAsync(pushes, ct);
+            EnqueuePushes(pushes);
             return granted;
         }, ct, IsRetryableGamificationConflict);
     }
@@ -519,7 +521,7 @@ public partial class GamificationService(
             var shouldSave = await ComputeGamificationEventAsync(userId, checkAchievements, pushes, ct);
             if (!shouldSave) return false;
             await unitOfWork.SaveChangesAsync(ct);
-            await FlushPushesAsync(pushes, ct);
+            EnqueuePushes(pushes);
             return true;
         }, ct, IsRetryableGamificationConflict);
     }
@@ -644,21 +646,22 @@ public partial class GamificationService(
         exception is DbUpdateConcurrencyException
         || exception is DbUpdateException updateException && DbUniqueViolation.IsUniqueViolation(updateException);
 
-    private async Task FlushPushesAsync(IReadOnlyList<PendingPush> pushes, CancellationToken ct)
+    private void EnqueuePushes(IReadOnlyList<PendingPush> pushes)
     {
         foreach (var push in pushes)
-        {
-            try
+            unitOfWork.AfterCommit(() =>
             {
-                await pushService.SendToUserAsync(push.UserId, push.Title, push.Body, push.Url, ct);
-            }
-            catch (Exception ex)
-            {
-                LogPushNotificationFailed(logger, ex, push.UserId);
-            }
-        }
+                try
+                {
+                    backgroundJobs.Enqueue<SendGamificationPushJob>(job => job.ExecuteAsync(push.UserId, push.Title, push.Body, push.Url));
+                }
+                catch (Exception exception)
+                {
+                    LogPushNotificationFailed(logger, exception, push.UserId);
+                }
+            });
     }
 
-    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Push notification failed for user {UserId}")]
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Failed to enqueue gamification push for user {UserId}")]
     private static partial void LogPushNotificationFailed(ILogger logger, Exception ex, Guid userId);
 }

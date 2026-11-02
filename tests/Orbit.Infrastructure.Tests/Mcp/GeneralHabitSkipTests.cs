@@ -49,6 +49,7 @@ public sealed class GeneralHabitSkipTests : IDisposable
         _user = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, _userId.ToString())], "Test"));
         _dates.GetUserTodayAsync(_userId, Arg.Any<CancellationToken>()).Returns(Today);
         _repository.TryRefreshAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>()).Returns(true);
+        _repository.TryRefreshRangeAsync(Arg.Any<IReadOnlyCollection<Habit>>(), Arg.Any<CancellationToken>()).Returns(true);
         _repository.FindOneTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>())
             .Returns(call => _habits.SingleOrDefault(call.Arg<Expression<Func<Habit, bool>>>().Compile()));

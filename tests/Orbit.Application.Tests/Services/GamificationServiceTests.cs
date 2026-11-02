@@ -1,5 +1,8 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Hangfire;
+using Hangfire.Common;
+using Hangfire.States;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
@@ -30,7 +33,8 @@ public class GamificationServiceTests
     private readonly IGenericRepository<UserAchievement> _achievementRepo = Substitute.For<IGenericRepository<UserAchievement>>();
     private readonly IGenericRepository<Notification> _notificationRepo = Substitute.For<IGenericRepository<Notification>>();
     private readonly IGenericRepository<XpAwardLog> _xpAwardLogRepo = Substitute.For<IGenericRepository<XpAwardLog>>();
-    private readonly IPushNotificationService _pushService = Substitute.For<IPushNotificationService>();
+    private readonly IBackgroundJobClient _backgroundJobs = Substitute.For<IBackgroundJobClient>();
+    private readonly List<Job> _pushJobs = [];
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly IFeatureFlagService _featureFlagService = Substitute.For<IFeatureFlagService>();
@@ -48,8 +52,10 @@ public class GamificationServiceTests
             _userRepo, _habitRepo, _habitLogRepo, _goalRepo, _achievementRepo, _notificationRepo, _xpAwardLogRepo,
             _foundingAchievementReader);
         _snapshotStore = new HabitScheduleSnapshotStore(_habitRepo);
+        _backgroundJobs.Create(Arg.Do<Job>(job => _pushJobs.Add(job)), Arg.Any<IState>());
+        _unitOfWork.When(unit => unit.AfterCommit(Arg.Any<Action>())).Do(call => call.Arg<Action>()());
         _sut = new GamificationService(
-            repos, _pushService, _userDateService, new XpAwarder(_xpAwardLogRepo), _unitOfWork,
+            repos, _backgroundJobs, _userDateService, new XpAwarder(_xpAwardLogRepo), _unitOfWork,
             _featureFlagService, Substitute.For<ILogger<GamificationService>>(),
             _snapshotStore);
 
@@ -1091,9 +1097,8 @@ public class GamificationServiceTests
             ? $"Você chegou ao nível {user.Level}"
             : $"You reached level {user.Level}"));
         foreach (var notification in notifications)
-            await _pushService.Received(1).SendToUserAsync(
-                UserId, notification.Title, notification.Body,
-                NotificationUrls.Progress, Arg.Any<CancellationToken>());
+            _pushJobs.Should().ContainSingle(job => (Guid)job.Args[0] == UserId && (string)job.Args[1] == notification.Title
+                && (string)job.Args[2] == notification.Body && (string)job.Args[3] == NotificationUrls.Progress);
     }
 
     [Fact]
@@ -1107,12 +1112,8 @@ public class GamificationServiceTests
 
         await _sut.ProcessHabitCreated(UserId);
 
-        await _pushService.Received(1).SendToUserAsync(
-            UserId,
-            "New achievement: first Orbit",
-            "Create your first habit (+25 XP)",
-            NotificationUrls.Progress,
-            Arg.Any<CancellationToken>());
+        _pushJobs.Should().ContainSingle(job => (Guid)job.Args[0] == UserId && (string)job.Args[1] == "New achievement: first Orbit"
+            && (string)job.Args[2] == "Create your first habit (+25 XP)" && (string)job.Args[3] == NotificationUrls.Progress);
     }
 
     [Theory]
@@ -1134,8 +1135,8 @@ public class GamificationServiceTests
         await _notificationRepo.Received(1).AddAsync(
             Arg.Is<Notification>(n => n.Title == title && n.Body == body && n.Url == NotificationUrls.Progress),
             Arg.Any<CancellationToken>());
-        await _pushService.Received(1).SendToUserAsync(
-            UserId, title, body, NotificationUrls.Progress, Arg.Any<CancellationToken>());
+        _pushJobs.Should().ContainSingle(job => (Guid)job.Args[0] == UserId && (string)job.Args[1] == title
+            && (string)job.Args[2] == body && (string)job.Args[3] == NotificationUrls.Progress);
     }
 
     [Fact]
@@ -1160,12 +1161,7 @@ public class GamificationServiceTests
 
         saveAttempts.Should().Be(2);
         _unitOfWork.Received(1).ResetTracking();
-        await _pushService.Received(1).SendToUserAsync(
-            UserId,
-            Arg.Is<string>(s => s.Contains("New achievement")),
-            Arg.Any<string>(),
-            Arg.Any<string?>(),
-            Arg.Any<CancellationToken>());
+        _pushJobs.Should().ContainSingle(job => ((string)job.Args[1]).Contains("New achievement"));
     }
 
     [Fact]
@@ -1183,12 +1179,7 @@ public class GamificationServiceTests
 
         await act.Should().ThrowAsync<DbUpdateConcurrencyException>();
         _unitOfWork.Received(2).ResetTracking();
-        await _pushService.DidNotReceive().SendToUserAsync(
-            Arg.Any<Guid>(),
-            Arg.Any<string>(),
-            Arg.Any<string>(),
-            Arg.Any<string?>(),
-            Arg.Any<CancellationToken>());
+        _pushJobs.Should().BeEmpty();
     }
 
     [Fact]
@@ -1535,12 +1526,7 @@ public class GamificationServiceTests
             UserId,
             Arg.Any<CancellationToken>());
         _unitOfWork.Received(1).ResetTracking();
-        await _pushService.DidNotReceive().SendToUserAsync(
-            Arg.Any<Guid>(),
-            Arg.Any<string>(),
-            Arg.Any<string>(),
-            Arg.Any<string?>(),
-            Arg.Any<CancellationToken>());
+        _pushJobs.Should().BeEmpty();
     }
 
     [Fact]
@@ -1645,11 +1631,6 @@ public class GamificationServiceTests
         persistedWinnerUser.TotalXp.Should().Be(0);
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
         _unitOfWork.Received(1).ResetTracking();
-        await _pushService.DidNotReceive().SendToUserAsync(
-            Arg.Any<Guid>(),
-            Arg.Any<string>(),
-            Arg.Any<string>(),
-            Arg.Any<string?>(),
-            Arg.Any<CancellationToken>());
+        _pushJobs.Should().BeEmpty();
     }
 }

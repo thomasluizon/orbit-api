@@ -20,6 +20,9 @@ public record GetHabitFullDetailQuery(
     Guid UserId,
     Guid HabitId) : IRequest<Result<HabitFullDetailResponse>>;
 
+public sealed record HabitFullDetailLogReadRow(Guid HabitId, DateOnly Date, decimal Value, bool IsDeleted,
+    Guid? ResponseId, DateTime? ResponseCreatedAtUtc, DateTime? TakenAtUtc, DateTime? ReminderAtUtc);
+
 public class GetHabitFullDetailQueryHandler(
     IGenericRepository<Habit> habitRepository,
     IGenericRepository<HabitLog> habitLogRepository,
@@ -61,9 +64,14 @@ public class GetHabitFullDetailQueryHandler(
             userToday,
             user.WeekStartDay,
             descendantLogsByHabitId);
-        var allRootLogs = await habitLogRepository.FindAsync(
-            l => l.HabitId == request.HabitId,
-            cancellationToken);
+        var cutoff = userToday.AddDays(-DefaultLookbackDays);
+        var allRootLogs = await habitLogRepository.ProjectAsync(
+            log => log.HabitId == request.HabitId,
+            query => query.Select(log => new HabitFullDetailLogReadRow(log.HabitId, log.Date, log.Value, log.IsDeleted,
+                log.Date >= cutoff ? log.Id : (Guid?)null,
+                log.Date >= cutoff ? log.CreatedAtUtc : (DateTime?)null,
+                log.Date >= cutoff ? log.TakenAtUtc : null,
+                log.Date >= cutoff ? log.ReminderAtUtc : null)), cancellationToken);
         var parentTitle = habits.FirstOrDefault(h => h.Id == habit.ParentHabitId)?.Title;
         var detail = new HabitDetailResponse(
             habit.Id, habit.Title, habit.Description,
@@ -89,19 +97,17 @@ public class GetHabitFullDetailQueryHandler(
             ParentHabitId: habit.ParentHabitId,
             ParentTitle: parentTitle);
 
-        var metrics = HabitMetricsCalculator.Calculate(
+        var metrics = HabitMetricsCalculator.CalculateProjected(
             habit,
-            allRootLogs,
+            allRootLogs.Select(log => new HabitMetricLog(log.HabitId, log.Date, log.Value, log.IsDeleted)).ToList(),
             userToday,
             user.WeekStartDay,
             userTimeZone);
 
-        var cutoff = userToday.AddDays(-DefaultLookbackDays);
-        var logs = allRootLogs
-            .Where(l => l.Date >= cutoff)
-            .OrderByDescending(l => l.Date)
-            .Select(l => new HabitLogResponse(l.Id, l.Date, l.Value, l.CreatedAtUtc, l.TakenAtUtc, l.ReminderAtUtc))
-            .ToList();
+        var logs = allRootLogs.Where(log => log.ResponseId.HasValue && log.ResponseCreatedAtUtc.HasValue)
+            .OrderByDescending(log => log.Date)
+            .Select(log => new HabitLogResponse(log.ResponseId.GetValueOrDefault(), log.Date, log.Value,
+                log.ResponseCreatedAtUtc.GetValueOrDefault(), log.TakenAtUtc, log.ReminderAtUtc)).ToList();
 
         detail = await RepeatReminderResponseEnricher.EnrichAsync(detail, request.UserId, repeatReminderReader, cancellationToken);
         return Result.Success(new HabitFullDetailResponse(detail, metrics, logs));

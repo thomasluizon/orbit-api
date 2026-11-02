@@ -10,6 +10,8 @@ public record GetAllHabitLogsQuery(
     DateOnly DateFrom,
     DateOnly DateTo) : IRequest<Result<Dictionary<Guid, List<HabitLogResponse>>>>;
 
+public record HabitLogReadRow(Guid HabitId, HabitLogResponse Log);
+
 public class GetAllHabitLogsQueryHandler(
     IGenericRepository<Habit> habitRepository,
     IGenericRepository<HabitLog> logRepository) : IRequestHandler<GetAllHabitLogsQuery, Result<Dictionary<Guid, List<HabitLogResponse>>>>
@@ -17,22 +19,16 @@ public class GetAllHabitLogsQueryHandler(
     public async Task<Result<Dictionary<Guid, List<HabitLogResponse>>>> Handle(
         GetAllHabitLogsQuery request, CancellationToken cancellationToken)
     {
-        var habits = await habitRepository.FindAsync(
+        var habitIds = await habitRepository.ProjectAsync(
             h => h.UserId == request.UserId && h.ParentHabitId == null,
-            cancellationToken);
-
-        var habitIds = habits.Select(h => h.Id).ToHashSet();
-
-        var logs = await logRepository.FindAsync(
+            query => query.Select(h => h.Id), cancellationToken);
+        var logs = await logRepository.ProjectAsync(
             l => habitIds.Contains(l.HabitId) && l.Date >= request.DateFrom && l.Date <= request.DateTo,
+            query => query.OrderByDescending(l => l.Date).Select(l => new HabitLogReadRow(l.HabitId,
+                new HabitLogResponse(l.Id, l.Date, l.Value, l.CreatedAtUtc, l.TakenAtUtc, l.ReminderAtUtc))),
             cancellationToken);
-
-        var grouped = logs
-            .OrderByDescending(l => l.Date)
-            .GroupBy(l => l.HabitId)
-            .ToDictionary(
-                g => g.Key,
-                g => g.Select(l => new HabitLogResponse(l.Id, l.Date, l.Value, l.CreatedAtUtc, l.TakenAtUtc, l.ReminderAtUtc)).ToList());
+        var grouped = logs.GroupBy(row => row.HabitId)
+            .ToDictionary(group => group.Key, group => group.Select(row => row.Log).ToList());
 
         return Result.Success(grouped);
     }

@@ -38,4 +38,22 @@ public static class HabitReminderInbox
         foreach (var row in rows)
             row.MarkAsRead();
     }
+
+    public static async Task MarkReadBatchAsync(IGenericRepository<Notification> notifications,
+        Guid userId, IEnumerable<(Guid HabitId, DateOnly Date)> completions, CancellationToken ct)
+    {
+        var datesByHabit = completions.GroupBy(completion => completion.HabitId)
+            .ToDictionary(group => group.Key, group => group.Select(completion => completion.Date).ToHashSet());
+        if (datesByHabit.Count == 0) return;
+        var ids = datesByHabit.Keys.ToArray();
+        var rows = await notifications.FindTrackedAsync(n => n.UserId == userId && n.HabitId != null
+            && ids.Contains(n.HabitId.Value) && !n.IsRead && n.DedupeKey != null
+            && n.DedupeKey.StartsWith(ReminderPrefix), ct);
+        foreach (var row in rows)
+        {
+            if (row.HabitId is not { } habitId || !datesByHabit.TryGetValue(habitId, out var dates)) continue;
+            if (dates.Any(date => row.ReminderDate == date
+                || row.ReminderDate is null && row.DedupeKey == Key(habitId, date))) row.MarkAsRead();
+        }
+    }
 }

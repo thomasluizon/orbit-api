@@ -698,7 +698,7 @@ public class BulkLogHabitsCommandHandlerTests
             new GamificationRepositories(
                 userRepo, habitRepo, habitLogRepo, goalRepo, achievementRepo, notificationRepo, xpAwardRepo,
                 Substitute.For<IFoundingAchievementReader>()),
-            Substitute.For<IPushNotificationService>(),
+            Substitute.For<Hangfire.IBackgroundJobClient>(),
             userDateService,
             new XpAwarder(xpAwardRepo),
             unitOfWork,

@@ -198,6 +198,7 @@ public class ClosedMonthRecapResetRaceTests
         private readonly AsyncLocal<TransactionState?> _transaction = new();
         private int _lockRequestCount;
 
+        public void AfterCommit(Action callback) => callback();
         public bool HasActiveTransaction => _transaction.Value is not null;
 
         public TaskCompletionSource<bool> SecondLockRequested { get; } =
