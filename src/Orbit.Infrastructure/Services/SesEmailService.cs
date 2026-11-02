@@ -98,6 +98,7 @@ public partial class SesEmailService(
         catch (Exception ex)
         {
             LogEmailSendException(logger, ex);
+            throw;
         }
     }
 

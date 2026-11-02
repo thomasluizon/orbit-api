@@ -1272,10 +1272,6 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.HasIndex("ReminderEnabled", "IsCompleted")
-                        .HasDatabaseName("IX_Habits_Reminder")
-                        .HasFilter("\"ReminderEnabled\" AND NOT \"IsCompleted\"");
-
                     b.HasIndex("UserId", "GoogleEventId")
                         .IsUnique()
                         .HasFilter("\"GoogleEventId\" IS NOT NULL AND \"IsDeleted\" = FALSE");

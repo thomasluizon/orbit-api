@@ -24,6 +24,20 @@ internal sealed class GoogleCalendarApi(TimeSpan httpTimeout) : IGoogleCalendarA
         _services.Clear();
     }
 
+    private readonly HttpMessageHandler? _handler;
+
+    internal GoogleCalendarApi(TimeSpan httpTimeout, HttpMessageHandler handler) : this(httpTimeout) => _handler = handler;
+
+    private sealed class HandlerFactory(HttpMessageHandler handler) : Google.Apis.Http.HttpClientFactory
+    {
+        protected override HttpMessageHandler CreateHandler(Google.Apis.Http.CreateHttpClientArgs args) =>
+            new BorrowedHandler(handler);
+    }
+
+    private sealed class BorrowedHandler(HttpMessageHandler handler) : DelegatingHandler(handler)
+    {
+        protected override void Dispose(bool disposing) { }
+    }
 
     public async Task<IReadOnlyList<CalendarListEntry>> ListCalendarsAsync(string accessToken, CancellationToken ct)
     {
@@ -98,6 +112,7 @@ internal sealed class GoogleCalendarApi(TimeSpan httpTimeout) : IGoogleCalendarA
         var service = new CalendarService(new BaseClientService.Initializer
         {
             HttpClientInitializer = credential,
+            HttpClientFactory = _handler is null ? null : new HandlerFactory(_handler),
             ApplicationName = "Orbit"
         });
         service.HttpClient.Timeout = httpTimeout;

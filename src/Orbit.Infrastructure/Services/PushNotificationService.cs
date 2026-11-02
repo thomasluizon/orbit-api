@@ -1,3 +1,6 @@
+using System.Collections.Concurrent;
+using System.Linq.Expressions;
+using Orbit.Domain.Models;
 using System.Net;
 using System.Text;
 using FirebaseAdmin.Messaging;
@@ -20,9 +23,22 @@ public partial class PushNotificationService(
     ILogger<PushNotificationService> logger,
     HttpClient httpClient,
     IApnsPushSender apnsSender,
-    IWnsPushSender wnsSender) : IPushNotificationService
+    IWnsPushSender wnsSender,
+    IOptions<PushDeliverySettings>? deliverySettings = null) : IPushNotificationService, IDisposable
 {
-    private readonly VapidSettings _settings = vapidSettings.Value;
+    private readonly object _authenticationGate = new();
+    private readonly PushDeliverySettings _deliverySettings = deliverySettings?.Value ?? new();
+    private readonly Lazy<PushServiceClient> _webPush = new(() => new PushServiceClient(httpClient)
+    {
+        AutoRetryAfter = false,
+        DefaultAuthentication = new VapidAuthentication(vapidSettings.Value.PublicKey, vapidSettings.Value.PrivateKey)
+        {
+            Subject = vapidSettings.Value.Subject
+        }
+    });
+
+    private TimeSpan AttemptTimeout => TimeSpan.FromSeconds(Math.Clamp(_deliverySettings.AttemptTimeoutSeconds, 1, 10));
+    private int DeliveryConcurrency => Math.Clamp(_deliverySettings.Concurrency, 1, 32);
     internal const string RepeatReminderCategoryId = "orbit-repeat-reminder";
 
     public async Task SendToUserAsync(
@@ -45,190 +61,152 @@ public partial class PushNotificationService(
         IReadOnlyDictionary<string, string> data, string? url = null, CancellationToken cancellationToken = default) =>
         await SendCoreAsync(userId, title, body, url, cancellationToken, data);
 
-    private async Task<bool> SendCoreAsync(Guid userId, string title, string body, string? url,
-        CancellationToken cancellationToken, IReadOnlyDictionary<string, string>? data)
+    public async Task SendManyAsync(IReadOnlyList<PushDelivery> deliveries, CancellationToken cancellationToken = default) =>
+        await SendManyCoreAsync(deliveries, cancellationToken);
+
+    private Task<bool> SendCoreAsync(Guid userId, string title, string body, string? url,
+        CancellationToken cancellationToken, IReadOnlyDictionary<string, string>? data) =>
+        SendManyCoreAsync([new(userId, title, body, url, data)], cancellationToken);
+
+    private async Task<bool> SendManyCoreAsync(IReadOnlyList<PushDelivery> deliveries, CancellationToken ct)
     {
-        var subscriptions = await dbContext.PushSubscriptions
-            .AsNoTracking()
-            .Where(s => s.UserId == userId)
-            .ToListAsync(cancellationToken);
-
-        if (subscriptions.Count == 0) return false;
-
-        var safeTitle = SanitizeForDelivery(title, MaxTitleBytes);
-        var safeBody = SanitizeForDelivery(body, MaxBodyBytes);
-
-        var fcmSubs = subscriptions.Where(s => s.Transport == PushTransport.Fcm).ToList();
-        var webPushSubs = subscriptions.Where(s => s.Transport == PushTransport.WebPush).ToList();
-
-        var staleSubscriptions = new List<Domain.Entities.PushSubscription>();
-        var delivered = false;
-
-        if (fcmSubs.Count > 0)
-            delivered |= await SendFcm(fcmSubs, safeTitle, safeBody, url, staleSubscriptions, cancellationToken, data);
-
-        foreach (var sub in subscriptions.Where(s => s.Transport == PushTransport.Apns))
+        if (deliveries.Count == 0) return false;
+        var ids = deliveries.Select(d => d.UserId).Distinct().ToArray();
+        var subscriptions = (await dbContext.PushSubscriptions.AsNoTracking()
+            .Where(s => ids.Contains(s.UserId)).ToListAsync(ct)).ToLookup(s => s.UserId);
+        var sends = deliveries.SelectMany(d => subscriptions[d.UserId].Select(s => new PendingPush(s,
+            d with { Title = SanitizeForDelivery(d.Title, MaxTitleBytes), Body = SanitizeForDelivery(d.Body, MaxBodyBytes) }))).ToList();
+        var stale = new ConcurrentBag<Domain.Entities.PushSubscription>();
+        var delivered = 0;
+        var fcmTask = SendFcm(sends.Where(s => s.Subscription.Transport == PushTransport.Fcm).ToList(), stale, ct);
+        await Parallel.ForEachAsync(sends.Where(s => s.Subscription.Transport != PushTransport.Fcm),
+            new ParallelOptions { MaxDegreeOfParallelism = DeliveryConcurrency, CancellationToken = ct }, async (send, token) =>
         {
-            var outcome = await apnsSender.SendAsync(sub.Endpoint, safeTitle, safeBody, url, cancellationToken, sub.ApnsTopic, data);
-            if (outcome == ApnsDeliveryOutcome.Stale)
-                staleSubscriptions.Add(sub);
-            delivered |= outcome == ApnsDeliveryOutcome.Delivered;
-        }
-
-        foreach (var sub in subscriptions.Where(s => s.Transport == PushTransport.Wns))
-        {
-            var outcome = await wnsSender.SendAsync(sub.Endpoint, CreateWebPushPayload(safeTitle, safeBody, url, data), cancellationToken);
-            if (outcome == WnsDeliveryOutcome.Stale)
-                staleSubscriptions.Add(sub);
-            delivered |= outcome == WnsDeliveryOutcome.Delivered;
-        }
-
-        if (webPushSubs.Count > 0)
-            delivered |= await SendWebPush(webPushSubs, safeTitle, safeBody, url, staleSubscriptions, cancellationToken, data);
-
-        foreach (var stale in staleSubscriptions)
-        {
-            await dbContext.PushSubscriptions
-                .Where(s => s.Id == stale.Id && s.UserId == stale.UserId && s.Endpoint == stale.Endpoint
-                    && s.P256dh == stale.P256dh && s.Auth == stale.Auth && s.ApnsTopic == stale.ApnsTopic
-                    && s.DeviceId == stale.DeviceId && s.CreatedAtUtc == stale.CreatedAtUtc)
-                .ExecuteDeleteAsync(cancellationToken);
-        }
-
-        return delivered;
-    }
-
-    private async Task<bool> SendFcm(
-        List<Domain.Entities.PushSubscription> subs,
-        string title, string body, string? url,
-        List<Domain.Entities.PushSubscription> staleSubscriptions,
-        CancellationToken ct, IReadOnlyDictionary<string, string>? data)
-    {
-        if (FirebaseMessaging.DefaultInstance is null)
-        {
-            if (logger.IsEnabled(LogLevel.Warning))
-                LogFcmNotInitialized(logger, subs.Count);
-            return false;
-        }
-
-        const int FcmBatchSize = 500;
-        var delivered = false;
-        for (int offset = 0; offset < subs.Count; offset += FcmBatchSize)
-        {
-            var chunk = subs.Skip(offset).Take(FcmBatchSize).ToList();
-            var messages = chunk
-                .Select(s => CreateFcmMessage(s.Endpoint, title, body, url, data))
-                .ToList();
-
-            BatchResponse response;
+            var sub = send.Subscription;
+            var d = send.Delivery;
+            using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);
+            deadline.CancelAfter(AttemptTimeout);
             try
             {
-                response = await FirebaseMessaging.DefaultInstance.SendEachAsync(messages, ct);
+                bool success;
+                switch (sub.Transport)
+                {
+                    case PushTransport.Apns:
+                        var apns = await apnsSender.SendAsync(sub.Endpoint, d.Title, d.Body, d.Url, deadline.Token, sub.ApnsTopic, d.Data);
+                        if (apns == ApnsDeliveryOutcome.Stale) stale.Add(sub);
+                        success = apns == ApnsDeliveryOutcome.Delivered;
+                        break;
+                    case PushTransport.Wns:
+                        var wns = await wnsSender.SendAsync(sub.Endpoint, CreateWebPushPayload(d.Title, d.Body, d.Url, d.Data), deadline.Token);
+                        if (wns == WnsDeliveryOutcome.Stale) stale.Add(sub);
+                        success = wns == WnsDeliveryOutcome.Delivered;
+                        break;
+                    default:
+                        success = await SendWebPushToSubscription(_webPush.Value, sub,
+                            new PushMessage(CreateWebPushPayload(d.Title, d.Body, d.Url, d.Data)) { TimeToLive = 3600 }, stale, token);
+                        break;
+                }
+                if (success) Interlocked.Exchange(ref delivered, 1);
             }
+            catch (Exception ex) when (!token.IsCancellationRequested)
+            {
+                LogWebPushFailedGeneric(logger, ex, sub.Endpoint);
+            }
+        });
+        if (await fcmTask) delivered = 1;
+        foreach (var group in stale.DistinctBy(s => s.Id).GroupBy(s => s.UserId))
+        {
+            Expression<Func<Domain.Entities.PushSubscription, bool>> guard = s => false;
+            foreach (var entry in group)
+            {
+                var row = entry;
+                Expression<Func<Domain.Entities.PushSubscription, bool>> matches = s =>
+                    s.Id == row.Id && s.UserId == row.UserId && s.Endpoint == row.Endpoint
+                    && s.P256dh == row.P256dh && s.Auth == row.Auth && s.ApnsTopic == row.ApnsTopic
+                    && s.DeviceId == row.DeviceId && s.CreatedAtUtc == row.CreatedAtUtc;
+                var body = new ReplaceParameter(matches.Parameters[0], guard.Parameters[0]).Visit(matches.Body)!;
+                guard = Expression.Lambda<Func<Domain.Entities.PushSubscription, bool>>(Expression.OrElse(guard.Body, body), guard.Parameters);
+            }
+            await dbContext.PushSubscriptions.Where(guard).ExecuteDeleteAsync(ct);
+        }
+        return delivered != 0;
+    }
+
+    private sealed class ReplaceParameter(ParameterExpression source, ParameterExpression target) : ExpressionVisitor
+    {
+        protected override Expression VisitParameter(ParameterExpression node) => node == source ? target : base.VisitParameter(node);
+    }
+
+    private sealed record PendingPush(Domain.Entities.PushSubscription Subscription, PushDelivery Delivery);
+
+    internal virtual Task<BatchResponse> SendFcmBatchAsync(IReadOnlyList<Message> messages, CancellationToken ct) =>
+        FirebaseMessaging.DefaultInstance!.SendEachAsync(messages, ct);
+
+    private async Task<bool> SendFcm(List<PendingPush> sends,
+        ConcurrentBag<Domain.Entities.PushSubscription> stale, CancellationToken ct)
+    {
+        if (sends.Count == 0) return false;
+        var messaging = FirebaseMessaging.DefaultInstance;
+        if (messaging is null)
+        {
+            if (logger.IsEnabled(LogLevel.Warning)) LogFcmNotInitialized(logger, sends.Count);
+            return false;
+        }
+        var delivered = 0;
+        foreach (var chunk in sends.Chunk(500))
+        {
+            try
+            {
+                var response = await SendFcmBatchAsync(chunk.Select(s => CreateFcmMessage(s.Subscription.Endpoint,
+                    s.Delivery.Title, s.Delivery.Body, s.Delivery.Url, s.Delivery.Data)).ToList(), ct);
+                ct.ThrowIfCancellationRequested();
+                for (var i = 0; i < response.Responses.Count; i++)
+                {
+                    var result = response.Responses[i];
+                    if (result.IsSuccess) delivered = 1;
+                    else RecordFcmFailure(chunk[i].Subscription, result.Exception, stale);
+                }
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
             catch (Exception ex)
             {
-                if (logger.IsEnabled(LogLevel.Warning))
-                    LogFcmPushFailed(logger, ex, "batch");
-                foreach (var sub in chunk)
-                    delivered |= await SendFcmToSubscription(sub, title, body, url, staleSubscriptions, ct, data);
-                continue;
+                LogFcmPushFailed(logger, ex, "batch");
+                await Parallel.ForEachAsync(chunk,
+                    new ParallelOptions { MaxDegreeOfParallelism = DeliveryConcurrency, CancellationToken = ct }, async (send, token) =>
+                {
+                    try
+                    {
+                        var d = send.Delivery;
+                        await messaging.SendAsync(CreateFcmMessage(send.Subscription.Endpoint, d.Title, d.Body, d.Url, d.Data), token);
+                        Interlocked.Exchange(ref delivered, 1);
+                    }
+                    catch (Exception failure) when (!token.IsCancellationRequested)
+                    {
+                        RecordFcmFailure(send.Subscription, failure, stale);
+                    }
+                });
             }
-
-            delivered |= RecordBatchOutcomes(response, chunk, staleSubscriptions);
         }
-
-        return delivered;
+        return delivered != 0;
     }
 
-    private bool RecordBatchOutcomes(
-        BatchResponse response,
-        List<Domain.Entities.PushSubscription> chunk,
-        List<Domain.Entities.PushSubscription> staleSubscriptions)
+    private void RecordFcmFailure(Domain.Entities.PushSubscription sub, Exception? failure,
+        ConcurrentBag<Domain.Entities.PushSubscription> stale)
     {
-        var delivered = false;
-        for (int i = 0; i < response.Responses.Count; i++)
+        if (failure is FirebaseMessagingException fme && IsStaleFcmError(fme.MessagingErrorCode))
         {
-            var resp = response.Responses[i];
-            var sub = chunk[i];
-            var tokenPreview = sub.Endpoint[..Math.Min(20, sub.Endpoint.Length)] + "...";
-            if (resp.IsSuccess)
-            {
-                delivered = true;
-                continue;
-            }
-
-            if (resp.Exception is FirebaseMessagingException fme && IsStaleFcmError(fme.MessagingErrorCode))
-            {
-                if (logger.IsEnabled(LogLevel.Debug))
-                    LogFcmTokenStale(logger, tokenPreview);
-                staleSubscriptions.Add(sub);
-            }
-            else if (resp.Exception is not null && logger.IsEnabled(LogLevel.Warning))
-            {
-                LogFcmPushFailed(logger, resp.Exception, tokenPreview);
-            }
+            stale.Add(sub);
+            if (logger.IsEnabled(LogLevel.Debug)) LogFcmTokenStale(logger, sub.Endpoint[..Math.Min(20, sub.Endpoint.Length)]);
         }
-
-        return delivered;
-    }
-
-    private async Task<bool> SendFcmToSubscription(
-        Domain.Entities.PushSubscription sub,
-        string title, string body, string? url,
-        List<Domain.Entities.PushSubscription> staleSubscriptions,
-        CancellationToken ct, IReadOnlyDictionary<string, string>? data)
-    {
-        var tokenPreview = sub.Endpoint[..Math.Min(20, sub.Endpoint.Length)] + "...";
-        try
-        {
-            var message = CreateFcmMessage(sub.Endpoint, title, body, url, data);
-            await FirebaseMessaging.DefaultInstance!.SendAsync(message, ct);
-            if (logger.IsEnabled(LogLevel.Debug))
-                LogFcmPushSent(logger, tokenPreview);
-            return true;
-        }
-        catch (FirebaseMessagingException ex) when (IsStaleFcmError(ex.MessagingErrorCode))
-        {
-            if (logger.IsEnabled(LogLevel.Debug))
-                LogFcmTokenStale(logger, tokenPreview);
-            staleSubscriptions.Add(sub);
-            return false;
-        }
-        catch (Exception ex)
-        {
-            if (logger.IsEnabled(LogLevel.Warning))
-                LogFcmPushFailed(logger, ex, tokenPreview);
-            return false;
-        }
-    }
-
-    private async Task<bool> SendWebPush(
-        List<Domain.Entities.PushSubscription> subs,
-        string title, string body, string? url,
-        List<Domain.Entities.PushSubscription> staleSubscriptions,
-        CancellationToken ct, IReadOnlyDictionary<string, string>? data)
-    {
-        var client = new PushServiceClient(httpClient);
-        client.DefaultAuthentication = new VapidAuthentication(
-            _settings.PublicKey, _settings.PrivateKey)
-        {
-            Subject = _settings.Subject
-        };
-
-        var payload = CreateWebPushPayload(title, body, url, data);
-        var message = new PushMessage(payload) { TimeToLive = 3600 };
-
-        var delivered = false;
-        foreach (var sub in subs)
-            delivered |= await SendWebPushToSubscription(client, sub, message, staleSubscriptions, ct);
-        return delivered;
+        else if (failure is not null && logger.IsEnabled(LogLevel.Warning))
+            LogFcmPushFailed(logger, failure, sub.Endpoint[..Math.Min(20, sub.Endpoint.Length)]);
     }
 
     private async Task<bool> SendWebPushToSubscription(
         PushServiceClient client,
         Domain.Entities.PushSubscription sub,
         PushMessage message,
-        List<Domain.Entities.PushSubscription> staleSubscriptions,
+        ConcurrentBag<Domain.Entities.PushSubscription> staleSubscriptions,
         CancellationToken ct)
     {
         const int MaxRetries = 2;
@@ -275,7 +253,12 @@ public partial class PushNotificationService(
     {
         try
         {
-            await client.RequestPushMessageDeliveryAsync(pushSub, message, ct);
+            using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            deadline.CancelAfter(AttemptTimeout);
+            Task delivery;
+            lock (_authenticationGate)
+                delivery = client.RequestPushMessageDeliveryAsync(pushSub, message, deadline.Token);
+            await delivery;
             if (logger.IsEnabled(LogLevel.Debug))
                 LogWebPushSent(logger, sub.Endpoint);
             return WebPushAttemptOutcome.Delivered;
@@ -293,13 +276,8 @@ public partial class PushNotificationService(
         }
         catch (Exception ex) when (!ct.IsCancellationRequested)
         {
-            if (attempt >= maxRetries)
-            {
-                if (logger.IsEnabled(LogLevel.Warning))
-                    LogWebPushFailedGeneric(logger, ex, sub.Endpoint);
-                return WebPushAttemptOutcome.GaveUp;
-            }
-            return WebPushAttemptOutcome.Retry;
+            if (logger.IsEnabled(LogLevel.Warning)) LogWebPushFailedGeneric(logger, ex, sub.Endpoint);
+            return WebPushAttemptOutcome.GaveUp;
         }
     }
 
@@ -319,17 +297,10 @@ public partial class PushNotificationService(
 
     internal static bool IsStaleFcmError(MessagingErrorCode? code) =>
         code is MessagingErrorCode.Unregistered
-            or MessagingErrorCode.InvalidArgument
             or MessagingErrorCode.SenderIdMismatch;
 
     private static bool IsTransient(HttpStatusCode? status) =>
-        status is null
-            or HttpStatusCode.RequestTimeout
-            or HttpStatusCode.TooManyRequests
-            or HttpStatusCode.InternalServerError
-            or HttpStatusCode.BadGateway
-            or HttpStatusCode.ServiceUnavailable
-            or HttpStatusCode.GatewayTimeout;
+        status is HttpStatusCode.TooManyRequests || (int?)status >= 500;
 
     internal static Message CreateFcmMessage(string token, string title, string body, string? url, IReadOnlyDictionary<string, string>? metadata = null)
     {
@@ -404,11 +375,14 @@ public partial class PushNotificationService(
         return builder.ToString();
     }
 
+    public void Dispose()
+    {
+        if (_webPush.IsValueCreated) _webPush.Value.DefaultAuthentication?.Dispose();
+        GC.SuppressFinalize(this);
+    }
+
     [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "FCM is not initialized (Firebase credentials not configured). Skipping FCM push to {Count} subscription(s).")]
     private static partial void LogFcmNotInitialized(ILogger logger, int count);
-
-    [LoggerMessage(EventId = 2, Level = LogLevel.Debug, Message = "FCM push sent to {Token}")]
-    private static partial void LogFcmPushSent(ILogger logger, string token);
 
     [LoggerMessage(EventId = 3, Level = LogLevel.Debug, Message = "FCM token {Token} is stale, removing")]
     private static partial void LogFcmTokenStale(ILogger logger, string token);

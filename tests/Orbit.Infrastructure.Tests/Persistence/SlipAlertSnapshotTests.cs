@@ -7,6 +7,7 @@ using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
+using Orbit.Domain.Models;
 using Orbit.Infrastructure.Services;
 
 namespace Orbit.Infrastructure.Tests.Persistence;
@@ -40,12 +41,14 @@ public class SlipAlertSnapshotTests
         var service = new SlipAlertSchedulerService(services.GetRequiredService<IServiceScopeFactory>(),
             NullLogger<SlipAlertSchedulerService>.Instance, new ConfigurationBuilder().Build(), clock);
         await service.CheckAndSendAlerts(default);
-        await push.DidNotReceive().SendToUserAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await push.DidNotReceive().SendManyAsync(Arg.Any<IReadOnlyList<PushDelivery>>(), Arg.Any<CancellationToken>());
         counter.Reset();
         clock.Now = clock.Now.AddMinutes(2);
         await service.CheckAndSendAlerts(default);
         counter.SelectCommandCount.Should().Be(1);
-        await push.Received(1).SendToUserAsync(user.Id, "Alert", "Body", Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await push.Received(1).SendManyAsync(Arg.Is<IReadOnlyList<PushDelivery>>(items =>
+            items.Count == 1 && items[0].UserId == user.Id && items[0].Title == "Alert" && items[0].Body == "Body"),
+            Arg.Any<CancellationToken>());
         db.HabitLogs.Add(HabitLog.FromScheduleRead(Guid.NewGuid(), habit.Id, today.AddDays(-1), 1, 0,
             today.AddDays(-1).ToDateTime(new TimeOnly(18, 0), DateTimeKind.Utc)));
         await db.SaveChangesAsync();

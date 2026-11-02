@@ -12,16 +12,30 @@ public class BoundedReadIndexMigrationTests(Xunit.Abstractions.ITestOutputHelper
     public void Migration_AddsReminderAndUserIndexesWithoutChangingTheUsageUniqueKey()
     {
         var migration = new RestoreBoundedReadIndexes();
-        migration.UpOperations.Should().HaveCount(2).And.OnlyContain(operation => operation is CreateIndexOperation);
-        var indexes = migration.UpOperations.Cast<CreateIndexOperation>().ToDictionary(index => index.Name);
-        indexes["IX_Habits_Reminder"].Columns.Should().Equal("ReminderEnabled", "IsCompleted");
-        indexes["IX_Habits_Reminder"].Filter.Should().Be("\"ReminderEnabled\" AND NOT \"IsCompleted\"");
+        var reminderMigration = new RestoreReminderSchedulerIndexes();
+        migration.UpOperations.Should().HaveCount(1).And.OnlyContain(operation => operation is CreateIndexOperation);
+        var indexes = migration.UpOperations.Concat(reminderMigration.UpOperations).Cast<CreateIndexOperation>().ToDictionary(index => index.Name);
+        indexes["IX_Habits_Reminder"].Columns.Should().Equal("ReminderEnabled", "IsCompleted", "Schedule");
+        indexes["IX_Habits_Reminder"].Filter.Should().Be("\"ReminderEnabled\" = TRUE AND \"IsCompleted\" = FALSE");
         indexes["IX_AiUsageDaily_UserId"].Columns.Should().Equal("UserId");
         indexes.Values.Should().OnlyContain(index => !index.IsUnique);
         using var db = new OrbitDbContext(new DbContextOptionsBuilder<OrbitDbContext>()
             .UseNpgsql("Host=unused;Database=unused").Options);
         db.Database.HasPendingModelChanges().Should().BeFalse();
     }
+    [Fact]
+    public void MergedIndexMigrations_CreateEachNamedIndexOnce()
+    {
+        var indexes = new RestoreBoundedReadIndexes().UpOperations
+            .Concat(new RestoreReminderSchedulerIndexes().UpOperations)
+            .OfType<CreateIndexOperation>().ToArray();
+        indexes.Select(index => index.Name).Should().OnlyHaveUniqueItems();
+        indexes.Single(index => index.Name == "IX_Habits_Reminder").Columns
+            .Should().Equal("ReminderEnabled", "IsCompleted", "Schedule");
+        new RestoreBoundedReadIndexes().DownOperations.OfType<DropIndexOperation>()
+            .Should().NotContain(index => index.Name == "IX_Habits_Reminder");
+    }
+
     [PostgresFact]
     public Task ReminderIndex_IsUsableForTheSchedulerPredicate() => PostgresTestDatabase.WithDatabase(async db =>
     {
