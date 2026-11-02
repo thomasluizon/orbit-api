@@ -100,10 +100,20 @@ public class OAuthControllerTests : IDisposable
         var (verifier, challenge) = GeneratePkce();
         var code = _authStore.CreateCode(UserId, challenge, "https://claude.ai/callback", "client", scopes: [AgentScopes.ReadHabits], isReadOnly: true);
         ApiKey? minted = null;
-        await _apiKeyRepo.AddAsync(Arg.Do<ApiKey>(key => minted = key), Arg.Any<CancellationToken>());
+        var mintObservedAtUtc = DateTime.MinValue;
+        _apiKeyRepo.AddAsync(Arg.Any<ApiKey>(), Arg.Any<CancellationToken>()).Returns(async call =>
+        {
+            var isFirstMint = minted is null;
+            minted = call.Arg<ApiKey>();
+            mintObservedAtUtc = DateTime.UtcNow;
+            if (isFirstMint)
+                await Task.Delay(TimeSpan.FromSeconds(6));
+        });
+        var mintStartedAtUtc = DateTime.UtcNow;
         var response = (OkObjectResult)await _controller.Token("authorization_code", code, verifier, "https://claude.ai/callback", default, client_id: "client");
         minted.Should().NotBeNull();
-        minted!.ExpiresAtUtc.Should().BeCloseTo(DateTime.UtcNow.AddHours(1), TimeSpan.FromSeconds(5));
+        minted!.ExpiresAtUtc.Should().BeOnOrAfter(mintStartedAtUtc.AddHours(1))
+            .And.BeOnOrBefore(mintObservedAtUtc.AddHours(1));
         var old = minted;
         var payload = JsonSerializer.SerializeToElement(response.Value);
         payload.GetProperty("expires_in").GetInt32().Should().Be(3600);
