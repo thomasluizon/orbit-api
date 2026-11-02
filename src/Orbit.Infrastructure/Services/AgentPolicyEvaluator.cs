@@ -23,7 +23,7 @@ public class AgentPolicyEvaluator(
     {
         var declared = catalogService.GetCapability(context.CapabilityId);
         if (declared is null)
-            return new AgentPolicyDecision(AgentPolicyDecisionStatus.Denied, null, "unsupported_by_policy");
+            return new AgentPolicyDecision(AgentPolicyDecisionStatus.Denied, null, Orbit.Application.Common.AgentPolicyReasons.UnsupportedByPolicy);
 
         var capability = context.ConfirmationRequirementOverride is { } escalated
             ? declared with { ConfirmationRequirement = escalated }

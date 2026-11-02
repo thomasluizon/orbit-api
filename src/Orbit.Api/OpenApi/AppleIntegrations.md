@@ -98,7 +98,7 @@ the returned `authorizationUrl`. The API generates an independent state and nonc
 for Apple, retaining the client state in encrypted server storage for five minutes.
 Apple posts the code and state to the callback. The callback exchanges the code,
 checks the nonce, signs in and returns HTTP 303 to
-`{WebOrigin}/auth-callback?provider=apple&handoff=...&state=...`.
+`{WebOrigin}/auth-callback#provider=apple&handoff=...&state=...`.
 The client checks its original state before posting `handoff` and `state` to
 `/api/auth/apple/handoff`. A handoff lasts 60 seconds and can be consumed once.
 No callback cookie or session token in the redirect URL is required.

@@ -362,8 +362,16 @@ but before the commit can still repeat that individual send.
 by default; zero disables the purge. Pending rows stay recoverable. Account erasure
 deletes the account's delivery rows by recipient id and email in the erasure
 transaction. Account reset keeps them so a pending broadcast retry still skips
-delivered recipients. The unmapped `MarketingBroadcastDeliveries` table is dropped
-by a later release once the rolling migration barrier allows it.
+delivered recipients. The legacy `SendMarketingBroadcastPageJob` transition shim
+imports unsent recipients from persisted page payloads into `MarketingDeliveries`.
+It reads the unmapped `MarketingBroadcastDeliveries` checkpoints so recorded
+successes are skipped, and the next durable-delivery recovery tick dispatches
+the imported rows through the paced recipient jobs. Replaying a page adds no
+duplicate recipient rows. The legacy Hangfire signature and `MarketingRecipient`
+argument type remain loadable until no legacy page job remains in Hangfire storage.
+In a later release, remove that shim and argument type and drop the unmapped
+`MarketingBroadcastDeliveries` table together, after verifying the Hangfire drain
+and recording the rolling migration barrier for thomasluizon/orbit-tickets#1956.
 Waitlist confirmation is also queued and no longer waits on SES in the request.
 
 ### Application history retention

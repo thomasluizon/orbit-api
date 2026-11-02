@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Hangfire.Storage;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
@@ -53,6 +54,20 @@ public class UnmapMarketingBroadcastDeliveriesMigrationTests
         });
 
     [Fact]
+    public void LegacyInvocation_RemainsLoadableWhileItsCheckpointTableIsUnmapped()
+    {
+        var payload = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", "Marketing", "LegacyBroadcastPage.json"));
+
+        var job = InvocationData.DeserializePayload(payload).DeserializeJob();
+
+        job.Type.FullName.Should().Be("Orbit.Application.Marketing.Jobs.SendMarketingBroadcastPageJob");
+        job.Method.Name.Should().Be("ExecuteAsync");
+        job.Method.GetParameters().Select(parameter => parameter.ParameterType.FullName).Should().Equal(
+            typeof(Guid).FullName, typeof(int).FullName, "Orbit.Application.Marketing.Commands.SendMarketingBroadcastCommand",
+            "Orbit.Application.Marketing.Jobs.MarketingRecipient[]", typeof(DateTime).FullName, typeof(CancellationToken).FullName);
+    }
+
+    [Fact]
     public void CurrentModel_UsesOnlyRecipientDeliveries()
     {
         using var context = new OrbitDbContext(new DbContextOptionsBuilder<OrbitDbContext>()
@@ -62,7 +77,6 @@ public class UnmapMarketingBroadcastDeliveriesMigrationTests
             .Should().Contain("MarketingDeliveries").And.NotContain("MarketingBroadcastDeliveries");
         typeof(OrbitDbContext).GetProperty("MarketingBroadcastDeliveries").Should().BeNull();
         typeof(MarketingDelivery).Assembly.GetType("Orbit.Domain.Entities.MarketingBroadcastDelivery").Should().BeNull();
-        typeof(SendMarketingEmailJob).Assembly.GetType("Orbit.Application.Marketing.Jobs.SendMarketingBroadcastPageJob").Should().BeNull();
         context.Database.HasPendingModelChanges().Should().BeFalse();
     }
 }

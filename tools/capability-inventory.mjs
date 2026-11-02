@@ -357,13 +357,14 @@ function registries(files, classMap) {
     for (const parameter of [...tool.parameters]) {
       if (!["filterJson", "updatesJson"].includes(parameter.name)) continue
       const object = parameter.name.replace("Json", "")
-      if (!tool.type.file.text.includes(`JsonSerializer.Deserialize<JsonElement>(${parameter.name})`)) throw new Error(`Review JSON adapter ${tool.name}.${parameter.name}`)
+      if (!tool.type.file.text.includes(`McpToolHelpers.ParseJson(${parameter.name}, JsonValueKind.Object, "${parameter.name}")`)) throw new Error(`Review JSON adapter ${tool.name}.${parameter.name}`)
       tool.parameters.push(...backing.parameters.filter(item => item.name.startsWith(`${object}.`)).map(item => ({ ...item, name: item.name.replace(object, parameter.name), adapter: parameter })))
     }
     const jsonArguments = tool.type.text.match(/McpToolHelpers\.AddJsonArguments\(arguments,([\s\S]*?)\);/)
     if (jsonArguments) {
       const helper = files.get("src/Orbit.Api/Mcp/Tools/McpToolHelpers.cs")
-      if (!helper.text.includes("arguments[field] = JsonSerializer.Deserialize<JsonElement>(json!)")) throw new Error("Review AddJsonArguments forwarding")
+      if (!helper.text.includes('arguments[field] = ParseJson(json!, field is "repeat_reminder" ? JsonValueKind.Object : JsonValueKind.Array, field, allowNull: field is "repeat_reminder")')
+        || !helper.text.includes("if (value.ValueKind != kind)")) throw new Error("Review AddJsonArguments forwarding")
       for (const match of jsonArguments[1].matchAll(/\("(\w+)",\s*(\w+)\)/g)) {
         const adapter = tool.parameters.find(parameter => parameter.name === match[2])
         if (!adapter) throw new Error(`Missing JSON adapter parameter ${tool.name}.${match[2]}`)

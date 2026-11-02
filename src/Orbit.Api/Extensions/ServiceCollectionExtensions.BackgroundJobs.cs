@@ -80,6 +80,7 @@ public static partial class ServiceCollectionExtensions
         });
         builder.Services.AddScoped<Orbit.Application.Waitlist.Commands.SendWaitlistConfirmationJob>();
         builder.Services.AddScoped<SendMarketingEmailJob>();
+        builder.Services.AddScoped<SendMarketingBroadcastPageJob>();
         builder.Services.AddScoped<ProactivePushJob>();
         builder.Services.AddScoped<DeliverReferralRewardJob>();
     }

@@ -345,6 +345,28 @@ public class RollingMigrationGateTests
         RollingMigrationGate.Check("expand", builder.Operations).Should().BeEmpty();
     }
 
+    [Theory]
+    [InlineData("DROP INDEX CONCURRENTLY IF EXISTS \"IX_OAuthStates_Kind_PartitionKey_ExpiresAtUtc\";")]
+    [InlineData("DROP INDEX CONCURRENTLY IF EXISTS public.\"IX_OAuthStates_Kind_PartitionKey_ExpiresAtUtc\";")]
+    public void ConcurrentIndexCleanup_StandaloneDropRequiresBarrier(string sql)
+    {
+        var builder = new MigrationBuilder("Npgsql.EntityFrameworkCore.PostgreSQL");
+        builder.Sql(sql, suppressTransaction: true);
+        RollingMigrationGate.Check("index", builder.Operations).Should().NotBeEmpty();
+    }
+
+    [Theory]
+    [InlineData("DROP INDEX CONCURRENTLY IF EXISTS \"ix\"; DROP TABLE \"Users\";")]
+    [InlineData("DROP INDEX CONCURRENTLY IF EXISTS \"ix\"; ALTER TABLE \"Users\" DROP COLUMN \"Name\";")]
+    [InlineData("DO $$ BEGIN DROP INDEX CONCURRENTLY IF EXISTS ix; END $$;")]
+    [InlineData("SELECT 'DROP INDEX CONCURRENTLY IF EXISTS ix'; DROP TABLE \"Users\";")]
+    public void ConcurrentIndexCleanup_CannotHideSchemaContractions(string sql)
+    {
+        var builder = new MigrationBuilder("Npgsql.EntityFrameworkCore.PostgreSQL");
+        builder.Sql(sql, suppressTransaction: true);
+        RollingMigrationGate.Check("contract", builder.Operations).Should().NotBeEmpty();
+    }
+
     [Fact]
     public void FluentSchemaContractions_RequireBarrier()
     {

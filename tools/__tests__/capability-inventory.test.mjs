@@ -270,6 +270,15 @@ test("direct JSON adapters retain nested contracts", () => {
   })
 })
 
+test("JSON adapter forwarding requires the shared kind check", () => {
+  mutate("src/Orbit.Api/Mcp/Tools/McpToolHelpers.cs", text => text.replace("if (value.ValueKind != kind)", "if (false)"), build => {
+    assert.throws(build, /Review AddJsonArguments forwarding/)
+  })
+  mutate("src/Orbit.Api/Mcp/Tools/HabitTools.cs", text => text.replaceAll('McpToolHelpers.ParseJson(filterJson, JsonValueKind.Object, "filterJson")', 'McpToolHelpers.ParseJson(filterJson, JsonValueKind.Array, "filterJson")'), build => {
+    assert.throws(build, /Review JSON adapter/)
+  })
+})
+
 test("source mutations expose helper, enum, array, nullable and partial-model drift", () => {
   for (const [path, before, after, diagnostic] of [
     ["src/Orbit.Application/Chat/Tools/Implementations/BulkHabitToolArguments.cs", "minutes_before = new {", "inventory_probe = new {", /registries.chat.update_habit.parameters.relative_reminders/],

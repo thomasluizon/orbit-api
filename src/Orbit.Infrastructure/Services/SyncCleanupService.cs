@@ -10,10 +10,10 @@ using Orbit.Infrastructure.Persistence;
 namespace Orbit.Infrastructure.Services;
 
 /// <summary>
-/// Daily background service that purges soft-deleted entities once they fall outside the
-/// incremental-sync window. The cutoff carries a one-day margin beyond the window a client
-/// is allowed to request (<see cref="AppConstants.MaxSyncWindowDays"/>) so a row is never
-/// purged on the exact boundary a slow client may still request it via /sync/changes.
+/// Removes soft-deleted entities after the incremental-sync window plus a one-day margin.
+/// The margin beyond <see cref="AppConstants.MaxSyncWindowDays"/> retains rows a slow client may
+/// still request via /sync/changes.
+/// Unused OAuth registrations are removed after seven days.
 /// </summary>
 public partial class SyncCleanupService(
     IServiceScopeFactory scopeFactory,
@@ -22,6 +22,7 @@ public partial class SyncCleanupService(
     private static readonly TimeSpan Interval = TimeSpan.FromHours(24);
     private static readonly TimeSpan RetentionPeriod =
         TimeSpan.FromDays(AppConstants.MaxSyncWindowDays + AppConstants.SyncCleanupMarginDays);
+    private static readonly TimeSpan OAuthRegistrationRetentionPeriod = TimeSpan.FromDays(7);
     private static readonly TimeSpan SuggestionRetentionPeriod = TimeSpan.FromDays(14);
 
     public string Name => "sync-cleanup";
@@ -117,6 +118,9 @@ public partial class SyncCleanupService(
 #pragma warning restore ORBIT0004
         totalPurged += await BatchedDelete.ExecuteAsync(dbContext.GoogleCalendarSyncSuggestions
             .Where(suggestion => suggestion.DiscoveredAtUtc < suggestionCutoff && suggestion.ImportedAtUtc == null), ct);
+        var registrationCutoffAtUtc = TimeProvider.System.GetUtcNow().UtcDateTime - OAuthRegistrationRetentionPeriod;
+        totalPurged += await BatchedDelete.ExecuteAsync(dbContext.OAuthClients
+            .Where(client => client.CreatedAtUtc < registrationCutoffAtUtc && client.AuthorizedAtUtc == null), ct);
         return totalPurged;
     }
 
@@ -129,6 +133,6 @@ public partial class SyncCleanupService(
     [LoggerMessage(EventId = 3, Level = LogLevel.Error, Message = "Error in sync cleanup")]
     private static partial void LogServiceError(ILogger logger, Exception ex);
 
-    [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "Purged {Count} soft-deleted entities outside the sync window")]
+    [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "Purged {Count} records outside their retention windows")]
     private static partial void LogEntitiesPurged(ILogger logger, int count);
 }

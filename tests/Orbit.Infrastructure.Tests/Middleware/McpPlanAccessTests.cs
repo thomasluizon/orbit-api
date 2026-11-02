@@ -1,3 +1,5 @@
+using Orbit.Infrastructure.Tests.Mcp;
+using Orbit.Infrastructure.Tests.Controllers;
 using System.Linq.Expressions;
 using System.Security.Claims;
 using System.Security.Cryptography;
@@ -38,12 +40,13 @@ namespace Orbit.Infrastructure.Tests.Middleware;
 public class McpPlanAccessTests
 {
     [Theory]
-    [InlineData(true, false)]
-    [InlineData(true, true)]
-    [InlineData(false, false)]
-    [InlineData(false, true)]
-    public async Task ToolCall_RequiresProAccess_ForOAuthAndApiKeys(bool throughOAuth, bool hasProAccess)
+    [InlineData(true, false, false)]
+    [InlineData(true, true, false)]
+    [InlineData(false, false, false)]
+    [InlineData(false, true, false)]
+    public async Task ToolCall_RequiresProAccess_ForOAuthAndApiKeys(bool throughOAuth, bool hasProAccess, bool write)
     {
+        var toolName = write ? "create_tag" : "list_habits";
         var user = User.Create("MCP member", "member@example.com").Value;
         user.StartTrial(DateTime.UtcNow.AddDays(-1));
         if (hasProAccess)
@@ -85,7 +88,7 @@ public class McpPlanAccessTests
         var policy = Substitute.For<IAgentPolicyEvaluator>();
         policy.EvaluateAsync(Arg.Any<AgentPolicyEvaluationContext>())
             .Returns(new AgentPolicyDecision(
-                AgentPolicyDecisionStatus.Allowed, catalog.GetCapabilityByMcpTool("list_habits")));
+                AgentPolicyDecisionStatus.Allowed, catalog.GetCapabilityByMcpTool(toolName)));
         var rateLimiter = Substitute.For<IDistributedRateLimitService>();
         rateLimiter.TryAcquireAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(new DistributedRateLimitDecision(true, 60, 1, DateTime.UtcNow.AddMinutes(1)));
@@ -119,8 +122,10 @@ public class McpPlanAccessTests
         builder.Services.AddMemoryCache();
         await using var services = builder.Services.BuildServiceProvider();
 
-        var tools = new HabitTools(mediator, Substitute.For<IUserDateService>(),
-            new McpExecutorBridge(Substitute.For<IAgentOperationExecutor>()));
+        var executor = Substitute.For<IAgentOperationExecutor>();
+        var bridge = new McpExecutorBridge(executor);
+        var tools = new HabitTools(mediator, Substitute.For<IUserDateService>(), bridge);
+        var tags = new TagTools(mediator, bridge);
         var pipeline = new ApplicationBuilder(services);
         pipeline.UseMcpSelectiveAuth();
         pipeline.UseAuthentication();
@@ -130,11 +135,16 @@ public class McpPlanAccessTests
         {
             using var body = await JsonDocument.ParseAsync(context.Request.Body);
             var parameters = body.RootElement.GetProperty("params");
-            parameters.GetProperty("name").GetString().Should().Be("list_habits");
+            parameters.GetProperty("name").GetString().Should().Be(toolName);
             var arguments = parameters.GetProperty("arguments");
-            toolOutput = await tools.ListHabits(context.User,
+            if (write)
+            {
+                toolOutput = (await tags.CreateTag(context.User, arguments.GetProperty("name").GetString()!, arguments.GetProperty("color").GetString()!)).AsText();
+                return;
+            }
+            toolOutput = (await tools.ListHabits(context.User,
                 arguments.GetProperty("dateFrom").GetString()!,
-                arguments.GetProperty("dateTo").GetString()!);
+                arguments.GetProperty("dateTo").GetString()!)).AsText();
         });
         var request = new JsonRpcRequest
         {
@@ -142,8 +152,12 @@ public class McpPlanAccessTests
             Method = RequestMethods.ToolsCall,
             Params = JsonSerializer.SerializeToNode(new CallToolRequestParams
             {
-                Name = "list_habits",
-                Arguments = new Dictionary<string, JsonElement>
+                Name = toolName,
+                Arguments = write ? new Dictionary<string, JsonElement>
+                {
+                    ["name"] = JsonSerializer.SerializeToElement("Created"),
+                    ["color"] = JsonSerializer.SerializeToElement("#123456")
+                } : new Dictionary<string, JsonElement>
                 {
                     ["dateFrom"] = JsonSerializer.SerializeToElement("2026-01-01"),
                     ["dateTo"] = JsonSerializer.SerializeToElement("2026-01-07")
@@ -183,6 +197,7 @@ public class McpPlanAccessTests
             context.Response.Headers.WWWAuthenticate.ToString().Should().Be(
                 "Bearer resource_metadata=\"https://api.example.com/.well-known/oauth-protected-resource/mcp\"");
             toolOutput.Should().BeNull();
+            executor.ReceivedCalls().Should().BeEmpty();
             key.LastUsedAtUtc.Should().BeNull();
             await mediator.DidNotReceive().Send(Arg.Any<GetHabitScheduleQuery>(), Arg.Any<CancellationToken>());
             await rateLimiter.DidNotReceive().TryAcquireAsync(
@@ -191,6 +206,12 @@ public class McpPlanAccessTests
         await authenticationStore.Received(1).FindAsync(key.KeyPrefix, Arg.Any<CancellationToken>());
         await userRepository.DidNotReceive().GetByIdAsync(user.Id, Arg.Any<CancellationToken>());
     }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public Task ToolCall_FreePlanWriteTool_Returns401WithoutExecutorCall(bool throughOAuth) =>
+        ToolCall_RequiresProAccess_ForOAuthAndApiKeys(throughOAuth, false, true);
 
     private static async Task<string> ExchangeOAuthTokenAsync(
         User user, IMediator mediator, IGenericRepository<ApiKey> keys, IUnitOfWork unitOfWork)
@@ -201,20 +222,21 @@ public class McpPlanAccessTests
             .Returns(Result.Success(new LoginResponse(user.Id, "login-token", user.Name, user.Email)));
         var controller = new OAuthController(mediator, store, keys, unitOfWork,
             Options.Create(new GoogleSettings()), new ConfigurationBuilder().Build(),
-            NullLogger<OAuthController>.Instance, Substitute.For<IOAuthClientMetadataService>());
+            NullLogger<OAuthController>.Instance, OAuthTestClient.Metadata(), Substitute.For<IGenericRepository<OAuthClient>>());
         controller.ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() };
+        OAuthTestClient.Bind(controller.HttpContext, store, "client-state");
         const string verifier = "mcp-client-code-verifier";
-        const string redirectUri = "https://claude.ai/callback";
+        const string redirectUri = "https://claude.ai/api/mcp/auth_callback";
         var challenge = WebEncoders.Base64UrlEncode(SHA256.HashData(Encoding.ASCII.GetBytes(verifier)));
         var login = await controller.VerifyCode(new OAuthController.VerifyCodeRequest(
-            user.Email, "123456", "client-state", challenge, redirectUri, "mcp-client"), CancellationToken.None);
+            user.Email, "123456", "client-state", challenge, redirectUri, "https://claude.ai/oauth/mcp-oauth-client-metadata"), CancellationToken.None);
         var redirect = JsonSerializer.SerializeToElement(login.Should().BeOfType<OkObjectResult>().Subject.Value)
             .GetProperty("redirectUrl").GetString()!;
         var ticket = QueryHelpers.ParseQuery(new Uri("https://api.useorbit.org" + redirect).Query)["ticket"].ToString();
         redirect = ((RedirectResult)controller.GrantConsent(ticket, "requested")).Url;
         var code = QueryHelpers.ParseQuery(new Uri(redirect).Query)["code"].ToString();
 
-        var result = await controller.Token("authorization_code", code, verifier, redirectUri, CancellationToken.None, client_id: "mcp-client");
+        var result = await controller.Token("authorization_code", code, verifier, redirectUri, CancellationToken.None, client_id: "https://claude.ai/oauth/mcp-oauth-client-metadata");
 
         var response = JsonSerializer.SerializeToElement(result.Should().BeOfType<OkObjectResult>().Subject.Value);
         response.GetProperty("token_type").GetString().Should().Be("Bearer");

@@ -102,6 +102,8 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddSingleton<IWaitlistConfirmationTokenService, WaitlistConfirmationTokenService>();
         builder.Services.AddSingleton<IMarketingUnsubscribeTokenService, MarketingUnsubscribeTokenService>();
         builder.Services.AddScoped<IMarketingContactsService, DatabaseMarketingContactsService>();
+        builder.Services.AddScoped<Orbit.Application.Marketing.Jobs.ILegacyMarketingBroadcastPageStore,
+            Orbit.Infrastructure.Persistence.LegacyMarketingBroadcastPageStore>();
     }
 
     internal static void AddBotProtection(WebApplicationBuilder builder, TimeSpan httpTimeout)
