@@ -1,15 +1,65 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.DependencyInjection;
 using Orbit.Application.Auth.Services;
+using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.Configuration;
 using Orbit.Infrastructure.Persistence;
+using Orbit.Infrastructure.Services;
 using Orbit.Infrastructure.Tests.Persistence;
 
 namespace Orbit.Infrastructure.Tests.Services;
 
 public class PostgresEmailChallengeStoreTests
 {
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task IndependentProviders_SerializeCompetingConfirmationsAndShareTheAttemptBudget(bool correctCode)
+    {
+        using var database = new SqliteOrbitDbContextFactory(Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".sqlite"));
+        using var first = Provider(database);
+        using var second = Provider(database);
+        using var issuer = first.CreateScope();
+        var challenges = issuer.ServiceProvider.GetRequiredService<IEmailChallengeStore>();
+        (await challenges.IssueAsync(EmailChallengeOperation.SignIn, "parallel@example.com", "123456")).IsSuccess.Should().BeTrue();
+        var start = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var confirmations = Enumerable.Range(0, correctCode ? 2 : 10).Select(index => Task.Run(async () =>
+        {
+            await start.Task;
+            using var scope = (index % 2 == 0 ? first : second).CreateScope();
+            return await scope.ServiceProvider.GetRequiredService<IEmailChallengeStore>()
+                .ConfirmAsync(EmailChallengeOperation.SignIn, "parallel@example.com", correctCode ? "123456" : "000000");
+        })).ToArray();
+        start.SetResult();
+        var results = await Task.WhenAll(confirmations);
+        using var reader = database.CreateContext();
+        var row = await reader.EmailChallenges.AsNoTracking().SingleAsync();
+        if (correctCode)
+        {
+            results.Count(result => result.IsSuccess).Should().Be(1);
+            row.Consumed.Should().BeTrue();
+            row.Attempts.Should().Be(0);
+        }
+        else
+        {
+            results.Should().OnlyContain(result => result.IsFailure);
+            results.Count(result => result.ErrorCode == "TOO_MANY_ATTEMPTS").Should().Be(7);
+            row.Attempts.Should().Be(3);
+            (await challenges.ConfirmAsync(EmailChallengeOperation.SignIn, "parallel@example.com", "123456"))
+                .ErrorCode.Should().Be("TOO_MANY_ATTEMPTS");
+        }
+    }
+
+    private static ServiceProvider Provider(SqliteOrbitDbContextFactory database) => new ServiceCollection()
+        .AddScoped(_ => database.CreateContext())
+        .AddScoped<IUnitOfWork>(services => new UnitOfWork(services.GetRequiredService<OrbitDbContext>(), new DatabaseConnectionSettings()))
+        .AddSingleton<TimeProvider>(TimeProvider.System)
+        .AddSingleton(Options.Create(new JwtSettings { SecretKey = "unit-test-challenge-secret-at-least-32-bytes", Issuer = "test", Audience = "test" }))
+        .AddScoped<IEmailChallengeStore, IndependentEmailChallengeStore>()
+        .BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
+
     [Fact]
     public async Task SeparateContexts_KeepHashesCooldownAttemptsAndConsumption()
     {

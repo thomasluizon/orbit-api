@@ -33,7 +33,7 @@ public sealed partial class PushNotificationServiceTests
         };
         var service = new PushNotificationService(_dbContext, Options.Create(_vapidSettings),
             NullLogger<PushNotificationService>.Instance, new HttpClient(), apns, wns);
-        await service.SendReminderToUserAsync(_userId, "Água", "Próximo às 20:00", data, "/");
+        (await service.TrySendReminderToUserAsync(_userId, "Água", "Próximo às 20:00", data, "/")).Should().BeTrue();
         await apns.Received(1).SendAsync("ios-token", "Água", "Próximo às 20:00", "/", Arg.Any<CancellationToken>(), null, data);
         var payload = PushNotificationService.CreateWebPushPayload("Água", "Próximo às 20:00", "/", data);
         await wns.Received(1).SendAsync(Arg.Any<string>(), payload, Arg.Any<CancellationToken>());

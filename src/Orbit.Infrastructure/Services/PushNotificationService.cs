@@ -41,10 +41,6 @@ public partial class PushNotificationService(
         CancellationToken cancellationToken = default) =>
         await SendCoreAsync(userId, title, body, url, cancellationToken, null);
 
-    public async Task SendReminderToUserAsync(Guid userId, string title, string body,
-        IReadOnlyDictionary<string, string> data, string? url = null, CancellationToken cancellationToken = default) =>
-        await SendCoreAsync(userId, title, body, url, cancellationToken, data);
-
     public Task<bool> TrySendReminderToUserAsync(Guid userId, string title, string body,
         IReadOnlyDictionary<string, string> data, string? url = null, CancellationToken cancellationToken = default) =>
         SendCoreAsync(userId, title, body, url, cancellationToken, data);

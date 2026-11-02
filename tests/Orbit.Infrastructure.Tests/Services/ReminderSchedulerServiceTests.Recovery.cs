@@ -1,9 +1,13 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using NSubstitute;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
+using Orbit.Infrastructure.Configuration;
+using Orbit.Infrastructure.Services;
 
 namespace Orbit.Infrastructure.Tests.Services;
 
@@ -19,8 +23,9 @@ public partial class ReminderSchedulerServiceTests
         reminder.PreparePush(user.Id, habit.Title, "Due now", recordedAtUtc: DefaultInstant.UtcDateTime.AddMinutes(-1));
         db.AddRange(user, habit, reminder);
         await db.SaveChangesAsync();
-        var push = SuccessfulPush();
-        push.TrySendToUserAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>()).Returns(false);
+        var push = new PushNotificationService(db, Options.Create(new VapidSettings()),
+            NullLogger<PushNotificationService>.Instance, new HttpClient(),
+            Substitute.For<IApnsPushSender>(), Substitute.For<IWnsPushSender>());
         await CreateService(db, push).CheckAndSendReminders(default);
         (await db.SentReminders.AsNoTracking().SingleAsync()).PushSentAtUtc.Should().BeNull();
     }
