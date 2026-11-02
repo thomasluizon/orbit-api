@@ -88,6 +88,9 @@ public class BulkCreateHabitsCommandHandler(
 {
     public async Task<Result<BulkCreateResult>> Handle(BulkCreateHabitsCommand request, CancellationToken cancellationToken)
     {
+        var limits = BulkHabitSubtree.CheckLimits(request.Habits);
+        if (limits.IsFailure)
+            return limits.PropagateError<BulkCreateResult>();
         var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         var result = await HabitCeilingLock.ExecuteAsync(
             unitOfWork,
@@ -111,7 +114,9 @@ public class BulkCreateHabitsCommandHandler(
         if (habitGate.IsFailure)
             return habitGate.PropagateError<BulkCreateResult>();
 
-        var featureGate = await CheckCreationGatesAsync(request, userToday, cancellationToken);
+        var maxDepth = await appConfigService.GetAsync(
+            AppConfigKeys.MaxHabitDepth, AppConstants.MaxHabitDepth, cancellationToken);
+        var featureGate = await CheckCreationGatesAsync(request, userToday, maxDepth, cancellationToken);
         if (featureGate.IsFailure)
             return featureGate.PropagateError<BulkCreateResult>();
 
@@ -124,8 +129,6 @@ public class BulkCreateHabitsCommandHandler(
             ? 0
             : existingRoots.Max(h => h.Position ?? -1) + 1;
 
-        var maxDepth = await appConfigService.GetAsync(
-            AppConfigKeys.MaxHabitDepth, AppConstants.MaxHabitDepth, cancellationToken);
         var tagsByName = new Dictionary<string, Tag>(StringComparer.OrdinalIgnoreCase);
         var tagsLoaded = false;
         var createdHabits = new List<Habit>();
@@ -175,11 +178,11 @@ public class BulkCreateHabitsCommandHandler(
     }
 
     private async Task<Result> CheckCreationGatesAsync(
-        BulkCreateHabitsCommand request, DateOnly today, CancellationToken ct)
+        BulkCreateHabitsCommand request, DateOnly today, int maxDepth, CancellationToken ct)
     {
         foreach (var item in request.Habits)
         {
-            var subtree = BulkHabitSubtree.Build(request.UserId, item, today, 0, int.MaxValue, ct, out _);
+            var subtree = BulkHabitSubtree.Build(request.UserId, item, today, 0, maxDepth, ct, out _);
             if (subtree.IsFailure)
                 continue;
             foreach (var node in subtree.Value)
@@ -195,6 +198,9 @@ public class BulkCreateHabitsCommandHandler(
     internal static async Task<Result> CheckArgumentsAsync(
         BulkCreateHabitsCommand request, IUserDateService dates, IAppConfigService config, CancellationToken ct)
     {
+        var limits = BulkHabitSubtree.CheckLimits(request.Habits);
+        if (limits.IsFailure)
+            return limits;
         var today = await dates.GetUserTodayAsync(request.UserId, ct);
         var maxDepth = await config.GetAsync(AppConfigKeys.MaxHabitDepth, AppConstants.MaxHabitDepth, ct);
         foreach (var item in request.Habits)

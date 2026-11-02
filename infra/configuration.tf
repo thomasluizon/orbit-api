@@ -38,6 +38,7 @@ locals {
     AI__EvalDailyBudgetUsd              = "0.50"
     AI__Model                           = "gpt-6-luna"
     AI__SubTaskModel                    = "gpt-6-luna"
+    BotProtection__Enabled              = "false"
     ASPNETCORE_ENVIRONMENT              = "Production"
     Cors__AllowedOrigins__0             = "https://app.useorbit.org"
     Database__MigrateOnStartup          = "true"
@@ -86,6 +87,7 @@ locals {
     Ses__TransactionalConfigurationSet = aws_sesv2_configuration_set.staging["transactional"].configuration_set_name
     Ses__MarketingConfigurationSet     = aws_sesv2_configuration_set.staging["marketing"].configuration_set_name
     Ses__TopicArn                      = aws_sns_topic.ses_events_staging.arn
+    BotProtection__Enabled             = "false"
     ASPNETCORE_ENVIRONMENT             = "Staging"
     Database__MigrateOnStartup         = "true"
     DesktopAuth__RedirectUri           = "org.useorbit.desktop.staging://auth/callback"
@@ -196,6 +198,7 @@ resource "render_env_group" "production_api" {
     },
     { BotProtection__SecretKey = { value = aws_ssm_parameter.turnstile_secret["production"].value } },
     { for key, value in local.onboarding_api_values["production"] : key => { value = value } },
+    { for key, value in local.bot_protection_api_values["production"] : key => { value = value } },
     { OnboardingSecurity__SigningSecret = { value = aws_ssm_parameter.onboarding_signing_secret_production.value } },
     { Auth__BffForwardingSecret = { value = aws_ssm_parameter.bff_forwarding_secret["production"].value } },
     { Ses__AccessKeyId = { value = aws_ssm_parameter.api_ses_access_key_id["production"].value } },
@@ -216,6 +219,7 @@ resource "render_env_group" "staging_api" {
     },
     { BotProtection__SecretKey = { value = aws_ssm_parameter.turnstile_secret["staging"].value } },
     { for key, value in local.onboarding_api_values["staging"] : key => { value = value } },
+    { for key, value in local.bot_protection_api_values["staging"] : key => { value = value } },
     { OnboardingSecurity__SigningSecret = { value = aws_ssm_parameter.onboarding_signing_secret_staging.value } },
     { Auth__BffForwardingSecret = { value = aws_ssm_parameter.bff_forwarding_secret["staging"].value } },
     { Ses__AccessKeyId = { value = aws_ssm_parameter.api_ses_access_key_id["staging"].value } },

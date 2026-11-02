@@ -19,7 +19,7 @@ public class DistributedRateLimitPartitionKeyTests
 
         upper.Resolved.Should().BeTrue();
         lower.Resolved.Should().BeTrue();
-        upper.PartitionKey.Should().Be("auth:email:a@x.com");
+        upper.PartitionKey.Should().StartWith("auth:email:").And.NotContain("@").And.NotContain("x.com");
         lower.PartitionKey.Should().Be(upper.PartitionKey);
     }
 
@@ -62,7 +62,7 @@ public class DistributedRateLimitPartitionKeyTests
         var resolved = ResolveFor("waitlist", new WaitlistController.JoinWaitlistRequest(" A@x.com "));
 
         resolved.Resolved.Should().BeTrue();
-        resolved.PartitionKey.Should().Be("waitlist:email:a@x.com");
+        resolved.PartitionKey.Should().StartWith("waitlist:email:").And.NotContain("@").And.NotContain("x.com");
     }
 
     [Fact]
@@ -98,6 +98,17 @@ public class DistributedRateLimitPartitionKeyTests
         foreach (var policy in emailPolicies)
             registeredPolicies.Contains($"{policy.ToLowerInvariant()}-ip").Should().BeTrue(
                 $"email-partitioned policy {policy} must also limit email rotation by source IP");
+    }
+
+    [Theory]
+    [InlineData("auth")]
+    [InlineData("waitlist")]
+    public void EmailKey_IsOpaqueAndDeterministic(string policy)
+    {
+        var first = ResolveFor(policy, new AuthController.SendCodeRequest("a@example.com"));
+        var second = ResolveFor(policy, new AuthController.SendCodeRequest(" A@EXAMPLE.COM "));
+        first.PartitionKey.Should().Be(second.PartitionKey).And.NotContain("@").And.NotContain("example.com");
+        first.PartitionKey.Split(':')[^1].Should().MatchRegex("^[0-9A-F]{64}$");
     }
 
     private static readonly string RefreshTokenA = new('A', RefreshTokenRules.TokenLength);

@@ -31,6 +31,7 @@ public partial class AuthController(IMediator mediator, IAgentAuditService audit
     public record LogoutSessionOperationRequest(string RefreshToken);
 
     [HttpPost("send-code")]
+    [SendCodeQuota]
     [DistributedRateLimit("auth")]
     [RequireBotProtection]
     [AllowAnonymous]
@@ -56,6 +57,7 @@ public partial class AuthController(IMediator mediator, IAgentAuditService audit
     }
 
     [HttpPost("operations/send-code")]
+    [SendCodeQuota]
     [DistributedRateLimit("auth")]
     [RequireBotProtection]
     [AllowAnonymous]

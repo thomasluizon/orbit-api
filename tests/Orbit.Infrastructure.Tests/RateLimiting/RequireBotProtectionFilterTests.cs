@@ -108,7 +108,7 @@ public class RequireBotProtectionFilterTests
         var jobs = Substitute.For<IBackgroundJobClient>();
         var handler = new SendCodeCommandHandler(ChallengeTestDatabase.For(cache).Store(), ChallengeTestDatabase.Environment(), jobs);
         _verifier.VerifyAsync("valid", Arg.Any<CancellationToken>())
-            .Returns(new TurnstileVerificationResult(true, []));
+            .Returns(new TurnstileVerificationResult(true, [], "app.useorbit.org"));
         var request = new AuthController.SendCodeRequest("person@example.com", TurnstileToken: "valid");
         var context = CreateContext(request);
         var mediator = Substitute.For<IMediator>();
@@ -233,7 +233,7 @@ public class RequireBotProtectionFilterTests
     {
         new RequireBotProtectionAttribute().Order.Should().BeGreaterThan(0);
         var rateLimits = Substitute.For<IDistributedRateLimitService>();
-        rateLimits.TryAcquireAsync("auth", "auth:email:person@example.com", Arg.Any<CancellationToken>())
+        rateLimits.TryAcquireAsync("auth", "auth:email:542D240129883C019E106E3B1B2D3F3CB3537C43C425364DE8E951D5A3083345", Arg.Any<CancellationToken>())
             .Returns(new DistributedRateLimitDecision(rejectIp, 10, 10, DateTime.UtcNow.AddMinutes(1)));
         rateLimits.TryAcquireAsync("auth-ip", "ip:unknown", Arg.Any<CancellationToken>())
             .Returns(new DistributedRateLimitDecision(!rejectIp, 30, 30, DateTime.UtcNow.AddMinutes(1)));
@@ -258,14 +258,14 @@ public class RequireBotProtectionFilterTests
 
         context.Result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(429);
         context.HttpContext.Response.Headers.RetryAfter.Should().NotBeEmpty();
-        await rateLimits.Received(1).TryAcquireAsync("auth", "auth:email:person@example.com", Arg.Any<CancellationToken>());
+        await rateLimits.Received(1).TryAcquireAsync("auth", "auth:email:542D240129883C019E106E3B1B2D3F3CB3537C43C425364DE8E951D5A3083345", Arg.Any<CancellationToken>());
         await rateLimits.Received(1).TryAcquireAsync("auth-ip", "ip:unknown", Arg.Any<CancellationToken>());
         commandRan.Should().BeFalse();
         await _verifier.DidNotReceiveWithAnyArgs().VerifyAsync(default!, default);
     }
 
     [Fact]
-    public async Task SmokeAccount_OnlyConfiguredProductionAddressBypasses()
+    public async Task SmokeAccount_RequiresVerificationLikeEveryOtherAddress()
     {
         var oldEnvironment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT");
         var oldEmail = Environment.GetEnvironmentVariable("SMOKE_TEST_EMAIL");
@@ -283,7 +283,8 @@ public class RequireBotProtectionFilterTests
                 commandRan = true;
                 return Task.FromResult(Executed(smoke));
             });
-            commandRan.Should().BeTrue();
+            commandRan.Should().BeFalse();
+            smoke.Result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(400);
 
             var other = CreateContext(new AuthController.SendCodeRequest("other@useorbit.org"));
             await EnabledFilter().OnActionExecutionAsync(other, () => Task.FromResult(Executed(other)));
@@ -297,10 +298,51 @@ public class RequireBotProtectionFilterTests
         }
     }
 
+    [Theory]
+    [InlineData("app.useorbit.org", "app-staging.useorbit.org")]
+    [InlineData("app-staging.useorbit.org", "app.useorbit.org")]
+    [InlineData("app.useorbit.org", null)]
+    public async Task SuccessfulTokenFromStaging_IsRejectedInProduction(string allowedHostname, string? tokenHostname)
+    {
+        _verifier.VerifyAsync("staging", Arg.Any<CancellationToken>())
+            .Returns(new TurnstileVerificationResult(true, [], tokenHostname));
+        var context = CreateContext(new AuthController.SendCodeRequest("person@example.com", TurnstileToken: "staging"));
+        var filter = new RequireBotProtectionFilter(Options.Create(new BotProtectionSettings
+        {
+            Enabled = true,
+            AllowedHostnames = [allowedHostname]
+        }), _verifier, _logger);
+        await filter.OnActionExecutionAsync(context, () => Task.FromResult(Executed(context)));
+        context.Result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(400);
+    }
+
+    [Theory]
+    [InlineData("app.useorbit.org")]
+    [InlineData("APP.USEORBIT.ORG")]
+    [InlineData("useorbit.org")]
+    public async Task AllowedHostname_PassesEveryProtectedRequestShape(string hostname)
+    {
+        _verifier.VerifyAsync("valid", Arg.Any<CancellationToken>())
+            .Returns(new TurnstileVerificationResult(true, [], hostname));
+        foreach (var action in new[] { nameof(AuthController.SendCode), nameof(AuthController.SendCodeOperation),
+            nameof(AuthController.VerifyCode), nameof(AuthController.VerifyCodeOperation), nameof(WaitlistController.Join) })
+        {
+            var context = CreateContext(RequestFor(action, "valid"));
+            var ran = false;
+            await EnabledFilter().OnActionExecutionAsync(context, () =>
+            {
+                ran = true;
+                return Task.FromResult(Executed(context));
+            });
+            ran.Should().BeTrue();
+            context.Result.Should().BeNull();
+        }
+    }
+
     private RequireBotProtectionFilter EnabledFilter() => Filter(enabled: true);
 
     private RequireBotProtectionFilter Filter(bool enabled)
-        => new(Options.Create(new BotProtectionSettings { Enabled = enabled, SecretKey = "test-secret" }), _verifier, _logger);
+        => new(Options.Create(new BotProtectionSettings { Enabled = enabled, SecretKey = "test-secret", AllowedHostnames = ["app.useorbit.org", "useorbit.org"] }), _verifier, _logger);
 
     private static object RequestFor(string action, string? token) => action switch
     {

@@ -18,6 +18,7 @@ public class DistributedRateLimitService(OrbitDbContext dbContext, TimeProvider 
     private static readonly Dictionary<string, RateLimitPolicy> Policies =
         new Dictionary<string, RateLimitPolicy>(StringComparer.OrdinalIgnoreCase)
         {
+            ["bulk-create"] = new(TimeSpan.FromMinutes(1), PermitLimit: 10, SegmentCount: 1),
             ["auth"] = new(TimeSpan.FromMinutes(1), PermitLimit: 10, SegmentCount: 1),
             ["auth-ip"] = new(TimeSpan.FromMinutes(1), PermitLimit: 30, SegmentCount: 1),
             ["refresh"] = new(TimeSpan.FromMinutes(1), PermitLimit: 10, SegmentCount: 1),

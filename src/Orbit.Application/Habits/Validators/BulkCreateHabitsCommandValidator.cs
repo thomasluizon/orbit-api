@@ -1,4 +1,5 @@
 using FluentValidation;
+using FluentValidation.Results;
 using Orbit.Application.Common;
 using Orbit.Application.Habits.Commands;
 
@@ -14,8 +15,17 @@ public class BulkCreateHabitsCommandValidator : AbstractValidator<BulkCreateHabi
         RuleFor(x => x.Habits)
             .NotEmpty()
             .WithCopy(ValidationErrorCodes.BulkHabitsRequired)
-            .Must(habits => habits.Count <= AppConstants.MaxBulkOperationSize)
-            .WithCopy(ValidationErrorCodes.BulkCreateLimit);
+            .Custom((habits, context) =>
+            {
+                if (habits is null)
+                    return;
+                var limits = BulkHabitSubtree.CheckLimits(habits, AppConstants.MaxHabitDepth);
+                if (limits.IsFailure)
+                    context.AddFailure(new ValidationFailure(nameof(BulkCreateHabitsCommand.Habits), limits.Error)
+                    {
+                        ErrorCode = limits.ErrorCode
+                    });
+            });
 
         RuleForEach(x => x.Habits).SetValidator(new BulkHabitItemValidator(isRoot: true));
     }
@@ -31,6 +41,10 @@ internal sealed class BulkHabitItemValidator : AbstractValidator<BulkHabitItem>
         SharedHabitRules.AddDescriptionRules(RuleFor(h => h.Description), isChild: !isRoot);
         SharedHabitRules.AddEmojiRules(RuleFor(h => h.Emoji));
         SharedHabitRules.AddChecklistItemRules(RuleFor(h => h.ChecklistItems));
+
+        RuleFor(h => h.SubHabits)
+            .Must(children => children is null || children.Count <= AppConstants.MaxSubHabits)
+            .WithCopy(ValidationErrorCodes.SubHabitLimit);
 
         RuleFor(h => h.FrequencyQuantity)
             .GreaterThan(0)

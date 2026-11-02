@@ -1044,9 +1044,9 @@ public class OAuthControllerTests : IDisposable
             .Returns(call => handler.Handle((SendCodeCommand)call[0], CancellationToken.None));
         var verifier = Substitute.For<ITurnstileVerificationService>();
         verifier.VerifyAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(call => new TurnstileVerificationResult((string)call[0] == "valid", []));
+            .Returns(call => new TurnstileVerificationResult((string)call[0] == "valid", [], "example.com"));
         var services = new ServiceCollection();
-        services.AddSingleton(Options.Create(new BotProtectionSettings { Enabled = enabled }));
+        services.AddSingleton(Options.Create(new BotProtectionSettings { Enabled = enabled, AllowedHostnames = ["example.com"] }));
         services.AddSingleton(verifier);
         services.AddSingleton<ILogger<RequireBotProtectionFilter>>(NullLogger<RequireBotProtectionFilter>.Instance);
         using var provider = services.BuildServiceProvider();
