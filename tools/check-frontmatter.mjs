@@ -27,24 +27,37 @@ for (const root of ROOTS) {
   walk(root);
 }
 
-const offenders = [];
-for (const file of targets) {
-  const text = fs.readFileSync(file, 'utf8');
-  const match = text.match(/^---\r?\n([\s\S]*?)\r?\n---/);
-  if (!match) continue;
-  for (const raw of match[1].split(/\r?\n/)) {
-    const line = raw.endsWith('\r') ? raw.slice(0, -1) : raw;
-    const kv = line.match(/^([A-Za-z][\w-]*):[ \t](.*)$/);
-    if (!kv) continue;
-    const value = kv[2].trim();
-    if (!value) continue;
-    if (BLOCK_SCALAR.test(value)) continue;
-    if (/^"[^"]*"$/.test(value) || /^'[^']*'$/.test(value)) continue;
-    if (/^\[.*\]$/.test(value) || /^\{.*\}$/.test(value)) continue;
-    if (/:[ \t]/.test(value)) offenders.push({ file, key: kv[1], value });
+function findOffenders() {
+  const offenders = [];
+  for (const file of targets) {
+    const text = fs.readFileSync(file, 'utf8');
+    if (/^\uFEFF---(?:\r?\n|$)/.test(text)) {
+      offenders.push({ file, problem: 'BOM before opening fence' });
+      continue;
+    }
+    if (!/^---(?:\r?\n|$)/.test(text)) continue;
+    const match = text.match(/^---\r?\n([\s\S]*?)^---[ \t]*(?:\r?\n|$)/m);
+    if (!match) {
+      offenders.push({ file, problem: 'Missing valid closing fence' });
+      continue;
+    }
+    for (const raw of match[1].split(/\r?\n/)) {
+      const line = raw.endsWith('\r') ? raw.slice(0, -1) : raw;
+      const kv = line.match(/^([A-Za-z][\w-]*):[ \t](.*)$/);
+      if (!kv) continue;
+      const value = kv[2].trim();
+      if (!value) continue;
+      if (BLOCK_SCALAR.test(value)) continue;
+      if (/^"[^"]*"$/.test(value) || /^'[^']*'$/.test(value)) continue;
+      if (/^\[.*\]$/.test(value) || /^\{.*\}$/.test(value)) continue;
+      if (/:[ \t]/.test(value)) offenders.push({ file, key: kv[1], value });
+    }
   }
+
+  return offenders;
 }
 
+let offenders = findOffenders();
 if (offenders.length === 0) {
   console.log(`frontmatter ok: ${targets.length} skill and agent files parse`);
   process.exit(0);
@@ -52,7 +65,7 @@ if (offenders.length === 0) {
 
 if (process.argv.includes('--fix')) {
   const byFile = new Map();
-  for (const o of offenders) byFile.set(o.file, [...(byFile.get(o.file) ?? []), o]);
+  for (const o of offenders.filter(item => !item.problem)) byFile.set(o.file, [...(byFile.get(o.file) ?? []), o]);
   for (const [file, items] of byFile) {
     const text = fs.readFileSync(file, 'utf8');
     const eol = text.includes('\r\n') ? '\r\n' : '\n';
@@ -64,13 +77,14 @@ if (process.argv.includes('--fix')) {
     fs.writeFileSync(file, lines.join(eol));
     console.log(`fixed ${file}`);
   }
-  process.exit(0);
+  offenders = findOffenders();
+  if (offenders.length === 0) process.exit(0);
 }
 
 console.error(`Unparseable frontmatter in ${offenders.length} file(s).`);
 console.error('A ": " inside an unquoted YAML value breaks the parse, so the skill or agent');
 console.error('loads with no description or does not load at all, silently.\n');
-for (const { file, key } of offenders) console.error(`  ${file}  [${key}]`);
+for (const { file, key, problem } of offenders) console.error(`  ${file}  [${problem ?? key}]`);
 console.error('\nFix: make the value a folded block scalar, or run:');
 console.error('  node tools/check-frontmatter.mjs --fix');
 process.exit(1);

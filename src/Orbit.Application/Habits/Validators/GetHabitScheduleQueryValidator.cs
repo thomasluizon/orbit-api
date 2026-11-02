@@ -24,7 +24,7 @@ public class GetHabitScheduleQueryValidator : AbstractValidator<GetHabitSchedule
             .When(q => q.IsGeneral != true && q.DateFrom.HasValue && q.DateTo.HasValue);
 
         RuleFor(q => q)
-            .Must(q => q.DateTo!.Value.DayNumber - q.DateFrom!.Value.DayNumber <= AppConstants.MaxRangeDays)
+            .Must(q => q.DateTo!.Value.DayNumber - q.DateFrom!.Value.DayNumber <= AppConstants.MaxReadRangeDays)
             .WithCopy(ValidationErrorCodes.DateRangeLimitShort)
             .When(q => q.IsGeneral != true && q.DateFrom.HasValue && q.DateTo.HasValue);
 
@@ -32,6 +32,6 @@ public class GetHabitScheduleQueryValidator : AbstractValidator<GetHabitSchedule
             .GreaterThanOrEqualTo(1);
 
         RuleFor(q => q.PageSize)
-            .InclusiveBetween(1, AppConstants.MaxPageSize);
+            .InclusiveBetween(1, AppConstants.MaxQueryPageSize);
     }
 }

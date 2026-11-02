@@ -97,16 +97,17 @@ public sealed class HabitScheduleLogReader(OrbitDbContext context) : IHabitSched
 
     public async Task<IReadOnlySet<Guid>> ReadResolvedDueDateIdsAsync(
         IReadOnlyCollection<Guid> habitIds,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default, DateOnly? earliestDueDate = null)
     {
         if (habitIds.Count == 0)
             return new HashSet<Guid>();
 
         var ids = habitIds.ToArray();
+        var minimumDate = earliestDueDate ?? DateOnly.MinValue;
         var resolved = await (
             from log in context.HabitLogs.AsNoTracking()
             join habit in context.Habits.AsNoTracking() on log.HabitId equals habit.Id
-            where ids.Contains(log.HabitId) && log.Date == habit.NextDueDate && log.Value >= 0
+            where ids.Contains(log.HabitId) && log.Date >= minimumDate && log.Date == habit.NextDueDate && log.Value >= 0
             select log.HabitId).Distinct().ToListAsync(cancellationToken);
         return resolved.ToHashSet();
     }

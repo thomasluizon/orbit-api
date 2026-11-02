@@ -199,11 +199,43 @@ public class DistributedRateLimitFilterTests
     }
 
     [Fact]
-    public async Task ConcurrentChatLimit_SecondRequest_ReturnsMatchingRateLimitResponse()
+    public async Task CalendarSync_SecondManualRequestIsRejectedBeforeInvokingTheAction()
+    {
+        using var factory = new Orbit.Infrastructure.Tests.Persistence.SqliteOrbitDbContextFactory();
+        var service = new DistributedRateLimitService(factory.Context, TimeProvider.System);
+        var userId = Guid.NewGuid();
+        using var provider = new ServiceCollection().AddSingleton<IDistributedRateLimitService>(service)
+            .AddSingleton(_authSessionService)
+            .AddSingleton(new BffClientIpResolver(Options.Create(new BffForwardingSettings())))
+            .AddSingleton(_logger).BuildServiceProvider();
+        var attribute = typeof(CalendarController).GetMethod(nameof(CalendarController.RunSyncNow))!
+            .GetCustomAttribute<DistributedRateLimitAttribute>()!;
+        var filter = (IAsyncActionFilter)attribute.CreateInstance(provider);
+        var calls = 0;
+        var (first, _) = CreateAuthenticatedExecutingContext(userId);
+        await filter.OnActionExecutionAsync(first, () =>
+        {
+            calls++;
+            return Task.FromResult(CreateExecutedContext(first));
+        });
+        var (second, _) = CreateAuthenticatedExecutingContext(userId);
+        await filter.OnActionExecutionAsync(second, () =>
+        {
+            calls++;
+            return Task.FromResult(CreateExecutedContext(second));
+        });
+        calls.Should().Be(1);
+        second.Result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(429);
+    }
+
+    [Theory]
+    [InlineData("chat-in-flight")]
+    [InlineData("transcription-in-flight")]
+    public async Task ConcurrentChatLimit_SecondRequest_ReturnsMatchingRateLimitResponse(string policy)
     {
         var userId = Guid.NewGuid();
         _service.TryAcquireLeaseAsync(
-                ConcurrentChatLimitFilter.PolicyName,
+                policy,
                 $"user:{userId}",
                 1,
                 TimeSpan.FromMinutes(5),
@@ -211,7 +243,7 @@ public class DistributedRateLimitFilterTests
             .Returns(new DistributedRateLimitDecision(false, 1, 1, DateTime.UtcNow.AddMinutes(4)));
         var filter = new ConcurrentChatLimitFilter(
             _service,
-            Substitute.For<ILogger<ConcurrentChatLimitFilter>>());
+            Substitute.For<ILogger<ConcurrentChatLimitFilter>>(), policy);
         var (context, httpContext) = CreateAuthenticatedExecutingContext(userId);
         httpContext.TraceIdentifier = "req_concurrent_chat";
 

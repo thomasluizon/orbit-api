@@ -49,6 +49,9 @@ public class GetCalendarSyncSuggestionsQueryHandlerTests
 
     public GetCalendarSyncSuggestionsQueryHandlerTests()
     {
+        Orbit.Tests.Shared.RepositoryProjections.FromFind<Habit, CalendarHabitMatch>(_habitRepo);
+        Orbit.Tests.Shared.RepositoryProjections.FromFind<GoogleCalendarSyncSuggestion, CalendarSuggestionRead>(_suggestionRepo);
+
         _payGate.CanAccessCalendar(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(Result.Success()));
         _handler = new GetCalendarSyncSuggestionsQueryHandler(

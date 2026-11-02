@@ -36,7 +36,9 @@ public class GetStreakHistoryQueryHandler(
 
         var seedFrom = request.DateFrom.AddDays(-AppConstants.StreakRepairWindowDays);
 
-        var allHabits = await habitRepository.FindAsync(h => h.UserId == request.UserId, cancellationToken);
+        var allHabits = (await habitRepository.ProjectAsync(h => h.UserId == request.UserId,
+            HabitScheduleProjection.Select, cancellationToken))
+            .Select(snapshot => Habit.FromScheduleSnapshot(snapshot, request.UserId)).ToList();
         var streakEligibleHabitIds = allHabits
             .Where(h => !h.IsDeleted && !h.IsBadHabit)
             .Select(h => h.Id)

@@ -22,12 +22,10 @@ public record GetNotificationsResponse(
     int? TotalCount = null,
     string? SourceRevision = null);
 
-public record NotificationRevision(Guid Id, DateTime UpdatedAtUtc);
-
 public record GetNotificationsQuery(Guid UserId, int Offset = 0, int Limit = AppConstants.MaxNotificationsReturned) : IRequest<Result<GetNotificationsResponse>>;
 
 public class GetNotificationsQueryHandler(
-    IGenericRepository<Notification> notificationRepository) : IRequestHandler<GetNotificationsQuery, Result<GetNotificationsResponse>>
+    IGenericRepository<Notification> notificationRepository, INotificationInboxAggregateReader aggregateReader) : IRequestHandler<GetNotificationsQuery, Result<GetNotificationsResponse>>
 {
     public async Task<Result<GetNotificationsResponse>> Handle(GetNotificationsQuery request, CancellationToken cancellationToken)
     {
@@ -41,18 +39,8 @@ public class GetNotificationsQueryHandler(
             .Select(n => new NotificationItemDto(n.Id, n.Title, n.Body, n.Url, n.HabitId, n.IsRead, n.CreatedAtUtc))
             .ToList();
 
-        var unreadCount = await notificationRepository.CountAsync(
-            VisibleForUser(request.UserId, unreadOnly: true),
-            cancellationToken);
-
-        var totalCount = await notificationRepository.CountAsync(
-            VisibleForUser(request.UserId),
-            cancellationToken);
-
-        var sources = await notificationRepository.ProjectAsync(VisibleForUser(request.UserId),
-            q => q.OrderBy(n => n.Id).Select(n => new NotificationRevision(n.Id, n.UpdatedAtUtc)), cancellationToken);
-        return Result.Success(new GetNotificationsResponse(items, unreadCount, totalCount,
-            Orbit.Application.Chat.ReadRevision.Hash(sources)));
+        var aggregate = await aggregateReader.ReadAsync(request.UserId, cancellationToken);
+        return Result.Success(new GetNotificationsResponse(items, aggregate.UnreadCount, aggregate.TotalCount, aggregate.Revision));
     }
 
     // Mirrors RETIRED_NOTIFICATION_URL_PREFIXES so counts match both inboxes: https://github.com/thomasluizon/orbit-ui-mobile/blob/main/packages/shared/src/utils/notification-actions.ts

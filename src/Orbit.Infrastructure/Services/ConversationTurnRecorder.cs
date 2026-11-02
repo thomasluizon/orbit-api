@@ -148,11 +148,13 @@ public sealed class ConversationTurnRecorder(
                 content = row.ModelContextJson ?? BuildModelContext(row.Content, row.ResponseJson, row.ToolResultsJson, row.PreviewOutcomesJson);
             }
             byte[]? bytes = null;
-            if (ReferenceEquals(image, row))
+            if (ReferenceEquals(row, image))
             {
-                bytes = await storage.ReadPrivateAsync(row.ImageObjectKey!, cancellationToken);
-                if (Convert.ToHexStringLower(SHA256.HashData(bytes)) != row.ImageSha256)
-                    throw new InvalidOperationException("Conversation image checksum did not match.");
+                await using var source = await storage.ReadPrivateAsync(row.ImageObjectKey!, cancellationToken);
+                await using var verified = new VerifiedConversationImageStream(source, row.ImageSha256!);
+                using var buffer = new MemoryStream();
+                await verified.CopyToAsync(buffer, cancellationToken);
+                bytes = buffer.ToArray();
             }
             messages.Add(new(row.Role, content) { ServerOwned = true, ImageData = bytes, ImageMimeType = row.ImageContentType });
         }
@@ -195,10 +197,8 @@ public sealed class ConversationTurnRecorder(
         var row = await db.ConversationTurns.AsNoTracking().SingleOrDefaultAsync(row => row.UserId == userId
             && row.ConversationId == conversationId && row.TurnId == turnId && row.Role == "user", cancellationToken);
         if (row?.ImageObjectKey is null) return null;
-        var bytes = await storage.ReadPrivateAsync(row.ImageObjectKey, cancellationToken);
-        if (Convert.ToHexStringLower(SHA256.HashData(bytes)) != row.ImageSha256)
-            throw new InvalidOperationException("Conversation image checksum did not match.");
-        return new(bytes, row.ImageContentType!);
+        var stream = await storage.ReadPrivateAsync(row.ImageObjectKey, cancellationToken);
+        return new(new VerifiedConversationImageStream(stream, row.ImageSha256!), row.ImageContentType!);
     }
 
     public async Task<bool> DeleteAsync(Guid userId, Guid conversationId, CancellationToken cancellationToken = default)

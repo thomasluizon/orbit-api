@@ -26,7 +26,7 @@ public class TranscribeAudioCommandHandlerTests
         _transcription.TranscribeAsync(Arg.Any<Stream>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success("Walk the dog every morning."));
 
-        var command = new TranscribeAudioCommand(_userId, [1, 2, 3], "clip.webm");
+        var command = new TranscribeAudioCommand(_userId, new MemoryStream([1, 2, 3]), "clip.webm");
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
@@ -42,7 +42,7 @@ public class TranscribeAudioCommandHandlerTests
         _transcription.TranscribeAsync(Arg.Any<Stream>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns(Result.Failure<string>(ErrorCopy.English(errorCode), errorCode));
 
-        var command = new TranscribeAudioCommand(_userId, [1, 2, 3], "clip.webm");
+        var command = new TranscribeAudioCommand(_userId, new MemoryStream([1, 2, 3]), "clip.webm");
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
@@ -64,7 +64,7 @@ public class TranscribeAudioCommandHandlerTests
         _transcription.TranscribeAsync(Arg.Any<Stream>(), Arg.Any<string>(), expectedHint, Arg.Any<CancellationToken>())
             .Returns(Result.Success("Transcribed text"));
 
-        var result = await handler.Handle(new TranscribeAudioCommand(userId, [1, 2, 3], "clip.webm"), CancellationToken.None);
+        var result = await handler.Handle(new TranscribeAudioCommand(userId, new MemoryStream([1, 2, 3]), "clip.webm"), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         await _transcription.Received(1).TranscribeAsync(
@@ -82,7 +82,7 @@ public class TranscribeAudioCommandHandlerTests
         _transcription.TranscribeAsync(Arg.Any<Stream>(), Arg.Any<string>(), Arg.Is<string?>(language => language == null), Arg.Any<CancellationToken>())
             .Returns(Result.Success("Transcribed text"));
 
-        var result = await _handler.Handle(new TranscribeAudioCommand(_userId, [1, 2, 3], "clip.webm"), CancellationToken.None);
+        var result = await _handler.Handle(new TranscribeAudioCommand(_userId, new MemoryStream([1, 2, 3]), "clip.webm"), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         await _transcription.Received(1).TranscribeAsync(

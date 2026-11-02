@@ -120,8 +120,8 @@ public class GetHabitWidgetQueryHandlerTests
     {
         var habit = CreateHabit(
             "Long overdue",
-            Today.AddDays(-AppConstants.MaxRangeDays - 1),
-            AppConstants.MaxRangeDays + 34);
+            Today.AddDays(-AppConstants.MaxReadRangeDays - 1),
+            AppConstants.MaxReadRangeDays + 34);
         SetupHabits(habit);
         var scheduleLogReader = Substitute.For<IHabitScheduleLogReader>();
         scheduleLogReader.ReadDaysAsync(
@@ -131,7 +131,8 @@ public class GetHabitWidgetQueryHandlerTests
             Arg.Any<CancellationToken>()).Returns(Array.Empty<HabitScheduleLogDay>());
         scheduleLogReader.ReadResolvedDueDateIdsAsync(
             Arg.Any<IReadOnlyCollection<Guid>>(),
-            Arg.Any<CancellationToken>()).Returns(new HashSet<Guid>());
+            Arg.Any<CancellationToken>(), Arg.Any<DateOnly?>()).Returns(new HashSet<Guid>());
+        Orbit.Tests.Shared.RepositoryProjections.FromFind<Habit, Guid>(_habitRepository);
         var scheduleHandler = new GetHabitScheduleQueryHandler(
             _habitRepository,
             scheduleLogReader,
@@ -166,6 +167,12 @@ public class GetHabitWidgetQueryHandlerTests
 
     private void SetupHabits(params Habit[] habits)
     {
+        _habitRepository.ProjectAsync(
+                Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Any<Func<IQueryable<Habit>, IQueryable<GetHabitWidgetQueryHandler.WidgetHabitRow>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call => call.ArgAt<Func<IQueryable<Habit>, IQueryable<GetHabitWidgetQueryHandler.WidgetHabitRow>>>(1)(
+                habits.AsQueryable()).ToList());
         _habitRepository.ProjectAsync(
                 Arg.Any<Expression<Func<Habit, bool>>>(),
                 Arg.Any<Func<IQueryable<Habit>, IQueryable<HabitScheduleCandidate>>>(),

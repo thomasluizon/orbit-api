@@ -31,6 +31,9 @@ public class GetCalendarEventsQueryHandlerTests
 
     public GetCalendarEventsQueryHandlerTests()
     {
+        Orbit.Tests.Shared.RepositoryProjections.FromFind<Habit, ImportedCalendarHabit>(_habitRepo);
+        Orbit.Tests.Shared.RepositoryProjections.FromFind<GoogleCalendarSyncSuggestion, PendingCalendarEvent>(_suggestionRepo);
+
         _payGate.CanAccessCalendar(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(Result.Success()));
         _handler = new GetCalendarEventsQueryHandler(
@@ -195,7 +198,7 @@ public class GetCalendarEventsQueryHandlerTests
             .Returns("valid-access-token");
 
         var importedHabit = Habit.Create(new HabitCreateParams(((FrequencyUnit?)(Domain.Enums.FrequencyUnit.Week)) is null ? HabitSchedule.OneTime : HabitSchedule.Recurring,
-            user.Id, "Existing", Domain.Enums.FrequencyUnit.Week, 1,
+            UserId, "Existing", Domain.Enums.FrequencyUnit.Week, 1,
             DueDate: DateOnly.FromDateTime(DateTime.UtcNow),
             GoogleEventId: "evt_already")).Value;
 

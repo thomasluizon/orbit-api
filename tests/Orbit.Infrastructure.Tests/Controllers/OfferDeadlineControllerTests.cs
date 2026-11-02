@@ -108,12 +108,10 @@ public sealed partial class OfferDeadlineControllerTests
         var alerts = Enumerable.Range(1, 3)
             .Select(index => Notification.Create(user.Id, $"Alert {index}", "Unread alert")).ToArray();
         var notifications = Repository(alerts);
-        notifications.ProjectAsync(Arg.Any<Expression<Func<Notification, bool>>>(),
-            Arg.Any<Func<IQueryable<Notification>, IQueryable<NotificationRevision>>>(), Arg.Any<CancellationToken>())
-            .Returns(call => call.Arg<Func<IQueryable<Notification>, IQueryable<NotificationRevision>>>()(
-                alerts.Where(call.Arg<Expression<Func<Notification, bool>>>().Compile()).AsQueryable()).ToArray());
+        var aggregate = Substitute.For<INotificationInboxAggregateReader>();
+        aggregate.ReadAsync(user.Id, Arg.Any<CancellationToken>()).Returns(new NotificationInboxAggregate(3, 3, "revision"));
         var mediator = Substitute.For<IMediator>();
-        var notificationQuery = new GetNotificationsQueryHandler(notifications);
+        var notificationQuery = new GetNotificationsQueryHandler(notifications, aggregate);
         mediator.Send(Arg.Any<GetNotificationsQuery>(), Arg.Any<CancellationToken>())
             .Returns(call => notificationQuery.Handle(call.Arg<GetNotificationsQuery>(), call.Arg<CancellationToken>()));
         var dates = Substitute.For<IUserDateService>();

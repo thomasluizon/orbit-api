@@ -120,15 +120,14 @@ public class ErrorCodesAndMessagesTests
         AppConstants.MaxChecklistItemTextLength.Should().BePositive();
         AppConstants.MaxHabitDepth.Should().BePositive();
         AppConstants.MaxTagsPerHabit.Should().BePositive();
-        AppConstants.MaxRangeDays.Should().BePositive();
+        AppConstants.MaxReadRangeDays.Should().BePositive();
         AppConstants.MaxBulkOperationSize.Should().BePositive();
         AppConstants.MaxGoalsPerHabit.Should().BePositive();
         AppConstants.MaxHabitsPerGoal.Should().BePositive();
         AppConstants.MaxPushSubscriptionsPerUser.Should().BePositive();
         AppConstants.MaxNotificationsReturned.Should().BePositive();
         AppConstants.MaxChecklistItems.Should().BePositive();
-        AppConstants.MaxTagNameLength.Should().BePositive();
-        AppConstants.MaxPageSize.Should().BePositive();
+        AppConstants.MaxQueryPageSize.Should().BePositive();
         AppConstants.DefaultOverdueWindowDays.Should().BePositive();
     }
 

@@ -32,7 +32,7 @@ public sealed class GetHabitRankingTool(IMediator mediator) : IAiTool
             months = new { type = JsonSchemaTypes.Integer, minimum = 1, maximum = 120 },
             metric = new { type = JsonSchemaTypes.String, @enum = new[] { HabitRankingDefinition.CompletionLogRecords } },
             habit_ids = new { type = JsonSchemaTypes.Array, items = new { type = JsonSchemaTypes.String }, sensitive = true },
-            page_size = new { type = JsonSchemaTypes.Integer, minimum = 1, maximum = HabitRankingDefinition.MaxPageSize },
+            page_size = new { type = JsonSchemaTypes.Integer, minimum = 1, maximum = HabitRankingDefinition.MaxRankingPageSize },
             query_token = new { type = JsonSchemaTypes.String, sensitive = true, description = "Reuse for paging or refresh with no date, metric, filter or page-size overrides." },
             cursor = new { type = JsonSchemaTypes.String, sensitive = true },
             refresh = new { type = JsonSchemaTypes.Boolean, description = "Recalculate the bound absolute query." }

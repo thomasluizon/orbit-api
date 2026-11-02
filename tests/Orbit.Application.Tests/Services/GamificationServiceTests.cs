@@ -1,5 +1,8 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Hangfire;
+using Hangfire.Common;
+using Hangfire.States;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
@@ -30,7 +33,8 @@ public class GamificationServiceTests
     private readonly IGenericRepository<UserAchievement> _achievementRepo = Substitute.For<IGenericRepository<UserAchievement>>();
     private readonly IGenericRepository<Notification> _notificationRepo = Substitute.For<IGenericRepository<Notification>>();
     private readonly IGenericRepository<XpAwardLog> _xpAwardLogRepo = Substitute.For<IGenericRepository<XpAwardLog>>();
-    private readonly IPushNotificationService _pushService = Substitute.For<IPushNotificationService>();
+    private readonly IBackgroundJobClient _backgroundJobs = Substitute.For<IBackgroundJobClient>();
+    private readonly List<Job> _pushJobs = [];
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly IFeatureFlagService _featureFlagService = Substitute.For<IFeatureFlagService>();
@@ -48,8 +52,10 @@ public class GamificationServiceTests
             _userRepo, _habitRepo, _habitLogRepo, _goalRepo, _achievementRepo, _notificationRepo, _xpAwardLogRepo,
             _foundingAchievementReader);
         _snapshotStore = new HabitScheduleSnapshotStore(_habitRepo);
+        _backgroundJobs.Create(Arg.Do<Job>(job => _pushJobs.Add(job)), Arg.Any<IState>());
+        _unitOfWork.When(unit => unit.AfterCommit(Arg.Any<Action>())).Do(call => call.Arg<Action>()());
         _sut = new GamificationService(
-            repos, _pushService, _userDateService, new XpAwarder(_xpAwardLogRepo), _unitOfWork,
+            repos, _backgroundJobs, _userDateService, new XpAwarder(_xpAwardLogRepo), _unitOfWork,
             _featureFlagService, Substitute.For<ILogger<GamificationService>>(),
             _snapshotStore);
 
@@ -165,6 +171,13 @@ public class GamificationServiceTests
 
     private void SetupUserHabits(params Habit[] habits)
     {
+        _habitRepo.FindTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => habits.Where(call.Arg<Expression<Func<Habit, bool>>>().Compile()).ToArray());
+        _habitLogRepo.ProjectAsync(Arg.Any<Expression<Func<HabitLog, bool>>>(),
+            Arg.Any<Func<IQueryable<HabitLog>, IQueryable<CompletionDay>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.Arg<Func<IQueryable<HabitLog>, IQueryable<CompletionDay>>>()(
+                habits.SelectMany(h => h.Logs).Where(call.Arg<Expression<Func<HabitLog, bool>>>().Compile()).AsQueryable()).ToArray());
+
         _habitRepo.ProjectAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Guid>>>(),
@@ -255,7 +268,7 @@ public class GamificationServiceTests
             : [AchievementDefinitions.Comeback]);
         user.TotalXp.Should().Be(extraHabitCount == 0 ? 106 : 81);
         user.Level.Should().Be(extraHabitCount == 0 ? 2 : 1);
-        await _habitRepo.Received(2).ProjectAsync(
+        await _habitRepo.Received(1).ProjectAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<HabitScheduleSnapshot>>>(),
             Arg.Any<CancellationToken>());
@@ -265,9 +278,9 @@ public class GamificationServiceTests
     {
         _habitLogRepo.ProjectAsync(
             Arg.Any<Expression<Func<HabitLog, bool>>>(),
-            Arg.Any<Func<IQueryable<HabitLog>, IQueryable<DateTime>>>(),
+            Arg.Any<Func<IQueryable<HabitLog>, IQueryable<CompletionMinute>>>(),
             Arg.Any<CancellationToken>())
-            .Returns(call => call.ArgAt<Func<IQueryable<HabitLog>, IQueryable<DateTime>>>(1)(logs.AsQueryable()).ToList());
+            .Returns(call => call.ArgAt<Func<IQueryable<HabitLog>, IQueryable<CompletionMinute>>>(1)(logs.AsQueryable()).ToList());
     }
 
     private void SetupHabitCount(int count)
@@ -903,7 +916,7 @@ public class GamificationServiceTests
             Arg.Any<Expression<Func<HabitLog, bool>>>(),
             Arg.Any<Func<IQueryable<HabitLog>, IQueryable<LoggedHabitLog>>>(),
             Arg.Any<CancellationToken>());
-        await _habitRepo.Received(2).ProjectAsync(
+        await _habitRepo.Received(1).ProjectAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<HabitScheduleSnapshot>>>(),
             Arg.Any<CancellationToken>());
@@ -1091,9 +1104,8 @@ public class GamificationServiceTests
             ? $"Você chegou ao nível {user.Level}"
             : $"You reached level {user.Level}"));
         foreach (var notification in notifications)
-            await _pushService.Received(1).SendToUserAsync(
-                UserId, notification.Title, notification.Body,
-                NotificationUrls.Progress, Arg.Any<CancellationToken>());
+            _pushJobs.Should().ContainSingle(job => (Guid)job.Args[0] == UserId && (string)job.Args[1] == notification.Title
+                && (string)job.Args[2] == notification.Body && (string)job.Args[3] == NotificationUrls.Progress);
     }
 
     [Fact]
@@ -1107,12 +1119,8 @@ public class GamificationServiceTests
 
         await _sut.ProcessHabitCreated(UserId);
 
-        await _pushService.Received(1).SendToUserAsync(
-            UserId,
-            "New achievement: first Orbit",
-            "Create your first habit (+25 XP)",
-            NotificationUrls.Progress,
-            Arg.Any<CancellationToken>());
+        _pushJobs.Should().ContainSingle(job => (Guid)job.Args[0] == UserId && (string)job.Args[1] == "New achievement: first Orbit"
+            && (string)job.Args[2] == "Create your first habit (+25 XP)" && (string)job.Args[3] == NotificationUrls.Progress);
     }
 
     [Theory]
@@ -1134,8 +1142,8 @@ public class GamificationServiceTests
         await _notificationRepo.Received(1).AddAsync(
             Arg.Is<Notification>(n => n.Title == title && n.Body == body && n.Url == NotificationUrls.Progress),
             Arg.Any<CancellationToken>());
-        await _pushService.Received(1).SendToUserAsync(
-            UserId, title, body, NotificationUrls.Progress, Arg.Any<CancellationToken>());
+        _pushJobs.Should().ContainSingle(job => (Guid)job.Args[0] == UserId && (string)job.Args[1] == title
+            && (string)job.Args[2] == body && (string)job.Args[3] == NotificationUrls.Progress);
     }
 
     [Fact]
@@ -1160,12 +1168,7 @@ public class GamificationServiceTests
 
         saveAttempts.Should().Be(2);
         _unitOfWork.Received(1).ResetTracking();
-        await _pushService.Received(1).SendToUserAsync(
-            UserId,
-            Arg.Is<string>(s => s.Contains("New achievement")),
-            Arg.Any<string>(),
-            Arg.Any<string?>(),
-            Arg.Any<CancellationToken>());
+        _pushJobs.Should().ContainSingle(job => ((string)job.Args[1]).Contains("New achievement"));
     }
 
     [Fact]
@@ -1183,12 +1186,7 @@ public class GamificationServiceTests
 
         await act.Should().ThrowAsync<DbUpdateConcurrencyException>();
         _unitOfWork.Received(2).ResetTracking();
-        await _pushService.DidNotReceive().SendToUserAsync(
-            Arg.Any<Guid>(),
-            Arg.Any<string>(),
-            Arg.Any<string>(),
-            Arg.Any<string?>(),
-            Arg.Any<CancellationToken>());
+        _pushJobs.Should().BeEmpty();
     }
 
     [Fact]
@@ -1427,6 +1425,16 @@ public class GamificationServiceTests
         foreach (var user in users) user.GrantLifetimePro();
         var earned = new List<UserAchievement>();
         ConfigurePageTransactions();
+        var committed = false;
+        _unitOfWork.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task<IReadOnlyList<FoundingReconciliationResult>>>>(), Arg.Any<CancellationToken>())
+            .Returns(async call =>
+            {
+                var page = await call.Arg<Func<CancellationToken, Task<IReadOnlyList<FoundingReconciliationResult>>>>()(call.Arg<CancellationToken>());
+                _pushJobs.Should().BeEmpty();
+                committed = true;
+                return page;
+            });
+        _unitOfWork.When(unit => unit.AfterCommit(Arg.Any<Action>())).Do(_ => committed.Should().BeTrue());
         _userRepo.FindOneTrackedAsync(Arg.Any<Expression<Func<User, bool>>>(),
             Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(), Arg.Any<CancellationToken>()).Returns(call =>
         {
@@ -1458,6 +1466,9 @@ public class GamificationServiceTests
         results.Single(result => result.UserId == users[1].Id).Granted.Should().Equal(AchievementDefinitions.Liftoff);
         if (failFirst) results.Single(result => result.UserId == users[0].Id).Error.Should().BeOfType<InvalidOperationException>();
         else results.Single(result => result.UserId == users[0].Id).Error.Should().BeNull();
+        _pushJobs.Should().HaveCount(failFirst ? 1 : 2);
+        _pushJobs.Select(job => (Guid)job.Args[0]).Should().BeEquivalentTo(
+            failFirst ? [users[1].Id] : users.Select(user => user.Id));
         earned.Should().HaveCount(failFirst ? 1 : 2);
         await _foundingAchievementReader.Received(1).ReadEvidencePageAsync(Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<CancellationToken>());
         await _foundingAchievementReader.DidNotReceive().ReadEvidenceAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
@@ -1626,12 +1637,7 @@ public class GamificationServiceTests
             UserId,
             Arg.Any<CancellationToken>());
         _unitOfWork.Received(1).ResetTracking();
-        await _pushService.DidNotReceive().SendToUserAsync(
-            Arg.Any<Guid>(),
-            Arg.Any<string>(),
-            Arg.Any<string>(),
-            Arg.Any<string?>(),
-            Arg.Any<CancellationToken>());
+        _pushJobs.Should().BeEmpty();
     }
 
     [Fact]
@@ -1736,11 +1742,6 @@ public class GamificationServiceTests
         persistedWinnerUser.TotalXp.Should().Be(0);
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
         _unitOfWork.Received(1).ResetTracking();
-        await _pushService.DidNotReceive().SendToUserAsync(
-            Arg.Any<Guid>(),
-            Arg.Any<string>(),
-            Arg.Any<string>(),
-            Arg.Any<string?>(),
-            Arg.Any<CancellationToken>());
+        _pushJobs.Should().BeEmpty();
     }
 }

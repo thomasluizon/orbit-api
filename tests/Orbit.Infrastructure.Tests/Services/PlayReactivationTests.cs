@@ -133,7 +133,7 @@ public class PlayReactivationTests
         var remaining = await persisted.OwedSubscriptionCancellations.ToListAsync();
         remaining.Should().HaveCount(2);
         remaining.Should().NotContain(record => record.Id == owed.Id);
-        var inbox = await new GetNotificationsQueryHandler(new GenericRepository<Notification>(persisted))
+        var inbox = await new GetNotificationsQueryHandler(new GenericRepository<Notification>(persisted), new NotificationInboxAggregateReader(persisted))
             .Handle(new GetNotificationsQuery(userId), CancellationToken.None);
         inbox.Value.UnreadCount.Should().Be(1);
         var notice = inbox.Value.Items.Should().ContainSingle().Subject;

@@ -29,6 +29,7 @@ public class BulkLogHabitsCommandHandlerTests
     private readonly IGamificationService _gamificationService = Substitute.For<IGamificationService>();
     private readonly IGoalCompletionService _goalCompletionService = Substitute.For<IGoalCompletionService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
+    private readonly ILogger<BulkLogHabitsCommandHandler> _logger = Substitute.For<ILogger<BulkLogHabitsCommandHandler>>();
     private readonly MemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
     private readonly BulkLogHabitsCommandHandler _handler;
 
@@ -78,18 +79,18 @@ public class BulkLogHabitsCommandHandlerTests
         var services = new BulkLogServices(_userDateService, _userStreakService, _gamificationService, Substitute.For<IGenericRepository<Notification>>());
         _handler = new BulkLogHabitsCommandHandler(
             _habitRepo, _habitLogRepo, services, _goalCompletionService, _unitOfWork, _cache,
-            Substitute.For<ILogger<BulkLogHabitsCommandHandler>>());
+            _logger);
 
         _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Today);
         _userStreakService.RecalculateAsync(Arg.Any<Guid>(), cancellationToken: Arg.Any<CancellationToken>())
             .Returns(new UserStreakState(1, 1, Today));
         _unitOfWork.ExecuteInTransactionAsync(
-                Arg.Any<Func<CancellationToken, Task>>(),
+                Arg.Any<Func<CancellationToken, Task<(BulkLogResult, Exception?, int)>>>(),
                 Arg.Any<CancellationToken>())
             .Returns(call =>
             {
-                var operation = call.ArgAt<Func<CancellationToken, Task>>(0);
+                var operation = call.ArgAt<Func<CancellationToken, Task<(BulkLogResult, Exception?, int)>>>(0);
                 var ct = call.ArgAt<CancellationToken>(1);
                 return operation(ct);
             });
@@ -100,6 +101,36 @@ public class BulkLogHabitsCommandHandlerTests
                 Arg.Any<bool>(),
                 Arg.Any<CancellationToken>())
             .Returns(Array.Empty<GoalCompletionUpdate>());
+    }
+
+    [Fact]
+    public async Task Handle_ReplayedTransaction_ReturnsOnlyCommittedAttemptAndLogsOneFailureSummary()
+    {
+        var habits = Enumerable.Range(0, 3).Select(index => Habit.Create(new HabitCreateParams(
+            HabitSchedule.Recurring, UserId, $"Failing {index}", FrequencyUnit.Day, 1, DueDate: Today)).Value).ToList();
+        SetupHabitsForUser(habits);
+        var failure = new InvalidOperationException("insert failed");
+        _habitLogRepo.AddAsync(Arg.Any<HabitLog>(), Arg.Any<CancellationToken>()).ThrowsAsync(failure);
+        _logger.IsEnabled(LogLevel.Error).Returns(true);
+        _unitOfWork.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task<(BulkLogResult, Exception?, int)>>>(), Arg.Any<CancellationToken>())
+            .Returns(async call =>
+            {
+                var operation = call.ArgAt<Func<CancellationToken, Task<(BulkLogResult, Exception?, int)>>>(0);
+                var token = call.ArgAt<CancellationToken>(1);
+                await operation(token);
+                foreach (var habit in habits) habit.Unlog(Today).IsSuccess.Should().BeTrue();
+                return await operation(token);
+            });
+
+        var result = await _handler.Handle(new BulkLogHabitsCommand(UserId,
+            habits.Select(habit => new BulkLogItem(habit.Id)).ToList()), default);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Results.Should().HaveCount(3).And.OnlyContain(item => item.Status == BulkItemStatus.Failed);
+        var error = _logger.ReceivedCalls().Where(call => call.GetMethodInfo().Name == "Log"
+            && call.GetArguments()[0] is LogLevel.Error).Should().ContainSingle().Subject;
+        error.GetArguments()[2]?.ToString().Should().Be("Bulk logging failed for 3 items");
+        error.GetArguments()[3].Should().BeSameAs(failure);
     }
 
     [Fact]
@@ -453,7 +484,7 @@ public class BulkLogHabitsCommandHandlerTests
 
         await act.Should().ThrowAsync<InvalidOperationException>();
         await _unitOfWork.Received(1).ExecuteInTransactionAsync(
-            Arg.Any<Func<CancellationToken, Task>>(),
+            Arg.Any<Func<CancellationToken, Task<(BulkLogResult, Exception?, int)>>>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -684,6 +715,10 @@ public class BulkLogHabitsCommandHandlerTests
                 Arg.Any<CancellationToken>())
             .Returns(call => call.ArgAt<Func<CancellationToken, Task>>(0)(call.ArgAt<CancellationToken>(1)));
         unitOfWork.ExecuteInTransactionAsync(
+                Arg.Any<Func<CancellationToken, Task<(BulkLogResult, Exception?, int)>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call => call.ArgAt<Func<CancellationToken, Task<(BulkLogResult, Exception?, int)>>>(0)(call.ArgAt<CancellationToken>(1)));
+        unitOfWork.ExecuteInTransactionAsync(
                 Arg.Any<Func<CancellationToken, Task<IReadOnlyList<GoalCompletionUpdate>>>>(),
                 Arg.Any<CancellationToken>())
             .Returns(call => call.ArgAt<Func<CancellationToken, Task<IReadOnlyList<GoalCompletionUpdate>>>>(0)(
@@ -698,7 +733,7 @@ public class BulkLogHabitsCommandHandlerTests
             new GamificationRepositories(
                 userRepo, habitRepo, habitLogRepo, goalRepo, achievementRepo, notificationRepo, xpAwardRepo,
                 Substitute.For<IFoundingAchievementReader>()),
-            Substitute.For<IPushNotificationService>(),
+            Substitute.For<Hangfire.IBackgroundJobClient>(),
             userDateService,
             new XpAwarder(xpAwardRepo),
             unitOfWork,

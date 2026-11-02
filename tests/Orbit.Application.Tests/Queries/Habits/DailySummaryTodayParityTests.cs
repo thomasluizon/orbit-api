@@ -17,7 +17,7 @@ public class DailySummaryTodayParityTests
     [Theory]
     [InlineData(false, 0)]
     [InlineData(true, 0)]
-    [InlineData(false, AppConstants.MaxPageSize)]
+    [InlineData(false, AppConstants.MaxQueryPageSize)]
     public async Task Summary_UsesHojeRowsAndCompletionState(bool nestedCompletion, int extraRemainingCount)
     {
         var day = new DateOnly(2026, 10, 25);
@@ -66,14 +66,15 @@ public class DailySummaryTodayParityTests
         var dates = Substitute.For<IUserDateService>();
         dates.GetUserTodayAsync(userId, Arg.Any<CancellationToken>()).Returns(day);
         dates.GetUserWeekStartDayAsync(userId, Arg.Any<CancellationToken>()).Returns(1);
+        Orbit.Tests.Shared.RepositoryProjections.FromFind<Habit, Guid>(repo);
         var schedule = new GetHabitScheduleQueryHandler(repo, reader, Substitute.For<IHabitSchedulePageLoader>(),
             dates, Substitute.For<IUnitOfWork>(), repeatReminderReader: Substitute.For<IRepeatReminderReader>());
-        var hoje = await schedule.Handle(new(userId, day, day, IncludeOverdue: true, PageSize: AppConstants.MaxPageSize), default);
+        var hoje = await schedule.Handle(new(userId, day, day, IncludeOverdue: true, PageSize: AppConstants.MaxQueryPageSize), default);
         var hojeItems = hoje.Value.Items.ToList();
         for (var page = 2; page <= hoje.Value.TotalPages; page++)
         {
             var nextPage = await schedule.Handle(new(userId, day, day, IncludeOverdue: true,
-                Page: page, PageSize: AppConstants.MaxPageSize), default);
+                Page: page, PageSize: AppConstants.MaxQueryPageSize), default);
             hojeItems.AddRange(nextPage.Value.Items);
         }
         var users = Substitute.For<IGenericRepository<User>>();
@@ -85,8 +86,8 @@ public class DailySummaryTodayParityTests
             .Returns(logs.Select(l => new HabitSummaryLogFact(l.HabitId, l.Date, l.Value)).ToList());
         using var cache = new MemoryCache(new MemoryCacheOptions());
         var mediator = Substitute.For<IMediator>();
-        mediator.Send(Arg.Any<GetHabitScheduleQuery>(), Arg.Any<CancellationToken>())
-            .Returns(call => schedule.Handle(call.Arg<GetHabitScheduleQuery>(), call.Arg<CancellationToken>()));
+        mediator.Send(Arg.Any<GetDailySummaryScheduleQuery>(), Arg.Any<CancellationToken>())
+            .Returns(call => schedule.ReadForSummaryAsync(call.Arg<GetDailySummaryScheduleQuery>(), call.Arg<CancellationToken>()));
         var handler = new GetDailySummaryQueryHandler(repo, users, Substitute.For<IGenericRepository<HabitLog>>(),
             summaryLogs, payGate, Substitute.For<ISummaryService>(), cache, dates, mediator);
         var summary = await handler.Handle(new(userId, day, day, "pt-BR", GenerateNarrative: false), default);

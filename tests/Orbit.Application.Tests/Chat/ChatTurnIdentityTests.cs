@@ -40,4 +40,21 @@ public sealed class ChatTurnIdentityTests
         ChatTurnIdentity.Fingerprint(command with { EvalTraceRequested = true }).Should().NotBe(original);
         ChatTurnIdentity.Fingerprint(command with { BlockAnswer = new(Guid.NewGuid(), ["choice"]) }).Should().NotBe(original);
     }
+    [Fact]
+    public void LargeImageFingerprint_UsesDigestAndAcceptsLegacyInFlightIdentity()
+    {
+        var command = new ProcessUserChatCommand(Guid.NewGuid(), "Image", new byte[10 * 1024 * 1024], "image/png");
+        ChatTurnIdentity.Fingerprint(command);
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        var current = ChatTurnIdentity.Fingerprint(command);
+        (GC.GetAllocatedBytesForCurrentThread() - before).Should().BeLessThan(2L * command.ImageData!.Length);
+        current.Should().StartWith("v2:");
+        ChatTurnIdentity.Matches(current, command).Should().BeTrue();
+        var legacy = (byte[])typeof(ChatTurnIdentity).GetMethod("FingerprintBytes",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!
+            .Invoke(null, [command, true])!;
+        ChatTurnIdentity.Matches(Convert.ToHexString(legacy), command).Should().BeTrue();
+        ChatTurnIdentity.Matches(Convert.ToHexString(legacy), command with { Message = "Changed" }).Should().BeFalse();
+    }
+
 }

@@ -56,9 +56,7 @@ internal static partial class McpHttpGate
 
     private static async Task HandleMcpRequestAsync(HttpContext context, Func<Task> next)
     {
-        var body = await ReadBufferedRequestBodyAsync(context);
-
-        using var document = TryParseMcpBody(body);
+        using var document = await ReadBufferedMcpBodyAsync(context);
         var root = document?.RootElement;
 
         if (root is { ValueKind: JsonValueKind.Object } message &&
@@ -102,6 +100,7 @@ internal static partial class McpHttpGate
         }
 
         var moderation = context.RequestServices.GetRequiredService<IContentModerationService>();
+        var body = document?.RootElement.GetRawText() ?? string.Empty;
         var check = await moderation.CheckTextAsync(body, context.RequestAborted);
         if (check.Flagged || check.Unavailable)
         {
@@ -199,25 +198,21 @@ internal static partial class McpHttpGate
                 && AiBearingAgentOperations.Contains(operationId));
     }
 
-    internal static JsonDocument? TryParseMcpBody(string body)
+    internal static async Task<JsonDocument?> ReadBufferedMcpBodyAsync(HttpContext context)
     {
+        context.Request.EnableBuffering(bufferThreshold: 30 * 1024, bufferLimit: 1024 * 1024);
         try
         {
-            return JsonDocument.Parse(body);
+            return await JsonDocument.ParseAsync(context.Request.Body, cancellationToken: context.RequestAborted);
         }
         catch (JsonException)
         {
             return null;
         }
-    }
-
-    private static async Task<string> ReadBufferedRequestBodyAsync(HttpContext context)
-    {
-        context.Request.EnableBuffering();
-        using var reader = new StreamReader(context.Request.Body, leaveOpen: true);
-        var body = await reader.ReadToEndAsync(context.RequestAborted);
-        context.Request.Body.Position = 0;
-        return body;
+        finally
+        {
+            context.Request.Body.Position = 0;
+        }
     }
 
     private static async Task<bool> TryAuthenticateMcpRequestAsync(HttpContext context)

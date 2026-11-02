@@ -6,7 +6,41 @@ namespace Orbit.Application.Common;
 
 public static class ConcurrencyRetry
 {
-    private const int DefaultMaxAttempts = 3;
+    public const int DefaultMaxAttempts = 3;
+
+    public static async Task<T> RunAsync<T>(
+        Func<CancellationToken, Task<T>> operation,
+        Func<CancellationToken, Task> reset,
+        CancellationToken cancellationToken,
+        Func<Exception, bool>? shouldRetry = null,
+        int maxAttempts = DefaultMaxAttempts)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(maxAttempts, 1);
+        for (var attempt = 1; ; attempt++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                return await operation(cancellationToken);
+            }
+            catch (Exception exception) when (attempt < maxAttempts
+                && (shouldRetry?.Invoke(exception) ?? exception is DbUpdateConcurrencyException))
+            {
+                await reset(cancellationToken);
+            }
+        }
+    }
+
+    public static Task<T> RunAsync<T>(
+        IUnitOfWork unitOfWork,
+        Func<CancellationToken, Task<T>> operation,
+        CancellationToken cancellationToken,
+        Func<Exception, bool>? shouldRetry = null) =>
+        RunAsync(operation, _ =>
+        {
+            unitOfWork.ResetTracking();
+            return Task.CompletedTask;
+        }, cancellationToken, shouldRetry);
 
     public static async Task SaveWithRetryAsync(
         IUnitOfWork unitOfWork,
@@ -14,26 +48,16 @@ public static class ConcurrencyRetry
         CancellationToken cancellationToken,
         int maxAttempts = DefaultMaxAttempts)
     {
-        var attempt = 1;
-        while (true)
+        await RunAsync(async ct =>
         {
-            if (attempt > 1)
-                unitOfWork.ResetTracking();
-
-            await mutate(cancellationToken);
-
-            try
-            {
-                await unitOfWork.SaveChangesAsync(cancellationToken);
-                return;
-            }
-            catch (DbUpdateConcurrencyException) when (attempt < maxAttempts)
-            {
-                // Swallowed: the loop retries the save after resetting change tracking. https://github.com/thomasluizon/orbit-ui-mobile/issues/243
-            }
-
-            attempt++;
-        }
+            await mutate(ct);
+            await unitOfWork.SaveChangesAsync(ct);
+            return true;
+        }, _ =>
+        {
+            unitOfWork.ResetTracking();
+            return Task.CompletedTask;
+        }, cancellationToken, maxAttempts: maxAttempts);
     }
 
     public static async Task<Result<TEntity>> ExecuteAsync<TEntity>(

@@ -15,7 +15,7 @@ using Orbit.Domain.Interfaces;
 namespace Orbit.Application.Calendar.Commands;
 
 public record RunCalendarAutoSyncCommand(Guid UserId, bool IsOpportunistic = false)
-    : IRequest<Result<CalendarAutoSyncResult>>, IConcurrencyRetryable;
+    : IRequest<Result<CalendarAutoSyncResult>>;
 
 public record CalendarAutoSyncResult(
     int NewSuggestions,
@@ -41,6 +41,7 @@ public partial class RunCalendarAutoSyncCommandHandler(
     : IRequestHandler<RunCalendarAutoSyncCommand, Result<CalendarAutoSyncResult>>
 {
     private const int MaxSuggestionsPerTick = 25;
+    private static readonly TimeSpan ManualDedupeWindow = TimeSpan.FromMinutes(5);
     private static readonly TimeSpan BackgroundDedupeWindow = TimeSpan.FromHours(4);
     private static readonly TimeSpan NotificationRateLimitWindow = TimeSpan.FromHours(24);
     private const int QuietHoursStart = 8;
@@ -48,49 +49,15 @@ public partial class RunCalendarAutoSyncCommandHandler(
 
     public async Task<Result<CalendarAutoSyncResult>> Handle(RunCalendarAutoSyncCommand request, CancellationToken cancellationToken)
     {
-        var outcome = Result.Success(new CalendarAutoSyncResult(0, 0, GoogleCalendarAutoSyncStatus.Idle, AlreadySyncing: true));
-        await deps.UnitOfWork.ExecuteInTransactionAsync(async transactionToken =>
-        {
-            if (await deps.SyncLock.TryAcquireAsync(request.UserId, transactionToken))
-                outcome = await HandleLocked(request, transactionToken);
-        }, cancellationToken);
-        return outcome;
-    }
-
-    private async Task<Result<CalendarAutoSyncResult>> HandleLocked(RunCalendarAutoSyncCommand request, CancellationToken cancellationToken)
-    {
-        var gateCheck = await payGate.CanManageCalendar(request.UserId, cancellationToken);
-        if (gateCheck.IsFailure)
-            return gateCheck.PropagateError<CalendarAutoSyncResult>();
-
-        await deps.UnitOfWork.AcquireUserRowLockAsync(request.UserId, cancellationToken);
-        var user = await deps.UserRepository.FindOneTrackedAsync(
-            u => u.Id == request.UserId,
-            cancellationToken: cancellationToken);
-
-        if (user is null)
-            return Result.Failure<CalendarAutoSyncResult>(ErrorMessages.UserNotFound);
-
-        await deps.UserRepository.ReloadAsync(user, cancellationToken);
-
+        var preparation = await ConcurrencyRetry.RunAsync(deps.UnitOfWork, ct => PrepareAsync(request, ct), cancellationToken);
+        if (preparation.IsFailure) return preparation.PropagateError<CalendarAutoSyncResult>();
+        var user = preparation.Value.User;
+        if (!preparation.Value.ShouldSync)
+            return Result.Success(new CalendarAutoSyncResult(0, 0, user.GoogleCalendarAutoSyncStatus ?? GoogleCalendarAutoSyncStatus.Idle));
         var utcNow = timeProvider.GetUtcNow().UtcDateTime;
-
-        if (!user.GoogleCalendarAutoSyncEnabled && !request.IsOpportunistic)
-        {
-            return Result.Success(new CalendarAutoSyncResult(0, 0, user.GoogleCalendarAutoSyncStatus ?? GoogleCalendarAutoSyncStatus.Idle));
-        }
-
-        if (user.GoogleAccessToken is null)
-            return Result.Failure<CalendarAutoSyncResult>(ErrorMessages.AutoSyncNotConnected);
-
-        if (!request.IsOpportunistic
-            && user.GoogleCalendarLastSyncedAt is { } lastSync
-            && utcNow - lastSync < BackgroundDedupeWindow)
-        {
-            return Result.Success(new CalendarAutoSyncResult(0, 0, user.GoogleCalendarAutoSyncStatus ?? GoogleCalendarAutoSyncStatus.Idle));
-        }
-
-        var refresh = await deps.GoogleTokenService.TryRefreshAsync(user, cancellationToken);
+        var refresh = user.GoogleAccessTokenExpiresAtUtc > utcNow.AddMinutes(1)
+            ? new GoogleTokenRefreshOutcome(user.GoogleAccessToken, GoogleTokenRefreshResult.Success, null)
+            : await deps.GoogleTokenService.TryRefreshAsync(user, cancellationToken);
         if (refresh.Result == GoogleTokenRefreshResult.RefreshTokenInvalid
             || refresh.ErrorCode == GoogleTokenErrorCodes.NoRefreshToken)
         {
@@ -113,11 +80,52 @@ public partial class RunCalendarAutoSyncCommandHandler(
             return Result.Success(new CalendarAutoSyncResult(0, 0, GoogleCalendarAutoSyncStatus.TransientError));
         }
 
-        return await FetchAndProcessLocked(user, accessToken, utcNow, cancellationToken);
+        return await FetchAndProcess(user, accessToken, request, utcNow, cancellationToken);
     }
 
-    private async Task<Result<CalendarAutoSyncResult>> FetchAndProcessLocked(
-        User user, string accessToken, DateTime utcNow, CancellationToken ct)
+    private static TimeSpan DedupeWindow(RunCalendarAutoSyncCommand request) =>
+        request.IsOpportunistic ? ManualDedupeWindow : BackgroundDedupeWindow;
+
+    private sealed record SyncPreparation(User User, bool ShouldSync);
+
+    private async Task<Result<SyncPreparation>> PrepareAsync(RunCalendarAutoSyncCommand request, CancellationToken cancellationToken)
+    {
+        var gateCheck = await payGate.CanManageCalendar(request.UserId, cancellationToken);
+        if (gateCheck.IsFailure)
+            return gateCheck.PropagateError<SyncPreparation>();
+
+        var user = await deps.UserRepository.FindOneTrackedAsync(
+            u => u.Id == request.UserId,
+            cancellationToken: cancellationToken);
+
+        if (user is null)
+            return Result.Failure<SyncPreparation>(ErrorMessages.UserNotFound);
+
+        await deps.UserRepository.ReloadAsync(user, cancellationToken);
+
+        var utcNow = timeProvider.GetUtcNow().UtcDateTime;
+
+        if (!user.GoogleCalendarAutoSyncEnabled && !request.IsOpportunistic)
+        {
+            return Result.Success(new SyncPreparation(user, false));
+        }
+
+        if (user.GoogleAccessToken is null)
+            return Result.Failure<SyncPreparation>(ErrorMessages.AutoSyncNotConnected);
+
+        if (user.GoogleCalendarLastSyncedAt is { } lastSync
+            && utcNow - lastSync < DedupeWindow(request))
+        {
+            return Result.Success(new SyncPreparation(user, false));
+        }
+
+        user.MarkCalendarSyncAttempt(utcNow);
+        await deps.UnitOfWork.SaveChangesAsync(cancellationToken);
+        return Result.Success(new SyncPreparation(user, true));
+    }
+
+    private async Task<Result<CalendarAutoSyncResult>> FetchAndProcess(
+        User user, string accessToken, RunCalendarAutoSyncCommand request, DateTime utcNow, CancellationToken ct)
     {
         List<CalendarEventItem> fetched;
         try
@@ -139,10 +147,51 @@ public partial class RunCalendarAutoSyncCommandHandler(
             return Result.Success(new CalendarAutoSyncResult(0, 0, GoogleCalendarAutoSyncStatus.TransientError));
         }
 
+        await deps.UnitOfWork.SaveChangesAsync(ct);
+        try
+        {
+            return await ConcurrencyRetry.RunAsync(deps.UnitOfWork, async retryToken =>
+        {
+            var outcome = Result.Success(new CalendarAutoSyncResult(0, 0, GoogleCalendarAutoSyncStatus.Idle, AlreadySyncing: true));
+            await deps.UnitOfWork.ExecuteInTransactionAsync(async transactionToken =>
+            {
+                if (!await deps.SyncLock.TryAcquireAsync(user.Id, transactionToken)) return;
+                await deps.UnitOfWork.AcquireUserRowLockAsync(user.Id, transactionToken);
+                var current = await deps.UserRepository.FindOneTrackedAsync(u => u.Id == user.Id, cancellationToken: transactionToken);
+                if (current is null)
+                {
+                    outcome = Result.Failure<CalendarAutoSyncResult>(ErrorMessages.UserNotFound);
+                    return;
+                }
+                await deps.UserRepository.ReloadAsync(current, transactionToken);
+                var gate = await payGate.CanManageCalendar(current.Id, transactionToken);
+                if (gate.IsFailure) { outcome = gate.PropagateError<CalendarAutoSyncResult>(); return; }
+                if (current.GoogleAccessToken is null || (!current.GoogleCalendarAutoSyncEnabled && !request.IsOpportunistic)
+                    || current.GoogleCalendarLastSyncedAt is { } last && utcNow - last < DedupeWindow(request))
+                {
+                    outcome = Result.Success(new CalendarAutoSyncResult(0, 0, current.GoogleCalendarAutoSyncStatus ?? GoogleCalendarAutoSyncStatus.Idle));
+                    return;
+                }
+                outcome = await ProcessFetched(current, fetched, utcNow, transactionToken);
+            }, retryToken);
+            return outcome;
+        }, ct, exception => exception is DbUpdateConcurrencyException
+            || exception is DbUpdateException update && DbUniqueViolation.IsUniqueViolation(update));
+        }
+        catch (DbUpdateException exception) when (DbUniqueViolation.IsUniqueViolation(exception))
+        {
+            deps.UnitOfWork.ResetTracking();
+            return Result.Success(new CalendarAutoSyncResult(0, 0, GoogleCalendarAutoSyncStatus.TransientError));
+        }
+    }
+
+    private async Task<Result<CalendarAutoSyncResult>> ProcessFetched(User user, List<CalendarEventItem> fetched, DateTime utcNow, CancellationToken ct)
+    {
         var timeZone = TimeZoneHelper.FindTimeZone(user.TimeZone, logger, user.Id);
         var normalizedFetched = NormalizeFetchedEvents(user.Id, fetched);
-        var reconciled = await ReconcileExistingHabits(user, normalizedFetched, timeZone, utcNow, ct);
-        var newSuggestions = await CreateSuggestions(user, normalizedFetched, fetched, timeZone, utcNow, ct);
+        var habits = await deps.HabitRepository.FindTrackedAsync(h => h.UserId == user.Id, ct);
+        var reconciled = ReconcileExistingHabits(user, habits, normalizedFetched, timeZone, utcNow);
+        var newSuggestions = await CreateSuggestions(user, habits, normalizedFetched, fetched, timeZone, utcNow, ct);
 
         if (newSuggestions > 0 && IsInQuietHours(timeZone, utcNow)
             && !await HasRecentSuggestionNotification(user.Id, utcNow, ct))
@@ -150,15 +199,7 @@ public partial class RunCalendarAutoSyncCommandHandler(
             await CreateSuggestionNotification(user, newSuggestions, ct);
         }
 
-        try
-        {
-            await deps.UnitOfWork.SaveChangesAsync(ct);
-        }
-        catch (DbUpdateException ex) when (newSuggestions > 0 && DbUniqueViolation.IsUniqueViolation(ex))
-        {
-            deps.UnitOfWork.ResetTracking();
-            return Result.Success(new CalendarAutoSyncResult(0, 0, GoogleCalendarAutoSyncStatus.TransientError));
-        }
+        await deps.UnitOfWork.SaveChangesAsync(ct);
 
         user.MarkCalendarSyncSuccess(utcNow);
         await deps.UnitOfWork.SaveChangesAsync(ct);
@@ -166,11 +207,10 @@ public partial class RunCalendarAutoSyncCommandHandler(
         return Result.Success(new CalendarAutoSyncResult(newSuggestions, reconciled, GoogleCalendarAutoSyncStatus.Idle));
     }
 
-    private async Task<int> ReconcileExistingHabits(
-        User user, List<CalendarEventItem> fetched, TimeZoneInfo timeZone, DateTime utcNow, CancellationToken ct)
+    private int ReconcileExistingHabits(
+        User user, IReadOnlyList<Habit> habits, List<CalendarEventItem> fetched, TimeZoneInfo timeZone, DateTime utcNow)
     {
-        var assignedEventIds = (await deps.HabitRepository.FindAsync(
-                h => h.UserId == user.Id && h.GoogleEventId != null, ct))
+        var assignedEventIds = habits.Where(h => h.GoogleEventId != null)
             .Select(h => h.GoogleEventId!)
             .ToHashSet(StringComparer.Ordinal);
         var reservedEventIds = new HashSet<string>(assignedEventIds, StringComparer.Ordinal);
@@ -190,8 +230,7 @@ public partial class RunCalendarAutoSyncCommandHandler(
             return 0;
         }
 
-        var existingHabits = await deps.HabitRepository.FindTrackedAsync(
-            h => h.UserId == user.Id && h.GoogleEventId == null, ct);
+        var existingHabits = habits.Where(h => h.GoogleEventId == null);
 
         var habitsByKey = existingHabits
             .GroupBy(habit => LegacyCalendarMatchKey.BuildLegacyMatchKey(
@@ -202,6 +241,7 @@ public partial class RunCalendarAutoSyncCommandHandler(
             .ToDictionary(group => group.Key, group => group.Single(), StringComparer.Ordinal);
 
         int reconciled = 0;
+        var duplicates = 0;
         foreach (var (key, habit) in habitsByKey)
         {
             if (!eventsByKey.TryGetValue(key, out var googleEventId))
@@ -209,7 +249,7 @@ public partial class RunCalendarAutoSyncCommandHandler(
 
             if (!reservedEventIds.Add(googleEventId))
             {
-                LogDuplicateReconciliationEventId(logger, user.Id, habit.Id, googleEventId);
+                duplicates++;
                 continue;
             }
 
@@ -217,26 +257,26 @@ public partial class RunCalendarAutoSyncCommandHandler(
             reconciled++;
         }
 
+        if (duplicates > 0) LogDuplicateReconciliationEventIds(logger, user.Id, duplicates);
         user.MarkCalendarSyncReconciled(utcNow);
         return reconciled;
     }
 
     private async Task<int> CreateSuggestions(
-        User user, List<CalendarEventItem> fetched, List<CalendarEventItem> fetchedIncludingDuplicates,
+        User user, IReadOnlyList<Habit> habits, List<CalendarEventItem> fetched, List<CalendarEventItem> fetchedIncludingDuplicates,
         TimeZoneInfo timeZone, DateTime utcNow, CancellationToken ct)
     {
         if (fetched.Count == 0) return 0;
 
-        var habitEventIds = (await deps.HabitRepository.FindAsync(
-                h => h.UserId == user.Id && h.GoogleEventId != null, ct))
+        var habitEventIds = habits.Where(h => h.GoogleEventId != null)
             .Select(h => h.GoogleEventId!)
             .ToHashSet(StringComparer.Ordinal);
 
         // Reserve ids from ALL suggestions (incl. imported/dismissed): UserId+GoogleEventId is a full unique index, so re-inserting a known event throws 23505. https://thomasluizon.sentry.io/issues/ORBIT-API-E
-        var existingSuggestions = await deps.SuggestionRepository.FindAsync(s => s.UserId == user.Id, ct);
-        var existingSuggestionEventIds = existingSuggestions
-            .Select(s => s.GoogleEventId)
-            .ToHashSet(StringComparer.Ordinal);
+        var existingSuggestionEventIds = (await deps.SuggestionRepository.ProjectAsync(s => s.UserId == user.Id,
+            q => q.Select(s => s.GoogleEventId), ct)).ToHashSet(StringComparer.Ordinal);
+        var existingSuggestions = await deps.SuggestionRepository.FindAsync(s => s.UserId == user.Id
+            && s.DismissedAtUtc == null && s.ImportedAtUtc == null, ct);
         var reservedEventIds = new HashSet<string>(habitEventIds, StringComparer.Ordinal);
         reservedEventIds.UnionWith(existingSuggestionEventIds);
 
@@ -357,16 +397,9 @@ public partial class RunCalendarAutoSyncCommandHandler(
         var seenEventIds = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (var ev in fetched)
-        {
-            if (!seenEventIds.Add(ev.Id))
-            {
-                LogDuplicateFetchedEventId(logger, userId, ev.Id);
-                continue;
-            }
-
-            unique.Add(ev);
-        }
-
+            if (seenEventIds.Add(ev.Id)) unique.Add(ev);
+        if (fetched.Count != unique.Count)
+            LogDuplicateFetchedEventIds(logger, userId, fetched.Count - unique.Count);
         return unique;
     }
 
@@ -376,9 +409,9 @@ public partial class RunCalendarAutoSyncCommandHandler(
     [LoggerMessage(EventId = 4, Level = LogLevel.Warning, Message = "Google Calendar reconnect required during auto-sync for user {UserId} (code: {ErrorCode})")]
     private static partial void LogReconnectRequired(ILogger logger, Guid userId, string? errorCode);
 
-    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Duplicate Google Calendar event id skipped during auto-sync for user {UserId}: {GoogleEventId}")]
-    private static partial void LogDuplicateFetchedEventId(ILogger logger, Guid userId, string googleEventId);
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Skipped {Count} duplicate Google Calendar event ids during auto-sync for user {UserId}")]
+    private static partial void LogDuplicateFetchedEventIds(ILogger logger, Guid userId, int count);
 
-    [LoggerMessage(EventId = 3, Level = LogLevel.Warning, Message = "Duplicate Google Calendar event id reconciliation skipped for user {UserId}, habit {HabitId}: {GoogleEventId}")]
-    private static partial void LogDuplicateReconciliationEventId(ILogger logger, Guid userId, Guid habitId, string googleEventId);
+    [LoggerMessage(EventId = 3, Level = LogLevel.Warning, Message = "Skipped {Count} duplicate Google Calendar event ids during reconciliation for user {UserId}")]
+    private static partial void LogDuplicateReconciliationEventIds(ILogger logger, Guid userId, int count);
 }

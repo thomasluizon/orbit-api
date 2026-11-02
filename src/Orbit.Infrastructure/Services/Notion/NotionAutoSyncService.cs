@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Configuration;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -10,7 +11,7 @@ using Orbit.Infrastructure.Persistence;
 namespace Orbit.Infrastructure.Services.Notion;
 
 public sealed class NotionAutoSyncService(IServiceScopeFactory scopeFactory, TimeProvider clock,
-    ILogger<NotionAutoSyncService> logger) : BackgroundService, IScheduledJob
+    ILogger<NotionAutoSyncService> logger, IConfiguration? configuration = null) : BackgroundService, IScheduledJob
 {
     public string Name => "notion-auto-sync";
     public string CronExpression => "*/15 * * * *";
@@ -25,16 +26,28 @@ public sealed class NotionAutoSyncService(IServiceScopeFactory scopeFactory, Tim
             .Where(c => c.Status != NotionConnectionStatus.ReconnectRequired && (c.LastPollAtUtc == null || c.LastPollAtUtc <= cutoff))
             .Join(db.Users.Where(u => u.IsLifetimePro || u.BonusProExpiresAtUtc > nowUtc
                 || (u.SubscriptionPlan == UserPlan.Pro && u.SubscriptionExpiresAtUtc > nowUtc) || u.TrialEndsAt > nowUtc),
-                c => c.UserId, u => u.Id, (c, u) => c.UserId).ToListAsync(cancellationToken);
-        foreach (var userId in userIds)
+                c => c.UserId, u => u.Id, (c, u) => new { c.UserId, c.AccessToken, c.LastPollAtUtc })
+            .OrderBy(c => c.LastPollAtUtc).ThenBy(c => c.UserId)
+            .Take(Math.Clamp(configuration?.GetValue("NotionSync:BatchSize", 50) ?? 50, 1, 200))
+            .ToListAsync(cancellationToken);
+        await Parallel.ForEachAsync(userIds.GroupBy(c => c.AccessToken), new ParallelOptions
         {
-            using var userScope = scopeFactory.CreateScope();
-            try { await userScope.ServiceProvider.GetRequiredService<NotionPollService>().PollAsync(userId, cancellationToken); }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            MaxDegreeOfParallelism = Math.Clamp(configuration?.GetValue("NotionSync:Parallelism", 4) ?? 4, 1, 4),
+            CancellationToken = cancellationToken
+        }, async (connections, tickToken) =>
+        {
+            foreach (var connection in connections)
             {
-                logger.LogWarning(ex, "Notion sync could not finish for {UserId}", userId);
+                using var userScope = scopeFactory.CreateScope();
+                using var deadline = CancellationTokenSource.CreateLinkedTokenSource(tickToken);
+                deadline.CancelAfter(TimeSpan.FromMinutes(2));
+                try { await userScope.ServiceProvider.GetRequiredService<NotionPollService>().PollAsync(connection.UserId, deadline.Token); }
+                catch (Exception ex) when (ex is not OperationCanceledException || !tickToken.IsCancellationRequested)
+                {
+                    logger.LogWarning(ex, "Notion sync could not finish for {UserId}", connection.UserId);
+                }
             }
-        }
+        });
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)

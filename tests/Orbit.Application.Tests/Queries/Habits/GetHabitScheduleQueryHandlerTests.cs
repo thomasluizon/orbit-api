@@ -39,7 +39,7 @@ public class GetHabitScheduleQueryHandlerTests
             Arg.Any<CancellationToken>()).Returns(Array.Empty<HabitScheduleLogDay>());
         _scheduleLogReader.ReadResolvedDueDateIdsAsync(
             Arg.Any<IReadOnlyCollection<Guid>>(),
-            Arg.Any<CancellationToken>()).Returns(new HashSet<Guid>());
+            Arg.Any<CancellationToken>(), Arg.Any<DateOnly?>()).Returns(new HashSet<Guid>());
     }
 
     private static Habit CreateTestHabit(
@@ -69,6 +69,8 @@ public class GetHabitScheduleQueryHandlerTests
     private void SetupHabits(params Habit[] habits)
     {
         var habitList = habits.ToList().AsReadOnly();
+        Orbit.Tests.Shared.RepositoryProjections.FromFind<Habit, Guid>(_habitRepo);
+        Orbit.Tests.Shared.RepositoryProjections.FromFind<Habit, Habit>(_habitRepo, includes: true);
         _habitRepo.ProjectAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<HabitScheduleCandidate>>>(),
@@ -108,7 +110,7 @@ public class GetHabitScheduleQueryHandlerTests
             });
         _scheduleLogReader.ReadResolvedDueDateIdsAsync(
             Arg.Any<IReadOnlyCollection<Guid>>(),
-            Arg.Any<CancellationToken>())
+            Arg.Any<CancellationToken>(), Arg.Any<DateOnly?>())
             .Returns(call =>
             {
                 var ids = call.ArgAt<IReadOnlyCollection<Guid>>(0).ToHashSet();

@@ -180,30 +180,17 @@ public static class AchievementChecks
         IReadOnlyList<DateTime> logsWithRecentCreationTimes,
         TimeZoneInfo userTz)
     {
-        var checkEarly = !earned.Contains(AchievementDefinitions.EarlyBird);
-        var checkNight = !earned.Contains(AchievementDefinitions.NightOwl);
-        if (!checkEarly && !checkNight) return;
+        var early = logsWithRecentCreationTimes.Count(instant => TimeZoneInfo.ConvertTimeFromUtc(instant, userTz).Hour < 7);
+        var night = logsWithRecentCreationTimes.Count(instant => TimeZoneInfo.ConvertTimeFromUtc(instant, userTz).Hour >= 22);
+        CheckTimeBasedAchievements(user, earned, newAchievements, early, night);
+    }
 
-        if (checkEarly)
-        {
-            var earlyCount = logsWithRecentCreationTimes.Count(createdAtUtc =>
-            {
-                var userTime = TimeZoneInfo.ConvertTimeFromUtc(createdAtUtc, userTz);
-                return userTime.Hour < 7;
-            });
-            if (earlyCount >= TargetFor(AchievementDefinitions.EarlyBird))
-                TryGrant(AchievementDefinitions.EarlyBird, user, earned, newAchievements);
-        }
-
-        if (checkNight)
-        {
-            var nightCount = logsWithRecentCreationTimes.Count(createdAtUtc =>
-            {
-                var userTime = TimeZoneInfo.ConvertTimeFromUtc(createdAtUtc, userTz);
-                return userTime.Hour >= 22;
-            });
-            if (nightCount >= TargetFor(AchievementDefinitions.NightOwl))
-                TryGrant(AchievementDefinitions.NightOwl, user, earned, newAchievements);
-        }
+    public static void CheckTimeBasedAchievements(User user, HashSet<string> earned,
+        List<(UserAchievement Entity, AchievementDefinition Definition)> newAchievements, int earlyCount, int nightCount)
+    {
+        if (!earned.Contains(AchievementDefinitions.EarlyBird) && earlyCount >= TargetFor(AchievementDefinitions.EarlyBird))
+            TryGrant(AchievementDefinitions.EarlyBird, user, earned, newAchievements);
+        if (!earned.Contains(AchievementDefinitions.NightOwl) && nightCount >= TargetFor(AchievementDefinitions.NightOwl))
+            TryGrant(AchievementDefinitions.NightOwl, user, earned, newAchievements);
     }
 }

@@ -37,7 +37,7 @@ public class DateRangeQueryValidatorTests
         var validator = new GetStreakHistoryQueryValidator();
 
         var result = validator.TestValidate(
-            new GetStreakHistoryQuery(Guid.NewGuid(), Start, Start.AddDays(AppConstants.MaxRangeDays + 1)));
+            new GetStreakHistoryQuery(Guid.NewGuid(), Start, Start.AddDays(AppConstants.MaxReadRangeDays + 1)));
 
         result.IsValid.Should().BeFalse();
     }
@@ -48,7 +48,7 @@ public class DateRangeQueryValidatorTests
         var validator = new GetStreakHistoryQueryValidator();
 
         var result = validator.TestValidate(
-            new GetStreakHistoryQuery(Guid.NewGuid(), Start, Start.AddDays(AppConstants.MaxRangeDays)));
+            new GetStreakHistoryQuery(Guid.NewGuid(), Start, Start.AddDays(AppConstants.MaxReadRangeDays)));
 
         result.ShouldNotHaveAnyValidationErrors();
     }
@@ -79,7 +79,7 @@ public class DateRangeQueryValidatorTests
         var validator = new GetXpHistoryQueryValidator();
 
         var result = validator.TestValidate(
-            new GetXpHistoryQuery(Guid.NewGuid(), Start, Start.AddDays(AppConstants.MaxRangeDays + 1)));
+            new GetXpHistoryQuery(Guid.NewGuid(), Start, Start.AddDays(AppConstants.MaxReadRangeDays + 1)));
 
         result.IsValid.Should().BeFalse();
     }
@@ -113,7 +113,7 @@ public class DateRangeQueryValidatorTests
 
         var result = validator.TestValidate(
             new GetGoalProgressHistoryQuery(
-                Guid.NewGuid(), Guid.NewGuid(), Start, Start.AddDays(AppConstants.MaxRangeDays + 1)));
+                Guid.NewGuid(), Guid.NewGuid(), Start, Start.AddDays(AppConstants.MaxReadRangeDays + 1)));
 
         result.IsValid.Should().BeFalse();
     }
@@ -145,7 +145,7 @@ public class DateRangeQueryValidatorTests
         var validator = new GetHabitsCompletionTrendsQueryValidator();
 
         var result = validator.TestValidate(
-            new GetHabitsCompletionTrendsQuery(Guid.NewGuid(), Start, Start.AddDays(AppConstants.MaxRangeDays + 1)));
+            new GetHabitsCompletionTrendsQuery(Guid.NewGuid(), Start, Start.AddDays(AppConstants.MaxReadRangeDays + 1)));
 
         result.IsValid.Should().BeFalse();
     }

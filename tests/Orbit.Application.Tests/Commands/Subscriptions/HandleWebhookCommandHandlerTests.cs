@@ -74,7 +74,7 @@ public class HandleWebhookCommandHandlerTests
             }
         };
         var (json, signature) = BuildSignedEvent("invoice.paid", System.Text.Json.JsonSerializer.Serialize(invoice));
-        (await _handler.Handle(new(json, signature), default)).IsSuccess.Should().BeTrue();
+        (await _handler.Handle(new(System.Text.Encoding.UTF8.GetBytes(json), signature), default)).IsSuccess.Should().BeTrue();
         user.SubscriptionInterval.Should().Be(SubscriptionInterval.Yearly);
         user.SubscriptionExpiresAtUtc.Should().BeCloseTo(periodEnd, TimeSpan.FromSeconds(1));
         await _subscriptionService.DidNotReceiveWithAnyArgs().GetAsync(default!, default, default, default);
@@ -92,9 +92,9 @@ public class HandleWebhookCommandHandlerTests
                 return CreateMockSubscription("sub_test");
             });
         var (json, signature) = BuildSignedEvent("checkout.session.completed", BuildCheckoutSessionJson(UserId.ToString(), "sub_test", "cus_test"));
-        (await _handler.Handle(new(json, signature), default)).IsSuccess.Should().BeTrue();
+        (await _handler.Handle(new(System.Text.Encoding.UTF8.GetBytes(json), signature), default)).IsSuccess.Should().BeTrue();
         _processedRepo.AnyAsync(Arg.Any<Expression<Func<ProcessedStripeEvent, bool>>>(), Arg.Any<CancellationToken>()).Returns(true);
-        (await _handler.Handle(new(json, signature), default)).IsSuccess.Should().BeTrue();
+        (await _handler.Handle(new(System.Text.Encoding.UTF8.GetBytes(json), signature), default)).IsSuccess.Should().BeTrue();
         await _subscriptionService.Received(1).GetAsync("sub_test", Arg.Any<SubscriptionGetOptions>(), Arg.Any<RequestOptions>(), Arg.Any<CancellationToken>());
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
@@ -107,7 +107,7 @@ public class HandleWebhookCommandHandlerTests
             _userRepo, _unitOfWork, settings, _subscriptionService, _processedRepo, _analytics,
             Substitute.For<ILogger<HandleWebhookCommandHandler>>());
 
-        var command = new HandleWebhookCommand("{}", "sig_test");
+        var command = new HandleWebhookCommand(System.Text.Encoding.UTF8.GetBytes("{}"), "sig_test");
 
         var result = await handler.Handle(command, CancellationToken.None);
 
@@ -123,7 +123,7 @@ public class HandleWebhookCommandHandlerTests
             _userRepo, _unitOfWork, settings, _subscriptionService, _processedRepo, _analytics,
             Substitute.For<ILogger<HandleWebhookCommandHandler>>());
 
-        var command = new HandleWebhookCommand("{}", "sig_test");
+        var command = new HandleWebhookCommand(System.Text.Encoding.UTF8.GetBytes("{}"), "sig_test");
 
         var result = await handler.Handle(command, CancellationToken.None);
 
@@ -134,7 +134,7 @@ public class HandleWebhookCommandHandlerTests
     [Fact]
     public async Task Handle_InvalidSignature_ReturnsFailure()
     {
-        var command = new HandleWebhookCommand("{}", "invalid_signature");
+        var command = new HandleWebhookCommand(System.Text.Encoding.UTF8.GetBytes("{}"), "invalid_signature");
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
@@ -162,7 +162,7 @@ public class HandleWebhookCommandHandlerTests
         var (json, signature) = BuildSignedEvent("checkout.session.completed", BuildCheckoutSessionJson(
             UserId.ToString(), subscriptionId, customerId));
 
-        var command = new HandleWebhookCommand(json, signature);
+        var command = new HandleWebhookCommand(System.Text.Encoding.UTF8.GetBytes(json), signature);
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
@@ -200,7 +200,7 @@ public class HandleWebhookCommandHandlerTests
         var (json, signature) = BuildSignedEvent("checkout.session.completed", BuildCheckoutSessionJson(
             user.Id.ToString(), "sub_event", currentCustomer ? "cus_replacement" : "cus_retired"));
 
-        var result = await _handler.Handle(new(json, signature), default);
+        var result = await _handler.Handle(new(Encoding.UTF8.GetBytes(json), signature), default);
 
         result.IsSuccess.Should().BeTrue();
         user.StripeCustomerId.Should().Be(previousCustomer);
@@ -237,7 +237,7 @@ public class HandleWebhookCommandHandlerTests
         };
         var (json, signature) = BuildSignedEvent("checkout.session.completed", System.Text.Json.JsonSerializer.Serialize(session));
 
-        var result = await _handler.Handle(new(json, signature), default);
+        var result = await _handler.Handle(new(System.Text.Encoding.UTF8.GetBytes(json), signature), default);
 
         result.IsSuccess.Should().BeTrue();
         user.StripeCustomerId.Should().Be("cus_replacement");
@@ -254,7 +254,7 @@ public class HandleWebhookCommandHandlerTests
         var (json, signature) = BuildSignedEvent("checkout.session.completed", BuildCheckoutSessionJson(
             null, "sub_test", "cus_test"));
 
-        var command = new HandleWebhookCommand(json, signature);
+        var command = new HandleWebhookCommand(System.Text.Encoding.UTF8.GetBytes(json), signature);
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
@@ -272,7 +272,7 @@ public class HandleWebhookCommandHandlerTests
         var (json, signature) = BuildSignedEvent("checkout.session.completed", BuildCheckoutSessionJson(
             UserId.ToString(), "sub_test", "cus_test"));
 
-        var command = new HandleWebhookCommand(json, signature);
+        var command = new HandleWebhookCommand(System.Text.Encoding.UTF8.GetBytes(json), signature);
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
@@ -298,7 +298,7 @@ public class HandleWebhookCommandHandlerTests
         var (json, signature) = BuildSignedEvent("checkout.session.completed", BuildCheckoutSessionJson(
             UserId.ToString(), "sub_test", "cus_test"));
 
-        var command = new HandleWebhookCommand(json, signature);
+        var command = new HandleWebhookCommand(System.Text.Encoding.UTF8.GetBytes(json), signature);
         await _handler.Handle(command, CancellationToken.None);
 
         user.ReferralCouponId.Should().BeNull();
@@ -318,7 +318,7 @@ public class HandleWebhookCommandHandlerTests
         var (json, signature) = BuildSignedEvent("customer.subscription.deleted",
             BuildSubscriptionJson("sub_test", "canceled"));
 
-        var command = new HandleWebhookCommand(json, signature);
+        var command = new HandleWebhookCommand(System.Text.Encoding.UTF8.GetBytes(json), signature);
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
@@ -349,7 +349,7 @@ public class HandleWebhookCommandHandlerTests
         var (json, signature) = BuildSignedEvent(eventType,
             BuildSubscriptionJson("sub_test", status, cancellationReason));
 
-        var result = await _handler.Handle(new HandleWebhookCommand(json, signature), CancellationToken.None);
+        var result = await _handler.Handle(new HandleWebhookCommand(System.Text.Encoding.UTF8.GetBytes(json), signature), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         await _unitOfWork.Received().SaveChangesAsync(Arg.Any<CancellationToken>());
@@ -362,7 +362,7 @@ public class HandleWebhookCommandHandlerTests
         user.HasActivePaidSubscription.Should().BeFalse();
         clock.Advance(TimeSpan.FromDays(7));
         user.HasProAccess.Should().BeFalse();
-        await _handler.Handle(new HandleWebhookCommand(json, signature), CancellationToken.None);
+        await _handler.Handle(new HandleWebhookCommand(System.Text.Encoding.UTF8.GetBytes(json), signature), CancellationToken.None);
         user.HasProAccess.Should().BeFalse();
         user.BonusProExpiresAtUtc.Should().Be(bonusExpiry);
     }
@@ -378,7 +378,7 @@ public class HandleWebhookCommandHandlerTests
         var (json, signature) = BuildSignedEvent("customer.subscription.deleted",
             BuildSubscriptionJson("sub_test", "canceled"));
 
-        var command = new HandleWebhookCommand(json, signature);
+        var command = new HandleWebhookCommand(System.Text.Encoding.UTF8.GetBytes(json), signature);
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
@@ -399,7 +399,7 @@ public class HandleWebhookCommandHandlerTests
             BuildSubscriptionJson("sub_test", "canceled", "cancellation_requested"));
 
         var result = await _handler.Handle(
-            new HandleWebhookCommand(json, signature), CancellationToken.None);
+            new HandleWebhookCommand(System.Text.Encoding.UTF8.GetBytes(json), signature), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         user.SubscriptionLapseReason.Should().Be(SubscriptionLapseReason.Canceled);
@@ -419,7 +419,7 @@ public class HandleWebhookCommandHandlerTests
         var (json, signature) = BuildSignedEvent("customer.subscription.updated",
             BuildSubscriptionJson("sub_test", "active"));
 
-        var command = new HandleWebhookCommand(json, signature);
+        var command = new HandleWebhookCommand(System.Text.Encoding.UTF8.GetBytes(json), signature);
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
@@ -440,7 +440,7 @@ public class HandleWebhookCommandHandlerTests
         var (json, signature) = BuildSignedEvent("customer.subscription.updated",
             BuildSubscriptionJson("sub_test", "canceled"));
 
-        var command = new HandleWebhookCommand(json, signature);
+        var command = new HandleWebhookCommand(System.Text.Encoding.UTF8.GetBytes(json), signature);
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
@@ -466,7 +466,7 @@ public class HandleWebhookCommandHandlerTests
             BuildSubscriptionJson("sub_test", "canceled", cancellationReason));
 
         var result = await _handler.Handle(
-            new HandleWebhookCommand(json, signature), CancellationToken.None);
+            new HandleWebhookCommand(System.Text.Encoding.UTF8.GetBytes(json), signature), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         user.SubscriptionLapseReason.Should().Be(SubscriptionLapseReason.PaymentFailed);
@@ -487,7 +487,7 @@ public class HandleWebhookCommandHandlerTests
         var (json, signature) = BuildSignedEvent("customer.subscription.updated",
             BuildSubscriptionJson("sub_test", "unpaid"));
 
-        var command = new HandleWebhookCommand(json, signature);
+        var command = new HandleWebhookCommand(System.Text.Encoding.UTF8.GetBytes(json), signature);
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
@@ -507,7 +507,7 @@ public class HandleWebhookCommandHandlerTests
         var (json, signature) = BuildSignedEvent("customer.subscription.updated",
             BuildSubscriptionJson("sub_test", "active"));
 
-        var command = new HandleWebhookCommand(json, signature);
+        var command = new HandleWebhookCommand(System.Text.Encoding.UTF8.GetBytes(json), signature);
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
@@ -533,7 +533,7 @@ public class HandleWebhookCommandHandlerTests
         var (json, signature) = BuildSignedEvent("invoice.paid",
             BuildInvoiceJson("sub_test"));
 
-        var command = new HandleWebhookCommand(json, signature);
+        var command = new HandleWebhookCommand(System.Text.Encoding.UTF8.GetBytes(json), signature);
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
@@ -546,7 +546,7 @@ public class HandleWebhookCommandHandlerTests
         var (json, signature) = BuildSignedEvent("invoice.paid",
             BuildInvoiceJson(null));
 
-        var command = new HandleWebhookCommand(json, signature);
+        var command = new HandleWebhookCommand(System.Text.Encoding.UTF8.GetBytes(json), signature);
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
@@ -564,7 +564,7 @@ public class HandleWebhookCommandHandlerTests
         var (json, signature) = BuildSignedEvent("invoice.paid",
             BuildInvoiceJson("sub_test"));
 
-        var command = new HandleWebhookCommand(json, signature);
+        var command = new HandleWebhookCommand(System.Text.Encoding.UTF8.GetBytes(json), signature);
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
@@ -577,7 +577,7 @@ public class HandleWebhookCommandHandlerTests
         var (json, signature) = BuildSignedEvent("payment_intent.created",
             """{"id":"pi_test","object":"payment_intent"}""");
 
-        var command = new HandleWebhookCommand(json, signature);
+        var command = new HandleWebhookCommand(System.Text.Encoding.UTF8.GetBytes(json), signature);
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
@@ -600,7 +600,7 @@ public class HandleWebhookCommandHandlerTests
         var (json, signature) = BuildSignedEvent("checkout.session.completed", BuildCheckoutSessionJson(
             UserId.ToString(), "sub_test", "cus_test"));
 
-        var result = await _handler.Handle(new HandleWebhookCommand(json, signature), CancellationToken.None);
+        var result = await _handler.Handle(new HandleWebhookCommand(System.Text.Encoding.UTF8.GetBytes(json), signature), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         await _processedRepo.Received(1).AnyAsync(
@@ -630,7 +630,7 @@ public class HandleWebhookCommandHandlerTests
         var (json, signature) = BuildSignedEvent("checkout.session.completed", BuildCheckoutSessionJson(
             UserId.ToString(), "sub_test", "cus_test"));
 
-        var result = await _handler.Handle(new HandleWebhookCommand(json, signature), CancellationToken.None);
+        var result = await _handler.Handle(new HandleWebhookCommand(System.Text.Encoding.UTF8.GetBytes(json), signature), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
     }
@@ -659,7 +659,7 @@ public class HandleWebhookCommandHandlerTests
         var (json, signature) = BuildSignedEvent("checkout.session.completed", BuildCheckoutSessionJson(
             UserId.ToString(), "sub_test", "cus_test"));
 
-        var act = () => _handler.Handle(new HandleWebhookCommand(json, signature), CancellationToken.None);
+        var act = () => _handler.Handle(new HandleWebhookCommand(System.Text.Encoding.UTF8.GetBytes(json), signature), CancellationToken.None);
 
         await act.Should().ThrowAsync<DbUpdateConcurrencyException>();
     }
@@ -686,7 +686,7 @@ public class HandleWebhookCommandHandlerTests
 
         var (json, signature) = BuildSignedEvent("checkout.session.completed", BuildCheckoutSessionJson(
             UserId.ToString(), "sub_test", "cus_test"));
-        var command = new HandleWebhookCommand(json, signature);
+        var command = new HandleWebhookCommand(System.Text.Encoding.UTF8.GetBytes(json), signature);
         var behavior = new ConcurrencyRetryBehavior<HandleWebhookCommand, Result>(_unitOfWork);
         RequestHandlerDelegate<Result> next = cancellationToken => _handler.Handle(command, cancellationToken);
 
@@ -717,7 +717,7 @@ public class HandleWebhookCommandHandlerTests
         var (json, signature) = BuildSignedEvent("checkout.session.completed", BuildCheckoutSessionJson(
             UserId.ToString(), "sub_test", "cus_test"));
 
-        await _handler.Handle(new HandleWebhookCommand(json, signature), CancellationToken.None);
+        await _handler.Handle(new HandleWebhookCommand(System.Text.Encoding.UTF8.GetBytes(json), signature), CancellationToken.None);
 
         user.PlayPurchaseToken.Should().Be("stale_play_token");
         user.SubscriptionSource.Should().Be(Orbit.Domain.Enums.SubscriptionSource.Stripe);
@@ -741,7 +741,7 @@ public class HandleWebhookCommandHandlerTests
         var (json, signature) = BuildSignedEvent("checkout.session.completed", BuildCheckoutSessionJson(
             UserId.ToString(), "sub_year", "cus_test"));
 
-        await _handler.Handle(new HandleWebhookCommand(json, signature), CancellationToken.None);
+        await _handler.Handle(new HandleWebhookCommand(System.Text.Encoding.UTF8.GetBytes(json), signature), CancellationToken.None);
 
         user.SubscriptionInterval.Should().Be(Orbit.Domain.Enums.SubscriptionInterval.Yearly);
         user.PlanExpiresAt.Should().NotBeNull();
@@ -754,7 +754,7 @@ public class HandleWebhookCommandHandlerTests
         var (json, signature) = BuildSignedEvent("customer.subscription.created",
             BuildSubscriptionJson("sub_new", "active"));
 
-        var result = await _handler.Handle(new HandleWebhookCommand(json, signature), CancellationToken.None);
+        var result = await _handler.Handle(new HandleWebhookCommand(System.Text.Encoding.UTF8.GetBytes(json), signature), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         await _userRepo.DidNotReceive().FindOneTrackedIgnoringFiltersAsync(
@@ -776,7 +776,7 @@ public class HandleWebhookCommandHandlerTests
 
         var (json, signature) = BuildSignedEvent("invoice.payment_failed", BuildInvoiceJson("sub_test"));
 
-        var result = await _handler.Handle(new HandleWebhookCommand(json, signature), CancellationToken.None);
+        var result = await _handler.Handle(new HandleWebhookCommand(System.Text.Encoding.UTF8.GetBytes(json), signature), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         user.IsPro.Should().BeTrue();
@@ -801,7 +801,7 @@ public class HandleWebhookCommandHandlerTests
             "invoice.payment_failed", BuildInvoiceJson("sub_test"));
 
         var result = await _handler.Handle(
-            new HandleWebhookCommand(json, signature), CancellationToken.None);
+            new HandleWebhookCommand(System.Text.Encoding.UTF8.GetBytes(json), signature), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         user.SubscriptionSource.Should().Be(SubscriptionSource.GooglePlay);
@@ -832,9 +832,9 @@ public class HandleWebhookCommandHandlerTests
             "invoice.payment_failed", BuildInvoiceJson("sub_test"), failedAt);
 
         await _handler.Handle(
-            new HandleWebhookCommand(paidJson, paidSignature), CancellationToken.None);
+            new HandleWebhookCommand(System.Text.Encoding.UTF8.GetBytes(paidJson), paidSignature), CancellationToken.None);
         var result = await _handler.Handle(
-            new HandleWebhookCommand(failedJson, failedSignature), CancellationToken.None);
+            new HandleWebhookCommand(System.Text.Encoding.UTF8.GetBytes(failedJson), failedSignature), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         user.SubscriptionLapseReason.Should().BeNull();
@@ -858,7 +858,7 @@ public class HandleWebhookCommandHandlerTests
         var (json, signature) = BuildSignedEvent("checkout.session.completed", BuildCheckoutSessionJson(
             UserId.ToString(), "sub_test", "cus_test"));
 
-        var result = await _handler.Handle(new HandleWebhookCommand(json, signature), CancellationToken.None);
+        var result = await _handler.Handle(new HandleWebhookCommand(System.Text.Encoding.UTF8.GetBytes(json), signature), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Be(ErrorMessages.WebhookStripeApiError.Message);
@@ -882,7 +882,7 @@ public class HandleWebhookCommandHandlerTests
         var (json, signature) = BuildSignedEvent("checkout.session.completed", BuildCheckoutSessionJson(
             UserId.ToString(), "sub_test", "cus_test"));
 
-        var act = () => _handler.Handle(new HandleWebhookCommand(json, signature), CancellationToken.None);
+        var act = () => _handler.Handle(new HandleWebhookCommand(System.Text.Encoding.UTF8.GetBytes(json), signature), CancellationToken.None);
 
         await act.Should().ThrowAsync<OperationCanceledException>();
     }
@@ -893,7 +893,7 @@ public class HandleWebhookCommandHandlerTests
         const string malformed = "{ not valid json";
         var signature = SignPayload(malformed, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
 
-        var result = await _handler.Handle(new HandleWebhookCommand(malformed, signature), CancellationToken.None);
+        var result = await _handler.Handle(new HandleWebhookCommand(System.Text.Encoding.UTF8.GetBytes(malformed), signature), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Be(ErrorMessages.InvalidWebhookSignature.Message);
@@ -905,7 +905,7 @@ public class HandleWebhookCommandHandlerTests
     {
         var signature = SignPayload("", DateTimeOffset.UtcNow.ToUnixTimeSeconds());
 
-        var result = await _handler.Handle(new HandleWebhookCommand("", signature), CancellationToken.None);
+        var result = await _handler.Handle(new HandleWebhookCommand(System.Text.Encoding.UTF8.GetBytes(""), signature), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Be(ErrorMessages.InvalidWebhookSignature.Message);
@@ -917,7 +917,7 @@ public class HandleWebhookCommandHandlerTests
         var (json, signature) = BuildSignedEvent("customer.subscription.updated",
             """{"id":"in_wrongtype","object":"invoice"}""");
 
-        var result = await _handler.Handle(new HandleWebhookCommand(json, signature), CancellationToken.None);
+        var result = await _handler.Handle(new HandleWebhookCommand(System.Text.Encoding.UTF8.GetBytes(json), signature), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         await _userRepo.DidNotReceive().FindOneTrackedIgnoringFiltersAsync(
@@ -941,7 +941,7 @@ public class HandleWebhookCommandHandlerTests
         var (json, signature) = BuildSignedEvent("checkout.session.completed", BuildCheckoutSessionJson(
             UserId.ToString(), "sub_noitems", "cus_test"));
 
-        await _handler.Handle(new HandleWebhookCommand(json, signature), CancellationToken.None);
+        await _handler.Handle(new HandleWebhookCommand(System.Text.Encoding.UTF8.GetBytes(json), signature), CancellationToken.None);
 
         user.SubscriptionInterval.Should().Be(Orbit.Domain.Enums.SubscriptionInterval.Monthly);
         user.PlanExpiresAt.Should().NotBeNull();
@@ -965,7 +965,7 @@ public class HandleWebhookCommandHandlerTests
         var (json, signature) = BuildSignedEvent("checkout.session.completed", BuildCheckoutSessionJson(
             UserId.ToString(), "sub_weekly", "cus_test"));
 
-        await _handler.Handle(new HandleWebhookCommand(json, signature), CancellationToken.None);
+        await _handler.Handle(new HandleWebhookCommand(System.Text.Encoding.UTF8.GetBytes(json), signature), CancellationToken.None);
 
         user.SubscriptionInterval.Should().Be(Orbit.Domain.Enums.SubscriptionInterval.Monthly);
         user.PlanExpiresAt!.Value.Should().BeCloseTo(periodEnd, TimeSpan.FromMinutes(1));
@@ -979,7 +979,7 @@ public class HandleWebhookCommandHandlerTests
         var staleTimestamp = DateTimeOffset.UtcNow.AddHours(-1).ToUnixTimeSeconds();
         var signature = SignPayload(eventJson, staleTimestamp);
 
-        var result = await _handler.Handle(new HandleWebhookCommand(eventJson, signature), CancellationToken.None);
+        var result = await _handler.Handle(new HandleWebhookCommand(System.Text.Encoding.UTF8.GetBytes(eventJson), signature), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Be(ErrorMessages.InvalidWebhookSignature.Message);
@@ -1002,7 +1002,7 @@ public class HandleWebhookCommandHandlerTests
         var (json, signature) = BuildSignedEvent("checkout.session.completed", BuildCheckoutSessionJson(
             UserId.ToString(), "sub_test", "cus_test"));
 
-        await _handler.Handle(new HandleWebhookCommand(json, signature), CancellationToken.None);
+        await _handler.Handle(new HandleWebhookCommand(System.Text.Encoding.UTF8.GetBytes(json), signature), CancellationToken.None);
 
         _analytics.Received(1).CaptureUserEvent(user.Id, "subscription_started", "Pro");
     }
@@ -1023,7 +1023,7 @@ public class HandleWebhookCommandHandlerTests
         var (json, signature) = BuildSignedEvent("checkout.session.completed", BuildCheckoutSessionJson(
             UserId.ToString(), "sub_year", "cus_test"));
 
-        await _handler.Handle(new HandleWebhookCommand(json, signature), CancellationToken.None);
+        await _handler.Handle(new HandleWebhookCommand(System.Text.Encoding.UTF8.GetBytes(json), signature), CancellationToken.None);
 
         _analytics.Received(1).CaptureUserEvent(user.Id, "subscription_started", "Pro");
     }
@@ -1045,7 +1045,7 @@ public class HandleWebhookCommandHandlerTests
 
         var (json, signature) = BuildSignedEvent("invoice.paid", BuildInvoiceJson("sub_test"));
 
-        await _handler.Handle(new HandleWebhookCommand(json, signature), CancellationToken.None);
+        await _handler.Handle(new HandleWebhookCommand(System.Text.Encoding.UTF8.GetBytes(json), signature), CancellationToken.None);
 
         _analytics.Received(1).CaptureUserEvent(user.Id, "subscription_renewed", "Pro");
     }
@@ -1064,7 +1064,7 @@ public class HandleWebhookCommandHandlerTests
         var (json, signature) = BuildSignedEvent("customer.subscription.deleted",
             BuildSubscriptionJson("sub_test", "canceled"));
 
-        await _handler.Handle(new HandleWebhookCommand(json, signature), CancellationToken.None);
+        await _handler.Handle(new HandleWebhookCommand(System.Text.Encoding.UTF8.GetBytes(json), signature), CancellationToken.None);
 
         _analytics.Received(1).CaptureUserEvent(user.Id, "subscription_canceled", "Free");
     }
@@ -1083,7 +1083,7 @@ public class HandleWebhookCommandHandlerTests
         var (json, signature) = BuildSignedEvent("customer.subscription.updated",
             BuildSubscriptionJson("sub_test", "active"));
 
-        await _handler.Handle(new HandleWebhookCommand(json, signature), CancellationToken.None);
+        await _handler.Handle(new HandleWebhookCommand(System.Text.Encoding.UTF8.GetBytes(json), signature), CancellationToken.None);
 
         _analytics.Received(1).CaptureUserEvent(user.Id, "subscription_updated", "Pro");
     }
@@ -1108,7 +1108,7 @@ public class HandleWebhookCommandHandlerTests
         var (json, signature) = BuildSignedEvent("checkout.session.completed", BuildCheckoutSessionJson(
             UserId.ToString(), "sub_test", "cus_test"));
 
-        var result = await _handler.Handle(new HandleWebhookCommand(json, signature), CancellationToken.None);
+        var result = await _handler.Handle(new HandleWebhookCommand(System.Text.Encoding.UTF8.GetBytes(json), signature), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         user.IsPro.Should().BeTrue();
@@ -1133,7 +1133,7 @@ public class HandleWebhookCommandHandlerTests
         var (json, signature) = BuildSignedEvent("checkout.session.completed", BuildCheckoutSessionJson(
             UserId.ToString(), "sub_test", "cus_test"));
 
-        var result = await _handler.Handle(new HandleWebhookCommand(json, signature), CancellationToken.None);
+        var result = await _handler.Handle(new HandleWebhookCommand(System.Text.Encoding.UTF8.GetBytes(json), signature), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         _analytics.DidNotReceive().CaptureUserEvent(
@@ -1161,7 +1161,7 @@ public class HandleWebhookCommandHandlerTests
         var (json, signature) = BuildSignedEvent("checkout.session.completed", BuildCheckoutSessionJson(
             UserId.ToString(), "sub_test", "cus_test"));
 
-        var result = await handler.Handle(new HandleWebhookCommand(json, signature), CancellationToken.None);
+        var result = await handler.Handle(new HandleWebhookCommand(System.Text.Encoding.UTF8.GetBytes(json), signature), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         user.IsPro.Should().BeTrue();

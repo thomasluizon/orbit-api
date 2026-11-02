@@ -97,9 +97,9 @@ public class AchievementProgressServiceTests
             });
         _habitLogRepo.ProjectAsync(
             Arg.Any<Expression<Func<HabitLog, bool>>>(),
-            Arg.Any<Func<IQueryable<HabitLog>, IQueryable<DateTime>>>(),
+            Arg.Any<Func<IQueryable<HabitLog>, IQueryable<CompletionMinute>>>(),
             Arg.Any<CancellationToken>())
-            .Returns(call => call.ArgAt<Func<IQueryable<HabitLog>, IQueryable<DateTime>>>(1)(
+            .Returns(call => call.ArgAt<Func<IQueryable<HabitLog>, IQueryable<CompletionMinute>>>(1)(
                 logs.AsQueryable()).ToList());
     }
 
@@ -155,7 +155,7 @@ public class AchievementProgressServiceTests
         metrics.NightLogs.Should().Be(0);
         await _habitLogRepo.DidNotReceive().ProjectAsync(
             Arg.Any<Expression<Func<HabitLog, bool>>>(),
-            Arg.Any<Func<IQueryable<HabitLog>, IQueryable<DateTime>>>(),
+            Arg.Any<Func<IQueryable<HabitLog>, IQueryable<CompletionMinute>>>(),
             Arg.Any<CancellationToken>());
     }
 

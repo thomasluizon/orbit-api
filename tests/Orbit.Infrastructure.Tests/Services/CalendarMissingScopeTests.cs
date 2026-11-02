@@ -98,7 +98,8 @@ public class CalendarMissingScopeTests
         result.IsSuccess.Should().BeTrue();
         result.Value.Status.Should().Be(GoogleCalendarAutoSyncStatus.ReconnectRequired);
         AssertReconnectState(logger.Levels);
-        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(2).SaveChangesAsync(Arg.Any<CancellationToken>());
+        _user.GoogleCalendarLastAttemptAtUtc.Should().NotBeNull();
         await notifications.Received(1).AddAsync(Arg.Any<Notification>(), Arg.Any<CancellationToken>());
         _api.ClearReceivedCalls();
         _tokens.ClearReceivedCalls();

@@ -31,7 +31,7 @@ public sealed class RepeatReminderEligibility(
     public static async Task<RepeatReminderEligibility> LoadAsync(IHabitScheduleLogReader reader,
         IReadOnlyCollection<Habit> habits, DateOnly from, DateOnly to, CancellationToken ct)
     {
-        var logFrom = from.AddDays(-Math.Min(AppConstants.MaxRangeDays, from.DayNumber));
+        var logFrom = from.AddDays(-Math.Min(AppConstants.MaxReadRangeDays, from.DayNumber));
         var yearStart = new DateOnly(from.Year, 1, 1);
         if (yearStart < logFrom)
             logFrom = yearStart;

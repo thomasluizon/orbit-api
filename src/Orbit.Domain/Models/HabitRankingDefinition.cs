@@ -6,7 +6,7 @@ namespace Orbit.Domain.Models;
 public sealed class HabitRankingDefinition
 {
     public const string CompletionLogRecords = "completion_log_records";
-    public const int MaxPageSize = 100;
+    public const int MaxRankingPageSize = 100;
     public const int MaxWindowDays = 3660;
     public const int MaxHabitIds = 100;
     public Guid UserId { get; }
@@ -34,7 +34,7 @@ public sealed class HabitRankingDefinition
     {
         if (userId == Guid.Empty || string.IsNullOrWhiteSpace(timeZone)
             || dateFrom >= dateToExclusive || dateToExclusive.DayNumber - dateFrom.DayNumber > MaxWindowDays
-            || metric != CompletionLogRecords || pageSize is < 1 or > MaxPageSize
+            || metric != CompletionLogRecords || pageSize is < 1 or > MaxRankingPageSize
             || habitIds is { Count: > MaxHabitIds } || habitIds?.Contains(Guid.Empty) == true)
             return Result.Failure<HabitRankingDefinition>("Invalid habit ranking query.", "HABIT_RANKING_INVALID");
 

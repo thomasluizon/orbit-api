@@ -14,6 +14,7 @@ public class GetXpHistoryQueryHandlerTests
     private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
     private readonly IGenericRepository<XpAwardLog> _xpRepo = Substitute.For<IGenericRepository<XpAwardLog>>();
     private readonly IFeatureFlagService _featureFlags = Substitute.For<IFeatureFlagService>();
+    private readonly IXpHistoryStore _history = Substitute.For<IXpHistoryStore>();
     private readonly GetXpHistoryQueryHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
@@ -21,7 +22,7 @@ public class GetXpHistoryQueryHandlerTests
 
     public GetXpHistoryQueryHandlerTests()
     {
-        _handler = new GetXpHistoryQueryHandler(_userRepo, _xpRepo, _featureFlags);
+        _handler = new GetXpHistoryQueryHandler(_userRepo, _xpRepo, _featureFlags, _history);
         _featureFlags.GetEnabledKeysForUserAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(new List<string>());
     }
@@ -47,11 +48,7 @@ public class GetXpHistoryQueryHandlerTests
         RowAt(amount, date.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
 
     private void ArrangeBaseline(int baseline) =>
-        _xpRepo.SumAsync(
-            Arg.Any<Expression<Func<XpAwardLog, bool>>>(),
-            Arg.Any<Expression<Func<XpAwardLog, int>>>(),
-            Arg.Any<CancellationToken>())
-            .Returns(baseline);
+        _history.ReadBaselineAsync(UserId, Arg.Any<DateOnly>(), Arg.Any<CancellationToken>()).Returns(baseline);
 
     private void ArrangeInRange(params XpAwardLog[] rows) =>
         _xpRepo.FindAsync(
@@ -106,13 +103,7 @@ public class GetXpHistoryQueryHandlerTests
         var user = CreateProUser();
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
 
-        Expression<Func<XpAwardLog, bool>>? baselinePredicate = null;
         Expression<Func<XpAwardLog, bool>>? rangePredicate = null;
-        _xpRepo.SumAsync(
-            Arg.Do<Expression<Func<XpAwardLog, bool>>>(p => baselinePredicate = p),
-            Arg.Any<Expression<Func<XpAwardLog, int>>>(),
-            Arg.Any<CancellationToken>())
-            .Returns(0);
         _xpRepo.FindAsync(
             Arg.Do<Expression<Func<XpAwardLog, bool>>>(p => rangePredicate = p),
             Arg.Any<CancellationToken>())
@@ -125,11 +116,9 @@ public class GetXpHistoryQueryHandlerTests
         var fromMidnight = from.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
         var toNextMidnight = to.AddDays(1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
 
-        var isBaseline = baselinePredicate!.Compile();
-        isBaseline(RowAt(1, fromMidnight.AddTicks(-1))).Should().BeTrue();
-        isBaseline(RowAt(1, fromMidnight)).Should().BeFalse();
-        isBaseline(XpAwardLog.Create(Guid.NewGuid(), 1, XpAwardSource.HabitLog, null, fromMidnight.AddTicks(-1)))
-            .Should().BeFalse();
+        await _history.Received(1).ReadBaselineAsync(UserId, from, Arg.Any<CancellationToken>());
+        await _xpRepo.DidNotReceive().SumAsync(Arg.Any<Expression<Func<XpAwardLog, bool>>>(),
+            Arg.Any<Expression<Func<XpAwardLog, int>>>(), Arg.Any<CancellationToken>());
 
         var isInRange = rangePredicate!.Compile();
         isInRange(RowAt(1, fromMidnight)).Should().BeTrue();

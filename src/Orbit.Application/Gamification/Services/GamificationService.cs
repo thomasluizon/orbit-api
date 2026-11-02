@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using Hangfire;
+using Orbit.Application.Gamification.Jobs;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
 using Orbit.Application.Gamification.Models;
@@ -25,7 +27,7 @@ public record GamificationRepositories(
 
 public partial class GamificationService(
     GamificationRepositories repos,
-    IPushNotificationService pushService,
+    IBackgroundJobClient backgroundJobs,
     IUserDateService userDateService,
     IXpAwarder xpAwarder,
     IUnitOfWork unitOfWork,
@@ -33,10 +35,6 @@ public partial class GamificationService(
     ILogger<GamificationService> logger,
     HabitScheduleSnapshotStore scheduleSnapshots) : IGamificationService
 {
-    // Streak window covers the 1000-day StreakImmortal target; volume window covers the 2500-completion Unstoppable target. Both must exceed their largest achievement target or those achievements can never be granted. https://github.com/thomasluizon/orbit-api/pull/419
-    public const int StreakLogWindowDays = 1100;
-    private const int TotalCompletionWindowDays = 2750;
-    private const int MaxConcurrencyAttempts = 3;
 
     private static readonly string[] FoundingAchievementIds =
     [
@@ -65,36 +63,17 @@ public partial class GamificationService(
     public async Task<IReadOnlyList<HabitLogGamificationResult>> ProcessHabitsLogged(
         Guid userId, IReadOnlyList<Guid> habitIds, CancellationToken ct = default)
     {
-        var attempt = 1;
-        while (true)
+        return await ConcurrencyRetry.RunAsync(unitOfWork, async ct =>
         {
-            if (attempt > 1)
-                unitOfWork.ResetTracking();
-
             var pushes = new List<PendingPush>();
             var outcome = await ComputeHabitsLoggedAsync(userId, habitIds, pushes, ct);
             if (!outcome.ShouldSave)
                 return outcome.Results;
 
-            try
-            {
-                await unitOfWork.SaveChangesAsync(ct);
-            }
-            catch (DbUpdateConcurrencyException) when (attempt < MaxConcurrencyAttempts)
-            {
-                attempt++;
-                continue;
-            }
-            catch (DbUpdateException exception) when (
-                DbUniqueViolation.IsUniqueViolation(exception)
-                && attempt < MaxConcurrencyAttempts)
-            {
-                attempt++;
-                continue;
-            }
-            await FlushPushesAsync(pushes, ct);
+            await unitOfWork.SaveChangesAsync(ct);
+            EnqueuePushes(pushes);
             return outcome.Results;
-        }
+        }, ct, IsRetryableGamificationConflict);
     }
 
     private async Task<HabitsLoggedOutcome> ComputeHabitsLoggedAsync(
@@ -107,18 +86,17 @@ public partial class GamificationService(
         var earned = await LoadEarnedAchievementIds(userId, ct);
         var today = await userDateService.GetUserTodayAsync(userId, ct);
 
-        var streakLogCutoff = today.AddDays(-StreakLogWindowDays);
-        var loggedHabits = (await repos.HabitRepository.ProjectAsync(
-            h => h.UserId == userId && habitIds.Contains(h.Id), HabitScheduleProjection.Select, ct))
-            .Select(snapshot => Habit.FromScheduleSnapshot(snapshot, userId))
-            .ToList();
+        var loggedHabits = (await repos.HabitRepository.FindTrackedAsync(
+            h => h.UserId == userId && habitIds.Contains(h.Id), ct)).ToList();
         if (loggedHabits.Count == 0) return new HabitsLoggedOutcome([], ShouldSave: false);
-        var loadedHabitIds = loggedHabits.Select(habit => habit.Id).ToList();
-        var streakLogs = await repos.HabitLogRepository.ProjectAsync(
-            log => loadedHabitIds.Contains(log.HabitId) && log.Date >= streakLogCutoff,
-            query => query.Select(log => new LoggedHabitLog(log.HabitId, log.Id, log.Date, log.Value, log.IsDeleted)),
-            ct);
-        var logsByHabit = streakLogs.ToLookup(log => log.HabitId);
+        var zone = TimeZoneHelper.FindTimeZone(user.TimeZone);
+        var metricLogs = await HabitStreakLogLoader.LoadAsync(repos.HabitLogRepository, loggedHabits, today, user.WeekStartDay, zone, ct);
+        var loadedHabitIds = loggedHabits.Select(h => h.Id).ToArray();
+        var todayRows = await repos.HabitLogRepository.ProjectAsync(l => loadedHabitIds.Contains(l.HabitId) && l.Date == today && l.Value > 0,
+            q => q.Select(l => new LoggedHabitLog(l.HabitId, l.Id, l.Date, l.Value, false)), ct);
+        var logsByHabit = metricLogs.SelectMany(pair => pair.Value.Select(l => new LoggedHabitLog(l.HabitId,
+            l.Date == today ? todayRows.FirstOrDefault(row => row.HabitId == l.HabitId)?.Id ?? Guid.Empty : Guid.Empty,
+            l.Date, l.Value, false))).ToLookup(l => l.HabitId);
 
         var context = await LoadLoggedHabitsContext(user, earned, today, ct);
 
@@ -139,7 +117,7 @@ public partial class GamificationService(
         IReadOnlySet<(Guid HabitId, DateOnly Date)> CompletedDates,
         TimeZoneInfo UserTimeZone,
         int TotalLogCount,
-        IReadOnlyList<DateTime> LogsWithRecentCreationTimes,
+        TimeOfDayCounts TimeOfDayCounts,
         bool HasActivityInPriorWeek);
 
     private async Task<LoggedHabitsContext> LoadLoggedHabitsContext(
@@ -161,19 +139,14 @@ public partial class GamificationService(
             h => h.UserId == user.Id,
             query => query.Select(habit => habit.Id), ct);
 
-        var totalLogCutoff = today.AddDays(-TotalCompletionWindowDays);
+        var totalLogCutoff = today.AddDays(-AppConstants.TotalCompletionWindowDays);
         var totalLogCount = earned.Contains(AchievementDefinitions.Liftoff) && earned.Contains(AchievementDefinitions.Unstoppable)
             ? 0
             : await repos.HabitLogRepository.CountAsync(
                 l => allHabitIds.Contains(l.HabitId) && l.Date >= totalLogCutoff, ct);
 
-        var createdAtUtcCutoff = DateTime.UtcNow.AddDays(-90);
-        IReadOnlyList<DateTime> logsWithRecentCreationTimes =
-            earned.Contains(AchievementDefinitions.EarlyBird) && earned.Contains(AchievementDefinitions.NightOwl)
-                ? []
-                : await repos.HabitLogRepository.ProjectAsync(
-                    l => allHabitIds.Contains(l.HabitId) && l.CreatedAtUtc >= createdAtUtcCutoff,
-                    query => query.Select(log => log.CreatedAtUtc), ct);
+        var timeOfDayCounts = await TimeOfDayAchievementCounts.ReadAsync(repos.HabitLogRepository, allHabitIds,
+            earned, TimeZoneHelper.FindTimeZone(user.TimeZone), ct);
 
         var comebackCutoff = today.AddDays(-7);
         var hasActivityInPriorWeek = earned.Contains(AchievementDefinitions.Comeback)
@@ -185,7 +158,7 @@ public partial class GamificationService(
             completedDates,
             TimeZoneHelper.FindTimeZone(user.TimeZone),
             totalLogCount,
-            logsWithRecentCreationTimes,
+            timeOfDayCounts,
             hasActivityInPriorWeek);
     }
 
@@ -200,6 +173,7 @@ public partial class GamificationService(
             logs.Select(log => new HabitMetricLog(log.HabitId, log.Date, log.Value, log.IsDeleted)).ToList(),
             today, user.WeekStartDay, context.UserTimeZone);
 
+        habit.RecordLongestStreak(metrics.LongestStreak);
         var xpEarned = habit.IsBadHabit
             ? 0
             : await AwardLoggedHabitXpAndAchievementsAsync(
@@ -250,6 +224,8 @@ public partial class GamificationService(
             AchievementChecks.TryGrant(AchievementDefinitions.Liftoff, user, earned, newAchievements);
 
         AchievementChecks.CheckConsistencyAchievements(currentStreak, earned, user, newAchievements);
+        if (habit.LongestRecordedStreak >= AchievementChecks.TargetFor(AchievementDefinitions.StreakImmortal))
+            AchievementChecks.TryGrant(AchievementDefinitions.StreakImmortal, user, earned, newAchievements);
 
         if (!earned.Contains(AchievementDefinitions.Unstoppable))
             AchievementChecks.CheckVolumeAchievements(context.TotalLogCount, earned, user, newAchievements);
@@ -262,7 +238,7 @@ public partial class GamificationService(
             AchievementChecks.CheckPerfectWeekAndMonth(context.AllUserHabits, today, earned, user, newAchievements, context.CompletedDates);
         }
 
-        AchievementChecks.CheckTimeBasedAchievements(user, earned, newAchievements, context.LogsWithRecentCreationTimes, context.UserTimeZone);
+        AchievementChecks.CheckTimeBasedAchievements(user, earned, newAchievements, context.TimeOfDayCounts.Early, context.TimeOfDayCounts.Night);
 
         if (!earned.Contains(AchievementDefinitions.Comeback) && !context.HasActivityInPriorWeek)
             AchievementChecks.TryGrant(AchievementDefinitions.Comeback, user, earned, newAchievements);
@@ -328,36 +304,17 @@ public partial class GamificationService(
     public async Task ProcessOnboardingChecklistAsync(
         Guid userId, OnboardingChecklistSignal signal, CancellationToken ct = default)
     {
-        var attempt = 1;
-        while (true)
+        await ConcurrencyRetry.RunAsync(unitOfWork, async ct =>
         {
-            if (attempt > 1)
-                unitOfWork.ResetTracking();
-
             var pushes = new List<PendingPush>();
             var shouldSave = await ComputeOnboardingChecklistAsync(userId, signal, pushes, ct);
             if (!shouldSave)
-                return;
+                return false;
 
-            try
-            {
-                await unitOfWork.SaveChangesAsync(ct);
-            }
-            catch (DbUpdateConcurrencyException) when (attempt < MaxConcurrencyAttempts)
-            {
-                attempt++;
-                continue;
-            }
-            catch (DbUpdateException exception) when (
-                DbUniqueViolation.IsUniqueViolation(exception)
-                && attempt < MaxConcurrencyAttempts)
-            {
-                attempt++;
-                continue;
-            }
-            await FlushPushesAsync(pushes, ct);
-            return;
-        }
+            await unitOfWork.SaveChangesAsync(ct);
+            EnqueuePushes(pushes);
+            return true;
+        }, ct, IsRetryableGamificationConflict);
     }
 
     private async Task<bool> ComputeOnboardingChecklistAsync(
@@ -420,37 +377,17 @@ public partial class GamificationService(
         Guid userId,
         CancellationToken ct = default)
     {
-        var attempt = 1;
-        while (true)
+        return await ConcurrencyRetry.RunAsync(unitOfWork, async ct =>
         {
-            if (attempt > 1)
-                unitOfWork.ResetTracking();
-
             var pushes = new List<PendingPush>();
-            try
+            var granted = await unitOfWork.ExecuteInTransactionAsync(async transactionCt =>
             {
-                var granted = await unitOfWork.ExecuteInTransactionAsync(async transactionCt =>
-                {
-                    await unitOfWork.AcquireAdvisoryLockAsync(
-                        ClosedMonthRecapLock.ForUser(userId),
-                        transactionCt);
-                    return await ComputeFoundingReconciliationAsync(userId, pushes, transactionCt);
-                }, ct);
-
-                await FlushPushesAsync(pushes, ct);
-                return granted;
-            }
-            catch (DbUpdateConcurrencyException) when (attempt < MaxConcurrencyAttempts)
-            {
-                attempt++;
-            }
-            catch (DbUpdateException exception) when (
-                DbUniqueViolation.IsUniqueViolation(exception)
-                && attempt < MaxConcurrencyAttempts)
-            {
-                attempt++;
-            }
-        }
+                await unitOfWork.AcquireAdvisoryLockAsync(ClosedMonthRecapLock.ForUser(userId), transactionCt);
+                return await ComputeFoundingReconciliationAsync(userId, pushes, transactionCt);
+            }, ct);
+            EnqueuePushes(pushes);
+            return granted;
+        }, ct, IsRetryableGamificationConflict);
     }
 
     public async Task<IReadOnlyList<FoundingReconciliationResult>> ReconcileFoundingAchievementPageAsync(
@@ -483,7 +420,7 @@ public partial class GamificationService(
             }
             return (IReadOnlyList<FoundingReconciliationResult>)outcomes;
         }, ct);
-        await FlushPushesAsync(pushes, ct);
+        EnqueuePushes(pushes);
         return results;
     }
 
@@ -545,37 +482,18 @@ public partial class GamificationService(
     public async Task<IReadOnlyList<string>> TryGrantAchievementsAsync(
         Guid userId, IReadOnlyList<string> achievementIds, CancellationToken ct = default)
     {
-        var attempt = 1;
-        while (true)
+        return await ConcurrencyRetry.RunAsync(unitOfWork, async ct =>
         {
-            if (attempt > 1)
-                unitOfWork.ResetTracking();
-
             var pushes = new List<PendingPush>();
             var granted = await ComputeGrantAchievementsAsync(userId, achievementIds, pushes, ct);
             if (granted.Count == 0)
                 return granted;
 
-            try
-            {
-                await unitOfWork.SaveChangesAsync(ct);
-            }
-            catch (DbUpdateConcurrencyException) when (attempt < MaxConcurrencyAttempts)
-            {
-                attempt++;
-                continue;
-            }
-            catch (DbUpdateException exception) when (
-                DbUniqueViolation.IsUniqueViolation(exception)
-                && attempt < MaxConcurrencyAttempts)
-            {
-                attempt++;
-                continue;
-            }
+            await unitOfWork.SaveChangesAsync(ct);
 
-            await FlushPushesAsync(pushes, ct);
+            EnqueuePushes(pushes);
             return granted;
-        }
+        }, ct, IsRetryableGamificationConflict);
     }
 
     /// <summary>
@@ -628,37 +546,15 @@ public partial class GamificationService(
         Func<User, HashSet<string>, List<(UserAchievement Entity, AchievementDefinition Definition)>, Task> checkAchievements,
         CancellationToken ct)
     {
-        var attempt = 1;
-        while (true)
+        await ConcurrencyRetry.RunAsync(unitOfWork, async ct =>
         {
-            if (attempt > 1)
-                unitOfWork.ResetTracking();
-
             var pushes = new List<PendingPush>();
             var shouldSave = await ComputeGamificationEventAsync(userId, checkAchievements, pushes, ct);
-            if (!shouldSave)
-                return;
-
-            try
-            {
-                await unitOfWork.SaveChangesAsync(ct);
-            }
-            catch (DbUpdateConcurrencyException) when (attempt < MaxConcurrencyAttempts)
-            {
-                attempt++;
-                continue;
-            }
-            catch (DbUpdateException exception) when (
-                DbUniqueViolation.IsUniqueViolation(exception)
-                && attempt < MaxConcurrencyAttempts)
-            {
-                attempt++;
-                continue;
-            }
-
-            await FlushPushesAsync(pushes, ct);
-            return;
-        }
+            if (!shouldSave) return false;
+            await unitOfWork.SaveChangesAsync(ct);
+            EnqueuePushes(pushes);
+            return true;
+        }, ct, IsRetryableGamificationConflict);
     }
 
     private async Task<bool> ComputeGamificationEventAsync(
@@ -725,42 +621,6 @@ public partial class GamificationService(
         }
     }
 
-    private static readonly Dictionary<string, (string Name, string Description)> AchievementTranslationsPt = new()
-    {
-        ["first_orbit"] = ("Primeira órbita", "Crie seu primeiro hábito"),
-        ["liftoff"] = ("Decolagem", "Complete seu primeiro hábito"),
-        ["mission_control"] = ("Controle de missão", "Crie sua primeira meta"),
-        ["onboarding_complete"] = ("Tudo pronto", "Conclua sua lista de configuração"),
-        ["week_warrior"] = ("Guerreiro da semana", "Alcance uma sequência de 7 dias"),
-        ["fortnight_focus"] = ("Foco quinzenal", "Alcance uma sequência de 14 dias"),
-        ["monthly_master"] = ("Mestre mensal", "Alcance uma sequência de 30 dias"),
-        ["quarter_champion"] = ("Campeão trimestral", "Alcance uma sequência de 90 dias"),
-        ["centurion"] = ("Centurião", "Alcance uma sequência de 100 dias"),
-        ["year_of_discipline"] = ("Ano de disciplina", "Alcance uma sequência de 365 dias"),
-        ["half_year_hero"] = ("Herói do semestre", "Alcance uma sequência de 180 dias"),
-        ["streak_titan"] = ("Titã da sequência", "Alcance uma sequência de 500 dias"),
-        ["getting_momentum"] = ("Ganhando ritmo", "Complete 10 hábitos no total"),
-        ["building_habits"] = ("Construindo hábitos", "Complete 50 hábitos no total"),
-        ["dedicated"] = ("Dedicado", "Complete 100 hábitos no total"),
-        ["relentless"] = ("Imparável", "Complete 500 hábitos no total"),
-        ["legendary"] = ("Lendário", "Complete 1.000 hábitos no total"),
-        ["goal_setter"] = ("Metas traçadas", "Crie 3 metas"),
-        ["goal_crusher"] = ("Meta batida", "Complete sua primeira meta"),
-        ["overachiever"] = ("Acima das expectativas", "Complete 5 metas"),
-        ["dream_maker"] = ("Realizador de sonhos", "Complete 10 metas"),
-        ["perfect_day"] = ("Dia perfeito", "Complete todos os hábitos em um dia"),
-        ["perfect_week"] = ("Semana perfeita", "Complete todos os hábitos por 7 dias consecutivos"),
-        ["perfect_month"] = ("Mês perfeito", "Complete todos os hábitos por 30 dias consecutivos"),
-        ["early_bird"] = ("Madrugador", "Complete um hábito antes das 7h (10 vezes)"),
-        ["night_owl"] = ("Coruja noturna", "Complete um hábito após as 22h (10 vezes)"),
-        ["comeback"] = ("Retorno", "Volte depois de 7 dias ou mais sem atividade"),
-        ["bad_habit_breaker"] = ("Livre do mau hábito", "Resista a um mau hábito por 30 dias consecutivos"),
-        ["show_off"] = ("Exibido", "Compartilhe seu primeiro card"),
-        ["year_in_review"] = ("Retrospectiva", "Veja seu primeiro Wrapped"),
-        ["streak_immortal"] = ("Sequência imortal", "Alcance uma sequência de 1000 dias"),
-        ["unstoppable"] = ("Imbatível", "Complete 2500 hábitos no total"),
-    };
-
     private static readonly Dictionary<int, string> LevelTranslationsPt = new()
     {
         [1] = "Iniciante",
@@ -779,18 +639,8 @@ public partial class GamificationService(
         Guid userId, AchievementDefinition achievement, string? language, List<PendingPush> pushes, CancellationToken ct)
     {
         var isPt = LocaleHelper.IsPortuguese(language);
-        string name, description;
-
-        if (isPt && AchievementTranslationsPt.TryGetValue(achievement.Id, out var pt))
-        {
-            name = pt.Name;
-            description = pt.Description;
-        }
-        else
-        {
-            name = achievement.Name;
-            description = achievement.Description;
-        }
+        var name = isPt ? achievement.NamePt ?? achievement.Name : achievement.Name;
+        var description = isPt ? achievement.DescriptionPt ?? achievement.Description : achievement.Description;
 
         var embeddedName = char.ToLowerInvariant(name[0]) + name[1..];
         var title = isPt
@@ -823,21 +673,26 @@ public partial class GamificationService(
         pushes.Add(new PendingPush(userId, title, body, NotificationUrls.Progress));
     }
 
-    private async Task FlushPushesAsync(IReadOnlyList<PendingPush> pushes, CancellationToken ct)
+    private static bool IsRetryableGamificationConflict(Exception exception) =>
+        exception is DbUpdateConcurrencyException
+        || exception is DbUpdateException updateException && DbUniqueViolation.IsUniqueViolation(updateException);
+
+    private void EnqueuePushes(IReadOnlyList<PendingPush> pushes)
     {
         foreach (var push in pushes)
-        {
-            try
+            unitOfWork.AfterCommit(() =>
             {
-                await pushService.SendToUserAsync(push.UserId, push.Title, push.Body, push.Url, ct);
-            }
-            catch (Exception ex)
-            {
-                LogPushNotificationFailed(logger, ex, push.UserId);
-            }
-        }
+                try
+                {
+                    backgroundJobs.Enqueue<SendGamificationPushJob>(job => job.ExecuteAsync(push.UserId, push.Title, push.Body, push.Url));
+                }
+                catch (Exception exception)
+                {
+                    LogPushNotificationFailed(logger, exception, push.UserId);
+                }
+            });
     }
 
-    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Push notification failed for user {UserId}")]
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Failed to enqueue gamification push for user {UserId}")]
     private static partial void LogPushNotificationFailed(ILogger logger, Exception ex, Guid userId);
 }

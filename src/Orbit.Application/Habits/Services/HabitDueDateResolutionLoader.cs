@@ -30,8 +30,9 @@ internal static class HabitDueDateResolutionLoader
 
         var habitIds = missingDueDates.Keys.ToHashSet();
         var dueDates = missingDueDates.Values.ToHashSet();
-        var resolutionLogs = await habitLogRepository.FindAsync(
+        var resolutionLogs = await habitLogRepository.ProjectAsync(
             log => habitIds.Contains(log.HabitId) && dueDates.Contains(log.Date),
+            query => query.Select(log => new HabitMetricLog(log.HabitId, log.Date, log.Value, log.IsDeleted)),
             cancellationToken);
 
         foreach (var log in resolutionLogs)

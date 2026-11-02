@@ -166,6 +166,9 @@ public class HabitSchedulePostgresTests
             await migrator.MigrateAsync();
             await AssertCompatibilityObjectsAbsentAsync(context);
             (await context.HabitLogs.AsNoTracking().SingleAsync()).Id.Should().Be(log.Id);
+            await migrator.MigrateAsync();
+            var restoredReminder = (await ScalarAsync(context, IndexDefinitionsSql))?.ToString();
+            restoredReminder.Should().Contain("IX_Habits_Reminder").And.Contain("ReminderEnabled").And.NotContain("DueDate");
         }, BeforeDrop);
 
     private static Task<int> InsertUserBeforeDropAsync(OrbitDbContext context, User user) =>
@@ -219,6 +222,9 @@ public class HabitSchedulePostgresTests
                 AND table_name = 'Habits' AND column_name IN ('IsGeneral', 'IsFlexible', 'DueDate')
             """)).Should().Be(0);
         (await ScalarAsync(context, TriggerDefinitionsSql)).Should().Be(DBNull.Value);
+        (await ScalarAsync(context, IndexDefinitionsSql))?.ToString().Should()
+            .NotContain("\"DueDate\"").And.NotContain("\"IsGeneral\"").And.NotContain("\"IsFlexible\"")
+            .And.NotContain("IX_Habits_DueDateAdvancement");
         Convert.ToInt64(await ScalarAsync(context, """
             SELECT count(*) FROM pg_indexes WHERE tablename = 'Habits'
                 AND (indexdef LIKE '%"DueDate"%' OR indexdef LIKE '%"IsGeneral"%' OR indexdef LIKE '%"IsFlexible"%')

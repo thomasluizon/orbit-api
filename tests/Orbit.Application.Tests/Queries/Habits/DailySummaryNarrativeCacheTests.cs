@@ -39,7 +39,7 @@ public sealed class DailySummaryNarrativeCacheTests : IDisposable
         var gate = Substitute.For<IPayGateService>();
         gate.CanUseDailySummary(userId, Arg.Any<CancellationToken>()).Returns(Result.Success());
         var mediator = Substitute.For<IMediator>();
-        mediator.Send(Arg.Any<GetHabitScheduleQuery>(), Arg.Any<CancellationToken>()).Returns(_ =>
+        mediator.Send(Arg.Any<GetDailySummaryScheduleQuery>(), Arg.Any<CancellationToken>()).Returns(_ =>
         {
             var schedule = DailySummaryScheduleFixture.Project(habits, today);
             return Result.Success(new PaginatedResponse<HabitScheduleItem>(schedule, 1, 100, schedule.Count, 1));

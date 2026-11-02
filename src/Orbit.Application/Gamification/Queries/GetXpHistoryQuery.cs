@@ -24,7 +24,7 @@ public record GetXpHistoryQuery(
 public class GetXpHistoryQueryHandler(
     IGenericRepository<User> userRepository,
     IGenericRepository<XpAwardLog> xpAwardLogRepository,
-    IFeatureFlagService featureFlagService) : IRequestHandler<GetXpHistoryQuery, Result<XpHistoryResponse>>
+    IFeatureFlagService featureFlagService, IXpHistoryStore history) : IRequestHandler<GetXpHistoryQuery, Result<XpHistoryResponse>>
 {
     public async Task<Result<XpHistoryResponse>> Handle(GetXpHistoryQuery request, CancellationToken cancellationToken)
     {
@@ -40,10 +40,7 @@ public class GetXpHistoryQueryHandler(
         var fromUtc = request.DateFrom.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
         var toExclusiveUtc = request.DateTo.AddDays(1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
 
-        var baseline = await xpAwardLogRepository.SumAsync(
-            x => x.UserId == request.UserId && x.AwardedAtUtc < fromUtc,
-            x => x.Amount,
-            cancellationToken);
+        var baseline = await history.ReadBaselineAsync(request.UserId, request.DateFrom, cancellationToken);
 
         var inRangeRows = await xpAwardLogRepository.FindAsync(
             x => x.UserId == request.UserId && x.AwardedAtUtc >= fromUtc && x.AwardedAtUtc < toExclusiveUtc,

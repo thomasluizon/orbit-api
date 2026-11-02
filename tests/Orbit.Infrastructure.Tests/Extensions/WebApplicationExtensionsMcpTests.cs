@@ -23,13 +23,50 @@ namespace Orbit.Infrastructure.Tests.Extensions;
 public class WebApplicationExtensionsMcpTests
 {
     [Theory]
+    [InlineData(1024 * 1024, true)]
+    [InlineData(1024 * 1024 + 1, false)]
+    public async Task UseMcpSelectiveAuth_LifecycleBody_EnforcesBufferLimitAndRewinds(int bodyLength, bool accepted)
+    {
+        var authentication = Substitute.For<IAuthenticationService>();
+        var principal = new ClaimsPrincipal(new ClaimsIdentity("Test"));
+        authentication.AuthenticateAsync(Arg.Any<HttpContext>(), Arg.Any<string?>())
+            .Returns(AuthenticateResult.Success(new AuthenticationTicket(principal, "Test")));
+        await using var services = new ServiceCollection().AddSingleton(authentication).BuildServiceProvider();
+        var pipeline = new ApplicationBuilder(services);
+        var reachedNext = false;
+        pipeline.UseMcpSelectiveAuth();
+        pipeline.Run(async context =>
+        {
+            reachedNext = true;
+            context.Request.Body.Position.Should().Be(0);
+            using var document = await JsonDocument.ParseAsync(context.Request.Body);
+            document.RootElement.GetProperty("method").GetString().Should().Be("ping");
+        });
+        var payload = Encoding.UTF8.GetBytes("{\"method\":\"ping\"}".PadRight(bodyLength));
+        using var stream = new NonSeekableReadStream(payload);
+        var context = new DefaultHttpContext { RequestServices = services };
+        context.Request.Method = HttpMethods.Post;
+        context.Request.Path = "/mcp";
+        context.Request.Body = stream;
+
+        var act = () => pipeline.Build()(context);
+
+        if (accepted)
+            await act.Should().NotThrowAsync();
+        else
+            await act.Should().ThrowAsync<IOException>().WithMessage("Buffer limit exceeded.");
+        reachedNext.Should().Be(accepted);
+        await context.Response.CompleteAsync();
+    }
+
+    [Theory]
     [InlineData("{\"method\":\"initialize\"}")]
     [InlineData("{\"method\":\"ping\"}")]
     [InlineData("{\"method\":\"notifications/cancelled\"}")]
     [InlineData("{\"method\":\"notifications/initialized\"}")]
-    public void IsMcpLifecycleMethod_RecognizesHandshakeAndNotifications(string body)
+    public async Task IsMcpLifecycleMethod_RecognizesHandshakeAndNotifications(string body)
     {
-        using var document = McpHttpGate.TryParseMcpBody(body);
+        using var document = await ReadMcpBodyAsync(body);
 
         McpHttpGate.IsMcpLifecycleMethod(document?.RootElement).Should().BeTrue();
     }
@@ -38,9 +75,9 @@ public class WebApplicationExtensionsMcpTests
     [InlineData("{\"method\":\"tools/call\"}")]
     [InlineData("{\"method\":\"tools/list\"}")]
     [InlineData("{\"id\":1}")]
-    public void IsMcpLifecycleMethod_DoesNotRecognizeOtherMethods(string body)
+    public async Task IsMcpLifecycleMethod_DoesNotRecognizeOtherMethods(string body)
     {
-        using var document = McpHttpGate.TryParseMcpBody(body);
+        using var document = await ReadMcpBodyAsync(body);
 
         McpHttpGate.IsMcpLifecycleMethod(document?.RootElement).Should().BeFalse();
     }
@@ -51,9 +88,9 @@ public class WebApplicationExtensionsMcpTests
     [InlineData("[{\"method\":\"initialize\"}]")]
     [InlineData("true")]
     [InlineData("null")]
-    public void IsMcpLifecycleMethod_NonObjectBody_ReturnsFalseWithoutThrowing(string body)
+    public async Task IsMcpLifecycleMethod_NonObjectBody_ReturnsFalseWithoutThrowing(string body)
     {
-        using var document = McpHttpGate.TryParseMcpBody(body);
+        using var document = await ReadMcpBodyAsync(body);
 
         var act = () => McpHttpGate.IsMcpLifecycleMethod(document?.RootElement);
 
@@ -62,9 +99,9 @@ public class WebApplicationExtensionsMcpTests
     }
 
     [Fact]
-    public void IsMcpLifecycleMethod_MalformedJson_ReturnsFalse()
+    public async Task IsMcpLifecycleMethod_MalformedJson_ReturnsFalse()
     {
-        using var document = McpHttpGate.TryParseMcpBody("{ not valid json");
+        using var document = await ReadMcpBodyAsync("{ not valid json");
 
         document.Should().BeNull();
         McpHttpGate.IsMcpLifecycleMethod(document?.RootElement).Should().BeFalse();
@@ -145,9 +182,9 @@ public class WebApplicationExtensionsMcpTests
     [InlineData("{\"method\":\"tools/call\",\"params\":{}}")]
     [InlineData("123")]
     [InlineData("[1,2,3]")]
-    public void TryGetMcpToolCall_NonToolCallOrNonObject_ReturnsFalseWithoutThrowing(string body)
+    public async Task TryGetMcpToolCall_NonToolCallOrNonObject_ReturnsFalseWithoutThrowing(string body)
     {
-        using var document = McpHttpGate.TryParseMcpBody(body);
+        using var document = await ReadMcpBodyAsync(body);
 
         var act = () => McpHttpGate.TryGetMcpToolCall(
             document?.RootElement, out _, out _, out _, out _);
@@ -157,9 +194,9 @@ public class WebApplicationExtensionsMcpTests
     }
 
     [Fact]
-    public void TryGetMcpToolCall_MalformedJson_ReturnsFalse()
+    public async Task TryGetMcpToolCall_MalformedJson_ReturnsFalse()
     {
-        using var document = McpHttpGate.TryParseMcpBody("}{");
+        using var document = await ReadMcpBodyAsync("}{");
 
         document.Should().BeNull();
         McpHttpGate.TryGetMcpToolCall(
@@ -600,4 +637,19 @@ public class WebApplicationExtensionsMcpTests
         return JsonDocument.Parse(
             JsonSerializer.Serialize<JsonRpcMessage>(request, McpJsonUtilities.DefaultOptions));
     }
+    private static async Task<JsonDocument?> ReadMcpBodyAsync(string body)
+    {
+        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(body));
+        var context = new DefaultHttpContext();
+        context.Request.Body = stream;
+        var document = await McpHttpGate.ReadBufferedMcpBodyAsync(context);
+        stream.Position.Should().Be(0);
+        return document;
+    }
+
+    private sealed class NonSeekableReadStream(byte[] data) : MemoryStream(data)
+    {
+        public override bool CanSeek => false;
+    }
+
 }

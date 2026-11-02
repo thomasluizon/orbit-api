@@ -1,3 +1,4 @@
+using Orbit.Api.RateLimiting;
 using Asp.Versioning;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -119,6 +120,7 @@ public partial class CalendarController(IMediator mediator, ILogger<CalendarCont
     }
 
     [HttpPost("auto-sync/run")]
+    [DistributedRateLimit("calendar-sync")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]

@@ -178,8 +178,7 @@ public sealed partial class BulkUpdateHabitsCommandHandler(
             habit => habit.UserId == userId && habitIds.Contains(habit.Id),
             query => query,
             cancellationToken);
-        foreach (var habit in habits)
-            await habitRepository.ReloadAsync(habit, cancellationToken);
+        await habitRepository.ReloadRangeAsync(habits.ToArray(), cancellationToken);
         var resolved = habits
             .Select(habit => (Habit: habit, Update: HabitUpdateValidation.ResolveUpdate(habit, changes, today)))
             .ToList();

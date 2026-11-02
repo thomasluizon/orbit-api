@@ -10,6 +10,7 @@ using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
+using Orbit.Domain.Models;
 using Orbit.Infrastructure.Persistence;
 using Orbit.Infrastructure.Services;
 
@@ -244,8 +245,9 @@ public class SlipAlertSchedulerServiceTests
         await CreateService(db, push, messages, 1440).CheckAndSendAlerts(default);
         await messages.Received(1).GenerateMessageAsync("Pro habit", Arg.Any<DayOfWeek>(), Arg.Any<int?>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
         await messages.DidNotReceive().GenerateMessageAsync("Lapsed habit", Arg.Any<DayOfWeek>(), Arg.Any<int?>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
-        await push.Received(1).SendToUserAsync(pro.Id, "Title", "Body", "/", Arg.Any<CancellationToken>());
-        await push.DidNotReceive().SendToUserAsync(lapsed.Id, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+        await push.Received(1).SendManyAsync(Arg.Is<IReadOnlyList<PushDelivery>>(items =>
+            items.Count == 1 && items[0].UserId == pro.Id && items[0].Title == "Title" && items[0].Body == "Body"),
+            Arg.Any<CancellationToken>());
         (await db.SentSlipAlerts.CountAsync()).Should().Be(1);
     }
 
@@ -277,8 +279,8 @@ public class SlipAlertSchedulerServiceTests
         var service = CreateService(dbContext, pushService, messageService);
         await service.CheckAndSendAlerts(CancellationToken.None);
 
-        await pushService.DidNotReceive().SendToUserAsync(
-            Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+        await pushService.DidNotReceive().SendManyAsync(
+            Arg.Any<IReadOnlyList<PushDelivery>>(), Arg.Any<CancellationToken>());
         (await dbContext.SentSlipAlerts.CountAsync()).Should().Be(0);
         await messageService.DidNotReceive().GenerateMessageAsync(
             Arg.Any<string>(), Arg.Any<DayOfWeek>(), Arg.Any<int?>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
@@ -313,8 +315,8 @@ public class SlipAlertSchedulerServiceTests
         var service = CreateService(dbContext, pushService, messageService);
         await service.CheckAndSendAlerts(CancellationToken.None);
 
-        await pushService.DidNotReceive().SendToUserAsync(
-            Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+        await pushService.DidNotReceive().SendManyAsync(
+            Arg.Any<IReadOnlyList<PushDelivery>>(), Arg.Any<CancellationToken>());
         (await dbContext.SentSlipAlerts.CountAsync(a => a.HabitId == habit.Id)).Should().Be(1);
     }
 
@@ -333,7 +335,7 @@ public class SlipAlertSchedulerServiceTests
 
         var firstPush = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         pushService
-            .SendToUserAsync(user.Id, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .SendManyAsync(Arg.Any<IReadOnlyList<PushDelivery>>(), Arg.Any<CancellationToken>())
             .Returns(_ => { firstPush.TrySetResult(); return Task.CompletedTask; });
 
         var service = CreateService(dbContext, pushService, messageService, intervalMinutes: 1440);
@@ -342,7 +344,9 @@ public class SlipAlertSchedulerServiceTests
         await firstPush.Task.WaitAsync(TimeSpan.FromSeconds(30));
         await service.StopAsync(CancellationToken.None);
 
-        await pushService.Received(1).SendToUserAsync(user.Id, "Title", "Body", "/", Arg.Any<CancellationToken>());
+        await pushService.Received(1).SendManyAsync(Arg.Is<IReadOnlyList<PushDelivery>>(items =>
+            items.Count == 1 && items[0].UserId == user.Id && items[0].Title == "Title" && items[0].Body == "Body"),
+            Arg.Any<CancellationToken>());
         (await dbContext.SentSlipAlerts.CountAsync(a => a.HabitId == habit.Id)).Should().Be(1);
         service.ExecuteTask.Should().NotBeNull();
         service.ExecuteTask!.IsCompleted.Should().BeTrue();
@@ -375,10 +379,9 @@ public class SlipAlertSchedulerServiceTests
         var run = async () => await service.CheckAndSendAlerts(CancellationToken.None);
         await run.Should().NotThrowAsync();
 
-        await pushService.Received(1).SendToUserAsync(
-            healthyUser.Id, "Title", "Body", "/", Arg.Any<CancellationToken>());
-        await pushService.DidNotReceive().SendToUserAsync(
-            throwingUser.Id, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+        await pushService.Received(1).SendManyAsync(Arg.Is<IReadOnlyList<PushDelivery>>(items =>
+            items.Count == 1 && items[0].UserId == healthyUser.Id && items[0].Title == "Title" && items[0].Body == "Body"),
+            Arg.Any<CancellationToken>());
         (await dbContext.SentSlipAlerts.CountAsync(a => a.HabitId == healthyHabit.Id)).Should().Be(1);
         (await dbContext.SentSlipAlerts.CountAsync(a => a.HabitId == throwingHabit.Id)).Should().Be(0);
     }
@@ -448,7 +451,6 @@ public class SlipAlertSchedulerServiceTests
         ISlipAlertMessageService messageService,
         int intervalMinutes = 5)
     {
-        PushBatchTestAdapter.ForwardToSingleSends(pushService);
         var serviceProvider = new ServiceCollection()
             .AddSingleton(dbContext)
             .AddSingleton(pushService)

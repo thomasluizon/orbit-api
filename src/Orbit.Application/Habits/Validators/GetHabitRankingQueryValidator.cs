@@ -29,7 +29,7 @@ public sealed class GetHabitRankingQueryValidator : AbstractValidator<GetHabitRa
                     && x.DateToExclusive.Value.DayNumber - x.DateFrom.Value.DayNumber <= HabitRankingDefinition.MaxWindowDays))
                 .WithMessage("Invalid ranking date range.");
             RuleFor(x => x.Metric).Must(x => x is null or HabitRankingDefinition.CompletionLogRecords);
-            RuleFor(x => x.PageSize).Must(x => x is null or >= 1 and <= HabitRankingDefinition.MaxPageSize);
+            RuleFor(x => x.PageSize).Must(x => x is null or >= 1 and <= HabitRankingDefinition.MaxRankingPageSize);
             RuleFor(x => x.HabitIds).Must(x => x is null || x.Count <= HabitRankingDefinition.MaxHabitIds
                 && !x.Contains(Guid.Empty));
         });

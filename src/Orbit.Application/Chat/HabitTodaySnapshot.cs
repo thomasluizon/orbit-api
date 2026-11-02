@@ -21,7 +21,7 @@ internal sealed record HabitTodaySnapshot(
         IHabitScheduleLogReader reader,
         CancellationToken cancellationToken)
     {
-        var logFrom = date.AddDays(-AppConstants.MaxRangeDays);
+        var logFrom = date.AddDays(-AppConstants.MaxReadRangeDays);
         var candidateIds = habits.Where(habit => !habit.IsCompleted
             || habit.Schedule is HabitSchedule.OneTime or HabitSchedule.General).Select(habit => habit.Id).ToArray();
         var logDays = await reader.ReadDaysAsync(candidateIds, logFrom, date, cancellationToken);

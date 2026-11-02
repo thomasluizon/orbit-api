@@ -25,6 +25,7 @@ public class GetStreakHistoryQueryHandlerTests
 
     public GetStreakHistoryQueryHandlerTests()
     {
+        Orbit.Tests.Shared.RepositoryProjections.FromFind<Habit, HabitScheduleSnapshot>(_habitRepo);
         _handler = new GetStreakHistoryQueryHandler(_userRepo, _habitRepo, _habitLogRepo, _freezeRepo, _featureFlags);
         _featureFlags.GetEnabledKeysForUserAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(new List<string>());
