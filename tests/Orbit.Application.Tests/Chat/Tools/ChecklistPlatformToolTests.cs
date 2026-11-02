@@ -783,14 +783,14 @@ public class ChecklistPlatformToolTests
     }
 
     [Fact]
-    public async Task SendSupportRequestTool_RequiresAllFields()
+    public async Task SendSupportRequestTool_RequiresSubjectAndMessage()
     {
         var tool = new SendSupportRequestTool(Substitute.For<IMediator>());
 
-        var result = await tool.ExecuteAsync(Parse("""{"name":"Alex"}"""), UserId, CancellationToken.None);
+        var result = await tool.ExecuteAsync(Parse("""{"subject":"Help"}"""), UserId, CancellationToken.None);
 
         result.Success.Should().BeFalse();
-        result.Error.Should().Be("name, email, subject, and message are required.");
+        result.Error.Should().Be("subject and message are required.");
     }
 
     [Fact]
