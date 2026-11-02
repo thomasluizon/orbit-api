@@ -1,3 +1,4 @@
+using Orbit.Api.Mcp;
 using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
@@ -28,9 +29,9 @@ public class WebApplicationExtensionsMcpTests
     [InlineData("{\"method\":\"notifications/initialized\"}")]
     public void IsMcpLifecycleMethod_RecognizesHandshakeAndNotifications(string body)
     {
-        using var document = WebApplicationExtensions.TryParseMcpBody(body);
+        using var document = McpHttpGate.TryParseMcpBody(body);
 
-        WebApplicationExtensions.IsMcpLifecycleMethod(document?.RootElement).Should().BeTrue();
+        McpHttpGate.IsMcpLifecycleMethod(document?.RootElement).Should().BeTrue();
     }
 
     [Theory]
@@ -39,9 +40,9 @@ public class WebApplicationExtensionsMcpTests
     [InlineData("{\"id\":1}")]
     public void IsMcpLifecycleMethod_DoesNotRecognizeOtherMethods(string body)
     {
-        using var document = WebApplicationExtensions.TryParseMcpBody(body);
+        using var document = McpHttpGate.TryParseMcpBody(body);
 
-        WebApplicationExtensions.IsMcpLifecycleMethod(document?.RootElement).Should().BeFalse();
+        McpHttpGate.IsMcpLifecycleMethod(document?.RootElement).Should().BeFalse();
     }
 
     [Theory]
@@ -52,9 +53,9 @@ public class WebApplicationExtensionsMcpTests
     [InlineData("null")]
     public void IsMcpLifecycleMethod_NonObjectBody_ReturnsFalseWithoutThrowing(string body)
     {
-        using var document = WebApplicationExtensions.TryParseMcpBody(body);
+        using var document = McpHttpGate.TryParseMcpBody(body);
 
-        var act = () => WebApplicationExtensions.IsMcpLifecycleMethod(document?.RootElement);
+        var act = () => McpHttpGate.IsMcpLifecycleMethod(document?.RootElement);
 
         act.Should().NotThrow();
         act().Should().BeFalse();
@@ -63,10 +64,10 @@ public class WebApplicationExtensionsMcpTests
     [Fact]
     public void IsMcpLifecycleMethod_MalformedJson_ReturnsFalse()
     {
-        using var document = WebApplicationExtensions.TryParseMcpBody("{ not valid json");
+        using var document = McpHttpGate.TryParseMcpBody("{ not valid json");
 
         document.Should().BeNull();
-        WebApplicationExtensions.IsMcpLifecycleMethod(document?.RootElement).Should().BeFalse();
+        McpHttpGate.IsMcpLifecycleMethod(document?.RootElement).Should().BeFalse();
     }
 
     [Fact]
@@ -84,7 +85,7 @@ public class WebApplicationExtensionsMcpTests
         document.RootElement.GetProperty("params").EnumerateObject().Select(property => property.Name)
             .Should().BeEquivalentTo("name", "arguments");
 
-        var matched = WebApplicationExtensions.TryGetMcpToolCall(
+        var matched = McpHttpGate.TryGetMcpToolCall(
             document?.RootElement,
             out var toolName,
             out var requestId,
@@ -111,7 +112,7 @@ public class WebApplicationExtensionsMcpTests
                 ["arguments"] = JsonSerializer.SerializeToElement(new { x = true })
             });
 
-        var matched = WebApplicationExtensions.TryGetMcpToolCall(
+        var matched = McpHttpGate.TryGetMcpToolCall(
             document?.RootElement,
             out var toolName,
             out _,
@@ -130,7 +131,7 @@ public class WebApplicationExtensionsMcpTests
         JsonElement? requestId;
         using (var document = CreateSdkToolCallDocument("get_habits", new RequestId("abc")))
         {
-            WebApplicationExtensions.TryGetMcpToolCall(
+            McpHttpGate.TryGetMcpToolCall(
                 document?.RootElement, out _, out requestId, out _, out _);
         }
 
@@ -146,9 +147,9 @@ public class WebApplicationExtensionsMcpTests
     [InlineData("[1,2,3]")]
     public void TryGetMcpToolCall_NonToolCallOrNonObject_ReturnsFalseWithoutThrowing(string body)
     {
-        using var document = WebApplicationExtensions.TryParseMcpBody(body);
+        using var document = McpHttpGate.TryParseMcpBody(body);
 
-        var act = () => WebApplicationExtensions.TryGetMcpToolCall(
+        var act = () => McpHttpGate.TryGetMcpToolCall(
             document?.RootElement, out _, out _, out _, out _);
 
         act.Should().NotThrow();
@@ -158,10 +159,10 @@ public class WebApplicationExtensionsMcpTests
     [Fact]
     public void TryGetMcpToolCall_MalformedJson_ReturnsFalse()
     {
-        using var document = WebApplicationExtensions.TryParseMcpBody("}{");
+        using var document = McpHttpGate.TryParseMcpBody("}{");
 
         document.Should().BeNull();
-        WebApplicationExtensions.TryGetMcpToolCall(
+        McpHttpGate.TryGetMcpToolCall(
             document?.RootElement, out _, out _, out _, out _).Should().BeFalse();
     }
 
@@ -169,7 +170,7 @@ public class WebApplicationExtensionsMcpTests
     public async Task TryApplyMcpRateLimitsAsync_NonToolRequest_PreservesRequestIdInRejection()
     {
         using var requestDocument = CreateSdkRequestDocument(RequestMethods.ToolsList, new RequestId("list-7"));
-        var isToolCall = WebApplicationExtensions.TryGetMcpToolCall(
+        var isToolCall = McpHttpGate.TryGetMcpToolCall(
             requestDocument?.RootElement,
             out var toolName,
             out var requestId,
@@ -177,7 +178,7 @@ public class WebApplicationExtensionsMcpTests
             out _);
         var service = Substitute.For<IDistributedRateLimitService>();
         service.TryAcquireAsync(
-                WebApplicationExtensions.McpRateLimitPolicy,
+                McpHttpGate.McpRateLimitPolicy,
                 Arg.Any<string>(),
                 Arg.Any<CancellationToken>())
             .Returns(new DistributedRateLimitDecision(false, 60, 60, DateTime.UtcNow.AddMinutes(1)));
@@ -185,7 +186,7 @@ public class WebApplicationExtensionsMcpTests
 
         isToolCall.Should().BeFalse();
         toolName.Should().BeNull();
-        (await WebApplicationExtensions.TryApplyMcpRateLimitsAsync(
+        (await McpHttpGate.TryApplyMcpRateLimitsAsync(
             context,
             toolName,
             operationId: null,
@@ -203,7 +204,7 @@ public class WebApplicationExtensionsMcpTests
         var service = Substitute.For<IDistributedRateLimitService>();
         var counts = new Dictionary<string, int>(StringComparer.Ordinal);
         service.TryAcquireAsync(
-                WebApplicationExtensions.McpRateLimitPolicy,
+                McpHttpGate.McpRateLimitPolicy,
                 Arg.Any<string>(),
                 Arg.Any<CancellationToken>())
             .Returns(call =>
@@ -222,17 +223,17 @@ public class WebApplicationExtensionsMcpTests
         var firstKey = Guid.NewGuid();
         var secondKey = Guid.NewGuid();
 
-        (await WebApplicationExtensions.TryApplyMcpRateLimitsAsync(
+        (await McpHttpGate.TryApplyMcpRateLimitsAsync(
             CreateRateLimitContext(service, firstKey),
             "get_habits",
             operationId: null,
             requestId: null)).Should().BeTrue();
-        (await WebApplicationExtensions.TryApplyMcpRateLimitsAsync(
+        (await McpHttpGate.TryApplyMcpRateLimitsAsync(
             CreateRateLimitContext(service, firstKey),
             "get_habits",
             operationId: null,
             requestId: null)).Should().BeFalse();
-        (await WebApplicationExtensions.TryApplyMcpRateLimitsAsync(
+        (await McpHttpGate.TryApplyMcpRateLimitsAsync(
             CreateRateLimitContext(service, secondKey),
             "get_habits",
             operationId: null,
@@ -240,8 +241,8 @@ public class WebApplicationExtensionsMcpTests
     }
 
     [Theory]
-    [InlineData(WebApplicationExtensions.McpRateLimitPolicy)]
-    [InlineData(WebApplicationExtensions.McpAiRateLimitPolicy)]
+    [InlineData(McpHttpGate.McpRateLimitPolicy)]
+    [InlineData(McpHttpGate.McpAiRateLimitPolicy)]
     public async Task UseMcpSelectiveAuth_ExhaustedKey_RejectsBeforeNextAndLeavesSecondKeyUnaffected(string exhaustedPolicy)
     {
         var limiter = Substitute.For<IDistributedRateLimitService>();
@@ -321,11 +322,11 @@ public class WebApplicationExtensionsMcpTests
         await invoke(otherKey);
         otherKey.Response.StatusCode.Should().Be(StatusCodes.Status200OK);
         nextRequests.Should().Equal(allowed, otherKey);
-        counts[(WebApplicationExtensions.McpRateLimitPolicy, $"api-key:{firstKey}")].Should().Be(2);
-        counts[(WebApplicationExtensions.McpAiRateLimitPolicy, $"api-key:{firstKey}")]
-            .Should().Be(exhaustedPolicy == WebApplicationExtensions.McpRateLimitPolicy ? 1 : 2);
-        counts[(WebApplicationExtensions.McpRateLimitPolicy, $"api-key:{secondKey}")].Should().Be(1);
-        counts[(WebApplicationExtensions.McpAiRateLimitPolicy, $"api-key:{secondKey}")].Should().Be(1);
+        counts[(McpHttpGate.McpRateLimitPolicy, $"api-key:{firstKey}")].Should().Be(2);
+        counts[(McpHttpGate.McpAiRateLimitPolicy, $"api-key:{firstKey}")]
+            .Should().Be(exhaustedPolicy == McpHttpGate.McpRateLimitPolicy ? 1 : 2);
+        counts[(McpHttpGate.McpRateLimitPolicy, $"api-key:{secondKey}")].Should().Be(1);
+        counts[(McpHttpGate.McpAiRateLimitPolicy, $"api-key:{secondKey}")].Should().Be(1);
         await authentication.Received(3).AuthenticateAsync(Arg.Any<HttpContext>(), Arg.Any<string?>());
         await moderation.Received(2).CheckTextAsync(Encoding.UTF8.GetString(body), Arg.Any<CancellationToken>());
     }
@@ -377,7 +378,7 @@ public class WebApplicationExtensionsMcpTests
         nextCalled.Should().BeFalse();
         await authentication.Received(1).AuthenticateAsync(context, Arg.Any<string?>());
         await limiter.Received(1).TryAcquireAsync(
-            WebApplicationExtensions.McpRateLimitPolicy, $"api-key:{apiKeyId}", Arg.Any<CancellationToken>());
+            McpHttpGate.McpRateLimitPolicy, $"api-key:{apiKeyId}", Arg.Any<CancellationToken>());
     }
 
     [Theory]
@@ -389,12 +390,12 @@ public class WebApplicationExtensionsMcpTests
         var service = Substitute.For<IDistributedRateLimitService>();
         var aiCount = 0;
         service.TryAcquireAsync(
-                WebApplicationExtensions.McpRateLimitPolicy,
+                McpHttpGate.McpRateLimitPolicy,
                 Arg.Any<string>(),
                 Arg.Any<CancellationToken>())
             .Returns(new DistributedRateLimitDecision(true, 60, 1, DateTime.UtcNow.AddMinutes(1)));
         service.TryAcquireAsync(
-                WebApplicationExtensions.McpAiRateLimitPolicy,
+                McpHttpGate.McpAiRateLimitPolicy,
                 Arg.Any<string>(),
                 Arg.Any<CancellationToken>())
             .Returns(_ =>
@@ -412,12 +413,12 @@ public class WebApplicationExtensionsMcpTests
         var rejectedContext = CreateRateLimitContext(service, apiKeyId);
         using var requestIdDocument = JsonDocument.Parse("42");
 
-        (await WebApplicationExtensions.TryApplyMcpRateLimitsAsync(
+        (await McpHttpGate.TryApplyMcpRateLimitsAsync(
             allowedContext,
             toolName,
             operationId: null,
             requestIdDocument.RootElement.Clone())).Should().BeTrue();
-        (await WebApplicationExtensions.TryApplyMcpRateLimitsAsync(
+        (await McpHttpGate.TryApplyMcpRateLimitsAsync(
             rejectedContext,
             toolName,
             operationId: null,
@@ -430,14 +431,14 @@ public class WebApplicationExtensionsMcpTests
         var error = responseDocument.RootElement.GetProperty("error");
         error.GetProperty("message").GetString().Should().Be("rate_limit_exceeded");
         error.GetProperty("data").GetProperty("policy").GetString()
-            .Should().Be(WebApplicationExtensions.McpAiRateLimitPolicy);
+            .Should().Be(McpHttpGate.McpAiRateLimitPolicy);
 
         await service.Received(2).TryAcquireAsync(
-            WebApplicationExtensions.McpRateLimitPolicy,
+            McpHttpGate.McpRateLimitPolicy,
             $"api-key:{apiKeyId}",
             Arg.Any<CancellationToken>());
         await service.Received(2).TryAcquireAsync(
-            WebApplicationExtensions.McpAiRateLimitPolicy,
+            McpHttpGate.McpAiRateLimitPolicy,
             $"api-key:{apiKeyId}",
             Arg.Any<CancellationToken>());
     }
@@ -456,7 +457,7 @@ public class WebApplicationExtensionsMcpTests
                 ["operationId"] = JsonSerializer.SerializeToElement(operationId),
                 ["arguments"] = JsonSerializer.SerializeToElement(new { })
             });
-        WebApplicationExtensions.TryGetMcpToolCall(
+        McpHttpGate.TryGetMcpToolCall(
             document.RootElement,
             out var toolName,
             out var requestId,
@@ -464,18 +465,18 @@ public class WebApplicationExtensionsMcpTests
             out _).Should().BeTrue();
         var service = Substitute.For<IDistributedRateLimitService>();
         service.TryAcquireAsync(
-                WebApplicationExtensions.McpRateLimitPolicy,
+                McpHttpGate.McpRateLimitPolicy,
                 Arg.Any<string>(),
                 Arg.Any<CancellationToken>())
             .Returns(new DistributedRateLimitDecision(true, 60, 1, DateTime.UtcNow.AddMinutes(1)));
         service.TryAcquireAsync(
-                WebApplicationExtensions.McpAiRateLimitPolicy,
+                McpHttpGate.McpAiRateLimitPolicy,
                 Arg.Any<string>(),
                 Arg.Any<CancellationToken>())
             .Returns(new DistributedRateLimitDecision(false, 15, 15, DateTime.UtcNow.AddMinutes(1)));
         var apiKeyId = Guid.NewGuid();
 
-        var allowed = await WebApplicationExtensions.TryApplyMcpRateLimitsAsync(
+        var allowed = await McpHttpGate.TryApplyMcpRateLimitsAsync(
             CreateRateLimitContext(service, apiKeyId),
             toolName,
             extractedOperationId,
@@ -484,7 +485,7 @@ public class WebApplicationExtensionsMcpTests
         allowed.Should().BeFalse();
         extractedOperationId.Should().Be(operationId);
         await service.Received(1).TryAcquireAsync(
-            WebApplicationExtensions.McpAiRateLimitPolicy,
+            McpHttpGate.McpAiRateLimitPolicy,
             $"api-key:{apiKeyId}",
             Arg.Any<CancellationToken>());
     }
@@ -494,14 +495,14 @@ public class WebApplicationExtensionsMcpTests
     {
         var service = Substitute.For<IDistributedRateLimitService>();
         service.TryAcquireAsync(
-                WebApplicationExtensions.McpRateLimitPolicy,
+                McpHttpGate.McpRateLimitPolicy,
                 Arg.Any<string>(),
                 Arg.Any<CancellationToken>())
             .Returns(new DistributedRateLimitDecision(true, 60, 1, DateTime.UtcNow.AddMinutes(1)));
         var userId = Guid.NewGuid();
         var context = CreateRateLimitContext(service, apiKeyId: null, userId);
 
-        var allowed = await WebApplicationExtensions.TryApplyMcpRateLimitsAsync(
+        var allowed = await McpHttpGate.TryApplyMcpRateLimitsAsync(
             context,
             "get_habits",
             operationId: null,
@@ -509,7 +510,7 @@ public class WebApplicationExtensionsMcpTests
 
         allowed.Should().BeTrue();
         await service.Received(1).TryAcquireAsync(
-            WebApplicationExtensions.McpRateLimitPolicy,
+            McpHttpGate.McpRateLimitPolicy,
             $"user:{userId}",
             Arg.Any<CancellationToken>());
     }
@@ -520,7 +521,7 @@ public class WebApplicationExtensionsMcpTests
         var service = Substitute.For<IDistributedRateLimitService>();
         var context = CreateRateLimitContext(service, apiKeyId: null);
 
-        var allowed = await WebApplicationExtensions.TryApplyMcpRateLimitsAsync(
+        var allowed = await McpHttpGate.TryApplyMcpRateLimitsAsync(
             context,
             "get_daily_summary",
             operationId: null,

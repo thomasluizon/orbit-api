@@ -51,7 +51,7 @@ public class GamificationAccessParityTests
         var astra = evaluator.Evaluate(new(AgentCapabilityIds.GamificationRead, user.Id,
             AgentExecutionSurface.Chat, AgentAuthMethod.Jwt, [], "get_gamification_overview", "Gamification"));
         rest.IsSuccess.Should().Be(pro || enabled);
-        mcp.StartsWith("Error:", StringComparison.Ordinal).Should().Be(!(pro || enabled));
+        mcp.IsError.GetValueOrDefault().Should().Be(!(pro || enabled));
         astra.Status.Should().Be(pro || enabled ? AgentPolicyDecisionStatus.Allowed : AgentPolicyDecisionStatus.Denied);
     }
 }

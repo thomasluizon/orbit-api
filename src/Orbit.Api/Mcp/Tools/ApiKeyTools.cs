@@ -2,6 +2,8 @@ using System.ComponentModel;
 using System.Security.Claims;
 using ModelContextProtocol.Server;
 using Orbit.Application.ApiKeys.Queries;
+using ModelContextProtocol.Protocol;
+using System.Text.Json;
 
 namespace Orbit.Api.Mcp.Tools;
 
@@ -9,37 +11,36 @@ namespace Orbit.Api.Mcp.Tools;
 public class ApiKeyTools(McpExecutorBridge executorBridge)
 {
     [McpServerTool(Name = "get_api_keys"), Description("Get the user's API keys (metadata only, no key material). Requires Pro subscription.")]
-    public async Task<string> GetApiKeys(
+    public async Task<CallToolResult> GetApiKeys(
         ClaimsPrincipal user,
         [Description("Confirmation token from verify_step_up_agent_operation_v2, required only while API-key step-up is switched on")] string? confirmationToken = null,
         CancellationToken cancellationToken = default)
     {
-        var result = await executorBridge.ExecuteAsync(
-            user,
-            "get_api_keys",
-            new { },
-            confirmationToken,
-            cancellationToken);
-
-        if (!result.Succeeded)
-            return result.Message;
-
-        if (result.Payload is not IReadOnlyList<ApiKeyResponse> keys || keys.Count == 0)
-            return "No API keys.";
-
-        var lines = keys.Select(k =>
-            $"- {k.Name} ({k.KeyPrefix}...) | id: {k.Id}" +
-            (k.IsReadOnly ? " | read-only" : "") +
-            (k.IsRevoked ? " | REVOKED" : "") +
-            (k.ExpiresAtUtc is not null ? string.Create(System.Globalization.CultureInfo.InvariantCulture, $" | expires {k.ExpiresAtUtc:yyyy-MM-dd}") : "") +
-            $" | scopes: {string.Join(", ", k.Scopes)}");
-
-        return $"API keys ({keys.Count}):\n{string.Join("\n", lines)}";
+        try
+        {
+            var result = await executorBridge.ExecuteAsync(user, "get_api_keys", new { }, confirmationToken, cancellationToken);
+            if (!result.Succeeded)
+                return McpToolHelpers.Error(result.Message);
+            if (result.Payload is not IReadOnlyList<ApiKeyResponse> keys)
+                return McpToolHelpers.Error("Invalid API-key response payload.");
+            if (keys.Count == 0)
+                return McpToolHelpers.Text("No API keys.");
+            var lines = keys.Select(k => $"- {k.Name} ({k.KeyPrefix}...) | id: {k.Id}" + (k.IsReadOnly ? " | read-only" : "") + (k.IsRevoked ? " | REVOKED" : "") + (k.ExpiresAtUtc is not null ? string.Create(System.Globalization.CultureInfo.InvariantCulture, $" | expires {k.ExpiresAtUtc:yyyy-MM-dd}") : "") + $" | scopes: {string.Join(", ", k.Scopes)}");
+            return McpToolHelpers.Text($"API keys ({keys.Count}):\n{string.Join("\n", lines)}");
+        }
+        catch (ArgumentException ex)
+        {
+            return McpToolHelpers.Error(ex.Message);
+        }
+        catch (JsonException ex)
+        {
+            return McpToolHelpers.Error("Invalid JSON input: " + ex.Message);
+        }
     }
 
     [McpServerTool(Name = "manage_api_keys"), Description("Create or revoke scoped API keys.")]
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Code Smell", "S107:Methods should not have too many parameters", Justification = "ManageApiKeys preserves flat action, keyId, name, scopes, isReadOnly, expiresAtUtc and confirmationToken schema properties. MCP schema generation requires these separate parameters.")]
-    public async Task<string> ManageApiKeys(
+    public async Task<CallToolResult> ManageApiKeys(
         ClaimsPrincipal user,
         [Description("Action to perform: create or revoke")] string action,
         [Description("For revoke: the API key ID (GUID)")] string? keyId = null,
@@ -50,23 +51,22 @@ public class ApiKeyTools(McpExecutorBridge executorBridge)
         [Description("Confirmation token from confirm_agent_operation_v2 through the Claude connector, after step_up_agent_operation_v2 and verify_step_up_agent_operation_v2; manual API keys must use the Claude connector or make this change in the Orbit app. (required: managing API keys is high-risk and needs step-up)")] string? confirmationToken = null,
         CancellationToken cancellationToken = default)
     {
-        var scopeList = scopes?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-
-        var result = await executorBridge.ExecuteAsync(user, "manage_api_keys", new
+        try
         {
-            action,
-            key_id = keyId,
-            name,
-            scopes = scopeList,
-            is_read_only = isReadOnly,
-            expires_at_utc = expiresAtUtc
-        }, confirmationToken, cancellationToken);
-
-        if (!result.Succeeded)
-            return result.Message;
-
-        return action == "create"
-            ? $"Created API key '{result.TargetName}' (id: {result.TargetId})"
-            : $"Revoked API key {keyId}.";
+            _ = McpInputParser.ParseOptionalGuid(keyId, "keyId");
+            var scopeList = scopes?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            var result = await executorBridge.ExecuteAsync(user, "manage_api_keys", new { action, key_id = keyId, name, scopes = scopeList, is_read_only = isReadOnly, expires_at_utc = expiresAtUtc }, confirmationToken, cancellationToken);
+            if (!result.Succeeded)
+                return McpToolHelpers.Error(result.Message);
+            return action == "create" ? McpToolHelpers.Text($"Created API key '{result.TargetName}' (id: {result.TargetId})") : McpToolHelpers.Text($"Revoked API key {keyId}.");
+        }
+        catch (ArgumentException ex)
+        {
+            return McpToolHelpers.Error(ex.Message);
+        }
+        catch (JsonException ex)
+        {
+            return McpToolHelpers.Error("Invalid JSON input: " + ex.Message);
+        }
     }
 }

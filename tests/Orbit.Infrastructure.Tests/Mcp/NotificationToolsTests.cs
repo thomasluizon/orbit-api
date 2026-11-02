@@ -56,7 +56,7 @@ public class NotificationToolsTests
         _mediator.Send(Arg.Any<GetNotificationsQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new GetNotificationsResponse([], 0)));
 
-        var result = await _tools.GetNotifications(_user);
+        var result = (await _tools.GetNotifications(_user)).AsText();
 
         result.Should().Be("No notifications.");
     }
@@ -70,7 +70,7 @@ public class NotificationToolsTests
         _mediator.Send(Arg.Any<GetNotificationsQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(response));
 
-        var result = await _tools.GetNotifications(_user);
+        var result = (await _tools.GetNotifications(_user)).AsText();
 
         result.Should().Contain("Notifications (1, 1 unread)");
         result.Should().Contain("Reminder");
@@ -87,7 +87,7 @@ public class NotificationToolsTests
         _mediator.Send(Arg.Any<GetNotificationsQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(response));
 
-        var result = await _tools.GetNotifications(_user);
+        var result = (await _tools.GetNotifications(_user)).AsText();
 
         result.Should().Contain("New friend request");
         result.Should().NotContain("Alice Johnson");
@@ -106,7 +106,7 @@ public class NotificationToolsTests
             .Returns(Result.Success(RecordListCardBuilder.BuildNotificationPage(response, userId, 10)));
         var tools = new RecordPageTools(_mediator, new McpExecutorBridge(_executor));
 
-        var result = await tools.GetNotificationPage(_user, cursor);
+        var result = (await tools.GetNotificationPage(_user, cursor)).AsText();
 
         result.Should().Contain("New friend request");
         result.Should().NotContain("Alice Johnson");
@@ -122,7 +122,7 @@ public class NotificationToolsTests
         _mediator.Send(Arg.Any<GetNotificationsQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(response));
 
-        var result = await _tools.GetNotifications(_user);
+        var result = (await _tools.GetNotifications(_user)).AsText();
 
         result.Should().Contain("Notifications (2, 1 unread)");
         result.Should().Contain("[ ]");
@@ -135,7 +135,7 @@ public class NotificationToolsTests
         _mediator.Send(Arg.Any<GetNotificationsQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Failure<GetNotificationsResponse>("Boom"));
 
-        var result = await _tools.GetNotifications(_user);
+        var result = (await _tools.GetNotifications(_user)).AsText();
 
         result.Should().StartWith("Error: ");
     }
@@ -147,7 +147,7 @@ public class NotificationToolsTests
         StubExecutor(AgentOperationStatus.Succeeded);
 
         string result = string.Empty;
-        var request = await CapturedRequestAsync(async () => result = await _tools.MarkNotificationRead(_user, notificationId.ToString()));
+        var request = await CapturedRequestAsync(async () => result = (await _tools.MarkNotificationRead(_user, notificationId.ToString())).AsText());
 
         request.OperationId.Should().Be("update_notifications");
         request.Arguments.GetRawText().Should().Contain("mark_read");
@@ -159,7 +159,7 @@ public class NotificationToolsTests
     {
         StubExecutor(AgentOperationStatus.Failed, policyReason: "Notification not found.");
 
-        var result = await _tools.MarkNotificationRead(_user, Guid.NewGuid().ToString());
+        var result = (await _tools.MarkNotificationRead(_user, Guid.NewGuid().ToString())).AsText();
 
         result.Should().Be("Error: Notification not found.");
     }
@@ -170,7 +170,7 @@ public class NotificationToolsTests
         StubExecutor(AgentOperationStatus.Succeeded);
 
         string result = string.Empty;
-        var request = await CapturedRequestAsync(async () => result = await _tools.MarkAllNotificationsRead(_user));
+        var request = await CapturedRequestAsync(async () => result = (await _tools.MarkAllNotificationsRead(_user)).AsText());
 
         request.OperationId.Should().Be("update_notifications");
         request.Arguments.GetRawText().Should().Contain("mark_all_read");
@@ -184,7 +184,7 @@ public class NotificationToolsTests
         StubExecutor(AgentOperationStatus.Succeeded);
 
         string result = string.Empty;
-        var request = await CapturedRequestAsync(async () => result = await _tools.DeleteNotification(_user, notificationId.ToString()));
+        var request = await CapturedRequestAsync(async () => result = (await _tools.DeleteNotification(_user, notificationId.ToString())).AsText());
 
         request.OperationId.Should().Be("delete_notifications");
         request.Arguments.GetRawText().Should().Contain("delete_one");
@@ -196,7 +196,7 @@ public class NotificationToolsTests
     {
         StubExecutor(AgentOperationStatus.PendingConfirmation);
 
-        var result = await _tools.DeleteNotification(_user, Guid.NewGuid().ToString());
+        var result = (await _tools.DeleteNotification(_user, Guid.NewGuid().ToString())).AsText();
 
         result.Should().Contain("Confirmation required");
     }
@@ -208,7 +208,7 @@ public class NotificationToolsTests
 
         string result = string.Empty;
         var request = await CapturedRequestAsync(async () =>
-            result = await _tools.SubscribePush(_user, "https://push.example/x", "p256", "auth"));
+            result = (await _tools.SubscribePush(_user, "https://push.example/x", "p256", "auth")).AsText());
 
         request.OperationId.Should().Be("update_notifications");
         request.Arguments.GetRawText().Should().Contain("subscribe_push");
@@ -222,7 +222,7 @@ public class NotificationToolsTests
 
         string result = string.Empty;
         var request = await CapturedRequestAsync(async () =>
-            result = await _tools.UnsubscribePush(_user, "https://push.example/x"));
+            result = (await _tools.UnsubscribePush(_user, "https://push.example/x")).AsText());
 
         request.OperationId.Should().Be("update_notifications");
         request.Arguments.GetRawText().Should().Contain("unsubscribe_push");
@@ -236,7 +236,7 @@ public class NotificationToolsTests
         StubExecutor(AgentOperationStatus.Succeeded);
 
         var request = await CapturedRequestAsync(async () =>
-            await _tools.UnsubscribePush(_user, "https://push.example/x", "device-key", "device-secret", releaseOtherAccount: true));
+            (await _tools.UnsubscribePush(_user, "https://push.example/x", "device-key", "device-secret", releaseOtherAccount: true)).AsText());
 
         request.Arguments.GetProperty("p256dh").GetString().Should().Be("device-key");
         request.Arguments.GetProperty("auth").GetString().Should().Be("device-secret");
@@ -249,7 +249,7 @@ public class NotificationToolsTests
         StubExecutor(AgentOperationStatus.Succeeded);
 
         string result = string.Empty;
-        var request = await CapturedRequestAsync(async () => result = await _tools.TestPush(_user));
+        var request = await CapturedRequestAsync(async () => result = (await _tools.TestPush(_user)).AsText());
 
         request.OperationId.Should().Be("update_notifications");
         request.Arguments.GetRawText().Should().Contain("test_push");

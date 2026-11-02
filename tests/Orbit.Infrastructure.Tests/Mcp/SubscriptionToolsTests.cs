@@ -71,14 +71,14 @@ public class SubscriptionToolsTests
         {
             _userDateService.GetUserTodayAsync(_userId, Arg.Any<CancellationToken>()).Returns(weekStart.AddDays(day));
 
-            var result = await _tools.GetSubscriptionStatus(_user);
+            var result = (await _tools.GetSubscriptionStatus(_user)).AsText();
 
             result.Should().Contain("AI Messages (week): 250/250");
             result.Should().Contain($"AI Messages reset: {periodEnd.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc):O}");
         }
 
         _userDateService.GetUserTodayAsync(_userId, Arg.Any<CancellationToken>()).Returns(periodEnd);
-        var nextPeriod = await _tools.GetSubscriptionStatus(_user);
+        var nextPeriod = (await _tools.GetSubscriptionStatus(_user)).AsText();
         nextPeriod.Should().Contain("AI Messages (week): 0/250");
         nextPeriod.Should().Contain($"AI Messages reset: {periodEnd.AddDays(7).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc):O}");
     }
@@ -89,7 +89,7 @@ public class SubscriptionToolsTests
         _userRepo.GetByIdAsync(_userId, Arg.Any<CancellationToken>())
             .Returns((User?)null);
 
-        var result = await _tools.GetSubscriptionStatus(_user);
+        var result = (await _tools.GetSubscriptionStatus(_user)).AsText();
 
         result.Should().Contain("Error:");
     }
@@ -103,7 +103,7 @@ public class SubscriptionToolsTests
         _payGate.GetAiMessageLimit(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(250);
 
-        var result = await _tools.GetSubscriptionStatus(_user);
+        var result = (await _tools.GetSubscriptionStatus(_user)).AsText();
 
         result.Should().Contain("Plan: Pro");
         result.Should().Contain("AI Messages (week): 0/250");
@@ -118,7 +118,7 @@ public class SubscriptionToolsTests
         _payGate.GetAiMessageLimit(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(100);
 
-        var result = await _tools.GetSubscriptionStatus(_user);
+        var result = (await _tools.GetSubscriptionStatus(_user)).AsText();
 
         result.Should().Contain("Trial active");
     }
@@ -132,7 +132,7 @@ public class SubscriptionToolsTests
         _payGate.GetAiMessageLimit(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(250);
 
-        var result = await _tools.GetSubscriptionStatus(_user);
+        var result = (await _tools.GetSubscriptionStatus(_user)).AsText();
 
         result.Should().Contain("AI Messages (week): 0/250");
     }
@@ -149,7 +149,7 @@ public class SubscriptionToolsTests
         _payGate.GetAiMessageLimit(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(250);
 
-        var result = await _tools.GetSubscriptionStatus(_user);
+        var result = (await _tools.GetSubscriptionStatus(_user)).AsText();
 
         result.Should().Contain("AI Messages (week): 5/250");
         result.Should().Contain("AI Messages reset: 2026-08-24T00:00:00.0000000Z");
@@ -165,7 +165,7 @@ public class SubscriptionToolsTests
         _mediator.Send(Arg.Any<GetReferralStatsQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(stats));
 
-        var result = await _tools.GetReferralStats(_user);
+        var result = (await _tools.GetReferralStats(_user)).AsText();
 
         result.Should().Contain("Referral Code: ABC123");
         result.Should().Contain("Successful Referrals: 3");
@@ -180,7 +180,7 @@ public class SubscriptionToolsTests
         var stats = new ReferralStatsResponse("CODE123", "https://app.useorbit.org/r/CODE123", 1, 0, 10, "pro_days", 10, 7);
         _mediator.Send(Arg.Any<GetReferralStatsQuery>(), Arg.Any<CancellationToken>()).Returns(Result.Success(stats));
 
-        var result = await _tools.GetReferralStats(_user);
+        var result = (await _tools.GetReferralStats(_user)).AsText();
 
         result.Should().Contain("Reward: 7 days of Pro (pro_days)");
         result.Should().NotContain("discount");
@@ -195,7 +195,7 @@ public class SubscriptionToolsTests
         _mediator.Send(Arg.Any<GetReferralStatsQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(stats));
 
-        var result = await _tools.GetReferralStats(_user);
+        var result = (await _tools.GetReferralStats(_user)).AsText();
 
         result.Should().NotContain("Referral Code:");
         result.Should().NotContain("Referral Link:");
@@ -208,7 +208,7 @@ public class SubscriptionToolsTests
         _mediator.Send(Arg.Any<GetReferralStatsQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Failure<ReferralStatsResponse>("User not found"));
 
-        var result = await _tools.GetReferralStats(_user);
+        var result = (await _tools.GetReferralStats(_user)).AsText();
 
         result.Should().StartWith("Error: ");
     }
@@ -218,7 +218,7 @@ public class SubscriptionToolsTests
     {
         StubExecutor(AgentOperationStatus.Succeeded, targetName: "XYZ789");
 
-        var result = await _tools.GetReferralCode(_user);
+        var result = (await _tools.GetReferralCode(_user)).AsText();
 
         var request = (AgentExecuteOperationRequest)_executor.ReceivedCalls()
             .Single(call => call.GetMethodInfo().Name == nameof(IAgentOperationExecutor.ExecuteAsync))
@@ -233,7 +233,7 @@ public class SubscriptionToolsTests
     {
         StubExecutor(AgentOperationStatus.Failed, policyReason: "User not found");
 
-        var result = await _tools.GetReferralCode(_user);
+        var result = (await _tools.GetReferralCode(_user)).AsText();
 
         result.Should().StartWith("Error: ");
     }
@@ -243,7 +243,7 @@ public class SubscriptionToolsTests
     {
         StubExecutor(AgentOperationStatus.Succeeded, targetName: "Created billing portal session");
 
-        var result = await _tools.ManageSubscription(_user, "create_portal");
+        var result = (await _tools.ManageSubscription(_user, "create_portal")).AsText();
 
         var request = (AgentExecuteOperationRequest)_executor.ReceivedCalls()
             .Single(call => call.GetMethodInfo().Name == nameof(IAgentOperationExecutor.ExecuteAsync))
@@ -257,7 +257,7 @@ public class SubscriptionToolsTests
     {
         StubStepUp();
 
-        var result = await _tools.ManageSubscription(_user, "create_portal");
+        var result = (await _tools.ManageSubscription(_user, "create_portal")).AsText();
 
         result.Should().Contain("Step-up verification required");
         result.Should().Contain("step_up_agent_operation_v2");

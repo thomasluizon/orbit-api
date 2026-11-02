@@ -15,6 +15,87 @@ namespace Orbit.Infrastructure.Tests.Middleware;
 
 public class McpBoundaryRegressionTests
 {
+    [Fact]
+    public async Task RequestBodyRead_UsesRequestCancellationAndRewindsForDispatch()
+    {
+        var (context, services) = CreateContext("""{"jsonrpc":"2.0","id":1,"method":"tools/list"}""");
+        using (services)
+        using (var cancellation = new CancellationTokenSource())
+        {
+            context.RequestAborted = cancellation.Token;
+            var body = new CancellationTrackingStream("""{"jsonrpc":"2.0","id":1,"method":"tools/list"}""");
+            context.Request.Body = body;
+            var forwarded = false;
+            var app = new ApplicationBuilder(services);
+            app.UseMcpSelectiveAuth();
+            app.Run(request =>
+            {
+                request.Request.Body.Position.Should().Be(0);
+                forwarded = true;
+                return Task.CompletedTask;
+            });
+
+            await app.Build()(context);
+
+            forwarded.Should().BeTrue();
+            body.ReadTokens.Should().NotBeEmpty().And.OnlyContain(token => token == cancellation.Token);
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task PolicyErrorWrite_UsesRequestCancellation(bool abortWrite)
+    {
+        var (context, services) = CreateContext("""{"jsonrpc":"2.0","id":1,"method":"unknown/method"}""");
+        using (services)
+        using (var cancellation = new CancellationTokenSource())
+        {
+            context.RequestAborted = cancellation.Token;
+            var response = new CancellationTrackingStream("") { AbortWrite = abortWrite ? cancellation : null };
+            context.Response.Body = response;
+            var app = new ApplicationBuilder(services);
+            app.UseMcpSelectiveAuth();
+            app.Run(_ => throw new InvalidOperationException("Rejected requests must not dispatch."));
+
+            var invoke = () => app.Build()(context);
+            if (abortWrite)
+                await invoke.Should().ThrowAsync<OperationCanceledException>();
+            else
+                await invoke();
+
+            response.WriteTokens.Should().NotBeEmpty().And.OnlyContain(token => token.CanBeCanceled
+                && token.IsCancellationRequested == abortWrite);
+        }
+    }
+
+    private sealed class CancellationTrackingStream : MemoryStream
+    {
+        public CancellationTrackingStream(string body)
+        {
+            Write(Encoding.UTF8.GetBytes(body));
+            Position = 0;
+        }
+
+        public List<CancellationToken> ReadTokens { get; } = [];
+        public List<CancellationToken> WriteTokens { get; } = [];
+        public CancellationTokenSource? AbortWrite { get; init; }
+
+        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            ReadTokens.Add(cancellationToken);
+            return base.ReadAsync(buffer, cancellationToken);
+        }
+
+        public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            WriteTokens.Add(cancellationToken);
+            AbortWrite?.Cancel();
+            cancellationToken.ThrowIfCancellationRequested();
+            return base.WriteAsync(buffer, cancellationToken);
+        }
+    }
+
     [Theory]
     [InlineData("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"unknown/method\"}")]
     [InlineData("[{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"get_habits\"}}]")]

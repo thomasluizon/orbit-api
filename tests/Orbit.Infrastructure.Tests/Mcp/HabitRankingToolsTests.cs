@@ -53,7 +53,7 @@ public class HabitRankingToolsTests(ITestOutputHelper output)
         var tools = new HabitTools(mediator, Substitute.For<IUserDateService>(),
             new McpExecutorBridge(Substitute.For<IAgentOperationExecutor>()));
 
-        var result = await tools.GetHabitRanking(user, new HabitRankingReadRequest(QueryToken: "signed-query", Refresh: true));
+        var result = (await tools.GetHabitRanking(user, new HabitRankingReadRequest(QueryToken: "signed-query", Refresh: true))).AsText();
 
         await mediator.Received(1).Send(Arg.Is<GetHabitRankingQuery>(q => q.UserId == userId
             && q.QueryToken == "signed-query" && q.Refresh && q.DateFrom == null), Arg.Any<CancellationToken>());

@@ -55,12 +55,6 @@
         "reason": "The since guard measures the elapsed MaxSyncWindow against the UTC sync cursor; it does not choose a calendar day. SyncChangesV2Response.ServerTimestamp is the UTC synchronization cursor used for subsequent incremental reads."
       }
     },
-    "src/Orbit.Api/OAuth/OAuthAuthorizationStore.cs": {
-      "ORBIT0004": {
-        "count": 2,
-        "reason": "Authorization code issuance and exchange use UTC instants for their elapsed lifetime, independently of user calendar dates."
-      }
-    },
     "src/Orbit.Api/RateLimiting/DistributedRateLimitAttribute.cs": {
       "S107": {
         "count": 1,

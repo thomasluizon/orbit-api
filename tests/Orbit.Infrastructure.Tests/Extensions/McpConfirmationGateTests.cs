@@ -1,3 +1,4 @@
+using Orbit.Infrastructure.Tests.Mcp;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using System.Security.Claims;
@@ -32,7 +33,7 @@ using Orbit.Domain.Models;
 using Orbit.Infrastructure.Configuration;
 using Orbit.Infrastructure.Persistence;
 using Orbit.Infrastructure.Services;
-using Orbit.Infrastructure.Tests.Mcp;
+
 
 namespace Orbit.Infrastructure.Tests.Extensions;
 
@@ -336,15 +337,15 @@ public class McpConfirmationGateTests : IDisposable
             new RequestId(7),
             new Dictionary<string, JsonElement>());
         var body = document.RootElement.GetRawText();
-        WebApplicationExtensions.TryGetMcpToolCall(
+        McpHttpGate.TryGetMcpToolCall(
             document.RootElement, out var toolName, out var requestId, out var operationId, out var fingerprint)
             .Should().BeTrue();
 
-        await WebApplicationExtensions.HandleMcpToolCallAsync(
+        await McpHttpGate.HandleMcpToolCallAsync(
             context,
             () => { toolRan = true; return Task.CompletedTask; },
             body,
-            new WebApplicationExtensions.McpToolCallRequest(toolName!, requestId, operationId, fingerprint));
+            new McpHttpGate.McpToolCallRequest(toolName!, requestId, operationId, fingerprint));
 
         toolRan.Should().BeFalse();
         ReadPolicyError(context).Should().Be($"missing_scope:{AgentScopes.ReadHabits}");
@@ -363,22 +364,22 @@ public class McpConfirmationGateTests : IDisposable
 
         using var document = CreateToolCallDocument("manage_api_keys", new RequestId(1), arguments);
         var body = document.RootElement.GetRawText();
-        WebApplicationExtensions.TryGetMcpToolCall(
+        McpHttpGate.TryGetMcpToolCall(
             document.RootElement, out var toolName, out var requestId, out var operationId, out var fingerprint)
             .Should().BeTrue();
 
         var context = CreateHttpContext(_user);
         string? toolOutput = null;
 
-        await WebApplicationExtensions.HandleMcpToolCallAsync(
+        await McpHttpGate.HandleMcpToolCallAsync(
             context,
-            async () => toolOutput = await _apiKeyTools.ManageApiKeys(
+            async () => toolOutput = (await _apiKeyTools.ManageApiKeys(
                 _user,
                 "revoke",
                 keyId: _keyId.ToString(),
-                confirmationToken: confirmationToken),
+                confirmationToken: confirmationToken)).AsText(),
             body,
-            new WebApplicationExtensions.McpToolCallRequest(toolName!, requestId, operationId, fingerprint));
+            new McpHttpGate.McpToolCallRequest(toolName!, requestId, operationId, fingerprint));
 
         return new McpCallOutcome(toolOutput, ReadPolicyError(context));
     }
@@ -391,17 +392,17 @@ public class McpConfirmationGateTests : IDisposable
 
         using var document = CreateToolCallDocument("get_api_keys", new RequestId(2), arguments);
         var body = document.RootElement.GetRawText();
-        WebApplicationExtensions.TryGetMcpToolCall(
+        McpHttpGate.TryGetMcpToolCall(
             document.RootElement, out var toolName, out var requestId, out var operationId, out var fingerprint)
             .Should().BeTrue();
 
         var context = CreateHttpContext(user);
         string? toolOutput = null;
-        await WebApplicationExtensions.HandleMcpToolCallAsync(
+        await McpHttpGate.HandleMcpToolCallAsync(
             context,
-            async () => toolOutput = await _apiKeyTools.GetApiKeys(user, confirmationToken),
+            async () => toolOutput = (await _apiKeyTools.GetApiKeys(user, confirmationToken)).AsText(),
             body,
-            new WebApplicationExtensions.McpToolCallRequest(toolName!, requestId, operationId, fingerprint));
+            new McpHttpGate.McpToolCallRequest(toolName!, requestId, operationId, fingerprint));
 
         return new McpCallOutcome(toolOutput, ReadPolicyError(context));
     }

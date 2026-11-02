@@ -79,7 +79,7 @@ public class AgentToolsTests
         _operationExecutor.ExecuteAsync(Arg.Any<AgentExecuteOperationRequest>(), Arg.Any<CancellationToken>())
             .Returns(response);
 
-        var result = await _tools.ExecuteAgentOperation(user, "list_habits", null, "token-123", CancellationToken.None);
+        var result = (await _tools.ExecuteAgentOperation(user, "list_habits", null, "token-123", CancellationToken.None)).AsOperation();
 
         result.Should().Be(response);
         await _operationExecutor.Received(1).ExecuteAsync(
@@ -111,7 +111,7 @@ public class AgentToolsTests
         var tools = new AgentTools(_catalogService, executor, _pendingOperationStore, _stepUpService);
         var arguments = JsonSerializer.SerializeToElement(new { goal_id = goal.Id, deadline = (string?)null });
 
-        var result = await tools.ExecuteAgentOperation(CreateUser(), operationId, arguments);
+        var result = (await tools.ExecuteAgentOperation(CreateUser(), operationId, arguments)).AsOperation();
 
         result.Operation.Status.Should().Be(AgentOperationStatus.Succeeded);
         goal.Deadline.Should().BeNull();
@@ -156,7 +156,7 @@ public class AgentToolsTests
             [field] = null
         });
 
-        var result = await tools.ExecuteAgentOperation(CreateUser(), "update_habit", arguments);
+        var result = (await tools.ExecuteAgentOperation(CreateUser(), "update_habit", arguments)).AsOperation();
 
         result.Operation.Status.Should().Be(AgentOperationStatus.Succeeded);
         habit.Title.Should().Be("Read");

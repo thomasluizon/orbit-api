@@ -1795,6 +1795,32 @@ namespace Orbit.Infrastructure.Migrations
                     b.ToTable("NotionTasks");
                 });
 
+            modelBuilder.Entity("Orbit.Domain.Entities.OAuthClient", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("AuthorizedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ClientName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.PrimitiveCollection<string[]>("RedirectUris")
+                        .IsRequired()
+                        .HasColumnType("text[]");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("OAuthClients");
+                });
+
             modelBuilder.Entity("Orbit.Domain.Entities.OAuthState", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1811,6 +1837,10 @@ namespace Orbit.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(30)
                         .HasColumnType("character varying(30)");
+
+                    b.Property<string>("PartitionKey")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
 
                     b.Property<string>("Payload")
                         .IsRequired()
@@ -1829,6 +1859,9 @@ namespace Orbit.Infrastructure.Migrations
                         .IsUnique();
 
                     b.HasIndex("Kind", "ExpiresAtUtc");
+
+                    b.HasIndex("Kind", "PartitionKey", "ExpiresAtUtc")
+                        .HasAnnotation("Npgsql:CreatedConcurrently", true);
 
                     b.ToTable("OAuthStates");
                 });
