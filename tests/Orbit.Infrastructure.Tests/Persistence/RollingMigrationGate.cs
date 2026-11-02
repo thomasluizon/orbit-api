@@ -57,7 +57,7 @@ internal static class RollingMigrationGate
         return Regex.IsMatch(tail, @"\A(?:(?:NOT\s+)?NULL\s+)?DEFAULT\s+\S", SqlOptions);
     }
 
-    private static string? MaskQuotedSqlAndComments(string sql)
+    internal static string? MaskQuotedSqlAndComments(string sql)
     {
         var masked = new StringBuilder();
         for (var i = 0; i < sql.Length;)
@@ -115,7 +115,7 @@ internal static class RollingMigrationGate
         return masked.ToString();
     }
 
-    private static List<string>? SplitTopLevel(string sql, char separator)
+    internal static List<string>? SplitTopLevel(string sql, char separator)
     {
         var parts = new List<string>();
         var depth = 0;

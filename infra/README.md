@@ -662,3 +662,20 @@ The deployment payload and release summary record the export id. A missing datab
 id, unavailable export or missing deployment baseline blocks the release. The
 operator does not supply an unverified restore-point id. Export creation and listing
 use the Render Postgres export endpoint documented in its public OpenAPI schema.
+
+### Migration lock budget
+
+The migration lock gate inspects every compiled migration after the pinned applied
+baseline in `.github/migration-locks.json`. Existing-table indexes use concurrent
+creation with transaction suppression. Fluent index drops are rejected because the
+installed provider does not suppress their transaction; use raw `DROP INDEX
+CONCURRENTLY` with `suppressTransaction: true`. Backfills use bounded primary-key
+ranges, one SQL operation per batch with transaction suppression, so locks release
+between batches. Procedural and dynamic SQL need reviewed evidence.
+
+Add foreign keys and checks as `NOT VALID`, then validate in a separate operation.
+Set a finite, nonzero `lock_timeout` of at most five seconds before altering an
+existing table. A required column needs a validated not-null check first. Type
+rewrites fail; prefer a length check added without validation. Per-migration
+exceptions name the rule, measured row count, expected lock milliseconds, review URL
+and reason in the same policy file. Raising the applied baseline is not an exception.

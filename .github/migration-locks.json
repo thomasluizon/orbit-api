@@ -1,0 +1,5 @@
+{
+  "baselineId": "20261101210800_PersistServerConversations",
+  "reason": "applied in production before this gate",
+  "exceptions": {}
+}
