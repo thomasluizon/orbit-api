@@ -673,9 +673,70 @@ CONCURRENTLY` with `suppressTransaction: true`. Backfills use bounded primary-ke
 ranges, one SQL operation per batch with transaction suppression, so locks release
 between batches. Procedural and dynamic SQL need reviewed evidence.
 
-Add foreign keys and checks as `NOT VALID`, then validate in a separate operation.
+Add foreign keys and checks as `NOT VALID`, then validate in a separate
+transaction-suppressed operation. Suppress the add operation too, releasing its
+initial table lock before validation.
 Set a finite, nonzero `lock_timeout` of at most five seconds before altering an
 existing table. A required column needs a validated not-null check first. Type
 rewrites fail; prefer a length check added without validation. Per-migration
 exceptions name the rule, measured row count, expected lock milliseconds, review URL
 and reason in the same policy file. Raising the applied baseline is not an exception.
+
+### Production plan monitor
+
+The production infrastructure plan workflow runs on main changes, daily and on
+manual dispatch from main. Its `render-operations` environment assumes
+`orbit-production-plan`, refreshes only the guarded services and API env group with
+their dependency graph, and never applies. Terraform binary plans, refresh logs and
+input files stay in a private temporary directory that is deleted on exit. JSON is
+piped into the web and production checkers; neither plans nor state are published.
+Any guarded change or drift, a different sender, or a shutdown delay other than 300
+seconds fails the job. A legitimate configuration change needs a reviewed targeted
+apply before this monitor can become green again.
+
+An operator must target `aws_iam_role.production_plan` and
+`aws_iam_role_policy.production_plan` in an apply before the workflow can assume the
+role. The state permission reads only `render/terraform.tfstate`. Provider reads are
+limited to the dependency graph's API SSM paths, upload buckets, IAM users, SES
+configuration sets, SNS topic and KMS key. Both environment API paths are needed
+because Terraform evaluates shared for-each maps. SSM `DescribeParameters` has no
+resource-level authorization; its metadata read is restricted to `us-east-2`.
+Decryption is restricted to SSM and those API parameter encryption contexts.
+
+In GitHub Settings > Environments > `render-operations`, add secret
+`CLOUDFLARE_READ_ONLY_API_TOKEN` from Cloudflare My Profile > API Tokens with Account
+Turnstile Read for the managed account. Add secret `PRODUCTION_PLAN_TFVARS` as a JSON
+object containing the reviewed local Terraform input values, including the four
+image digest variables, the non-empty `production_postgres_ip_allow_list`,
+`web_custom_domains` and any other configured custom domains or alert recipients.
+Retain the environment's `RENDER_API_KEY`. A dispatch from main must pass with the
+read-only role and both checkers before considering the monitor operational. A pull
+request runs mock-provider Terraform tests and never receives these credentials.
+
+### Landing content security policy
+
+Both static sites have an enforcing Terraform CSP header by default. The allowlist
+contains the same-origin assets, the environment API and Cloudflare Turnstile.
+`landing-csp.tf` hashes the emitted inline font styles and the exact existing style
+attributes, using `style-src-attr 'unsafe-hashes'` for only those attributes. It also
+lists the inline structured-data script hashes. Executable scripts in the reviewed
+landing source are bundled modules. `fixtures/landing-inline-blocks.json` records
+the source commit, public page URLs and exact bytes used to derive every hash.
+Recompute these SHA-256 sources whenever the landing's emitted inline bytes change;
+never add `unsafe-inline` to work around a mismatch.
+
+The operator first runs a targeted apply for `render_static_site.staging_landing`
+with `staging_landing_csp_report_only=true`. Read the report-only response header,
+then check the home page, waitlist section, confirmation page including
+`?status=invalid`, and 404 console. Complete Turnstile and a staging waitlist signup,
+accept and revoke consent, and check the PostHog relay and app links. With no CSP
+violations, target the same staging resource with the variable set to false and
+repeat the checks. Only then target `render_static_site.landing` in production.
+Verify the enforcing header with `curl -sI` on both sites and repeat the production
+home and waitlist console checks. Keep all five existing security headers.
+
+The worker does not open a browser or apply infrastructure. These rollout checks
+belong to the operator. For a staging rollback, target the staging resource with
+`staging_landing_csp_report_only=true`. For a production rollback, change only its
+header name to `Content-Security-Policy-Report-Only` and target the production static
+site. Landing source changes remain in the landing ticket.
