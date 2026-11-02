@@ -52,6 +52,21 @@ public class ConfigControllerTests : IDisposable
     }
 
     [Fact]
+    public async Task GetConfig_ReturnsMaxActiveApiKeysInLimits()
+    {
+        _dbContext.AppConfigs.Add(AppConfig.Create("MaxActiveApiKeys", "3"));
+        await _dbContext.SaveChangesAsync();
+        var stored = await _dbContext.AppConfigs.AsNoTracking()
+            .ToDictionaryAsync(config => config.Key, config => config.Value);
+        _configService.GetAllAsync(Arg.Any<CancellationToken>()).Returns(stored);
+
+        var result = (OkObjectResult)await _controller.GetConfig(CancellationToken.None);
+
+        var payload = JsonSerializer.SerializeToElement(result.Value, JsonSerializerOptions.Web);
+        payload.GetProperty("limits").GetProperty("MaxActiveApiKeys").GetString().Should().Be("3");
+    }
+
+    [Fact]
     public async Task GetConfig_ReturnsSeededLimitsWithoutRetiredMemoryLimit()
     {
         var account = User.Create("Account", "seeded-config@example.com").Value;
