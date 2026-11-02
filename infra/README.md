@@ -360,8 +360,9 @@ Waitlist confirmation is also queued and no longer waits on SES in the request.
 The daily `sync-cleanup` occurrence purges application history using the configured
 `BackgroundServices:Retention` windows. Each delete orders by its primary key and
 commits at most `BackgroundServices:CleanupBatchSize` rows, defaulting to 5,000.
-A window of zero disables that table's age purge. `SessionsDays` controls both
-sessions and their refresh tokens; an active session keeps its tokens. OAuth state
+A window of zero disables that table's age purge. Notification age retention
+applies to live rows; recently deleted notifications retain their sync tombstones.
+`SessionsDays` controls both sessions and their refresh tokens; an active session keeps its tokens. OAuth state
 expiry runs here instead of on sign-in requests. AI budget rows inside a stored
 allowance period survive the age purge until that period can no longer be active.
 Changing week start from Monday to Sunday can extend that period to thirteen days;

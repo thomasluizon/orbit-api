@@ -20,10 +20,10 @@ internal static class ApplicationHistoryRetention
             ArgumentOutOfRangeException.ThrowIfNegative(days);
             if (days > 0) deleted += await BatchedDelete.ExecuteAsync(query(days), cancellationToken, batchSize);
         }
-        await Purge("Notifications", 90, days => db.Notifications.IgnoreQueryFilters().Where(row => row.CreatedAtUtc < nowAtUtc.AddDays(-days)));
+        await Purge("Notifications", 90, days => db.Notifications.Where(row => row.CreatedAtUtc < nowAtUtc.AddDays(-days)));
         var earliestUserToday = today.AddDays(-1);
         await Purge("AiBudgetCalls", 8, days => db.AiBudgetCalls.Where(row => row.LocalDate < today.AddDays(-days)
-            && !db.Users.Any(user => user.Id == row.UserId && user.AiMessagesWeekStart.HasValue
+            && !db.Users.IgnoreQueryFilters().Any(user => user.Id == row.UserId && user.AiMessagesWeekStart.HasValue
                 && row.LocalDate >= user.AiMessagesWeekStart.Value
                 && row.LocalDate < user.AiMessagesWeekStart.Value.AddDays(AiAllowancePeriod.MaximumProPeriodDays)
                 && user.AiMessagesWeekStart.Value.AddDays(AiAllowancePeriod.MaximumProPeriodDays) > earliestUserToday)));

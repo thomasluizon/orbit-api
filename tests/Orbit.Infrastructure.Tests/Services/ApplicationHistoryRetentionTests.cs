@@ -100,8 +100,10 @@ public sealed class ApplicationHistoryRetentionTests
             .Should().OnlyContain(window => window <= 30);
     }
 
-    [Fact]
-    public async Task AiBudgetRetention_ExtendedWeeklyAllowance_KeepsCallsStillCountedByBudget()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AiBudgetRetention_ExtendedWeeklyAllowance_KeepsCallsStillCountedByBudget(bool deactivated)
     {
         using var factory = new SqliteOrbitDbContextFactory();
         var db = factory.Context;
@@ -116,6 +118,7 @@ public sealed class ApplicationHistoryRetentionTests
         var callDate = start.AddDays(1);
         today.DayNumber.Should().BeLessThan(active.End.DayNumber);
         callDate.DayNumber.Should().BeGreaterThanOrEqualTo(active.Start.DayNumber);
+        if (deactivated) user.Deactivate(NowAtUtc.AddDays(30));
         var call = AiBudgetCall.Reserve(user.Id, callDate, 100);
         db.AddRange(user, call);
         await db.SaveChangesAsync();
@@ -128,6 +131,27 @@ public sealed class ApplicationHistoryRetentionTests
 
         await ApplicationHistoryRetention.PurgeAsync(db, new ConfigurationBuilder().Build(), new Clock(3), default);
         (await db.AiBudgetCalls.AnyAsync(row => row.Id == call.Id)).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task NotificationRetention_OldLiveRowIsPurged_RecentSyncTombstoneSurvives()
+    {
+        using var factory = new SqliteOrbitDbContextFactory();
+        var db = factory.Context;
+        var user = User.Create("Tombstones", "tombstones@example.com").Value;
+        var tombstone = Notification.Create(user.Id, "Old", "Deleted recently", "/");
+        var live = Notification.Create(user.Id, "Old", "Still live", "/");
+        Set(tombstone, nameof(Notification.CreatedAtUtc), NowAtUtc.AddDays(-100));
+        Set(live, nameof(Notification.CreatedAtUtc), NowAtUtc.AddDays(-100));
+        tombstone.SoftDelete();
+        Set(tombstone, nameof(Notification.DeletedAtUtc), NowAtUtc.AddDays(-1));
+        db.AddRange(user, tombstone, live);
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        await ApplicationHistoryRetention.PurgeAsync(db, new ConfigurationBuilder().Build(), new Clock(), default);
+
+        (await db.Notifications.IgnoreQueryFilters().Select(row => row.Id).ToListAsync()).Should().Equal(tombstone.Id);
     }
 
     private static Task<bool> ExistsAsync(DbContext db, Entity row) => row switch
