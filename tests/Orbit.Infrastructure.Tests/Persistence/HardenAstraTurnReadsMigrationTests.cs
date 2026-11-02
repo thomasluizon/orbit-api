@@ -16,7 +16,8 @@ public class HardenAstraTurnReadsMigrationTests
         var migration = new HardenAstraTurnReads();
         migration.UpOperations.OfType<AddColumnOperation>().Should().ContainSingle().Which.Name.Should().Be("ModelContextJson");
         var sql = migration.UpOperations.OfType<SqlOperation>().ToArray();
-        sql.Should().ContainSingle(operation => operation.Sql.Contains("ON CONFLICT (\"Key\") DO NOTHING", StringComparison.Ordinal));
+        sql.Should().NotContain(operation => operation.Sql.Contains("AppFeatureFlags", StringComparison.Ordinal),
+            "the existing seed and enable migrations own the flag and its current value");
         sql.Should().ContainSingle(operation => operation.SuppressTransaction
             && operation.Sql.Contains("CREATE INDEX CONCURRENTLY IF NOT EXISTS", StringComparison.Ordinal)
             && operation.Sql.Contains("(\"ConversationId\", \"UserId\")", StringComparison.Ordinal));

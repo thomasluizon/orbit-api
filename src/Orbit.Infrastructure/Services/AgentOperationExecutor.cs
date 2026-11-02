@@ -694,9 +694,7 @@ public partial class AgentOperationExecutor(
                 context.TargetId,
                 context.TargetName,
                 context.RedactedArguments,
-                context.Error,
-                context.ShadowPolicyDecision,
-                context.ShadowReason), auditTimeout.Token);
+                context.Error), auditTimeout.Token);
         }
         catch (Exception ex)
         {
@@ -742,7 +740,5 @@ public partial class AgentOperationExecutor(
         string? RedactedArguments,
         string? TargetId = null,
         string? TargetName = null,
-        string? Error = null,
-        AgentPolicyDecisionStatus? ShadowPolicyDecision = null,
-        string? ShadowReason = null);
+        string? Error = null);
 }

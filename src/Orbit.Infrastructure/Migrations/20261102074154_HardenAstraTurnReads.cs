@@ -17,12 +17,6 @@ namespace Orbit.Infrastructure.Migrations
                 nullable: true);
 
             migrationBuilder.Sql("""
-                INSERT INTO "AppFeatureFlags" ("Key", "Description", "Enabled", "PlanRequirement", "UpdatedAtUtc")
-                VALUES ('gamification_free_tier', 'Unlock gamification for free accounts', FALSE, NULL, TIMESTAMPTZ '2026-04-01 00:00:00+00')
-                ON CONFLICT ("Key") DO NOTHING;
-                """);
-
-            migrationBuilder.Sql("""
                 CREATE INDEX CONCURRENTLY IF NOT EXISTS "IX_ConversationTurns_ConversationId_UserId"
                 ON "ConversationTurns" ("ConversationId", "UserId");
                 """, suppressTransaction: true);

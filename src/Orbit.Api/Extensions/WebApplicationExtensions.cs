@@ -689,9 +689,7 @@ public static partial class WebApplicationExtensions
                 context.TraceIdentifier,
                 $"{auditContext.SourceName} requested via MCP",
                 RedactedArguments: redactedArguments,
-                Error: auditContext.Error,
-                ShadowPolicyDecision: auditContext.ShadowPolicyDecision,
-                ShadowReason: auditContext.ShadowReason), cancellationToken);
+                Error: auditContext.Error), cancellationToken);
         }
         catch (Exception ex)
         {
@@ -735,7 +733,5 @@ public static partial class WebApplicationExtensions
         AgentPolicyDecisionStatus PolicyDecision,
         AgentOperationStatus OutcomeStatus,
         string? Error,
-        string RawBody,
-        AgentPolicyDecisionStatus? ShadowPolicyDecision = null,
-        string? ShadowReason = null);
+        string RawBody);
 }
