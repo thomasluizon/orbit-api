@@ -51,53 +51,67 @@ public partial class StreakFreezeAutoActivationService(
         var pushService = scope.ServiceProvider.GetRequiredService<IPushNotificationService>();
         var userDateService = scope.ServiceProvider.GetRequiredService<IUserDateService>();
 
-        var candidates = await dbContext.Users
-            .Where(user => user.CurrentStreak > 0
-                && user.StreakFreezesAccumulated > 0)
-            .ToListAsync(cancellationToken);
-
-        if (candidates.Count == 0)
-            return;
-
-        var featureFlagService = scope.ServiceProvider.GetRequiredService<IFeatureFlagService>();
-        var enabledKeys = await featureFlagService.GetEnabledKeysForUsersAsync(candidates, cancellationToken);
-        var freeTierAccounts = enabledKeys.Where(account => account.Value.Contains(FeatureFlagKeys.GamificationFreeTier))
-            .Select(account => account.Key).ToHashSet();
-
-        var repairBatch = await LoadRepairBatchAsync(
-            candidates,
-            dbContext,
-            userDateService,
-            cancellationToken);
-        var staged = new List<StagedFreeze>(candidates.Count);
-        foreach (var user in candidates)
+        Guid? cursor = null;
+        while (true)
         {
-            var stagedFreeze = StageFreeze(
-                user,
-                freeTierAccounts.Contains(user.Id),
+            var candidates = await dbContext.Users
+                .Where(user => user.CurrentStreak > 0
+                    && user.StreakFreezesAccumulated > 0)
+                .Page(cursor, configuration.GetValue("BackgroundServices:ScanPageSize", JobPaging.DefaultPageSize))
+                .ToListAsync(cancellationToken);
+
+            if (candidates.Count == 0)
+                return;
+
+            cursor = candidates[^1].Id;
+            var featureFlagService = scope.ServiceProvider.GetRequiredService<IFeatureFlagService>();
+            var enabledKeys = await featureFlagService.GetEnabledKeysForUsersAsync(candidates, cancellationToken);
+            var freeTierAccounts = enabledKeys.Where(account => account.Value.Contains(FeatureFlagKeys.GamificationFreeTier))
+                .Select(account => account.Key).ToHashSet();
+
+            var repairBatch = await LoadRepairBatchAsync(
+                candidates,
                 dbContext,
-                repairBatch);
-            if (stagedFreeze is not null)
-                staged.Add(stagedFreeze);
+                userDateService,
+                cancellationToken);
+            var staged = new List<StagedFreeze>(candidates.Count);
+            foreach (var user in candidates)
+            {
+                var stagedFreeze = StageFreeze(
+                    user,
+                    freeTierAccounts.Contains(user.Id),
+                    dbContext,
+                    repairBatch);
+                if (stagedFreeze is not null)
+                    staged.Add(stagedFreeze);
+            }
+
+            if (staged.Count == 0)
+            {
+                dbContext.ChangeTracker.Clear();
+                if (candidates.Count < configuration.GetValue("BackgroundServices:ScanPageSize", JobPaging.DefaultPageSize)) return;
+                continue;
+            }
+
+            if (await TrySaveBatchAsync(dbContext, cancellationToken))
+            {
+                await NotifyActivatedAsync(staged, pushService, cancellationToken);
+                dbContext.ChangeTracker.Clear();
+                if (candidates.Count < configuration.GetValue("BackgroundServices:ScanPageSize", JobPaging.DefaultPageSize)) return;
+                continue;
+            }
+
+            dbContext.ChangeTracker.Clear();
+            await ActivatePerUserFallbackAsync(
+                staged.Select(freeze => freeze.User.Id).ToList(),
+                freeTierAccounts,
+                pushService,
+                dbContext,
+                userDateService,
+                cancellationToken);
+            dbContext.ChangeTracker.Clear();
+            if (candidates.Count < configuration.GetValue("BackgroundServices:ScanPageSize", JobPaging.DefaultPageSize)) return;
         }
-
-        if (staged.Count == 0)
-            return;
-
-        if (await TrySaveBatchAsync(dbContext, cancellationToken))
-        {
-            await NotifyActivatedAsync(staged, pushService, cancellationToken);
-            return;
-        }
-
-        dbContext.ChangeTracker.Clear();
-        await ActivatePerUserFallbackAsync(
-            staged.Select(freeze => freeze.User.Id).ToList(),
-            freeTierAccounts,
-            pushService,
-            dbContext,
-            userDateService,
-            cancellationToken);
     }
 
     private sealed record StagedFreeze(User User, DateOnly MissedDate, string Title, string Body);
@@ -229,8 +243,9 @@ public partial class StreakFreezeAutoActivationService(
         IPushNotificationService pushService,
         CancellationToken cancellationToken)
     {
-        foreach (var freeze in staged)
-            await NotifyFreezeActivatedAsync(freeze, pushService, cancellationToken);
+        await Parallel.ForEachAsync(staged, new ParallelOptions
+        { MaxDegreeOfParallelism = Math.Clamp(configuration.GetValue("BackgroundServices:PushParallelism", 4), 1, 8), CancellationToken = cancellationToken },
+            async (freeze, token) => await NotifyFreezeActivatedAsync(freeze, pushService, token));
     }
 
     private async Task NotifyFreezeActivatedAsync(

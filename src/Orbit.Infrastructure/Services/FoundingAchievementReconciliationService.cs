@@ -46,19 +46,12 @@ public sealed partial class FoundingAchievementReconciliationService(
             if (candidates.Count == 0)
                 return grantedCount;
 
-            foreach (var candidate in candidates)
+            var outcomes = await gamificationService.ReconcileFoundingAchievementPageAsync(
+                candidates.Select(candidate => candidate.UserId).ToList(), cancellationToken);
+            foreach (var outcome in outcomes)
             {
-                try
-                {
-                    var granted = await gamificationService.ReconcileFoundingAchievementsAsync(
-                        candidate.UserId,
-                        cancellationToken);
-                    grantedCount += granted.Count;
-                }
-                catch (Exception exception) when (exception is not OperationCanceledException)
-                {
-                    LogCandidateFailed(logger, candidate.UserId, exception);
-                }
+                grantedCount += outcome.Granted.Count;
+                if (outcome.Error is not null) LogCandidateFailed(logger, outcome.UserId, outcome.Error);
             }
 
             cursor = candidates[^1];

@@ -47,36 +47,44 @@ public partial class PeriodCloseNotificationService(
         var pushService = scope.ServiceProvider.GetRequiredService<IPushNotificationService>();
         var userDateService = scope.ServiceProvider.GetRequiredService<IUserDateService>();
 
-        var subscribedUsers = await dbContext.Users
-            .AsNoTracking()
-            .Where(user => !user.IsDeactivated
-                && dbContext.PushSubscriptions.Any(subscription => subscription.UserId == user.Id))
-            .Select(user => new SubscribedUser(user.Id, user.TimeZone, user.Language))
-            .ToListAsync(cancellationToken);
-
-        var boundaryUsers = new List<BoundaryUser>();
-        foreach (var user in subscribedUsers)
+        Guid? cursor = null;
+        while (true)
         {
-            var userToday = await userDateService.GetUserTodayAsync(
-                user.TimeZone,
-                user.Id,
-                cancellationToken);
-            if (userToday.Day != 1)
-                continue;
+            var subscribedUsers = await dbContext.Users
+                .AsNoTracking()
+                .Where(user => !user.IsDeactivated
+                    && dbContext.PushSubscriptions.Any(subscription => subscription.UserId == user.Id))
+                .Page(cursor, configuration.GetValue("BackgroundServices:ScanPageSize", JobPaging.DefaultPageSize))
+                .Select(user => new SubscribedUser(user.Id, user.TimeZone, user.Language))
+                .ToListAsync(cancellationToken);
 
-            var closedMonth = userToday.AddMonths(-1);
-            boundaryUsers.Add(new BoundaryUser(user.Id, user.Language, closedMonth.Year, closedMonth.Month));
-        }
+            if (subscribedUsers.Count == 0) return;
+            cursor = subscribedUsers[^1].Id;
+            var boundaryUsers = new List<BoundaryUser>();
+            foreach (var user in subscribedUsers)
+            {
+                var userToday = await userDateService.GetUserTodayAsync(
+                    user.TimeZone,
+                    user.Id,
+                    cancellationToken);
+                if (userToday.Day != 1)
+                    continue;
 
-        foreach (var monthGroup in boundaryUsers.GroupBy(user => new { user.Year, user.Month }))
-        {
-            await ProcessClosedMonthAsync(
-                monthGroup.ToList(),
-                monthGroup.Key.Year,
-                monthGroup.Key.Month,
-                dbContext,
-                pushService,
-                cancellationToken);
+                var closedMonth = userToday.AddMonths(-1);
+                boundaryUsers.Add(new BoundaryUser(user.Id, user.Language, closedMonth.Year, closedMonth.Month));
+            }
+
+            foreach (var monthGroup in boundaryUsers.GroupBy(user => new { user.Year, user.Month }))
+            {
+                await ProcessClosedMonthAsync(
+                    monthGroup.ToList(),
+                    monthGroup.Key.Year,
+                    monthGroup.Key.Month,
+                    dbContext,
+                    pushService,
+                    cancellationToken);
+            }
+            dbContext.ChangeTracker.Clear();
         }
     }
 
@@ -118,90 +126,77 @@ public partial class PeriodCloseNotificationService(
             .ToListAsync(cancellationToken))
             .ToHashSet();
 
-        foreach (var user in activeUsers)
+        var claims = activeUsers.Where(user => sentKeys.Add(BuildDedupeKey(user.Id, year, month))).Select(user =>
         {
-            var dedupeKey = BuildDedupeKey(user.Id, year, month);
-            if (!sentKeys.Add(dedupeKey))
-                continue;
-
-            try
+            var (title, body) = BuildNotification(month, user.Language);
+            return Notification.Create(user.Id, title, body, NotificationUrls.WrappedClosedMonth(year, month),
+                dedupeKey: BuildDedupeKey(user.Id, year, month));
+        }).ToList();
+        if (claims.Count == 0) return;
+        dbContext.Notifications.AddRange(claims);
+        try { await dbContext.SaveChangesAsync(cancellationToken); }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            foreach (var claim in claims) dbContext.Entry(claim).State = EntityState.Detached;
+            var retained = new List<Notification>();
+            foreach (var claim in claims)
+                if (await TryRecordAsync(claim, year, month, dbContext, cancellationToken)) retained.Add(claim);
+            claims = retained;
+        }
+        foreach (var claim in claims) dbContext.Entry(claim).State = EntityState.Detached;
+        var failed = new System.Collections.Concurrent.ConcurrentBag<Notification>();
+        try
+        {
+            await Parallel.ForEachAsync(claims, new ParallelOptions
+            { MaxDegreeOfParallelism = Math.Clamp(configuration.GetValue("BackgroundServices:PushParallelism", 4), 1, 8), CancellationToken = cancellationToken }, async (claim, token) =>
             {
-                await TryRecordAndSendAsync(
-                    user,
-                    year,
-                    month,
-                    dedupeKey,
-                    dbContext,
-                    pushService,
-                    cancellationToken);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                LogUserProcessingFailed(logger, user.Id, year, month, ex);
-            }
+                try
+                {
+                    if (!await pushService.TrySendToUserAsync(claim.UserId, claim.Title, claim.Body, claim.Url, token))
+                    {
+                        failed.Add(claim);
+                        LogNotificationNotDelivered(logger, claim.UserId, year, month);
+                    }
+                    else if (logger.IsEnabled(LogLevel.Debug)) LogNotificationSent(logger, claim.UserId, year, month);
+                }
+                catch (Exception exception) when (exception is not OperationCanceledException)
+                {
+                    failed.Add(claim);
+                    LogUserProcessingFailed(logger, claim.UserId, year, month, exception);
+                }
+                catch (OperationCanceledException) { failed.Add(claim); throw; }
+            });
+        }
+        finally
+        {
+            foreach (var claim in failed) await RemoveNotificationAfterPushFailureAsync(claim, dbContext);
         }
     }
 
-    private async Task TryRecordAndSendAsync(
-        BoundaryUser user,
-        int year,
-        int month,
-        string dedupeKey,
-        OrbitDbContext dbContext,
-        IPushNotificationService pushService,
-        CancellationToken cancellationToken)
+    private async Task<bool> TryRecordAsync(Notification notification, int year, int month,
+        OrbitDbContext dbContext, CancellationToken ct)
     {
-        var (title, body) = BuildNotification(month, user.Language);
-        var url = NotificationUrls.WrappedClosedMonth(year, month);
-        var notification = Notification.Create(
-            user.Id,
-            title,
-            body,
-            url,
-            dedupeKey: dedupeKey);
-        await dbContext.Notifications.AddAsync(notification, cancellationToken);
-
+        dbContext.Notifications.Add(notification);
         try
         {
-            await dbContext.SaveChangesAsync(cancellationToken);
+            await dbContext.SaveChangesAsync(ct);
+            return true;
         }
-        catch (DbUpdateException ex) when (DbUniqueViolation.IsUniqueViolation(ex))
+        catch (DbUpdateException exception) when (DbUniqueViolation.IsUniqueViolation(exception))
         {
             dbContext.Entry(notification).State = EntityState.Detached;
-            if (logger.IsEnabled(LogLevel.Debug))
-                LogNotificationAlreadyRecorded(logger, user.Id, year, month);
-            return;
+            if (logger.IsEnabled(LogLevel.Debug)) LogNotificationAlreadyRecorded(logger, notification.UserId, year, month);
+            return false;
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception exception) when (exception is not OperationCanceledException)
         {
             dbContext.Entry(notification).State = EntityState.Detached;
-            LogNotificationRecordFailed(logger, user.Id, year, month, ex);
-            return;
+            LogNotificationRecordFailed(logger, notification.UserId, year, month, exception);
+            return false;
         }
-
-        try
-        {
-            var delivered = await pushService.TrySendToUserAsync(user.Id, title, body, url, cancellationToken);
-            if (!delivered)
-            {
-                await RemoveNotificationAfterPushFailureAsync(notification, dbContext);
-                LogNotificationNotDelivered(logger, user.Id, year, month);
-                return;
-            }
-        }
-        catch
-        {
-            await RemoveNotificationAfterPushFailureAsync(notification, dbContext);
-            throw;
-        }
-
-        if (logger.IsEnabled(LogLevel.Debug))
-            LogNotificationSent(logger, user.Id, year, month);
     }
 
-    private async Task RemoveNotificationAfterPushFailureAsync(
-        Notification notification,
-        OrbitDbContext dbContext)
+    private async Task RemoveNotificationAfterPushFailureAsync(Notification notification, OrbitDbContext dbContext)
     {
         try
         {

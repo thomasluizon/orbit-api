@@ -31,7 +31,8 @@ public sealed class BackgroundServiceHealthCheck(
         ["owed-subscription-cancellation"] = TimeSpan.FromMinutes(3),
         ["founding-achievement-reconciliation"] = TimeSpan.FromHours(12),
         ["period-close-notification"] = TimeSpan.FromMinutes(90),
-        ["chat-turn-retention"] = TimeSpan.FromHours(2)
+        ["chat-turn-retention"] = TimeSpan.FromHours(2),
+        ["hangfire-history-retention"] = TimeSpan.FromHours(48)
     };
 
     internal async Task RegisterAsync(CancellationToken cancellationToken)

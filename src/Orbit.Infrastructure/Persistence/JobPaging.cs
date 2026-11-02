@@ -11,6 +11,7 @@ internal static class JobPaging
         where T : Entity
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(pageSize, 1);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(pageSize, 500);
         if (afterId.HasValue) query = query.Where(row => row.Id.CompareTo(afterId.Value) > 0);
         return query.OrderBy(row => row.Id).Take(pageSize);
     }

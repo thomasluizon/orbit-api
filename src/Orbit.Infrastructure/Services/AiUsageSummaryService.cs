@@ -75,8 +75,7 @@ public partial class AiUsageSummaryService(
         var today = DateOnly.FromDateTime(TimeProvider.System.GetUtcNow().UtcDateTime);
         using var scope = scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
-        var rows = await dbContext.AiUsageDaily.AsNoTracking()
-            .Where(usage => usage.Date == today).ToListAsync(cancellationToken);
+        var rows = await AiUsageSummaryReader.ReadUsageAsync(dbContext, today, cancellationToken);
         if (logger.IsEnabled(LogLevel.Information))
             LogAiUsageSummary(logger, BuildSummaryLine(today, rows, _pricing, partial: true));
         _startupSummarized = true;
@@ -93,15 +92,7 @@ public partial class AiUsageSummaryService(
         using var scope = scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
 
-        var rows = await dbContext.AiUsageDaily
-            .AsNoTracking()
-            .Where(usage => usage.Date == yesterday)
-            .ToListAsync(cancellationToken);
-
-        var activeUsers = await dbContext.Users
-            .AsNoTracking()
-            .Where(user => user.AiMessagesLocalDate == yesterday && user.AiMessagesUsedToday > 0)
-            .ToListAsync(cancellationToken);
+        var rows = await AiUsageSummaryReader.ReadUsageAsync(dbContext, yesterday, cancellationToken);
 
         var appConfig = scope.ServiceProvider.GetRequiredService<IAppConfigService>();
         var freeLimit = await appConfig.GetAsync(
@@ -113,10 +104,12 @@ public partial class AiUsageSummaryService(
             AppConstants.DefaultProAiMessages,
             cancellationToken);
 
+        var quota = await AiUsageSummaryReader.ReadQuotaAsync(dbContext, yesterday, TimeProvider.System.GetUtcNow().UtcDateTime,
+            freeLimit, proLimit, cancellationToken);
         if (logger.IsEnabled(LogLevel.Information))
         {
             var summaryLine = $"{BuildSummaryLine(yesterday, rows, _pricing)}; " +
-                BuildQuotaSummaryLine(yesterday, activeUsers, freeLimit, proLimit);
+                BuildQuotaSummaryLine(yesterday, quota);
             LogAiUsageSummary(logger, summaryLine);
         }
         _lastSummarizedDate = yesterday;
@@ -170,6 +163,11 @@ public partial class AiUsageSummaryService(
 
         return line;
     }
+
+    internal static string BuildQuotaSummaryLine(DateOnly date, AiUsageSummaryReader.QuotaSummary quota) =>
+        quota.ActiveUsers == 0
+            ? string.Create(CultureInfo.InvariantCulture, $"Astra quota {date:yyyy-MM-dd}: no active users")
+            : string.Create(CultureInfo.InvariantCulture, $"Astra quota {date:yyyy-MM-dd}: free_cap_hits={quota.FreeCapHits}; pro_cap_hits={quota.ProCapHits}; mean_messages_per_active_user={quota.Mean:F2}; p95_messages_per_active_user={quota.P95}");
 
     internal static string BuildQuotaSummaryLine(
         DateOnly date,

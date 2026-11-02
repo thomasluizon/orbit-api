@@ -65,7 +65,7 @@ public class ScheduledJobRegistryTests
     [Fact]
     public void AllRecurringSchedulers_AreRegisteredAsJobs()
     {
-        BuildAll().Should().HaveCount(17);
+        BuildAll().Should().HaveCount(18);
         BuildAll().Select(job => job.Name).Should().NotContain("openai-batch-poller");
     }
 
@@ -141,6 +141,7 @@ public class ScheduledJobRegistryTests
 
     private static List<IScheduledJob> BuildAll() =>
     [
+        new HangfireHistoryRetentionJob(Substitute.For<Hangfire.JobStorage>(), Substitute.For<Hangfire.IBackgroundJobClient>(), TimeProvider.System, EmptyConfiguration),
         new ChatTurnRetentionJob(ScopeFactory()),
         new Orbit.Infrastructure.Services.Notion.NotionAutoSyncService(ScopeFactory(), TimeProvider.System,
             NullLogger<Orbit.Infrastructure.Services.Notion.NotionAutoSyncService>.Instance),

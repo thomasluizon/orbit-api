@@ -5,6 +5,10 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Options;
+using Orbit.Infrastructure.Configuration;
+using Orbit.Infrastructure.Tests.AI;
 using NSubstitute;
 using Orbit.Api.Authentication;
 using Orbit.Domain.Entities;
@@ -61,14 +65,58 @@ public sealed class BackgroundJobFailureTests
             && (LogLevel)call.GetArguments()[0]! == LogLevel.Error);
     }
 
+    [Fact]
+    public async Task PlayCleanup_LoopLogsAndRunsAgain()
+    {
+        var failures = new FailPlayDelete();
+        using var factory = new SqliteOrbitDbContextFactory(failures);
+        using var provider = new ServiceCollection().AddScoped(_ => factory.CreateContext()).BuildServiceProvider();
+        var logger = Substitute.For<ILogger<PlayNotificationCleanupService>>();
+        logger.IsEnabled(Arg.Any<LogLevel>()).Returns(true);
+        var clock = new CompletionTestClock();
+        using var service = new PlayNotificationCleanupService(provider.GetRequiredService<IServiceScopeFactory>(), logger, clock);
+        await service.StartAsync(default);
+        try
+        {
+            for (var attempt = 0; attempt < 100 && clock.ActiveTimers == 0; attempt++) await Task.Delay(10);
+            clock.ActiveTimers.Should().Be(1);
+            clock.Advance(TimeSpan.FromHours(24));
+            await failures.SecondAttempt.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        }
+        finally { await service.StopAsync(default); }
+        logger.ReceivedCalls().Count(call => call.GetMethodInfo().Name == "Log"
+            && (LogLevel)call.GetArguments()[0]! == LogLevel.Error).Should().Be(2);
+    }
+
+    [Fact]
+    public async Task AiUsageStartup_SummaryThrows_LogsAndContinues()
+    {
+        var scopes = Substitute.For<IServiceScopeFactory>();
+        scopes.CreateScope().Returns(_ => throw new InvalidOperationException("summary read failed"));
+        var logger = Substitute.For<ILogger<AiUsageSummaryStartupService>>();
+        logger.IsEnabled(Arg.Any<LogLevel>()).Returns(true);
+        using var summary = new AiUsageSummaryService(scopes, Substitute.For<ILogger<AiUsageSummaryService>>(),
+            new ConfigurationBuilder().Build(), Options.Create(new AiSettings()));
+        using var startup = new AiUsageSummaryStartupService(summary, logger);
+        await startup.StartAsync(default);
+        await startup.ExecuteTask!;
+        logger.ReceivedCalls().Should().Contain(call => call.GetMethodInfo().Name == "Log"
+            && (LogLevel)call.GetArguments()[0]! == LogLevel.Warning);
+    }
+
     private sealed class FailPlayDelete : DbCommandInterceptor
     {
+        private int _attempts;
+        internal TaskCompletionSource SecondAttempt { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(DbCommand command,
             CommandEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
         {
             if (command.CommandText.StartsWith("DELETE", StringComparison.Ordinal)
                 && command.CommandText.Contains("ProcessedPlayNotifications", StringComparison.Ordinal))
+            {
+                if (Interlocked.Increment(ref _attempts) == 2) SecondAttempt.TrySetResult();
                 throw new InvalidOperationException("Play delete failed");
+            }
             return base.NonQueryExecutingAsync(command, eventData, result, cancellationToken);
         }
     }

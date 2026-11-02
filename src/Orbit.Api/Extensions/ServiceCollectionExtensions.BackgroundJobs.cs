@@ -73,13 +73,22 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<CancelSubscriptionOnDeletionJob>();
         builder.Services.AddScoped<RevokeAppleTokenOnDeletionJob>();
         builder.Services.AddScoped<OwedSubscriptionCancellationJob>();
+        builder.Services.AddHangfireServer(options =>
+        {
+            options.Queues = ["marketing"];
+            options.WorkerCount = 1;
+        });
+        builder.Services.AddScoped<SendMarketingBroadcastPageJob>();
+        builder.Services.AddScoped<Orbit.Application.Waitlist.Commands.SendWaitlistConfirmationJob>();
         builder.Services.AddScoped<SendMarketingEmailJob>();
+        builder.Services.AddScoped<ProactivePushJob>();
         builder.Services.AddScoped<DeliverReferralRewardJob>();
     }
 
     internal static void AddDurableRecurringJobs(WebApplicationBuilder builder)
     {
         builder.Services.TryAddSingleton<ScheduledJobRunner>();
+        AddScheduledJob<HangfireHistoryRetentionJob>(builder);
         AddScheduledJob<ReminderSchedulerService>(builder);
         AddScheduledJob<GoalDeadlineNotificationService>(builder);
         if (IsPeriodCloseNotificationEnabled(builder.Configuration))

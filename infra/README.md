@@ -285,7 +285,7 @@ The coordinator performs the cutover after merge, with no service replacement:
 ### Recurring jobs and health
 
 Recurring schedules run through Hangfire in the `hangfire` schema. The API runs six
-workers. `ConnectionStrings__HangfireConnection` can select a dedicated job-store
+general workers and one worker dedicated to the `marketing` queue. `ConnectionStrings__HangfireConnection` can select a dedicated job-store
 connection; otherwise the session endpoint is reused with the `orbit-hangfire`
 application name and a separate pool capped at 12 connections. Job leases use the
 session endpoint with the `orbit-job-locks` application name and a separate pool
@@ -314,6 +314,42 @@ timeouts and non-success responses count as failures. The monitor runs outside
 Render and remains active when the API is unavailable. Its Terraform resources
 live in `production-health.tf`; its dependency-free handler is
 `workers/production-health.mjs`. The staging pinger remains independent.
+
+### Bounded recurring work and email
+
+`BackgroundServices:ScanPageSize` defaults to 400 and accepts at most 500 rows.
+Goal deadlines, streak goal synchronization, period close, streak freezes, proactive
+checks and due-date advancement use keyset pages. `BackgroundServices:TimeoutMinutes`
+sets a deadline by job name. `BackgroundServices:PushParallelism` defaults to four
+and is capped at eight. The proactive engine processes four accounts concurrently,
+with `BackgroundServices:ProactiveUserTimeoutSeconds` per account. It loads rule data
+once per page, computes old standard-goal completion totals in SQL, and queues pushes
+after saving each account. Calendar claims precede network calls to preserve dedupe;
+Google token refresh runs without a transaction or user row lock.
+
+The XP startup backfill saves `XpAwardLogBackfillCursor` after each 200-user page.
+A failed page is retried after the last completed page, and existing XP audit rows
+keep individual replays idempotent. The XP and encryption backfills acquire separate
+nonblocking cluster leases. Encryption uses 50-row keyset pages and retains its
+`EncryptionMigrationComplete_v2` guard until the live flag can be verified.
+
+The `hangfire-history-retention` job runs daily. Failed jobs older than thirty days
+move to Deleted and expire. Successful and deleted jobs also expire after seven days.
+`BackgroundServices:SucceededListSize` and `BackgroundServices:DeletedListSize`, both
+defaulting to 1,000, bound retained finished history by expiring overflow. The storage
+expiration sweep removes expired rows within an hour. State locks prevent a retried
+job from expiring on an obsolete monitoring snapshot. These are application settings;
+the installed PostgreSql provider exposes no options with those list-size names.
+
+Marketing broadcasts enqueue pages identified by broadcast id and page number.
+`Marketing:BroadcastPageSize` defaults to 500, `Marketing:BroadcastParallelism` to three,
+and `Marketing:MaxSendsPerSecond` to ten. Page jobs share a distributed method lock;
+the separate queue keeps their waits away from reminder workers. Send starts are
+paced by the greater of `Marketing:SendDelayMilliseconds` and the configured rate.
+The rate is capped at fourteen, matching the verified SES quota. SES requests have a
+thirty-second timeout. A failed page retries that page's recipients; confirmed sends
+within a failed page can be repeated. Delivery deduplication is tracked separately.
+Waitlist confirmation is also queued and no longer waits on SES in the request.
 
 ### Application history retention
 

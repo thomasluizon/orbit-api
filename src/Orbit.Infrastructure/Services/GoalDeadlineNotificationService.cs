@@ -58,7 +58,7 @@ public partial class GoalDeadlineNotificationService(
             var page = await dbContext.Goals.AsNoTracking()
                 .Where(goal => goal.Status == GoalStatus.Active && goal.Deadline != null)
                 .Page(cursor, configuration.GetValue("BackgroundServices:ScanPageSize", JobPaging.DefaultPageSize))
-                .Include(goal => goal.Habits).ThenInclude(habit => habit.Logs.Where(log => log.Date >= streakWindowStart))
+                .Include(goal => goal.Habits)
                 .AsSplitQuery()
                 .Select(goal => new
                 {
@@ -72,10 +72,16 @@ public partial class GoalDeadlineNotificationService(
             var userIds = goals.Select(goal => goal.UserId).Distinct().ToList();
             var users = await dbContext.Users.AsNoTracking().Where(user => userIds.Contains(user.Id))
                 .ToDictionaryAsync(user => user.Id, ct);
+            var streakHabitIds = goals.Where(goal => goal.Type == GoalType.Streak).SelectMany(goal => goal.Habits)
+                .Select(habit => habit.Id).Distinct().ToList();
+            var streakLogs = streakHabitIds.Count == 0 ? [] : await dbContext.HabitLogs.AsNoTracking()
+                .Where(log => streakHabitIds.Contains(log.HabitId) && log.Date >= streakWindowStart).ToListAsync(ct);
+            var logs = streakLogs.ToLookup(log => log.HabitId);
             var freshDerivedValues = new Dictionary<Guid, int>();
             foreach (var row in page)
             {
                 var goal = row.Goal;
+                foreach (var habit in goal.Habits) habit.LoadScheduleLogsForRead(logs[habit.Id]);
                 if (!users.TryGetValue(goal.UserId, out var user)) continue;
                 var userToday = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(TimeProvider.System.GetUtcNow().UtcDateTime,
                     TimeZoneHelper.FindTimeZone(user.TimeZone, logger, user.Id)));

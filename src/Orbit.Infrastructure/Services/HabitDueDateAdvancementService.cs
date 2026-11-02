@@ -75,50 +75,56 @@ public partial class HabitDueDateAdvancementService(
         var dbContext = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
 
         var cutoff = ConservativeCutoffUtc(clock);
-        var habits = await dbContext.Habits
-            .Where(StaleBadHabitFilter(cutoff))
-            .ToListAsync(ct);
-
-        if (habits.Count == 0) return;
-
-        var userIds = habits.Select(h => h.UserId).Distinct().ToList();
-        var users = await dbContext.Users
-            .Where(u => userIds.Contains(u.Id))
-            .ToDictionaryAsync(u => u.Id, ct);
-
-        var advanced = 0;
-        foreach (var habit in habits)
+        Guid? cursor = null;
+        while (true)
         {
-            try
+            var habits = await dbContext.Habits
+                .Where(StaleBadHabitFilter(cutoff)).Page(cursor, configuration.GetValue("BackgroundServices:ScanPageSize", JobPaging.DefaultPageSize))
+                .ToListAsync(ct);
+
+            if (habits.Count == 0) return;
+            cursor = habits[^1].Id;
+
+            var userIds = habits.Select(h => h.UserId).Distinct().ToList();
+            var users = await dbContext.Users
+                .Where(u => userIds.Contains(u.Id))
+                .ToDictionaryAsync(u => u.Id, ct);
+
+            var advanced = 0;
+            foreach (var habit in habits)
             {
-                if (!users.TryGetValue(habit.UserId, out var user)) continue;
-
-                var tz = TimeZoneHelper.FindTimeZone(user.TimeZone, logger, user.Id);
-                var userNow = TimeZoneInfo.ConvertTimeFromUtc(clock.GetUtcNow().UtcDateTime, tz);
-                var userToday = DateOnly.FromDateTime(userNow);
-
-                if (!ShouldAdvanceForUserToday(habit, userToday)) continue;
-
-                var result = habit.CatchUpDueDate(userToday, user.WeekStartDay);
-                if (result.IsFailure)
+                try
                 {
-                    LogHabitSkipped(logger, habit.Id, result.ErrorCode);
-                    continue;
+                    if (!users.TryGetValue(habit.UserId, out var user)) continue;
+
+                    var tz = TimeZoneHelper.FindTimeZone(user.TimeZone, logger, user.Id);
+                    var userNow = TimeZoneInfo.ConvertTimeFromUtc(clock.GetUtcNow().UtcDateTime, tz);
+                    var userToday = DateOnly.FromDateTime(userNow);
+
+                    if (!ShouldAdvanceForUserToday(habit, userToday)) continue;
+
+                    var result = habit.CatchUpDueDate(userToday, user.WeekStartDay);
+                    if (result.IsFailure)
+                    {
+                        LogHabitSkipped(logger, habit.Id, result.ErrorCode);
+                        continue;
+                    }
+
+                    advanced++;
                 }
-
-                advanced++;
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    LogHabitUnexpectedError(logger, ex, habit.Id);
+                }
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+
+            if (advanced > 0)
             {
-                LogHabitUnexpectedError(logger, ex, habit.Id);
+                await dbContext.SaveChangesAsync(ct);
+                if (logger.IsEnabled(LogLevel.Debug))
+                    LogDueDatesAdvanced(logger, advanced);
             }
-        }
-
-        if (advanced > 0)
-        {
-            await dbContext.SaveChangesAsync(ct);
-            if (logger.IsEnabled(LogLevel.Debug))
-                LogDueDatesAdvanced(logger, advanced);
+            dbContext.ChangeTracker.Clear();
         }
     }
 
