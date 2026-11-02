@@ -41,7 +41,6 @@ public class OrbitDbContext : DbContext
     public DbSet<AppConfig> AppConfigs => Set<AppConfig>();
     public DbSet<Tag> Tags => Set<Tag>();
     public DbSet<PushSubscription> PushSubscriptions => Set<PushSubscription>();
-    internal DbSet<ReminderScheduleProbe> ReminderScheduleProbes => Set<ReminderScheduleProbe>();
     public DbSet<SentReminder> SentReminders => Set<SentReminder>();
     public DbSet<SentSlipAlert> SentSlipAlerts => Set<SentSlipAlert>();
     public DbSet<ProactiveItem> ProactiveItems => Set<ProactiveItem>();
