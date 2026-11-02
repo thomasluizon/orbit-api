@@ -451,7 +451,7 @@ test("the release-safety SQL seed declares the API key limit without relaxing ot
     key: "MaxActiveApiKeys", compiledDefault: 5, compiledDefaultExpression: "5", seededInMigrations: true,
   })
   const fixture = copySourceFixture("release-safety-upsert-update")
-  const migration = join(fixture, "src/Orbit.Infrastructure/Migrations/20261102071227_ReleaseSafetyAppConfig.cs")
+  const migration = join(fixture, "src/Orbit.Infrastructure/Migrations/20261102123402_ReleaseSafetyAppConfig.cs")
   const source = readFileSync(migration, "utf8")
   assert.ok(source.includes('ON CONFLICT ("Key") DO NOTHING;'))
   writeFileSync(migration, source.replace('ON CONFLICT ("Key") DO NOTHING;', 'ON CONFLICT ("Key") DO UPDATE SET "Value" = EXCLUDED."Value";'))
