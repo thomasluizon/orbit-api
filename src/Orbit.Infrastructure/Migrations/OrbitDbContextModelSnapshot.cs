@@ -132,6 +132,8 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("CreatedAtUtc");
+
                     b.HasIndex("CapabilityId", "CreatedAtUtc");
 
                     b.HasIndex("UserId", "CreatedAtUtc");
@@ -205,6 +207,8 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.HasIndex("EvalDateUtc")
                         .HasFilter("\"EvalDateUtc\" IS NOT NULL");
+
+                    b.HasIndex("LocalDate");
 
                     b.HasIndex("UserId", "LocalDate");
 
@@ -652,6 +656,8 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("ExpiresAtUtc");
+
                     b.HasIndex("UserId", "KeyHash")
                         .IsUnique();
 
@@ -691,6 +697,9 @@ namespace Orbit.Infrastructure.Migrations
                         .HasColumnType("uuid");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("DeletedAtUtc")
+                        .HasFilter("\"IsDeleted\" = TRUE");
 
                     b.HasIndex("UserId");
 
@@ -1027,11 +1036,20 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("DeletedAtUtc")
+                        .HasFilter("\"IsDeleted\" = TRUE");
+
                     b.HasIndex("UserId");
+
+                    b.HasIndex("Status", "Deadline")
+                        .HasFilter("\"Status\" = 0 AND \"IsDeleted\" = FALSE");
 
                     b.HasIndex("UserId", "IsDeleted");
 
                     b.HasIndex("UserId", "UpdatedAtUtc");
+
+                    b.HasIndex(new[] { "UserId" }, "IX_Goals_ActiveUser")
+                        .HasFilter("\"Status\" = 0 AND \"IsDeleted\" = FALSE");
 
                     b.ToTable("Goals");
                 });
@@ -1067,6 +1085,9 @@ namespace Orbit.Infrastructure.Migrations
                         .HasColumnType("numeric");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("DeletedAtUtc")
+                        .HasFilter("\"IsDeleted\" = TRUE");
 
                     b.HasIndex("GoalId");
 
@@ -1115,6 +1136,9 @@ namespace Orbit.Infrastructure.Migrations
                         .HasColumnType("uuid");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("DiscoveredAtUtc")
+                        .HasFilter("\"ImportedAtUtc\" IS NULL");
 
                     b.HasIndex("UserId");
 
@@ -1263,9 +1287,13 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ParentHabitId");
+                    b.HasIndex("DeletedAtUtc")
+                        .HasFilter("\"IsDeleted\" = TRUE");
 
-                    b.HasIndex("UserId");
+                    b.HasIndex("NextDueDate")
+                        .HasFilter("\"IsCompleted\" = FALSE AND \"Schedule\" = 1 AND \"FrequencyQuantity\" IS NOT NULL AND \"IsBadHabit\" = TRUE AND \"IsDeleted\" = FALSE");
+
+                    b.HasIndex("ParentHabitId");
 
                     b.HasIndex("UserId", "GoogleEventId")
                         .IsUnique()
@@ -1326,6 +1354,9 @@ namespace Orbit.Infrastructure.Migrations
                         .HasColumnType("numeric");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("DeletedAtUtc")
+                        .HasFilter("\"IsDeleted\" = TRUE");
 
                     b.HasIndex("HabitId", "UpdatedAtUtc");
 
@@ -1518,9 +1549,14 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("CreatedAtUtc");
+
                     b.HasIndex("DedupeKey")
                         .IsUnique()
                         .HasFilter("\"DedupeKey\" IS NOT NULL");
+
+                    b.HasIndex("DeletedAtUtc")
+                        .HasFilter("\"IsDeleted\" = TRUE");
 
                     b.HasIndex("Url")
                         .HasFilter("\"Url\" IS NOT NULL");
@@ -1694,6 +1730,8 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("ExpiresAtUtc");
+
                     b.HasIndex("SecretHash")
                         .IsUnique();
 
@@ -1829,6 +1867,8 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("ExpiresAtUtc");
+
                     b.HasIndex("UserId", "CapabilityId");
 
                     b.HasIndex("UserId", "OperationFingerprint");
@@ -1908,6 +1948,8 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("LocalDate");
+
                     b.HasIndex("UserId", "LocalDate")
                         .IsUnique();
 
@@ -1976,6 +2018,8 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("LocalDate");
+
                     b.HasIndex("UserId", "LocalDate")
                         .IsUnique()
                         .HasFilter("\"PushedAtUtc\" IS NOT NULL");
@@ -2031,6 +2075,8 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.HasIndex("MessageId")
                         .IsUnique();
+
+                    b.HasIndex("ProcessedAtUtc");
 
                     b.ToTable("ProcessedPlayNotifications");
                 });
@@ -2092,6 +2138,8 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.HasIndex("EventId")
                         .IsUnique();
+
+                    b.HasIndex("ProcessedAtUtc");
 
                     b.ToTable("ProcessedStripeEvents");
                 });
@@ -2241,6 +2289,8 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("Date");
+
                     b.HasIndex("HabitId", "ReminderAtUtc")
                         .IsUnique()
                         .HasFilter("\"ReminderAtUtc\" IS NOT NULL");
@@ -2270,6 +2320,8 @@ namespace Orbit.Infrastructure.Migrations
                         .HasColumnType("date");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("WeekStart");
 
                     b.HasIndex("HabitId", "WeekStart")
                         .IsUnique();
@@ -2336,6 +2388,9 @@ namespace Orbit.Infrastructure.Migrations
                         .HasColumnType("uuid");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("DeletedAtUtc")
+                        .HasFilter("\"IsDeleted\" = TRUE");
 
                     b.HasIndex("UserId", "IsDeleted");
 
@@ -2684,6 +2739,9 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("AiMessagesLocalDate")
+                        .HasFilter("\"AiMessagesUsedToday\" > 0");
+
                     b.HasIndex("AppStoreOriginalTransactionId")
                         .IsUnique()
                         .HasFilter("\"AppStoreOriginalTransactionId\" IS NOT NULL");
@@ -2773,6 +2831,10 @@ namespace Orbit.Infrastructure.Migrations
                         .HasColumnName("xmin");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ExpiresAtUtc");
+
+                    b.HasIndex("RevokedAtUtc");
 
                     b.HasIndex("TokenHash")
                         .IsUnique();

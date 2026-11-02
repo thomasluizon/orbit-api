@@ -63,14 +63,14 @@ public partial class PlayNotificationCleanupService(
         var nowAtUtc = TimeProvider.System.GetUtcNow().UtcDateTime;
         await PurgeAsync(async () =>
         {
-            var count = await dbContext.ProcessedPlayNotifications
-                .Where(n => n.ProcessedAtUtc < nowAtUtc - PlayRetentionPeriod).ExecuteDeleteAsync(ct);
+            var count = await BatchedDelete.ExecuteAsync(dbContext.ProcessedPlayNotifications
+                .Where(n => n.ProcessedAtUtc < nowAtUtc - PlayRetentionPeriod), ct);
             if (count > 0) LogNotificationsPurged(logger, count);
         });
         await PurgeAsync(async () =>
         {
-            var count = await dbContext.ProcessedStripeEvents
-                .Where(e => e.ProcessedAtUtc < nowAtUtc - StripeRetentionPeriod).ExecuteDeleteAsync(ct);
+            var count = await BatchedDelete.ExecuteAsync(dbContext.ProcessedStripeEvents
+                .Where(e => e.ProcessedAtUtc < nowAtUtc - StripeRetentionPeriod), ct);
             if (count > 0) LogStripeEventsPurged(logger, count);
         });
     }

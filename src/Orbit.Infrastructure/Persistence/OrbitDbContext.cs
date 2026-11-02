@@ -85,6 +85,7 @@ public class OrbitDbContext : DbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        ScheduledJobIndexes.Configure(modelBuilder);
         modelBuilder.Entity<BackgroundJobHeartbeat>(entity =>
         {
             entity.ToTable("BackgroundJobHeartbeats");
@@ -834,7 +835,6 @@ public class OrbitDbContext : DbContext
     {
         modelBuilder.Entity<Habit>(entity =>
         {
-            entity.HasIndex(h => h.UserId);
             entity.HasIndex(h => new { h.UserId, h.IsDeleted });
             entity.HasIndex(h => new { h.UserId, h.UpdatedAtUtc });
             entity.HasQueryFilter(h => !h.IsDeleted);

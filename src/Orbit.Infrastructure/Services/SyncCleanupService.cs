@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
@@ -16,7 +17,7 @@ namespace Orbit.Infrastructure.Services;
 /// </summary>
 public partial class SyncCleanupService(
     IServiceScopeFactory scopeFactory,
-    ILogger<SyncCleanupService> logger) : BackgroundService, IScheduledJob
+    ILogger<SyncCleanupService> logger, IConfiguration? configuration = null) : BackgroundService, IScheduledJob
 {
     private static readonly TimeSpan Interval = TimeSpan.FromHours(24);
     private static readonly TimeSpan RetentionPeriod =
@@ -63,13 +64,9 @@ public partial class SyncCleanupService(
         using var scope = scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
 
-        var totalPurged = await dbContext.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
-        {
-            await using var transaction = await dbContext.Database.BeginTransactionAsync(ct);
-            var purged = await PurgeCoreAsync(dbContext, ct);
-            await transaction.CommitAsync(ct);
-            return purged;
-        });
+        var totalPurged = await PurgeCoreAsync(dbContext, ct);
+        totalPurged += await ApplicationHistoryRetention.PurgeAsync(dbContext,
+            configuration ?? new ConfigurationBuilder().Build(), TimeProvider.System, ct);
         if (totalPurged > 0)
             LogEntitiesPurged(logger, totalPurged);
     }
@@ -81,7 +78,7 @@ public partial class SyncCleanupService(
 #pragma warning restore ORBIT0004
         var totalPurged = 0;
 
-        var purgedCompletions = await dbContext.Database.SqlQuery<PurgedCompletion>($"""
+        await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
             WITH RECURSIVE "PurgeHabits" ("Id", "UserId", "IsBadHabit") AS (
                 SELECT h."Id", h."UserId", h."IsBadHabit"
                 FROM "Habits" h
@@ -92,51 +89,35 @@ public partial class SyncCleanupService(
                 JOIN "PurgeHabits" parent
                     ON child."ParentHabitId" = parent."Id" AND child."UserId" = parent."UserId"
             )
-            SELECT h."UserId" AS "UserId", MAX(l."Date") AS "Date"
-            FROM "PurgeHabits" h
-            JOIN "HabitLogs" l ON l."HabitId" = h."Id"
-            WHERE h."IsBadHabit" = FALSE AND CAST(l."Value" AS NUMERIC) > 0
-                AND l."IsDeleted" = FALSE
-            GROUP BY h."UserId"
-            """)
-            .ToListAsync(ct);
+            , "Completions" AS (
+                SELECT h."UserId" AS "UserId", MAX(l."Date") AS "Date"
+                FROM "PurgeHabits" h
+                JOIN "HabitLogs" l ON l."HabitId" = h."Id"
+                WHERE h."IsBadHabit" = FALSE AND CAST(l."Value" AS NUMERIC) > 0
+                    AND l."IsDeleted" = FALSE
+                GROUP BY h."UserId"
+            )
+            UPDATE "Users" SET "LastPurgedCompletionDate" = "Completions"."Date"
+            FROM "Completions"
+            WHERE "Users"."Id" = "Completions"."UserId"
+              AND ("Users"."LastPurgedCompletionDate" IS NULL
+                   OR "Users"."LastPurgedCompletionDate" < "Completions"."Date")
+            """, ct);
 
-        foreach (var completion in purgedCompletions.OrderBy(completion => completion.UserId))
-        {
-            await dbContext.Users.IgnoreQueryFilters()
-                .Where(user => user.Id == completion.UserId
-                    && (user.LastPurgedCompletionDate == null || user.LastPurgedCompletionDate < completion.Date))
-                .ExecuteUpdateAsync(update => update.SetProperty(user => user.LastPurgedCompletionDate, completion.Date), ct);
-        }
-
-        totalPurged += await dbContext.Habits.IgnoreQueryFilters()
-            .Where(habit => habit.IsDeleted && habit.DeletedAtUtc < cutoff).ExecuteDeleteAsync(ct);
-        totalPurged += await dbContext.Goals.IgnoreQueryFilters()
-            .Where(goal => goal.IsDeleted && goal.DeletedAtUtc < cutoff).ExecuteDeleteAsync(ct);
-        totalPurged += await dbContext.Tags.IgnoreQueryFilters()
-            .Where(tag => tag.IsDeleted && tag.DeletedAtUtc < cutoff).ExecuteDeleteAsync(ct);
-        totalPurged += await dbContext.HabitLogs.IgnoreQueryFilters()
-            .Where(log => log.IsDeleted && log.DeletedAtUtc < cutoff).ExecuteDeleteAsync(ct);
-        totalPurged += await dbContext.GoalProgressLogs.IgnoreQueryFilters()
-            .Where(log => log.IsDeleted && log.DeletedAtUtc < cutoff).ExecuteDeleteAsync(ct);
-        totalPurged += await dbContext.Notifications.IgnoreQueryFilters()
-            .Where(notification => notification.IsDeleted && notification.DeletedAtUtc < cutoff).ExecuteDeleteAsync(ct);
-        totalPurged += await dbContext.ChecklistTemplates.IgnoreQueryFilters()
-            .Where(template => template.IsDeleted && template.DeletedAtUtc < cutoff).ExecuteDeleteAsync(ct);
+        totalPurged += await BatchedDelete.ExecuteAsync(dbContext.Habits.IgnoreQueryFilters().Where(habit => habit.IsDeleted && habit.DeletedAtUtc < cutoff), ct);
+        totalPurged += await BatchedDelete.ExecuteAsync(dbContext.Goals.IgnoreQueryFilters().Where(goal => goal.IsDeleted && goal.DeletedAtUtc < cutoff), ct);
+        totalPurged += await BatchedDelete.ExecuteAsync(dbContext.Tags.IgnoreQueryFilters().Where(tag => tag.IsDeleted && tag.DeletedAtUtc < cutoff), ct);
+        totalPurged += await BatchedDelete.ExecuteAsync(dbContext.HabitLogs.IgnoreQueryFilters().Where(log => log.IsDeleted && log.DeletedAtUtc < cutoff), ct);
+        totalPurged += await BatchedDelete.ExecuteAsync(dbContext.GoalProgressLogs.IgnoreQueryFilters().Where(log => log.IsDeleted && log.DeletedAtUtc < cutoff), ct);
+        totalPurged += await BatchedDelete.ExecuteAsync(dbContext.Notifications.IgnoreQueryFilters().Where(notification => notification.IsDeleted && notification.DeletedAtUtc < cutoff), ct);
+        totalPurged += await BatchedDelete.ExecuteAsync(dbContext.ChecklistTemplates.IgnoreQueryFilters().Where(template => template.IsDeleted && template.DeletedAtUtc < cutoff), ct);
 
 #pragma warning disable ORBIT0004 // suggestionCutoff removes unimported calendar suggestions by DiscoveredAtUtc age after SuggestionRetentionPeriod. https://github.com/thomasluizon/orbit-tickets/issues/230
         var suggestionCutoff = DateTime.UtcNow - SuggestionRetentionPeriod;
 #pragma warning restore ORBIT0004
-        totalPurged += await dbContext.GoogleCalendarSyncSuggestions
-            .Where(suggestion => suggestion.DiscoveredAtUtc < suggestionCutoff && suggestion.ImportedAtUtc == null)
-            .ExecuteDeleteAsync(ct);
+        totalPurged += await BatchedDelete.ExecuteAsync(dbContext.GoogleCalendarSyncSuggestions
+            .Where(suggestion => suggestion.DiscoveredAtUtc < suggestionCutoff && suggestion.ImportedAtUtc == null), ct);
         return totalPurged;
-    }
-
-    private sealed class PurgedCompletion
-    {
-        public Guid UserId { get; set; }
-        public DateOnly Date { get; set; }
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "SyncCleanupService started")]

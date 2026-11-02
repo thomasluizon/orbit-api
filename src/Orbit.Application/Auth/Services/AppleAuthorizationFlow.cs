@@ -24,7 +24,6 @@ public sealed class AppleAuthorizationFlow(IOAuthStateStore states, IAppleIdenti
     {
         if (!apple.IsConfigured || mcpContext is not null && !_settings.IsMcpConfigured)
             return null;
-        states.RemoveExpired(time.GetUtcNow().UtcDateTime);
         var secret = NewSecret();
         var nonce = NewSecret();
         var redirectUri = mcpContext is null ? _settings.RedirectUri : _settings.McpRedirectUri;

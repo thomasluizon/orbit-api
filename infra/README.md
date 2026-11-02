@@ -315,6 +315,30 @@ Render and remains active when the API is unavailable. Its Terraform resources
 live in `production-health.tf`; its dependency-free handler is
 `workers/production-health.mjs`. The staging pinger remains independent.
 
+### Application history retention
+
+The daily `sync-cleanup` occurrence purges application history using the configured
+`BackgroundServices:Retention` windows. Each delete orders by its primary key and
+commits at most `BackgroundServices:CleanupBatchSize` rows, defaulting to 5,000.
+A window of zero disables that table's age purge. `SessionsDays` controls both
+sessions and their refresh tokens; an active session keeps its tokens. OAuth state
+expiry runs here instead of on sign-in requests. Soft-delete cleanup keeps its
+sync-window margin and updates completion watermarks in one set-based statement.
+
+Proactive history keeps recent rows and at most three older ended items per user
+and trigger. Those rows are the evidence for the existing rest rule, whose three
+ignored observations can span more than thirty days. Purging that bounded evidence
+would change which proactive items the engine produces. Calendar-day claims retain
+thirty days. Issued Astra blocks are not read to render conversation history;
+conversation turns contain the rendered content.
+
+The `ScheduledJobIndexes` migration builds indexes concurrently outside migration
+transactions. Before releasing it, create its new indexes on staging, inspect
+`EXPLAIN` for active-goal and stale-due-date scans, and compare user-scoped habit
+plans before dropping `IX_Habits_UserId`. The migration's idempotent index creation
+accepts those prebuilt indexes. Take a database export before enabling the first
+retention sweep; it can remove a backlog.
+
 ### Startup migrations and long migrations
 
 Both API environment groups set `Database__MigrateOnStartup=true`.

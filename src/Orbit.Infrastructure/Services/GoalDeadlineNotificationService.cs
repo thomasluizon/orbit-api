@@ -50,99 +50,56 @@ public partial class GoalDeadlineNotificationService(
         var dbContext = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
         var pushService = scope.ServiceProvider.GetRequiredService<IPushNotificationService>();
 
-        var freshDerivedValues = await ComputeFreshDerivedValuesAsync(dbContext, ct);
-
-        var candidateGoals = await dbContext.Goals
-            .AsNoTracking()
-            .Where(g => g.Status == GoalStatus.Active && g.Deadline != null)
-            .ToListAsync(ct);
-
-        var goals = candidateGoals
-            .Where(g => EffectiveCurrentValue(g, freshDerivedValues) < g.TargetValue)
-            .ToList();
-
-        if (goals.Count == 0) return;
-
-        var userIds = goals.Select(g => g.UserId).Distinct().ToList();
-        var users = await dbContext.Users
-            .AsNoTracking()
-            .Where(u => userIds.Contains(u.Id))
-            .ToDictionaryAsync(u => u.Id, ct);
-
-        var allKeys = goals
-            .Where(g => g.Deadline.HasValue)
-            .SelectMany(g => NotifyDaysBefore.Select(d => BuildDedupeKey(g.Id, d)))
-            .ToList();
-        var sentKeys = (await dbContext.Notifications
-            .Where(n => allKeys.Contains(n.DedupeKey!))
-            .Select(n => n.DedupeKey!)
-            .ToListAsync(ct))
-            .ToHashSet();
-
-        foreach (var goal in goals)
+        Guid? cursor = null;
+        while (true)
         {
-            try
+            var streakWindowStart = DateOnly.FromDateTime(TimeProvider.System.GetUtcNow().UtcDateTime)
+                .AddDays(-AppConstants.MaxStreakLookbackDays - 1);
+            var page = await dbContext.Goals.AsNoTracking()
+                .Where(goal => goal.Status == GoalStatus.Active && goal.Deadline != null)
+                .Page(cursor, configuration.GetValue("BackgroundServices:ScanPageSize", JobPaging.DefaultPageSize))
+                .Include(goal => goal.Habits).ThenInclude(habit => habit.Logs.Where(log => log.Date >= streakWindowStart))
+                .AsSplitQuery()
+                .Select(goal => new
+                {
+                    Goal = goal,
+                    StandardCount = goal.Habits.Where(habit => !habit.IsDeleted).SelectMany(habit => habit.Logs)
+                        .Count(log => !log.IsDeleted && log.Value > 0 && log.CreatedAtUtc >= goal.CreatedAtUtc)
+                }).ToListAsync(ct);
+            if (page.Count == 0) return;
+            cursor = page[^1].Goal.Id;
+            var goals = page.Select(row => row.Goal).ToList();
+            var userIds = goals.Select(goal => goal.UserId).Distinct().ToList();
+            var users = await dbContext.Users.AsNoTracking().Where(user => userIds.Contains(user.Id))
+                .ToDictionaryAsync(user => user.Id, ct);
+            var freshDerivedValues = new Dictionary<Guid, int>();
+            foreach (var row in page)
             {
-                await ProcessGoalDeadlineAsync(
-                    goal, EffectiveCurrentValue(goal, freshDerivedValues), users, sentKeys, pushService, dbContext, ct);
+                var goal = row.Goal;
+                if (!users.TryGetValue(goal.UserId, out var user)) continue;
+                var userToday = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(TimeProvider.System.GetUtcNow().UtcDateTime,
+                    TimeZoneHelper.FindTimeZone(user.TimeZone, logger, user.Id)));
+                var fresh = goal.Type == GoalType.Standard && goal.Habits.Count > 0
+                    ? row.StandardCount : GoalProgressSyncService.ComputeReadValue(goal, userToday, user.WeekStartDay);
+                if (fresh.HasValue) freshDerivedValues[goal.Id] = fresh.Value;
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            var allKeys = goals.SelectMany(goal => NotifyDaysBefore.Select(days => BuildDedupeKey(goal.Id, days))).ToList();
+            var sentKeys = (await dbContext.Notifications.Where(notification => allKeys.Contains(notification.DedupeKey!))
+                .Select(notification => notification.DedupeKey!).ToListAsync(ct)).ToHashSet();
+            foreach (var goal in goals.Where(goal => EffectiveCurrentValue(goal, freshDerivedValues) < goal.TargetValue))
             {
-                LogGoalDeadlineProcessingFailed(logger, goal.Id, goal.UserId, ex);
+                try
+                {
+                    await ProcessGoalDeadlineAsync(goal, EffectiveCurrentValue(goal, freshDerivedValues), users,
+                        sentKeys, pushService, dbContext, ct);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    LogGoalDeadlineProcessingFailed(logger, goal.Id, goal.UserId, ex);
+                }
             }
+            dbContext.ChangeTracker.Clear();
         }
-    }
-
-    private async Task<Dictionary<Guid, int>> ComputeFreshDerivedValuesAsync(OrbitDbContext dbContext, CancellationToken ct)
-    {
-#pragma warning disable ORBIT0004 // streakWindowStart widens the batched log prefetch by a timezone-skew day; ComputeReadValue receives the separately converted userToday. https://github.com/thomasluizon/orbit-tickets/issues/230
-        var streakWindowStart = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-AppConstants.MaxStreakLookbackDays - 1);
-#pragma warning restore ORBIT0004
-        var candidates = await dbContext.Goals
-            .AsNoTracking()
-            .Where(g => g.Status == GoalStatus.Active
-                        && g.Deadline != null
-                        && !g.IsDeleted
-                        && (g.Type == GoalType.Streak || g.Habits.Any()))
-            .ToListAsync(ct);
-
-        var freshValues = new Dictionary<Guid, int>();
-        if (candidates.Count == 0) return freshValues;
-
-        var standardWindowStart = candidates
-            .Where(goal => goal.Type == GoalType.Standard)
-            .Select(goal => goal.CreatedAtUtc)
-            .DefaultIfEmpty(DateTime.MaxValue)
-            .Min();
-        var candidateIds = candidates.Select(goal => goal.Id).ToList();
-        var goals = await dbContext.Goals
-            .AsNoTracking()
-            .Where(goal => candidateIds.Contains(goal.Id))
-            .Include(goal => goal.Habits)
-            .ThenInclude(habit => habit.Logs.Where(log =>
-                log.Date >= streakWindowStart || log.CreatedAtUtc >= standardWindowStart))
-            .AsSplitQuery()
-            .ToListAsync(ct);
-
-        var userIds = goals.Select(goal => goal.UserId).Distinct().ToList();
-        var users = await dbContext.Users
-            .AsNoTracking()
-            .Where(user => userIds.Contains(user.Id))
-            .ToDictionaryAsync(u => u.Id, ct);
-
-        foreach (var goal in goals)
-        {
-            if (!users.TryGetValue(goal.UserId, out var user)) continue;
-
-            var tz = TimeZoneHelper.FindTimeZone(user.TimeZone, logger, user.Id);
-            var userToday = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz));
-
-            var readValue = GoalProgressSyncService.ComputeReadValue(goal, userToday, user.WeekStartDay);
-            if (readValue.HasValue)
-                freshValues[goal.Id] = readValue.Value;
-        }
-
-        return freshValues;
     }
 
     private static decimal EffectiveCurrentValue(Goal goal, Dictionary<Guid, int> freshStreakValues) =>
@@ -213,6 +170,7 @@ public partial class GoalDeadlineNotificationService(
             return false;
         }
 
+        DetachPendingEntries(dbContext);
         await pushService.SendToUserAsync(
             goal.UserId, goal.Title, body, NotificationUrls.Progress, ct);
         return true;
