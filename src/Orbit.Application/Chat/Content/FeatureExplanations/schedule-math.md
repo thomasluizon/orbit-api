@@ -3,7 +3,7 @@ key: schedule-math
 display_name: Schedule and Overdue Math
 related_capabilities: [habits.read]
 related_surfaces: [today]
-version: 2
+version: 3
 derived_from:
   - src/Orbit.Infrastructure/Services/AgentCatalogService.Surfaces.cs DailyUseSurfaces
   - src/Orbit.Application/Habits/Services/HabitScheduleService.cs IsMonthlyMatch
@@ -19,6 +19,12 @@ derived_from:
 Open Today, open the habit's details and choose Edit habit. Use Frequency to choose the repeat interval or a flexible target, and adjust the habit's date, weekdays and end date in the same form. The due date anchors the recurrence; an end date and weekday restrictions limit which dates are scheduled.
 
 A few scheduling rules surprise people because the calendar isn't uniform. Here is exactly how Orbit handles the tricky cases.
+
+## Where to set the time
+
+The create and edit forms on web and mobile use the same time controls. Open Time and reminder, set Exact time and optionally End Time, then choose Done and Save (or Create for a new habit). Tasks in General do not show the time fields.
+
+Os formulários de criação e edição na web e no aplicativo usam os mesmos campos de horário. Abra Horário e lembrete, defina Horário exato e, se quiser, Horário final; escolha Concluir e Salvar (ou Criar para um novo hábito). Tarefas em Geral não mostram os campos de horário.
 
 ## Monthly habits clamp to the last valid day
 

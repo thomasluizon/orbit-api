@@ -27,7 +27,8 @@ public class ContentModerationServiceTests : IDisposable
     {
         var httpClient = new HttpClient(_handler)
         {
-            BaseAddress = new Uri("https://api.openai.com/v1")
+            BaseAddress = new Uri("https://api.openai.com/v1"),
+            Timeout = ContentModerationService.RequestDeadline
         };
         var aiSettings = Options.Create(new AiSettings
         {
@@ -86,15 +87,19 @@ public class ContentModerationServiceTests : IDisposable
         result.Categories.Should().BeEmpty();
     }
 
-    [Fact]
-    public async Task CheckTextAsync_NonSuccessStatus_ReturnsUnavailableWithoutThrowing()
+    [Theory]
+    [InlineData(HttpStatusCode.BadRequest)]
+    [InlineData(HttpStatusCode.TooManyRequests)]
+    [InlineData(HttpStatusCode.InternalServerError)]
+    public async Task CheckTextAsync_NonSuccessStatus_ReturnsUnavailableWithoutThrowing(HttpStatusCode statusCode)
     {
-        _handler.Response = new HttpResponseMessage(HttpStatusCode.InternalServerError);
+        _handler.Response = new HttpResponseMessage(statusCode);
 
         var result = await _sut.CheckTextAsync("any text");
 
         result.Unavailable.Should().BeTrue();
         result.Flagged.Should().BeFalse();
+        _handler.Calls.Should().Be(1);
     }
 
     [Fact]
@@ -106,6 +111,7 @@ public class ContentModerationServiceTests : IDisposable
 
         result.Unavailable.Should().BeTrue();
         result.Flagged.Should().BeFalse();
+        _handler.Calls.Should().Be(2);
     }
 
     [Fact]
@@ -117,6 +123,7 @@ public class ContentModerationServiceTests : IDisposable
 
         result.Unavailable.Should().BeTrue();
         result.Flagged.Should().BeFalse();
+        _handler.Calls.Should().Be(2);
     }
 
     [Fact]
@@ -124,12 +131,70 @@ public class ContentModerationServiceTests : IDisposable
     {
         _handler.Stall = true;
 
-        var result = await _sut.CheckTextAsync("any text").WaitAsync(TimeSpan.FromSeconds(3));
+        var result = await _sut.CheckTextAsync("any text").WaitAsync(TimeSpan.FromSeconds(5));
 
         result.Unavailable.Should().BeTrue();
         result.Flagged.Should().BeFalse();
+        _handler.Calls.Should().Be(2);
+        _handler.CancelledCalls.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task CheckTextAsync_StalledFirstAttempt_RecoversOnSecondAttempt()
+    {
+        _handler.Stall = true;
+        _handler.FailuresBeforeRecovery = 1;
+        _handler.Response = JsonResponse(HttpStatusCode.OK, """
+            {"results":[{"flagged":false,"categories":{}}]}
+            """);
+
+        var result = await _sut.CheckTextAsync("any text").WaitAsync(TimeSpan.FromSeconds(5));
+
+        result.Unavailable.Should().BeFalse();
+        result.Flagged.Should().BeFalse();
+        _handler.Calls.Should().Be(2);
+        _handler.CancelledCalls.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task CheckTextAsync_TransportFailure_RecoversOnSecondAttempt()
+    {
+        _handler.ExceptionToThrow = new HttpRequestException("connection reset");
+        _handler.FailuresBeforeRecovery = 1;
+        _handler.Response = JsonResponse(HttpStatusCode.OK, """
+            {"results":[{"flagged":true,"categories":{"harassment":true}}]}
+            """);
+
+        var result = await _sut.CheckTextAsync("any text");
+
+        result.Unavailable.Should().BeFalse();
+        result.Flagged.Should().BeTrue();
+        result.Categories.Should().Equal("harassment");
+        _handler.Calls.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task CheckTextAsync_InvalidJson_ReturnsUnavailableWithoutRetrying()
+    {
+        _handler.Response = JsonResponse(HttpStatusCode.OK, "invalid json");
+
+        var result = await _sut.CheckTextAsync("any text");
+
+        result.Unavailable.Should().BeTrue();
         _handler.Calls.Should().Be(1);
-        _handler.Cancelled.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task CheckTextAsync_CallerCancelsDuringStall_DoesNotRetry()
+    {
+        _handler.Stall = true;
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
+
+        var act = async () => await _sut.CheckTextAsync("any text", cancellation.Token);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+        _handler.Calls.Should().Be(1);
+        _handler.CancelledCalls.Should().Be(1);
     }
 
     [Fact]
@@ -152,7 +217,8 @@ public class ContentModerationServiceTests : IDisposable
         public HttpResponseMessage? Response { get; set; }
         public Exception? ExceptionToThrow { get; set; }
         public bool Stall { get; set; }
-        public bool Cancelled { get; private set; }
+        public int FailuresBeforeRecovery { get; set; } = int.MaxValue;
+        public int CancelledCalls { get; private set; }
         public int Calls { get; private set; }
 
         protected override async Task<HttpResponseMessage> SendAsync(
@@ -162,13 +228,13 @@ public class ContentModerationServiceTests : IDisposable
             cancellationToken.ThrowIfCancellationRequested();
             Credential = request.Headers.Authorization?.Parameter;
 
-            if (Stall)
+            if (Stall && Calls <= FailuresBeforeRecovery)
             {
                 try { await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken); }
-                finally { Cancelled = cancellationToken.IsCancellationRequested; }
+                finally { if (cancellationToken.IsCancellationRequested) CancelledCalls++; }
             }
 
-            if (ExceptionToThrow is not null)
+            if (ExceptionToThrow is not null && Calls <= FailuresBeforeRecovery)
                 throw ExceptionToThrow;
 
             return Response ?? new HttpResponseMessage(HttpStatusCode.OK);

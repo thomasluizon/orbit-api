@@ -44,6 +44,28 @@ public class DescribeFeatureToolTests
         help.Markdown.Should().Contain("Frequency").And.Contain("due date");
     }
 
+    [Theory]
+    [InlineData("frequencies", "Time and reminder", "Exact time", "End Time", "Done", "Save")]
+    [InlineData("frequencies", "Horário e lembrete", "Horário exato", "Horário final", "Concluir", "Salvar")]
+    [InlineData("schedule-math", "Time and reminder", "Exact time", "End Time", "Done", "Save")]
+    [InlineData("schedule-math", "Horário e lembrete", "Horário exato", "Horário final", "Concluir", "Salvar")]
+    public async Task ExecuteAsync_HabitTimeHelpDocumentsTheSharedFormFieldsInBothLocales(
+        string key, string section, string time, string endTime, string done, string save)
+    {
+        var tool = new DescribeFeatureTool(_service, new AppSurfaceCatalog());
+
+        var result = await tool.ExecuteAsync(Args(key), Guid.NewGuid(), default);
+
+        var help = result.Payload.Should().BeOfType<FeatureHelpResult>().Subject;
+        help.Markdown.Should().Contain(section).And.Contain(time).And.Contain(endTime)
+            .And.Contain(done).And.Contain(save);
+        help.Markdown.Should().Contain("create and edit forms").And.Contain("General");
+        help.AppSurfaces!.Single(surface => surface.Id == "today").HowToSteps
+            .Should().Contain(step => step.Contains(section, StringComparison.Ordinal)
+                && step.Contains(time, StringComparison.Ordinal)
+                && step.Contains(endTime, StringComparison.Ordinal));
+    }
+
     [Fact]
     public void FeatureKeyEnum_MatchesEmbeddedResourceKeys()
     {
