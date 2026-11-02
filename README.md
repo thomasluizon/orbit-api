@@ -225,6 +225,8 @@ Before release, take a fresh Render production database export. Apply only the A
 
 Set `BotProtection__Enabled=false` in the affected Render API environment group to keep sign-in available during a Turnstile outage, then reconcile Terraform before the next apply. Production logs one startup warning while disabled. There is no email-based bot-check exemption. Waitlist confirmation links issued before the encrypted token format must be requested again through the join form.
 
+Public abuse quotas use UTC hour and day windows in the distributed bucket store. `AppConfigs` seeds `SendCodeEmailsPerIpPerDay=100`, `SendCodeEmailsPerDay=10000`, `OnboardingAttestationCallsPerHour=1000`, `OnboardingAttestationCallsPerDay=10000` and `OnboardingEnrollAttemptsPerInstallPerHour=3`. Send-code budgets cover all three routes, after bot verification. The onboarding global budgets are shared by challenge and enrollment requests before attestation verification. Enrollment attempts use the signed installation subject; the existing single-use challenge still allows at most one verifier call per subject. These limits can be raised through `AppConfigs` without a release, subject to the configuration service cache. A spent global email budget logs a warning and blocks sends until the next UTC day.
+
 ### Docker
 
 ```bash

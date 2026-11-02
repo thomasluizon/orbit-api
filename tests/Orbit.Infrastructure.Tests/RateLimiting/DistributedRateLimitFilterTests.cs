@@ -579,6 +579,25 @@ public class DistributedRateLimitFilterTests
             .Should().BeEquivalentTo(["ip:198.51.100.1", "ip:198.51.100.2"]);
     }
 
+    [Theory]
+    [InlineData("auth")]
+    [InlineData("waitlist")]
+    public async Task RejectedEmailPartition_LogsOnlyHash(string policy)
+    {
+        _logger.IsEnabled(LogLevel.Warning).Returns(true);
+        _service.TryAcquireAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(new DistributedRateLimitDecision(false, 5, 5, DateTime.UtcNow.AddMinutes(10)));
+        var filter = new DistributedRateLimitFilter(policy, _service, _authSessionService,
+            new BffClientIpResolver(Options.Create(new BffForwardingSettings())), _logger);
+        var (context, _) = CreateExecutingContext(new AuthController.SendCodeRequest("a@example.com"));
+        await filter.OnActionExecutionAsync(context, () => Task.FromResult(CreateExecutedContext(context)));
+        DistributedRateLimitFilter.TryResolveEmailPartitionKey(policy, context.ActionArguments.Values, out var key).Should().BeTrue();
+        var logs = _logger.ReceivedCalls().Where(call => call.GetMethodInfo().Name == "Log")
+            .Select(call => call.GetArguments()[2]!.ToString()).ToArray();
+        logs.Should().Contain(message => message!.Contains(key, StringComparison.Ordinal));
+        logs.Should().OnlyContain(message => !message!.Contains("a@example.com", StringComparison.Ordinal));
+    }
+
     private void SetupAllowedLease(Guid userId)
     {
         _service.TryAcquireLeaseAsync(

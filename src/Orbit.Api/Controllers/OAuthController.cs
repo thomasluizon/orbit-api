@@ -208,6 +208,7 @@ public partial class OAuthController(
     public record SendCodeRequest(string Email, string? Language = "en", string? TurnstileToken = null);
 
     [HttpPost("/oauth/send-code")]
+    [SendCodeQuota]
     [DistributedRateLimit("auth")]
     [RequireBotProtection]
     public async Task<IActionResult> SendCode([FromBody] SendCodeRequest request, CancellationToken ct)

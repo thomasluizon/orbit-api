@@ -439,6 +439,7 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
     }
 
     [HttpPost("bulk")]
+    [DistributedRateLimit("bulk-create")]
     [ProducesResponseType(StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]

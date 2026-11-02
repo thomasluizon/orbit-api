@@ -110,7 +110,8 @@ public static partial class ServiceCollectionExtensions
         if (settings.Enabled && string.IsNullOrWhiteSpace(settings.SecretKey))
             throw new InvalidOperationException("BotProtection:Enabled is true but BotProtection:SecretKey is not configured.");
 
-        if (settings.Enabled && settings.AllowedHostnames.Length == 0)
+        if (settings.Enabled && (settings.AllowedHostnames.Length == 0
+            || settings.AllowedHostnames.Any(string.IsNullOrWhiteSpace)))
             throw new InvalidOperationException("BotProtection:Enabled is true but BotProtection:AllowedHostnames is empty.");
 
         builder.Services.Configure<BotProtectionSettings>(

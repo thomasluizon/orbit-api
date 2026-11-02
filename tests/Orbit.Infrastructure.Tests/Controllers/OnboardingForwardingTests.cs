@@ -61,6 +61,9 @@ public sealed class OnboardingForwardingTests : IAsyncLifetime
             Arg.Any<uint>(), Arg.Any<CancellationToken>()).Returns(new VerifiedOnboardingAttestation(null, 0));
         builder.Services.AddSingleton(verifier);
         var config = Substitute.For<IAppConfigService>();
+        config.GetAsync(AppConfigKeys.OnboardingAttestationCallsPerHour, 0, Arg.Any<CancellationToken>()).Returns(1000);
+        config.GetAsync(AppConfigKeys.OnboardingAttestationCallsPerDay, 0, Arg.Any<CancellationToken>()).Returns(10000);
+        config.GetAsync(AppConfigKeys.OnboardingEnrollAttemptsPerInstallPerHour, 0, Arg.Any<CancellationToken>()).Returns(3);
         config.GetAsync(OnboardingAccessService.IpHourlyLimit, 0, Arg.Any<CancellationToken>()).Returns(10);
         config.GetAsync(OnboardingAccessService.InstallHourlyLimit, 0, Arg.Any<CancellationToken>()).Returns(20);
         config.GetAsync(OnboardingAccessService.DailyCallLimit, 0, Arg.Any<CancellationToken>()).Returns(100);

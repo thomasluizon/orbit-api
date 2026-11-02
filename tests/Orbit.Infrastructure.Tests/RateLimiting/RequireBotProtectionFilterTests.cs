@@ -298,13 +298,21 @@ public class RequireBotProtectionFilterTests
         }
     }
 
-    [Fact]
-    public async Task SuccessfulTokenFromStaging_IsRejectedInProduction()
+    [Theory]
+    [InlineData("app.useorbit.org", "app-staging.useorbit.org")]
+    [InlineData("app-staging.useorbit.org", "app.useorbit.org")]
+    [InlineData("app.useorbit.org", null)]
+    public async Task SuccessfulTokenFromStaging_IsRejectedInProduction(string allowedHostname, string? tokenHostname)
     {
         _verifier.VerifyAsync("staging", Arg.Any<CancellationToken>())
-            .Returns(new TurnstileVerificationResult(true, [], "app-staging.useorbit.org"));
+            .Returns(new TurnstileVerificationResult(true, [], tokenHostname));
         var context = CreateContext(new AuthController.SendCodeRequest("person@example.com", TurnstileToken: "staging"));
-        await EnabledFilter().OnActionExecutionAsync(context, () => Task.FromResult(Executed(context)));
+        var filter = new RequireBotProtectionFilter(Options.Create(new BotProtectionSettings
+        {
+            Enabled = true,
+            AllowedHostnames = [allowedHostname]
+        }), _verifier, _logger);
+        await filter.OnActionExecutionAsync(context, () => Task.FromResult(Executed(context)));
         context.Result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
