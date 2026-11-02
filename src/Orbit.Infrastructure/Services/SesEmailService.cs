@@ -49,6 +49,15 @@ public partial class SesEmailService(
             {
                 await DelayBeforeRetryAsync(attempt, cancellationToken);
             }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                LogEmailSendException(logger, ex);
+                throw;
+            }
         }
     }
 
@@ -91,6 +100,7 @@ public partial class SesEmailService(
         catch (Exception ex)
         {
             LogEmailSendException(logger, ex);
+            throw;
         }
     }
 

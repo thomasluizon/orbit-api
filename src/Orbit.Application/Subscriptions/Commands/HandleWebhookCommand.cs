@@ -58,32 +58,40 @@ public partial class HandleWebhookCommandHandler(
 
         LogStripeEventType(logger, stripeEvent.Type, stripeEvent.Id);
 
+        if (await processedEventRepository.AnyAsync(e => e.EventId == stripeEvent.Id, cancellationToken))
+        {
+            LogDuplicateEvent(logger, stripeEvent.Id);
+            return Result.Success();
+        }
+
         await processedEventRepository.AddAsync(ProcessedStripeEvent.Create(stripeEvent.Id), cancellationToken);
 
         try
         {
+            var saved = false;
             switch (stripeEvent.Type)
             {
                 case "checkout.session.completed":
-                    await HandleCheckoutSessionCompleted(stripeEvent, cancellationToken);
+                    saved = await HandleCheckoutSessionCompleted(stripeEvent, cancellationToken);
                     break;
 
                 case "invoice.paid":
-                    await HandleInvoicePaid(stripeEvent, cancellationToken);
+                    saved = await HandleInvoicePaid(stripeEvent, cancellationToken);
                     break;
 
                 case "invoice.payment_failed":
-                    await HandleInvoicePaymentFailed(stripeEvent, cancellationToken);
+                    saved = await HandleInvoicePaymentFailed(stripeEvent, cancellationToken);
                     break;
 
                 case "customer.subscription.deleted":
-                    await HandleSubscriptionDeleted(stripeEvent, cancellationToken);
+                    saved = await HandleSubscriptionDeleted(stripeEvent, cancellationToken);
                     break;
 
                 case "customer.subscription.updated":
-                    await HandleSubscriptionUpdated(stripeEvent, cancellationToken);
+                    saved = await HandleSubscriptionUpdated(stripeEvent, cancellationToken);
                     break;
             }
+            if (!saved) await unitOfWork.SaveChangesAsync(cancellationToken);
         }
         catch (Exception ex) when (DbUniqueViolation.IsUniqueViolation(ex))
         {
@@ -104,7 +112,14 @@ public partial class HandleWebhookCommandHandler(
         return Result.Success();
     }
 
-    private async Task HandleCheckoutSessionCompleted(Event stripeEvent, CancellationToken ct)
+    private async Task<Subscription> FetchSubscriptionAsync(string id, CancellationToken ct)
+    {
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        deadline.CancelAfter(TimeSpan.FromSeconds(10));
+        return await subscriptionService.GetAsync(id, cancellationToken: deadline.Token);
+    }
+
+    private async Task<bool> HandleCheckoutSessionCompleted(Event stripeEvent, CancellationToken ct)
     {
         var session = stripeEvent.Data.Object as Session;
         LogCheckoutSession(logger, session?.Id, session?.SubscriptionId ?? session?.Subscription?.Id,
@@ -124,13 +139,13 @@ public partial class HandleWebhookCommandHandler(
         LogUserFound(logger, user is not null, subscriptionId);
 
         if (user is null || subscriptionId is null)
-            return;
+            return false;
 
         var customerId = session.CustomerId ?? session.Customer?.Id;
         if (!CanLinkCheckoutCustomer(user, customerId))
-            return;
+            return false;
 
-        var subscription = await subscriptionService.GetAsync(subscriptionId, cancellationToken: ct);
+        var subscription = await ReadCheckoutSubscriptionAsync(session, subscriptionId, ct);
         var interval = GetSubscriptionInterval(subscription);
         var periodEnd = GetPeriodEnd(subscription, interval);
 
@@ -146,70 +161,93 @@ public partial class HandleWebhookCommandHandler(
         await unitOfWork.SaveChangesAsync(ct);
         LogUserUpgradedToPro(logger, uid, periodEnd);
         AnalyticsCapture.SafeCaptureUserEvent(productAnalytics, logger, user, "subscription_started");
+        return true;
     }
 
     private static bool CanLinkCheckoutCustomer(User user, string? customerId) =>
         user.StripeCustomerGeneration == 0
         || !string.IsNullOrWhiteSpace(customerId) && user.StripeCustomerId == customerId;
 
-    private async Task HandleInvoicePaid(Event stripeEvent, CancellationToken ct)
+    private Task<Subscription> ReadCheckoutSubscriptionAsync(Session session, string subscriptionId, CancellationToken ct) =>
+        session.Subscription is { Items.Data.Count: > 0 } expanded
+            ? Task.FromResult(expanded)
+            : FetchSubscriptionAsync(subscriptionId, ct);
+
+    private async Task<bool> HandleInvoicePaid(Event stripeEvent, CancellationToken ct)
     {
         var invoice = stripeEvent.Data.Object as Invoice;
         var invoiceSubId = invoice?.Parent?.SubscriptionDetails?.SubscriptionId;
         LogInvoicePaid(logger, invoiceSubId);
 
         if (invoiceSubId is null)
-            return;
+            return false;
 
         var user = await userRepository.FindOneTrackedIgnoringFiltersAsync(
             u => u.StripeSubscriptionId == invoiceSubId, ct);
 
         if (user is null)
-            return;
+            return false;
 
-        var subscription = await subscriptionService.GetAsync(invoiceSubId, cancellationToken: ct);
-        var interval = GetSubscriptionInterval(subscription);
-        var periodEnd = GetPeriodEnd(subscription, interval);
+        var (periodEnd, interval) = await ReadInvoicePeriodAsync(invoice!, invoiceSubId, ct);
         user.SetStripeSubscription(invoiceSubId, periodEnd, interval, stripeEvent.Created);
         await unitOfWork.SaveChangesAsync(ct);
         LogSubscriptionRenewed(logger, user.Id, periodEnd);
         AnalyticsCapture.SafeCaptureUserEvent(productAnalytics, logger, user, "subscription_renewed");
+        return true;
     }
 
-    private async Task HandleSubscriptionDeleted(Event stripeEvent, CancellationToken ct)
+    private async Task<(DateTime PeriodEnd, SubscriptionInterval Interval)> ReadInvoicePeriodAsync(Invoice invoice, string subscriptionId, CancellationToken ct)
+    {
+        if (invoice.Parent?.SubscriptionDetails?.Subscription is { Items.Data.Count: > 0 } expanded)
+        {
+            var expandedInterval = GetSubscriptionInterval(expanded);
+            return (GetPeriodEnd(expanded, expandedInterval), expandedInterval);
+        }
+        if (invoice.Lines?.Data is [var line]
+            && line.Parent?.SubscriptionItemDetails is { Proration: false } parent && parent.Subscription == subscriptionId
+            && line.Pricing?.PriceDetails?.Price?.Recurring is { Interval: "year" or "month" } recurring
+            && line.Period is { End: var endAtUtc } && endAtUtc > DateTime.UnixEpoch)
+            return (endAtUtc, recurring.Interval == "year" ? SubscriptionInterval.Yearly : SubscriptionInterval.Monthly);
+        var subscription = await FetchSubscriptionAsync(subscriptionId, ct);
+        var interval = GetSubscriptionInterval(subscription);
+        return (GetPeriodEnd(subscription, interval), interval);
+    }
+
+    private async Task<bool> HandleSubscriptionDeleted(Event stripeEvent, CancellationToken ct)
     {
         var subscription = stripeEvent.Data.Object as Subscription;
         LogSubscriptionDeleted(logger, subscription?.Id);
 
         if (subscription is null)
-            return;
+            return false;
 
         var user = await userRepository.FindOneTrackedIgnoringFiltersAsync(
             u => u.StripeSubscriptionId == subscription.Id, ct);
 
         if (user is null)
-            return;
+            return false;
 
         user.CancelStripeSubscription(
             GetDeletedSubscriptionLapseReason(subscription, user), stripeEvent.Created);
         await unitOfWork.SaveChangesAsync(ct);
         LogUserDowngraded(logger, user.Id);
         AnalyticsCapture.SafeCaptureUserEvent(productAnalytics, logger, user, "subscription_canceled");
+        return true;
     }
 
-    private async Task HandleSubscriptionUpdated(Event stripeEvent, CancellationToken ct)
+    private async Task<bool> HandleSubscriptionUpdated(Event stripeEvent, CancellationToken ct)
     {
         var subscription = stripeEvent.Data.Object as Subscription;
         LogSubscriptionUpdated(logger, subscription?.Id, subscription?.Status);
 
         if (subscription is null)
-            return;
+            return false;
 
         var user = await userRepository.FindOneTrackedIgnoringFiltersAsync(
             u => u.StripeSubscriptionId == subscription.Id, ct);
 
         if (user is null)
-            return;
+            return false;
 
         if (subscription.Status == "active")
         {
@@ -230,27 +268,29 @@ public partial class HandleWebhookCommandHandler(
 
         await unitOfWork.SaveChangesAsync(ct);
         AnalyticsCapture.SafeCaptureUserEvent(productAnalytics, logger, user, "subscription_updated");
+        return true;
     }
 
-    private async Task HandleInvoicePaymentFailed(Event stripeEvent, CancellationToken ct)
+    private async Task<bool> HandleInvoicePaymentFailed(Event stripeEvent, CancellationToken ct)
     {
         var invoice = stripeEvent.Data.Object as Invoice;
         var subscriptionId = invoice?.Parent?.SubscriptionDetails?.SubscriptionId;
 
         if (subscriptionId is null)
-            return;
+            return false;
 
         var user = await userRepository.FindOneTrackedIgnoringFiltersAsync(
             u => u.StripeSubscriptionId == subscriptionId, ct);
 
         if (user is null)
-            return;
+            return false;
 
         user.RecordSubscriptionLapseReason(
             SubscriptionSource.Stripe,
             SubscriptionLapseReason.PaymentFailed,
             stripeEvent.Created);
         await unitOfWork.SaveChangesAsync(ct);
+        return true;
     }
 
     private static SubscriptionLapseReason GetCanceledSubscriptionLapseReason(Subscription subscription) =>

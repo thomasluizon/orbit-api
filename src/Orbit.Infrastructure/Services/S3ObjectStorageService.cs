@@ -15,6 +15,8 @@ public sealed class S3ObjectStorageService(IAmazonS3 client, IOptions<S3StorageS
 
     public async Task PutPrivateAsync(string objectKey, string contentType, byte[] data, CancellationToken cancellationToken = default)
     {
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        deadline.CancelAfter(TimeSpan.FromSeconds(10));
         using var stream = new MemoryStream(data, writable: false);
         await client.PutObjectAsync(new PutObjectRequest
         {
@@ -22,7 +24,7 @@ public sealed class S3ObjectStorageService(IAmazonS3 client, IOptions<S3StorageS
             Key = objectKey,
             ContentType = contentType,
             InputStream = stream
-        }, cancellationToken);
+        }, deadline.Token);
     }
 
     public async Task<byte[]> ReadPrivateAsync(string objectKey, CancellationToken cancellationToken = default)

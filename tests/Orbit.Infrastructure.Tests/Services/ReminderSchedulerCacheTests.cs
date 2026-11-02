@@ -99,8 +99,8 @@ public class ReminderSchedulerCacheTests
         await service.CheckAndSendReminders(CancellationToken.None);
 
         reads.Commands.Should().HaveCount(2);
-        reads.Commands[0].Should().Contain("COUNT(");
-        reads.Commands[1].Should().Contain("FROM \"SentReminders\"").And.Contain("\"PushSentAtUtc\" IS NULL");
+        reads.Commands[0].Should().Contain("ReminderScheduleProbes");
+        reads.Commands[1].Should().Contain("\"PushSentAtUtc\" IS NULL");
     }
 
     [Fact]
@@ -132,10 +132,8 @@ public class ReminderSchedulerCacheTests
         reads.Clear();
         await service.CheckAndSendReminders(CancellationToken.None);
         reads.Commands.Should().HaveCount(2);
-        reads.Commands[1].Should().Contain("FROM \"SentReminders\"").And.Contain("\"PushSentAtUtc\" IS NULL");
-        reads.Commands[0].Should().Contain("COUNT(").And.Contain("SUM(")
-            .And.Contain("\"ReminderProbeVersion\"").And.Contain("\"ReminderPreferencesVersion\"")
-            .And.NotContain("GROUP BY");
+        reads.Commands[0].Should().Contain("ReminderScheduleProbes").And.Contain("\"ReminderPreferencesVersion\"")
+            .And.NotContain("SUM(").And.NotContain("GROUP BY").And.NotContain("\"Habits\"");
         reads.Commands[0].Should().NotContain("\"Title\"")
             .And.NotContain("\"HabitLogs\"")
             .And.NotContain("\"SentReminders\"");
@@ -193,7 +191,7 @@ public class ReminderSchedulerCacheTests
 
         await service.CheckAndSendReminders(CancellationToken.None);
 
-        reads.Commands.Should().Contain(c => c.Contains("FROM \"Habits\"", StringComparison.Ordinal)
+        if (change != "complete") reads.Commands.Should().Contain(c => c.Contains("FROM \"Habits\"", StringComparison.Ordinal)
             && c.Contains("\"Title\"", StringComparison.Ordinal));
         if (change is "create" or "restore" or "toggle")
             (await db.SentReminders.CountAsync(r => r.HabitId == habit.Id)).Should().Be(1);
@@ -538,6 +536,7 @@ public class ReminderSchedulerCacheTests
     private static IServiceScopeFactory Scope(Orbit.Infrastructure.Persistence.OrbitDbContext db,
         IPushNotificationService push)
     {
+        PushBatchTestAdapter.ForwardToSingleSends(push);
         var services = new ServiceCollection().AddSingleton(db).AddSingleton(push);
         return services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();
     }

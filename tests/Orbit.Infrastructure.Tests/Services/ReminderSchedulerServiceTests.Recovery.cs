@@ -14,6 +14,45 @@ namespace Orbit.Infrastructure.Tests.Services;
 public partial class ReminderSchedulerServiceTests
 {
     [Fact]
+    public async Task BatchDelivery_RecordsOnlySuccessfulReminderAndRetriesTheOther()
+    {
+        using var db = CreateSqliteDbContext();
+        var user = User.Create("User", "partial-batch@example.com").Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, user.Id, "Task", null, null, UtcToday)).Value;
+        var delivered = SentReminder.Create(habit.Id, UtcToday, 0);
+        delivered.PreparePush(user.Id, habit.Title, "Delivered", recordedAtUtc: DefaultInstant.UtcDateTime.AddMinutes(-1));
+        var retry = SentReminder.Create(habit.Id, UtcToday, 10);
+        retry.PreparePush(user.Id, habit.Title, "Retry", recordedAtUtc: DefaultInstant.UtcDateTime.AddMinutes(-1));
+        db.AddRange(user, habit, delivered, retry,
+            PushSubscription.Create(user.Id, "apns-token", "apns", "install-secret").Value);
+        await db.SaveChangesAsync();
+        var sender = Substitute.For<IApnsPushSender>();
+        sender.SendAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(),
+            Arg.Any<CancellationToken>(), Arg.Any<string?>(), Arg.Any<IReadOnlyDictionary<string, string>?>())
+            .Returns(call => call.ArgAt<string>(2) == "Delivered" ? ApnsDeliveryOutcome.Delivered : ApnsDeliveryOutcome.Retained);
+        var push = new PushNotificationService(db, Options.Create(new VapidSettings()),
+            NullLogger<PushNotificationService>.Instance, new HttpClient(), sender, Substitute.For<IWnsPushSender>());
+        var service = CreateService(db, push, forwardBatches: false);
+
+        await service.CheckAndSendReminders(default);
+
+        var rows = await db.SentReminders.AsNoTracking().ToListAsync();
+        rows.Single(row => row.Id == delivered.Id).PushSentAtUtc.Should().NotBeNull();
+        rows.Single(row => row.Id == retry.Id).PushSentAtUtc.Should().BeNull();
+        sender.SendAsync(Arg.Any<string>(), Arg.Any<string>(), "Retry", Arg.Any<string?>(),
+            Arg.Any<CancellationToken>(), Arg.Any<string?>(), Arg.Any<IReadOnlyDictionary<string, string>?>())
+            .Returns(ApnsDeliveryOutcome.Delivered);
+        await service.CheckAndSendReminders(default);
+        await service.CheckAndSendReminders(default);
+
+        (await db.SentReminders.AsNoTracking().ToListAsync()).Should().OnlyContain(row => row.PushSentAtUtc != null);
+        await sender.Received(1).SendAsync("apns-token", habit.Title, "Delivered", "/", Arg.Any<CancellationToken>(),
+            Arg.Any<string?>(), Arg.Any<IReadOnlyDictionary<string, string>?>());
+        await sender.Received(2).SendAsync("apns-token", habit.Title, "Retry", "/", Arg.Any<CancellationToken>(),
+            Arg.Any<string?>(), Arg.Any<IReadOnlyDictionary<string, string>?>());
+    }
+
+    [Fact]
     public async Task NoDeviceAcceptsThePush_LeavesDeliveryPending()
     {
         using var db = CreateSqliteDbContext();
@@ -26,7 +65,7 @@ public partial class ReminderSchedulerServiceTests
         var push = new PushNotificationService(db, Options.Create(new VapidSettings()),
             NullLogger<PushNotificationService>.Instance, new HttpClient(),
             Substitute.For<IApnsPushSender>(), Substitute.For<IWnsPushSender>());
-        await CreateService(db, push).CheckAndSendReminders(default);
+        await CreateService(db, push, forwardBatches: false).CheckAndSendReminders(default);
         (await db.SentReminders.AsNoTracking().SingleAsync()).PushSentAtUtc.Should().BeNull();
     }
 

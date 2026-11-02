@@ -28,8 +28,9 @@ internal readonly record struct AiEvalAccount
         if (userId is not { } id)
             return default;
 
-        var unmetered = (await flags.GetEnabledKeysForUserAsync(id, cancellationToken))
-            .Contains(FeatureFlagKeys.AstraEvalUnmetered, StringComparer.Ordinal);
-        return new AiEvalAccount(id, unmetered, EvalAccountAccess.Contains(configuration?[EvalAccountAccess.AccountIdsKey], id));
+        return Resolve(id, await flags.GetEnabledKeysForUserAsync(id, cancellationToken), configuration);
     }
+    internal static AiEvalAccount Resolve(Guid? userId, IReadOnlyList<string> enabledFlags, IConfiguration? configuration) =>
+        userId is { } id ? new AiEvalAccount(id, enabledFlags.Contains(FeatureFlagKeys.AstraEvalUnmetered, StringComparer.Ordinal),
+            EvalAccountAccess.Contains(configuration?[EvalAccountAccess.AccountIdsKey], id)) : default;
 }

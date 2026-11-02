@@ -12,4 +12,9 @@ public interface IPlayReferralCouponConsumer
 {
     string? ConsumeOnNewPurchase(User user, PlaySubscriptionState state, string purchaseToken);
 
+    /// <summary>
+    /// Queues cancellation of a consumed coupon after the user mutation is committed.
+    /// Provider failures are retried by the background job.
+    /// </summary>
+    Task CancelConsumedCouponAsync(Guid userId, string couponId, CancellationToken cancellationToken);
 }

@@ -1,3 +1,5 @@
+using Hangfire;
+using Orbit.Application.Subscriptions.Jobs;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Orbit.Application.Common;
@@ -7,6 +9,7 @@ namespace Orbit.Application.Subscriptions.Services;
 
 public partial class PlayReferralCouponConsumer(
     IOptions<GooglePlaySettings> playSettings,
+    IBackgroundJobClient backgroundJobs,
     ILogger<PlayReferralCouponConsumer> logger) : IPlayReferralCouponConsumer
 {
     private readonly GooglePlaySettings _settings = playSettings.Value;
@@ -32,6 +35,12 @@ public partial class PlayReferralCouponConsumer(
         user.SetReferralCoupon(null);
         LogConsumedReferralCoupon(logger, couponId, user.Id);
         return couponId;
+    }
+
+    public Task CancelConsumedCouponAsync(Guid userId, string couponId, CancellationToken cancellationToken)
+    {
+        backgroundJobs.Enqueue<CancelPlayReferralCouponJob>(job => job.ExecuteAsync(couponId, CancellationToken.None));
+        return Task.CompletedTask;
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Consumed referral coupon {CouponId} for user {UserId} via Play referral offer")]

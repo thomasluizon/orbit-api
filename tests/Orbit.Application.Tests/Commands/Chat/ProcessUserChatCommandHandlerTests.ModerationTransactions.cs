@@ -54,7 +54,7 @@ public partial class ProcessUserChatCommandHandlerTests
         try
         {
             var contextToken = await contextStarted.Task;
-            work.HasActiveTransaction.Should().BeTrue();
+            work.HasActiveTransaction.Should().Be(!blockAnswer);
             _aiIntentService.ReceivedCalls().Should().BeEmpty();
             moderation.SetResult(new ModerationResult(outcome is "refusal" or "self-harm", outcome == "unavailable",
                 outcome == "self-harm" ? ["self-harm/intent"] : []));
@@ -64,10 +64,11 @@ public partial class ProcessUserChatCommandHandlerTests
             var result = await turn;
 
             result.IsFailure.Should().Be(outcome == "unavailable");
-            work.Commits.Should().BeGreaterThan(0);
+            if (blockAnswer && outcome != "allowed") work.Commits.Should().Be(0);
+            else work.Commits.Should().BeGreaterThan(0);
             work.IsAborted.Should().BeFalse();
-            work.SavepointRollbacks.Should().Be(outcome == "allowed" ? 0 : 1);
-            work.SavepointReleases.Should().Be(outcome == "allowed" ? 1 : 0);
+            work.SavepointRollbacks.Should().Be(!blockAnswer && outcome != "allowed" ? 1 : 0);
+            work.SavepointReleases.Should().Be(!blockAnswer && outcome == "allowed" ? 1 : 0);
             readCancelled.Should().Be(outcome != "allowed");
             contextToken.IsCancellationRequested.Should().Be(outcome != "allowed");
             if (outcome == "allowed")

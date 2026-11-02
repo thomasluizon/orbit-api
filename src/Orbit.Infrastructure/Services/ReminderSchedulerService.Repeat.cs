@@ -16,11 +16,11 @@ namespace Orbit.Infrastructure.Services;
 public partial class ReminderSchedulerService
 {
     private static Task<List<Habit>> LoadRepeatHabits(
-        OrbitDbContext dbContext, DateOnly minLocalDate, CancellationToken ct) =>
+        OrbitDbContext dbContext, Guid userId, DateOnly minLocalDate, CancellationToken ct) =>
         dbContext.Habits.AsNoTracking()
-            .Where(h => !h.IsCompleted && h.ReminderEnabled && h.RepeatIntervalMinutes != null
+            .Where(h => h.UserId == userId && !h.IsCompleted && h.ReminderEnabled && h.RepeatIntervalMinutes != null
                 && (!h.EndDate.HasValue || h.EndDate.Value >= minLocalDate))
-            .ToListAsync(ct);
+            .LoadReminderPageAsync(ct);
 
     private async Task<(Dictionary<Guid, DateTime> Anchors, RepeatReminderEligibility Eligibility,
         List<SentReminder> Sent)> LoadRepeatSnapshot(OrbitDbContext dbContext, List<Habit> repeatHabits,
@@ -37,9 +37,10 @@ public partial class ReminderSchedulerService
         return (anchors, eligibility, repeatSent);
     }
 
-    private async Task ProcessRepeatReminders(ReminderSnapshot snapshot, OrbitDbContext db,
+    private void ProcessRepeatReminders(ReminderSnapshot snapshot,
         List<PendingReminderPush> pending, DateTime nowAtUtc, CancellationToken ct)
     {
+        var sentByHabit = snapshot.RepeatSent.ToLookup(r => r.HabitId);
         foreach (var habit in snapshot.RepeatHabits)
         {
             if (!snapshot.Users.TryGetValue(habit.UserId, out var user) || habit.RepeatReminder is null)
@@ -48,19 +49,19 @@ public partial class ReminderSchedulerService
             var plan = RepeatReminderPlanner.Next(habit, nowAtUtc, zone, user.WeekStartDay,
                 snapshot.RepeatAnchors.TryGetValue(habit.Id, out var anchorAtUtc) ? anchorAtUtc : null,
                 snapshot.RepeatEligibility,
-                snapshot.RepeatSent.Where(r => r.HabitId == habit.Id).ToList(), nowAtUtc);
+                sentByHabit[habit.Id].ToList(), nowAtUtc);
             if (plan is null || plan.DispatchAtUtc > nowAtUtc)
                 continue;
             var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(nowAtUtc, zone));
             var reminder = SentReminder.CreateRepeat(habit.Id, today, plan.ReminderAtUtc, plan.ExpiresAtUtc,
                 plan.DoseAnchorAtUtc, plan.Parent?.Id);
-            if (await RecordRepeat(habit, user, reminder, plan.Parent ?? reminder, zone, db, pending, nowAtUtc, ct))
-                snapshot.RepeatSent.Add(reminder);
+            RecordRepeat(habit, user, reminder, plan.Parent ?? reminder, zone, pending, nowAtUtc, ct);
+            snapshot.RepeatSent.Add(reminder);
         }
     }
 
-    private async Task<bool> RecordRepeat(Habit habit, User user, SentReminder reminder, SentReminder actionReminder,
-        TimeZoneInfo zone, OrbitDbContext db, List<PendingReminderPush> pending, DateTime sentAtUtc, CancellationToken ct)
+    private void RecordRepeat(Habit habit, User user, SentReminder reminder, SentReminder actionReminder,
+        TimeZoneInfo zone, List<PendingReminderPush> pending, DateTime sentAtUtc, CancellationToken ct)
     {
         var localNext = TimeZoneInfo.ConvertTimeFromUtc(actionReminder.ExpiresAtUtc!.Value, zone);
         var format = TimeFormatResolver.Uses24HourClock(user.Uses24HourClockPreference, user.TimeZone) ? "HH:mm" : "h:mm tt";
@@ -82,9 +83,7 @@ public partial class ReminderSchedulerService
             ["doneLabel"] = LocaleHelper.IsPortuguese(user.Language) ? "Concluir" : "Done"
         };
         reminder.PreparePush(user.Id, habit.Title, body, data, sentAtUtc);
-        if (!await TryRecordReminderAsync(habit, reminder, notification, db, zone, sentAtUtc, ct))
-            return false;
-        pending.Add(new PendingReminderPush(user.Id, habit.Title, body, habit.Id, data));
-        return true;
+        StageReminder(habit, reminder, notification, zone, sentAtUtc, ct);
+        pending.Add(new PendingReminderPush(user.Id, habit.Title, body, habit.Id, reminder.Id, data));
     }
 }
