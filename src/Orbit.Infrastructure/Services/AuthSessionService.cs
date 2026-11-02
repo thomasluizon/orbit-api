@@ -29,8 +29,16 @@ public class AuthSessionService(
             ? nowUtc.AddDays(_jwtSettings.RefreshExpiryDays.Value)
             : null;
 
-    public async Task<Result<SessionTokens>> CreateSessionAsync(Guid userId, string email, CancellationToken cancellationToken = default)
+    public Task<Result<SessionTokens>> CreateSessionAsync(Guid userId, string email, CancellationToken cancellationToken = default)
+        => unitOfWork.ExecuteInTransactionAsync(async token =>
     {
+        await unitOfWork.AcquireUserRowLockAsync(userId, token);
+        var owner = await userRepository.GetByIdAsync(userId, token);
+        if (owner is null)
+            return Result.Failure<SessionTokens>(ErrorMessages.InvalidSession);
+        await userRepository.ReloadAsync(owner, token);
+        if (owner.IsDeactivated)
+            return Result.Failure<SessionTokens>(ErrorMessages.InvalidSession);
         var refreshToken = GenerateRefreshToken();
 #pragma warning disable ORBIT0004 // CreateSessionAsync computes the refresh-token ExpiresAtUtc instant through GetRefreshExpiry; no calendar date is derived. https://github.com/thomasluizon/orbit-tickets/issues/230
         var nowUtc = DateTime.UtcNow;
@@ -43,13 +51,13 @@ public class AuthSessionService(
         if (sessionResult.IsFailure)
             return Result.Failure<SessionTokens>(sessionResult.Error, ErrorCodes.SessionCreationFailed);
 
-        await userSessionRepository.AddAsync(sessionResult.Value, cancellationToken);
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+        await userSessionRepository.AddAsync(sessionResult.Value, token);
+        await unitOfWork.SaveChangesAsync(token);
 
         return Result.Success(new SessionTokens(
             tokenService.GenerateToken(userId, email, sessionResult.Value.Id),
             refreshToken));
-    }
+    }, cancellationToken);
 
     public async Task<Result<SessionTokens>> RefreshSessionAsync(string refreshToken, CancellationToken cancellationToken = default)
     {
@@ -93,17 +101,41 @@ public class AuthSessionService(
         catch (DbUpdateConcurrencyException)
         {
             unitOfWork.DiscardChanges();
+            await RevokeRotatedSessionAsync(session.Id, tokenHash, cancellationToken);
             return Result.Failure<SessionTokens>(ErrorMessages.InvalidSession);
         }
         catch (DbUpdateException exception) when (DbUniqueViolation.IsUniqueViolation(exception))
         {
             unitOfWork.DiscardChanges();
+            await RevokeRotatedSessionAsync(session.Id, tokenHash, cancellationToken);
             return Result.Failure<SessionTokens>(ErrorMessages.InvalidSession);
         }
 
         return Result.Success(new SessionTokens(
             tokenService.GenerateToken(user.Id, user.Email, session.Id),
             newRefreshToken));
+    }
+
+    private async Task RevokeRotatedSessionAsync(Guid sessionId, string previousHash, CancellationToken cancellationToken)
+    {
+        unitOfWork.ResetTracking();
+        for (var attempt = 0; attempt < MaxRevokeSessionAttempts; attempt++)
+        {
+            var current = await userSessionRepository.GetByIdAsync(sessionId, cancellationToken);
+            if (current is null || current.TokenHash == previousHash || current.RevokedAtUtc is not null)
+                return;
+            current.Revoke(DateTime.UtcNow);
+            try
+            {
+                await unitOfWork.SaveChangesAsync(cancellationToken);
+                validationCache?.InvalidateUser(current.UserId);
+                return;
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                unitOfWork.ResetTracking();
+            }
+        }
     }
 
     public async Task<Result> RevokeSessionAsync(string refreshToken, CancellationToken cancellationToken = default)
@@ -144,18 +176,20 @@ public class AuthSessionService(
         return Result.Failure(ErrorMessages.InvalidSession);
     }
 
-    public async Task<Result> RevokeAllSessionsAsync(Guid userId, CancellationToken cancellationToken = default)
+    public Task<Result> RevokeAllSessionsAsync(Guid userId, CancellationToken cancellationToken = default)
+        => unitOfWork.ExecuteInTransactionAsync(async token =>
     {
         if (userId == Guid.Empty)
             return Result.Failure(DomainErrors.UserIdRequired);
 
+        await unitOfWork.AcquireUserRowLockAsync(userId, token);
         var nowUtc = DateTime.UtcNow;
 
         for (var attempt = 0; attempt < MaxRevokeAllAttempts; attempt++)
         {
             var activeSessions = await userSessionRepository.FindTrackedAsync(
                 s => s.UserId == userId && s.RevokedAtUtc == null,
-                cancellationToken);
+                token);
 
             if (activeSessions.Count == 0)
                 return Result.Success();
@@ -165,7 +199,7 @@ public class AuthSessionService(
 
             try
             {
-                await unitOfWork.SaveChangesAsync(cancellationToken);
+                await unitOfWork.SaveChangesAsync(token);
                 validationCache?.InvalidateUser(userId);
                 return Result.Success();
             }
@@ -176,7 +210,7 @@ public class AuthSessionService(
         }
 
         return Result.Failure(ErrorMessages.InvalidSession);
-    }
+    }, cancellationToken);
 
     public async Task<bool> HasSessionForTokenAsync(string refreshToken, CancellationToken cancellationToken = default)
     {

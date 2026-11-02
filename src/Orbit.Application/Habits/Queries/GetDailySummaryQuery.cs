@@ -42,6 +42,7 @@ public class GetDailySummaryQueryHandler(
         GetDailySummaryQuery request,
         CancellationToken cancellationToken)
     {
+        var cacheVersion = await CacheInvalidationHelper.VersionSuffixAsync(cache, request.UserId, cancellationToken);
         var gateCheck = await payGate.CanUseDailySummary(request.UserId, cancellationToken);
         if (gateCheck.IsFailure)
             return gateCheck.PropagateError<DailySummaryResponse>();
@@ -87,7 +88,7 @@ public class GetDailySummaryQueryHandler(
 
         var pendingHabits = PendingHabitsForToday(request, scheduleItems, userToday);
         var nextStepId = DailySummaryPendingProjection.SelectNextStep(pendingHabits)?.Id;
-        var cacheScopeKey = CacheKey(request.UserId, request.DateFrom, effectiveLanguage, SummaryTimeBucket(currentLocalTime));
+        var cacheScopeKey = CacheKey(request.UserId, request.DateFrom, effectiveLanguage, SummaryTimeBucket(currentLocalTime)) + cacheVersion;
         var cacheKey = $"{cacheScopeKey}:{nextStepId?.ToString("N") ?? "none"}";
         var cached = ReadCachedSummary(request, cacheKey);
         var fromCache = cached is not null;

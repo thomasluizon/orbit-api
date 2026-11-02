@@ -33,6 +33,9 @@ public class OrbitDbContext : DbContext
     internal CancellationToken? TransactionCompletionToken { get; set; }
 
     public DbSet<OwedSubscriptionCancellation> OwedSubscriptionCancellations => Set<OwedSubscriptionCancellation>();
+    public DbSet<UserCacheVersion> UserCacheVersions => Set<UserCacheVersion>();
+    public DbSet<MarketingDelivery> MarketingDeliveries => Set<MarketingDelivery>();
+    public DbSet<PendingCouponCancellation> PendingCouponCancellations => Set<PendingCouponCancellation>();
     public DbSet<EmailChallenge> EmailChallenges => Set<EmailChallenge>();
     public DbSet<User> Users => Set<User>();
     public DbSet<MarketingContact> MarketingContacts => Set<MarketingContact>();
@@ -119,6 +122,20 @@ public class OrbitDbContext : DbContext
             entity.HasIndex(record => new { record.Provider, record.ProviderIdentifier }).IsUnique();
         });
         ConfigureUserEntity(modelBuilder, nullableEncConverter);
+        modelBuilder.Entity<UserCacheVersion>(entity => entity.Property(row => row.Version).IsRequired());
+        modelBuilder.Entity<MarketingDelivery>(entity =>
+        {
+            entity.HasIndex(row => new { row.BroadcastId, row.RecipientId }).IsUnique();
+            entity.HasIndex(row => new { row.SentAtUtc, row.NotBeforeAtUtc });
+            entity.Property(row => row.Email).HasMaxLength(320);
+            entity.Property(row => row.Language).HasMaxLength(32);
+        });
+        modelBuilder.Entity<PendingCouponCancellation>(entity =>
+        {
+            entity.HasIndex(row => row.CouponId).IsUnique();
+            entity.HasIndex(row => row.NextAttemptAtUtc);
+            entity.Property(row => row.CouponId).HasMaxLength(255);
+        });
         ConfigureMarketingContactEntity(modelBuilder);
         ConfigureHabitEntity(modelBuilder, isPostgres, encConverter, nullableEncConverter);
 
@@ -339,6 +356,7 @@ public class OrbitDbContext : DbContext
     {
         modelBuilder.Entity<SentReminder>(entity =>
         {
+            entity.HasIndex(row => new { row.PushSentAtUtc, row.SentAtUtc });
             entity.HasIndex(r => new { r.HabitId, r.Date, r.MinutesBefore, r.ReminderTimeUtc, r.When })
                 .IsUnique()
                 .AreNullsDistinct(false)
@@ -495,7 +513,7 @@ public class OrbitDbContext : DbContext
         {
             entity.HasIndex(s => s.TokenHash).IsUnique();
             entity.HasIndex(s => s.UserId);
-            entity.HasOne<User>().WithMany().HasForeignKey(s => s.UserId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(s => s.User).WithMany().HasForeignKey(s => s.UserId).OnDelete(DeleteBehavior.Cascade);
             entity.Property(s => s.TokenHash).HasMaxLength(128);
         });
     }
@@ -610,6 +628,7 @@ public class OrbitDbContext : DbContext
         modelBuilder.Entity<DistributedRateLimitBucket>(entity =>
         {
             entity.HasIndex(item => new { item.PolicyName, item.PartitionKey, item.WindowStartUtc }).IsUnique();
+            entity.HasIndex(item => new { item.PolicyName, item.WindowEndsAtUtc });
             entity.Property(item => item.PolicyName).HasMaxLength(64);
             entity.Property(item => item.PartitionKey).HasMaxLength(256);
         });
@@ -1005,96 +1024,135 @@ public class OrbitDbContext : DbContext
         });
     }
 
+    private (HashSet<Guid> Users, Guid[] Habits, Guid[] Goals) CacheOwners()
+    {
+        var users = new HashSet<Guid>();
+        var habits = new HashSet<Guid>();
+        var goals = new HashSet<Guid>();
+        foreach (var entry in ChangeTracker.Entries().Where(entry => entry.State is EntityState.Added or EntityState.Modified or EntityState.Deleted))
+            switch (entry.Entity)
+            {
+                case Habit habit: users.Add(habit.UserId); break;
+                case Goal goal: users.Add(goal.UserId); break;
+                case Tag tag: users.Add(tag.UserId); break;
+                case ChecklistTemplate template: users.Add(template.UserId); break;
+                case ApiKey key: users.Add(key.UserId); break;
+                case HabitLog log: habits.Add(log.HabitId); break;
+                case GoalProgressLog log: goals.Add(log.GoalId); break;
+                case User user when entry.Properties.Any(property => property.IsModified && property.Metadata.Name is
+                    nameof(User.Language) or nameof(User.TimeZone) or nameof(User.WeekStartDay) or nameof(User.Name)
+                    or nameof(User.CurrentStreak) or nameof(User.AiSummaryEnabled)):
+                    users.Add(user.Id); break;
+            }
+        foreach (var entry in ChangeTracker.Entries<Habit>().Where(entry => habits.Contains(entry.Entity.Id)))
+        { users.Add(entry.Entity.UserId); habits.Remove(entry.Entity.Id); }
+        foreach (var entry in ChangeTracker.Entries<Goal>().Where(entry => goals.Contains(entry.Entity.Id)))
+        { users.Add(entry.Entity.UserId); goals.Remove(entry.Entity.Id); }
+        users.Remove(Guid.Empty);
+        return (users, habits.ToArray(), goals.ToArray());
+    }
+
+    private void AdvanceInMemoryVersions(IEnumerable<Guid> userIds)
+    {
+        foreach (var userId in userIds)
+        {
+            var version = UserCacheVersions.Find(userId);
+            if (version is null) UserCacheVersions.Add(UserCacheVersion.Create(userId));
+            else version.Increment();
+        }
+    }
+
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {
-        var modifiedHabits = ChangeTracker.Entries<Habit>()
-            .Where(entry => entry.State == EntityState.Modified).ToArray();
-        if (modifiedHabits.Length == 0 || !Database.IsRelational())
+        var owners = CacheOwners();
+        if (owners.Habits.Length > 0)
+            owners.Users.UnionWith(Habits.IgnoreQueryFilters().Where(habit => owners.Habits.Contains(habit.Id)).Select(habit => habit.UserId));
+        if (owners.Goals.Length > 0)
+            owners.Users.UnionWith(Goals.IgnoreQueryFilters().Where(goal => owners.Goals.Contains(goal.Id)).Select(goal => goal.UserId));
+        var modifiedHabits = ChangeTracker.Entries<Habit>().Where(entry => entry.State == EntityState.Modified).ToArray();
+        if (!Database.IsRelational())
         {
-            foreach (var entry in modifiedHabits)
-                entry.Property(h => h.ReminderProbeVersion).CurrentValue++;
+            AdvanceInMemoryVersions(owners.Users);
+            foreach (var entry in modifiedHabits) entry.Property(habit => habit.ReminderProbeVersion).CurrentValue++;
             return base.SaveChanges(acceptAllChangesOnSuccess);
         }
-
         var habitIds = modifiedHabits.Select(entry => entry.Entity.Id).Distinct().ToArray();
-        foreach (var entry in modifiedHabits)
-            entry.Property(h => h.ReminderProbeVersion).IsModified = false;
-
+        foreach (var entry in modifiedHabits) entry.Property(habit => habit.ReminderProbeVersion).IsModified = false;
+        if (owners.Users.Count == 0 && habitIds.Length == 0)
+            return base.SaveChanges(acceptAllChangesOnSuccess);
         if (Database.CurrentTransaction is not null)
-            return SaveHabitChanges(acceptAllChangesOnSuccess, habitIds);
-
+            return SaveVersionedChanges(acceptAllChangesOnSuccess, habitIds, owners.Users);
         return Database.CreateExecutionStrategy().Execute(() =>
         {
             using var transaction = Database.BeginTransaction();
-            var saved = SaveHabitChanges(false, habitIds);
+            var saved = SaveVersionedChanges(false, habitIds, owners.Users);
             transaction.Commit();
-            if (acceptAllChangesOnSuccess)
-                ChangeTracker.AcceptAllChanges();
+            if (acceptAllChangesOnSuccess) ChangeTracker.AcceptAllChanges();
             return saved;
         });
     }
 
-    public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess,
-        CancellationToken cancellationToken = default)
+    public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (Database.CurrentTransaction is not null && TransactionCompletionToken is { } completionToken)
             cancellationToken = completionToken;
-
-        var now = DateTime.UtcNow;
-        foreach (var entry in ChangeTracker.Entries<ITimestamped>()
-            .Where(e => e.State is EntityState.Modified or EntityState.Added))
+        var nowAtUtc = DateTime.UtcNow;
+        foreach (var entry in ChangeTracker.Entries<ITimestamped>().Where(entry => entry.State is EntityState.Modified or EntityState.Added))
+            entry.Entity.UpdatedAtUtc = nowAtUtc;
+        var owners = CacheOwners();
+        if (owners.Habits.Length > 0)
+            owners.Users.UnionWith(await Habits.IgnoreQueryFilters().Where(habit => owners.Habits.Contains(habit.Id)).Select(habit => habit.UserId).ToListAsync(cancellationToken));
+        if (owners.Goals.Length > 0)
+            owners.Users.UnionWith(await Goals.IgnoreQueryFilters().Where(goal => owners.Goals.Contains(goal.Id)).Select(goal => goal.UserId).ToListAsync(cancellationToken));
+        var modifiedHabits = ChangeTracker.Entries<Habit>().Where(entry => entry.State == EntityState.Modified).ToArray();
+        if (!Database.IsRelational())
         {
-            entry.Entity.UpdatedAtUtc = now;
-        }
-
-        var modifiedHabits = ChangeTracker.Entries<Habit>()
-            .Where(entry => entry.State == EntityState.Modified).ToArray();
-        if (modifiedHabits.Length == 0 || !Database.IsRelational())
-        {
-            foreach (var entry in modifiedHabits)
-                entry.Property(h => h.ReminderProbeVersion).CurrentValue++;
+            AdvanceInMemoryVersions(owners.Users);
+            foreach (var entry in modifiedHabits) entry.Property(habit => habit.ReminderProbeVersion).CurrentValue++;
             return await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
         }
-
         var habitIds = modifiedHabits.Select(entry => entry.Entity.Id).Distinct().ToArray();
-        foreach (var entry in modifiedHabits)
-            entry.Property(h => h.ReminderProbeVersion).IsModified = false;
-
+        foreach (var entry in modifiedHabits) entry.Property(habit => habit.ReminderProbeVersion).IsModified = false;
+        if (owners.Users.Count == 0 && habitIds.Length == 0)
+            return await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
         if (Database.CurrentTransaction is not null)
-            return await SaveHabitChangesAsync(acceptAllChangesOnSuccess, habitIds, cancellationToken);
-
+            return await SaveVersionedChangesAsync(acceptAllChangesOnSuccess, habitIds, owners.Users, cancellationToken);
         return await Database.CreateExecutionStrategy().ExecuteAsync(async () =>
         {
             await using var transaction = await Database.BeginTransactionAsync(cancellationToken);
-            var saved = await SaveHabitChangesAsync(false, habitIds, cancellationToken);
+            var saved = await SaveVersionedChangesAsync(false, habitIds, owners.Users, cancellationToken);
             await transaction.CommitAsync(cancellationToken);
-            if (acceptAllChangesOnSuccess)
-                ChangeTracker.AcceptAllChanges();
+            if (acceptAllChangesOnSuccess) ChangeTracker.AcceptAllChanges();
             return saved;
         });
     }
 
-    private int SaveHabitChanges(bool acceptAllChangesOnSuccess, Guid[] habitIds)
+    private int SaveVersionedChanges(bool acceptAllChangesOnSuccess, Guid[] habitIds, IEnumerable<Guid> userIds)
     {
         var saved = base.SaveChanges(false);
-        Habits.IgnoreQueryFilters().Where(habit => habitIds.Contains(habit.Id))
-            .ExecuteUpdate(setters => setters.SetProperty(habit => habit.ReminderProbeVersion,
-                habit => habit.ReminderProbeVersion + 1));
-        if (acceptAllChangesOnSuccess)
-            ChangeTracker.AcceptAllChanges();
+        if (habitIds.Length > 0)
+            Habits.IgnoreQueryFilters().Where(habit => habitIds.Contains(habit.Id)).ExecuteUpdate(setters => setters
+                .SetProperty(habit => habit.ReminderProbeVersion, habit => habit.ReminderProbeVersion + 1));
+        foreach (var userId in userIds)
+            Database.ExecuteSqlInterpolated($"""
+                INSERT INTO "UserCacheVersions" ("Id", "Version") VALUES ({userId}, 1)
+                ON CONFLICT ("Id") DO UPDATE SET "Version" = "UserCacheVersions"."Version" + 1
+                """);
+        if (acceptAllChangesOnSuccess) ChangeTracker.AcceptAllChanges();
         return saved;
     }
 
-    private async Task<int> SaveHabitChangesAsync(bool acceptAllChangesOnSuccess, Guid[] habitIds,
+    private async Task<int> SaveVersionedChangesAsync(bool acceptAllChangesOnSuccess, Guid[] habitIds, IEnumerable<Guid> userIds,
         CancellationToken cancellationToken)
     {
         var saved = await base.SaveChangesAsync(false, cancellationToken);
-        await Habits.IgnoreQueryFilters().Where(habit => habitIds.Contains(habit.Id))
-            .ExecuteUpdateAsync(setters => setters.SetProperty(habit => habit.ReminderProbeVersion,
-                habit => habit.ReminderProbeVersion + 1), cancellationToken);
-        if (acceptAllChangesOnSuccess)
-            ChangeTracker.AcceptAllChanges();
+        if (habitIds.Length > 0)
+            await Habits.IgnoreQueryFilters().Where(habit => habitIds.Contains(habit.Id)).ExecuteUpdateAsync(setters => setters
+                .SetProperty(habit => habit.ReminderProbeVersion, habit => habit.ReminderProbeVersion + 1), cancellationToken);
+        var versions = new Orbit.Infrastructure.Services.UserCacheVersions(this);
+        foreach (var userId in userIds) await versions.BumpAsync(userId, cancellationToken);
+        if (acceptAllChangesOnSuccess) ChangeTracker.AcceptAllChanges();
         return saved;
     }
 

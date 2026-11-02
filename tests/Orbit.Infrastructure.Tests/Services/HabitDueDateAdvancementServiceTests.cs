@@ -8,6 +8,7 @@ using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Infrastructure.Persistence;
 using Orbit.Infrastructure.Services;
+using Orbit.Infrastructure.Tests.Persistence;
 
 namespace Orbit.Infrastructure.Tests.Services;
 
@@ -17,8 +18,10 @@ namespace Orbit.Infrastructure.Tests.Services;
 /// conditions and cutoff logic, and a DB-backed regression covering the
 /// real advancement query (bad habits advance; non-bad stay overdue).
 /// </summary>
-public class HabitDueDateAdvancementServiceTests
+public partial class HabitDueDateAdvancementServiceTests : IDisposable
 {
+    private readonly List<SqliteOrbitDbContextFactory> _factories = [];
+    public void Dispose() { foreach (var factory in _factories) factory.Dispose(); }
     private static readonly Guid ValidUserId = Guid.NewGuid();
     private static readonly DateOnly Today = DateOnly.FromDateTime(DateTime.UtcNow);
 
@@ -253,7 +256,7 @@ public class HabitDueDateAdvancementServiceTests
     [Fact]
     public async Task AdvanceStaleDueDates_AdvancesBadHabitOnly_LeavesNonBadOverdue()
     {
-        await using var dbContext = CreateInMemoryDbContext();
+        await using var dbContext = CreateSqliteDbContext();
         var user = User.Create("Alex", "alex@test.com").Value;
         var staleDueDate = Today.AddDays(-3);
         var nonBadHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
@@ -282,7 +285,7 @@ public class HabitDueDateAdvancementServiceTests
     [Fact]
     public async Task AdvanceStaleDueDates_UnsatisfiableHabit_DoesNotBlockValidHabit()
     {
-        await using var dbContext = CreateInMemoryDbContext();
+        await using var dbContext = CreateSqliteDbContext();
         var user = User.Create("Alex", "alex@test.com").Value;
         var anchor = Today.AddDays(-35);
         var unsatisfiableHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
@@ -313,13 +316,13 @@ public class HabitDueDateAdvancementServiceTests
 
         await act.Should().NotThrowAsync();
         unsatisfiableHabit.NextDueDate.Should().Be(unsatisfiableDueDate);
-        validHabit.NextDueDate.Should().BeOnOrAfter(Today);
+        (await dbContext.Habits.AsNoTracking().SingleAsync(habit => habit.Id == validHabit.Id)).NextDueDate.Should().BeOnOrAfter(Today);
     }
 
     [Fact]
     public async Task AdvanceStaleDueDates_SundayStartBoundaryHabit_SavesValidSibling()
     {
-        await using var dbContext = CreateInMemoryDbContext();
+        await using var dbContext = CreateSqliteDbContext();
         var user = User.Create("Alex", "alex@test.com").Value;
         user.SetWeekStartDay(0).IsSuccess.Should().BeTrue();
         var boundaryHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
@@ -355,12 +358,11 @@ public class HabitDueDateAdvancementServiceTests
         reloadedValid.NextDueDate.Should().BeOnOrAfter(Today);
     }
 
-    private static OrbitDbContext CreateInMemoryDbContext()
+    private OrbitDbContext CreateSqliteDbContext()
     {
-        var options = new DbContextOptionsBuilder<OrbitDbContext>()
-            .UseInMemoryDatabase($"HabitDueDateAdvancementServiceTests_{Guid.NewGuid()}")
-            .Options;
-        return new OrbitDbContext(options);
+        var factory = new SqliteOrbitDbContextFactory();
+        _factories.Add(factory);
+        return factory.Context;
     }
 
     private static HabitDueDateAdvancementService CreateService(

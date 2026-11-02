@@ -54,7 +54,7 @@ public partial class DistributedRateLimitServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task TryAcquireAsync_Expiration_RemovesOnlyExpiredBucketsForThePolicy()
+    public async Task TryAcquireAsync_Expiration_LeavesCleanupToThePeriodicJob()
     {
         var segmentStartUtc = MidWindowInstant.UtcDateTime.AddSeconds(-30);
         var expired = DistributedRateLimitBucket.Create("auth", "user:expired",
@@ -71,7 +71,7 @@ public partial class DistributedRateLimitServiceTests : IDisposable
         decision.Allowed.Should().BeTrue();
         decision.CurrentCount.Should().Be(1);
         var buckets = await _dbContext.DistributedRateLimitBuckets.AsNoTracking().ToListAsync();
-        buckets.Should().HaveCount(3).And.NotContain(bucket => bucket.Id == expired.Id);
+        buckets.Should().HaveCount(4).And.Contain(bucket => bucket.Id == expired.Id);
         buckets.Should().ContainSingle(bucket => bucket.Id == active.Id && bucket.Count == 10);
         buckets.Should().ContainSingle(bucket => bucket.Id == otherPolicy.Id && bucket.Count == 10);
         buckets.Should().ContainSingle(bucket => bucket.PolicyName == "auth" && bucket.PartitionKey == "user:expired"
@@ -516,7 +516,8 @@ public partial class DistributedRateLimitServiceTests : IDisposable
             expired.Allowed.Should().BeTrue();
             expired.CurrentCount.Should().Be(1);
         }
-        (await scope.Context.DistributedRateLimitBuckets.AsNoTracking().SingleAsync()).Count.Should().Be(1);
+        (await scope.Context.DistributedRateLimitBuckets.AsNoTracking()
+            .SingleAsync(bucket => bucket.WindowEndsAtUtc > clock.GetUtcNow().UtcDateTime)).Count.Should().Be(1);
     }
 
     [Fact]

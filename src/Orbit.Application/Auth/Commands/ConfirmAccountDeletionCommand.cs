@@ -32,24 +32,35 @@ public class ConfirmAccountDeletionCommandHandler(
         if (confirmation.IsFailure)
             return confirmation.PropagateError<DateTime>();
 
-        var nowAtUtc = DateTime.UtcNow;
-        var scheduledDate = user.HasProAccess && user.PlanExpiresAt.HasValue && user.PlanExpiresAt.Value > nowAtUtc
-            ? user.PlanExpiresAt.Value.AddDays(7)
-            : nowAtUtc.AddDays(7);
-        var maximumScheduledDate = nowAtUtc.AddDays(AppConstants.MaxDeletionGraceDays);
-        scheduledDate = scheduledDate < maximumScheduledDate ? scheduledDate : maximumScheduledDate;
-
-        user.Deactivate(scheduledDate);
-        foreach (var key in await apiKeyRepository.FindTrackedAsync(k => k.UserId == user.Id && !k.IsRevoked, cancellationToken))
-            key.Revoke();
-        var revocation = await authSessionService.RevokeAllSessionsAsync(user.Id, cancellationToken);
-        if (revocation.IsFailure)
-            return revocation.PropagateError<DateTime>();
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+        var result = await unitOfWork.ExecuteInTransactionAsync(async token =>
+        {
+            await unitOfWork.AcquireUserRowLockAsync(request.UserId, token);
+            var revocation = await authSessionService.RevokeAllSessionsAsync(request.UserId, token);
+            if (revocation.IsFailure)
+                return revocation.PropagateError<DateTime>();
+            user = await userRepository.GetByIdAsync(request.UserId, token);
+            if (user is null)
+                return Result.Failure<DateTime>(ErrorMessages.UserNotFound);
+            await userRepository.ReloadAsync(user, token);
+            var nowAtUtc = DateTime.UtcNow;
+            var scheduledDate = user.HasProAccess && user.PlanExpiresAt.HasValue && user.PlanExpiresAt.Value > nowAtUtc
+                ? user.PlanExpiresAt.Value.AddDays(7) : nowAtUtc.AddDays(7);
+            var maximumScheduledDate = nowAtUtc.AddDays(AppConstants.MaxDeletionGraceDays);
+            scheduledDate = scheduledDate < maximumScheduledDate ? scheduledDate : maximumScheduledDate;
+            user.Deactivate(scheduledDate);
+            foreach (var key in await apiKeyRepository.FindTrackedAsync(k => k.UserId == user.Id && !k.IsRevoked, token))
+                key.Revoke();
+            await unitOfWork.SaveChangesAsync(token);
+            return Result.Success(scheduledDate);
+        }, cancellationToken);
+        if (result.IsFailure)
+            return result;
+        if (user is null)
+            throw new InvalidOperationException("A successful deletion requires the deactivated account.");
         CancelSubscriptionOnDeletionJob.EnqueueCancellation(backgroundJobClient, user);
         if (user.AppleRefreshToken is not null)
             backgroundJobClient.Enqueue<RevokeAppleTokenOnDeletionJob>(job => job.ExecuteAsync(user.Id, CancellationToken.None));
 
-        return Result.Success(scheduledDate);
+        return result;
     }
 }

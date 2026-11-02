@@ -1,6 +1,5 @@
 using Hangfire;
 using MediatR;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Orbit.Application.Common;
@@ -25,7 +24,8 @@ public partial class SendMarketingBroadcastCommandHandler(
     IGenericRepository<MarketingContact> contactRepository,
     IBackgroundJobClient backgroundJobClient,
     IMarketingUnsubscribeTokenService unsubscribeTokenService,
-    IServiceScopeFactory scopeFactory,
+    IGenericRepository<MarketingDelivery> deliveryRepository,
+    IUnitOfWork unitOfWork,
     IOptions<MarketingSettings> marketingSettings,
     ILogger<SendMarketingBroadcastCommandHandler> logger)
     : IRequestHandler<SendMarketingBroadcastCommand, Result<MarketingBroadcastResult>>
@@ -69,49 +69,21 @@ public partial class SendMarketingBroadcastCommandHandler(
             .Select(contact => new MarketingRecipient(contact.Id, contact.Email, contact.Language)));
 
         LogBroadcastQueued(logger, recipients.Count, request.SubjectEn);
-        FanOutInBackground(request, recipients);
+        var broadcastId = Guid.NewGuid();
+        var nowAtUtc = DateTime.UtcNow;
+        var deliveries = recipients.Select((recipient, index) => MarketingDelivery.Create(
+            broadcastId, recipient.UserId, recipient.Email, recipient.Language,
+            request.SubjectEn, request.SubjectPt, request.BodyHtmlEn, request.BodyHtmlPt,
+            nowAtUtc.AddMilliseconds((long)index * Math.Max(0, _settings.SendDelayMilliseconds)))).ToList();
+        foreach (var delivery in deliveries)
+            await deliveryRepository.AddAsync(delivery, cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        foreach (var delivery in deliveries)
+            backgroundJobClient.Schedule<SendMarketingEmailJob>(job => job.ExecuteRecipientAsync(
+                delivery.BroadcastId, delivery.RecipientId, delivery.Email, delivery.Language),
+                new DateTimeOffset(delivery.NotBeforeAtUtc));
 
         return Result.Success(new MarketingBroadcastResult(recipients.Count, WasTest: false));
-    }
-
-    private void FanOutInBackground(SendMarketingBroadcastCommand request, IReadOnlyList<MarketingRecipient> recipients)
-    {
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                using var scope = scopeFactory.CreateScope();
-                var bgEmailService = scope.ServiceProvider.GetRequiredService<IEmailService>();
-                var bgTokenService = scope.ServiceProvider.GetRequiredService<IMarketingUnsubscribeTokenService>();
-                var bgLogger = scope.ServiceProvider.GetRequiredService<ILogger<SendMarketingBroadcastCommandHandler>>();
-
-                var failureCount = 0;
-                foreach (var recipient in recipients)
-                {
-                    try
-                    {
-                        var content = RenderFor(request, recipient.Language);
-                        var unsubscribeUrl = BuildUnsubscribeUrl(bgTokenService.CreateToken(recipient.UserId), recipient.Language);
-                        await bgEmailService.SendMarketingEmailAsync(
-                            recipient.Email, content.Subject, content.BodyHtml, recipient.Language, unsubscribeUrl, CancellationToken.None);
-                    }
-                    catch (Exception ex)
-                    {
-                        failureCount++;
-                        LogRecipientSendFailed(bgLogger, ex, recipient.UserId);
-                    }
-
-                    if (_settings.SendDelayMilliseconds > 0)
-                        await Task.Delay(_settings.SendDelayMilliseconds, CancellationToken.None);
-                }
-
-                LogBroadcastCompleted(bgLogger, recipients.Count - failureCount, failureCount);
-            }
-            catch (Exception ex)
-            {
-                LogBroadcastFailed(logger, ex, recipients.Count);
-            }
-        }, CancellationToken.None);
     }
 
     private static RenderedContent RenderFor(SendMarketingBroadcastCommand request, string language) =>
@@ -133,12 +105,4 @@ public partial class SendMarketingBroadcastCommandHandler(
     [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "Marketing broadcast queued: {RecipientCount} recipients, subject={Subject}")]
     private static partial void LogBroadcastQueued(ILogger logger, int recipientCount, string subject);
 
-    [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "Marketing broadcast fan-out completed: {SentCount} sent, {FailedCount} failed")]
-    private static partial void LogBroadcastCompleted(ILogger logger, int sentCount, int failedCount);
-
-    [LoggerMessage(EventId = 4, Level = LogLevel.Error, Message = "Marketing broadcast fan-out failed after queuing {RecipientCount} recipients")]
-    private static partial void LogBroadcastFailed(ILogger logger, Exception ex, int recipientCount);
-
-    [LoggerMessage(EventId = 5, Level = LogLevel.Error, Message = "Marketing broadcast send failed for recipient {UserId}; continuing with the rest")]
-    private static partial void LogRecipientSendFailed(ILogger logger, Exception ex, Guid userId);
 }

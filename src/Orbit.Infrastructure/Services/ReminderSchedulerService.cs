@@ -73,7 +73,19 @@ public partial class ReminderSchedulerService(
             await ProcessRelativeReminders(snapshot, dbContext, pending, nowUtc, ct);
             await ProcessScheduledReminders(snapshot, dbContext, pending, nowUtc, ct);
             await ProcessRepeatReminders(snapshot, dbContext, pending, nowUtc, ct);
-            await SendPushesAsync(pending, ct);
+            var cutoffAtUtc = nowUtc.AddMinutes(-15);
+            var missing = await (from reminder in dbContext.SentReminders.AsNoTracking()
+                                 join habit in dbContext.Habits on reminder.HabitId equals habit.Id
+                                 join user in dbContext.Users on habit.UserId equals user.Id
+                                 where reminder.PushSentAtUtc == null && reminder.PushUserId != null
+                                     && reminder.SentAtUtc >= cutoffAtUtc
+                                     && (reminder.ExpiresAtUtc == null || reminder.ExpiresAtUtc > nowUtc)
+                                 select reminder).ToListAsync(ct);
+            pending = missing.Select(row => new PendingReminderPush(row.PushUserId!.Value,
+                row.PushTitle!, row.PushBody!, row.HabitId,
+                row.PushDataJson is null ? null : System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(row.PushDataJson), row.Id)).ToList();
+            using var pushDeadline = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            await SendPushesAsync(pending, pushDeadline.Token);
         }
         finally
         {
@@ -366,6 +378,8 @@ public partial class ReminderSchedulerService(
         Habit habit, SentReminder sentReminder, Notification notification,
         OrbitDbContext dbContext, TimeZoneInfo zone, DateTime sentAtUtc, CancellationToken ct)
     {
+        if (sentReminder.PushUserId is null)
+            sentReminder.PreparePush(habit.UserId, notification.Title, notification.Body, recordedAtUtc: sentAtUtc);
         await dbContext.SentReminders.AddAsync(sentReminder, ct);
 
         try
@@ -410,6 +424,7 @@ public partial class ReminderSchedulerService(
     {
         using var scope = scopeFactory.CreateScope();
         var pushService = scope.ServiceProvider.GetRequiredService<IPushNotificationService>();
+        var db = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
 
         while (queue.TryDequeue(out var push))
         {
@@ -419,6 +434,9 @@ public partial class ReminderSchedulerService(
                     await pushService.SendReminderToUserAsync(push.UserId, push.Title, push.Body, data, NotificationUrls.Home, ct);
                 else
                     await pushService.SendToUserAsync(push.UserId, push.Title, push.Body, NotificationUrls.Home, ct);
+                var sentAtUtc = (timeProvider ?? TimeProvider.System).GetUtcNow().UtcDateTime;
+                await db.SentReminders.Where(row => row.Id == push.ReminderId && row.PushSentAtUtc == null)
+                    .ExecuteUpdateAsync(setters => setters.SetProperty(row => row.PushSentAtUtc, sentAtUtc), ct);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -434,7 +452,7 @@ public partial class ReminderSchedulerService(
     }
 
     private readonly record struct PendingReminderPush(Guid UserId, string Title, string Body, Guid HabitId,
-        IReadOnlyDictionary<string, string>? Data = null);
+        IReadOnlyDictionary<string, string>? Data = null, Guid ReminderId = default);
 
     private sealed record ReminderProbe
     {

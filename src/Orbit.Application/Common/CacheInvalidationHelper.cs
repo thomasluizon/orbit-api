@@ -5,6 +5,25 @@ namespace Orbit.Application.Common;
 
 public static class CacheInvalidationHelper
 {
+    public static async Task<string> VersionSuffixAsync(IMemoryCache cache, Guid userId, CancellationToken cancellationToken = default) =>
+        cache is IVersionedMemoryCache versioned
+            ? $":v{await versioned.Versions.GetAsync(userId, cancellationToken)}"
+            : string.Empty;
+
+    public static async Task InvalidateUserAiCachesAsync(IMemoryCache cache, Guid userId, DateOnly today, bool preserveDailyNarrative = false)
+    {
+        if (cache is IVersionedMemoryCache versioned)
+            await versioned.Versions.BumpAsync(userId);
+        InvalidateUserAiCaches(cache, userId, today, preserveDailyNarrative);
+    }
+
+    public static async Task InvalidateReferenceCacheAsync(IMemoryCache cache, Guid userId, string key)
+    {
+        if (cache is IVersionedMemoryCache versioned)
+            await versioned.Versions.BumpAsync(userId);
+        cache.Remove(key);
+    }
+
     private static readonly string[] RetrospectivePeriods = ["week", "month", "quarter", "semester", "year"];
     private static readonly int[] RetrospectiveWeekStartDays = [0, 1];
     private static readonly string[] SummaryTimeBuckets = ["morning", "afternoon", "evening", "night", "timeless"];

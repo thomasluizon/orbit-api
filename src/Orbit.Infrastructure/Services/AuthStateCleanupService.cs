@@ -20,6 +20,11 @@ public sealed class AuthStateCleanupService(
         using var scope = scopes.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
         var nowAtUtc = clock.GetUtcNow().UtcDateTime;
+        var policies = await db.DistributedRateLimitBuckets.AsNoTracking().Select(row => row.PolicyName)
+            .Distinct().ToListAsync(cancellationToken);
+        foreach (var policy in policies)
+            await db.DistributedRateLimitBuckets.Where(row => row.PolicyName == policy && row.WindowEndsAtUtc <= nowAtUtc)
+                .ExecuteDeleteAsync(cancellationToken);
         var cooldownCutoffAtUtc = nowAtUtc.AddSeconds(-60);
         await db.EmailChallenges.Where(row => row.ExpiresAtUtc < nowAtUtc
             && row.AttemptWindowEndsAtUtc < nowAtUtc && row.IssuedAtUtc < cooldownCutoffAtUtc)

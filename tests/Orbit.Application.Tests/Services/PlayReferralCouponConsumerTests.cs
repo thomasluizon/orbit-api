@@ -2,23 +2,18 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using NSubstitute;
-using NSubstitute.ExceptionExtensions;
 using Orbit.Application.Common;
 using Orbit.Application.Subscriptions.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
-using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Tests.Services;
 
 public class PlayReferralCouponConsumerTests
 {
-    private readonly IReferralRewardService _rewardService = Substitute.For<IReferralRewardService>();
-
     private PlayReferralCouponConsumer CreateConsumer(string referralOfferId = "referral10") =>
         new(
             Options.Create(new GooglePlaySettings { ReferralOfferId = referralOfferId }),
-            _rewardService,
             Substitute.For<ILogger<PlayReferralCouponConsumer>>());
 
     private static User UserWithCoupon()
@@ -96,24 +91,5 @@ public class PlayReferralCouponConsumerTests
 
         couponId.Should().BeNull();
         user.ReferralCouponId.Should().Be("coupon_abc");
-    }
-
-    [Fact]
-    public async Task CancelConsumedCouponAsync_CancelsAtBillingProvider()
-    {
-        await CreateConsumer().CancelConsumedCouponAsync(Guid.NewGuid(), "coupon_abc", CancellationToken.None);
-
-        await _rewardService.Received(1).CancelCouponAsync("coupon_abc", Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task CancelConsumedCouponAsync_BillingProviderFailure_DoesNotThrow()
-    {
-        _rewardService.CancelCouponAsync("coupon_abc", Arg.Any<CancellationToken>())
-            .ThrowsAsync(new InvalidOperationException("stripe down"));
-
-        var act = () => CreateConsumer().CancelConsumedCouponAsync(Guid.NewGuid(), "coupon_abc", CancellationToken.None);
-
-        await act.Should().NotThrowAsync();
     }
 }

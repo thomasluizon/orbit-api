@@ -72,6 +72,7 @@ public class GetRetrospectiveQueryHandler(
         GetRetrospectiveQuery request,
         CancellationToken cancellationToken)
     {
+        var cacheVersion = await CacheInvalidationHelper.VersionSuffixAsync(cache, request.UserId, cancellationToken);
         var gateCheck = await payGate.CanUseRetrospective(request.UserId, cancellationToken);
         if (gateCheck.IsFailure)
             return gateCheck.PropagateError<RetrospectiveResponse>();
@@ -80,7 +81,7 @@ public class GetRetrospectiveQueryHandler(
             request.UserId,
             request.Period,
             request.DateFrom,
-            request.Language);
+            request.Language) + cacheVersion;
 
         if (request.GenerateNarrative && cache.TryGetValue(cacheKey, out RetrospectiveResponse? cached) && cached is not null
             && cached.DateFrom == request.DateFrom && cached.DateTo == request.DateTo)

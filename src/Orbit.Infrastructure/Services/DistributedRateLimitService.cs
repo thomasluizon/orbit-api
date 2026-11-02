@@ -94,7 +94,6 @@ public class DistributedRateLimitService(OrbitDbContext dbContext, TimeProvider 
 
         var now = clock.GetUtcNow().UtcDateTime;
         var leaseEndsAtUtc = now.Add(leaseDuration);
-        await DeleteExpiredLeasesAsync(policyName, now, cancellationToken);
 
         var existingLease = await dbContext.DistributedRateLimitBuckets
             .AsNoTracking()
@@ -103,6 +102,20 @@ public class DistributedRateLimitService(OrbitDbContext dbContext, TimeProvider 
                           bucket.PartitionKey == partitionKey &&
                           bucket.WindowStartUtc == LeaseWindowStartUtc,
                 cancellationToken);
+
+        if (existingLease is not null && existingLease.WindowEndsAtUtc <= now)
+        {
+            var renewed = dbContext.Database.IsRelational()
+                ? await dbContext.DistributedRateLimitBuckets
+                    .Where(bucket => bucket.Id == existingLease.Id && bucket.WindowEndsAtUtc <= now)
+                    .ExecuteUpdateAsync(setters => setters.SetProperty(bucket => bucket.WindowEndsAtUtc, leaseEndsAtUtc)
+                        .SetProperty(bucket => bucket.UpdatedAtUtc, now), cancellationToken)
+                : await RenewInMemoryLeaseAsync(existingLease.Id, leaseEndsAtUtc, cancellationToken);
+            if (renewed == 1)
+                return new DistributedRateLimitDecision(true, permitLimit, 1, leaseEndsAtUtc);
+            existingLease = await dbContext.DistributedRateLimitBuckets.AsNoTracking()
+                .SingleOrDefaultAsync(bucket => bucket.Id == existingLease.Id, cancellationToken);
+        }
 
         if (existingLease is not null)
         {
@@ -157,36 +170,42 @@ public class DistributedRateLimitService(OrbitDbContext dbContext, TimeProvider 
             .ExecuteDeleteAsync(cancellationToken);
     }
 
-    private async Task DeleteExpiredLeasesAsync(
-        string policyName,
-        DateTime now,
-        CancellationToken cancellationToken)
+    private async Task<int> RenewInMemoryLeaseAsync(Guid id, DateTime leaseEndsAtUtc, CancellationToken cancellationToken)
     {
-        var expiredLeases = dbContext.DistributedRateLimitBuckets
-            .Where(bucket => bucket.PolicyName == policyName &&
-                             bucket.WindowStartUtc == LeaseWindowStartUtc &&
-                             bucket.WindowEndsAtUtc <= now);
+        var row = await dbContext.DistributedRateLimitBuckets.FindAsync([id], cancellationToken);
+        if (row is null || row.WindowEndsAtUtc > clock.GetUtcNow().UtcDateTime)
+            return 0;
+        row.RenewLease(leaseEndsAtUtc);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return 1;
+    }
 
-        if (dbContext.Database.ProviderName?.Contains("InMemory", StringComparison.OrdinalIgnoreCase) == true)
+    public async Task<(DistributedRateLimitDecision RateLimit, DistributedRateLimitDecision? Lease)> TryAcquireWithLeaseAsync(
+        string policyName, string partitionKey, string leasePolicy, int permitLimit, TimeSpan leaseDuration,
+        CancellationToken cancellationToken = default)
+    {
+        if (!Policies.TryGetValue(policyName, out var policy))
+            throw new InvalidOperationException($"Unknown rate-limit policy '{policyName}'.");
+        DistributedRateLimitDecision? lease = null;
+        async Task AcquireLease(CancellationToken token) => lease = await TryAcquireLeaseAsync(
+            leasePolicy, partitionKey, permitLimit, leaseDuration, token);
+        DistributedRateLimitDecision decision;
+        if (dbContext.Database.IsRelational())
+            decision = await ExecuteRelationalAttemptAsync(policyName, partitionKey, policy, cancellationToken, AcquireLease);
+        else
         {
-            var expiredEntities = await expiredLeases.ToListAsync(cancellationToken);
-            if (expiredEntities.Count > 0)
-            {
-                dbContext.DistributedRateLimitBuckets.RemoveRange(expiredEntities);
-                await dbContext.SaveChangesAsync(cancellationToken);
-            }
-
-            return;
+            decision = await TryAcquireCoreAsync(policyName, partitionKey, policy, cancellationToken);
+            if (decision.Allowed) await AcquireLease(cancellationToken);
         }
-
-        await expiredLeases.ExecuteDeleteAsync(cancellationToken);
+        return (decision, lease);
     }
 
     private async Task<DistributedRateLimitDecision> ExecuteRelationalAttemptAsync(
         string policyName,
         string partitionKey,
         RateLimitPolicy policy,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Func<CancellationToken, Task>? onAllowed = null)
     {
         var settings = databaseSettings ?? new DatabaseConnectionSettings();
         using var deadline = new TransactionDeadline(dbContext, settings, cancellationToken);
@@ -196,8 +215,6 @@ public class DistributedRateLimitService(OrbitDbContext dbContext, TimeProvider 
             return await strategy.ExecuteAsync(async token =>
             {
                 strategy.CommitStarted = false;
-                if (dbContext.Database.IsNpgsql())
-                    await DeleteExpiredBucketsAsync(policyName, clock.GetUtcNow().UtcDateTime, token);
                 await using var transaction = await dbContext.Database.BeginTransactionAsync(
                     // https://www.postgresql.org/docs/17/transaction-iso.html#XACT-READ-COMMITTED: the bucket read must see the preceding lock holder's commit.
                     dbContext.Database.IsNpgsql() ? IsolationLevel.ReadCommitted : IsolationLevel.Serializable,
@@ -210,6 +227,7 @@ public class DistributedRateLimitService(OrbitDbContext dbContext, TimeProvider 
                     var decision = await TryAcquireCoreAsync(policyName, partitionKey, policy, token);
                     if (decision.Allowed)
                     {
+                        if (onAllowed is not null) await onAllowed(token);
                         strategy.CommitStarted = true;
                         await transaction.CommitAsync(deadline.CompletionToken);
                     }
@@ -253,14 +271,11 @@ public class DistributedRateLimitService(OrbitDbContext dbContext, TimeProvider 
             ? segmentStartUtc
             : now - policy.Window + segmentWindow;
 
-        if (!dbContext.Database.IsNpgsql())
-            await DeleteExpiredBucketsAsync(policyName, now, cancellationToken);
-
         var recentBuckets = await dbContext.DistributedRateLimitBuckets
             .Where(bucket =>
                 bucket.PolicyName == policyName &&
                 bucket.PartitionKey == partitionKey &&
-                bucket.WindowStartUtc >= activeWindowStartUtc)
+                bucket.WindowStartUtc >= activeWindowStartUtc && bucket.WindowEndsAtUtc > now)
             .OrderBy(bucket => bucket.WindowStartUtc)
             .ToListAsync(cancellationToken);
 
@@ -305,38 +320,6 @@ public class DistributedRateLimitService(OrbitDbContext dbContext, TimeProvider 
     {
         foreach (var entry in dbContext.ChangeTracker.Entries<DistributedRateLimitBucket>().ToList())
             entry.State = EntityState.Detached;
-    }
-
-    private async Task DeleteExpiredBucketsAsync(string policyName, DateTime nowAtUtc, CancellationToken cancellationToken)
-    {
-        if (dbContext.Database.IsNpgsql())
-        {
-            // https://www.postgresql.org/docs/17/sql-select.html#SQL-FOR-UPDATE-SHARE: skip rows owned by another acquisition during policy-wide cleanup.
-            await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
-                DELETE FROM "DistributedRateLimitBuckets" WHERE "Id" IN (
-                    SELECT "Id" FROM "DistributedRateLimitBuckets"
-                    WHERE "PolicyName" = {policyName} AND "WindowEndsAtUtc" <= {nowAtUtc}
-                    FOR UPDATE SKIP LOCKED
-                )
-                """, cancellationToken);
-            return;
-        }
-
-        var expiredBuckets = dbContext.DistributedRateLimitBuckets
-            .Where(bucket => bucket.PolicyName == policyName && bucket.WindowEndsAtUtc <= nowAtUtc);
-        if (dbContext.Database.ProviderName?.Contains("InMemory", StringComparison.OrdinalIgnoreCase) == true)
-        {
-            var expiredEntities = await expiredBuckets.ToListAsync(cancellationToken);
-            if (expiredEntities.Count > 0)
-            {
-                dbContext.DistributedRateLimitBuckets.RemoveRange(expiredEntities);
-                await dbContext.SaveChangesAsync(cancellationToken);
-            }
-        }
-        else
-        {
-            await expiredBuckets.ExecuteDeleteAsync(cancellationToken);
-        }
     }
 
     internal class AcquisitionExecutionStrategy(OrbitDbContext context)

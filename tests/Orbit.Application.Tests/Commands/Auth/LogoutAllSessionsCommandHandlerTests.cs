@@ -16,7 +16,10 @@ public class LogoutAllSessionsCommandHandlerTests
     {
         var keys = Substitute.For<IGenericRepository<ApiKey>>();
         keys.FindTrackedAsync(Arg.Any<System.Linq.Expressions.Expression<Func<ApiKey, bool>>>(), Arg.Any<CancellationToken>()).Returns(Array.Empty<ApiKey>());
-        _handler = new LogoutAllSessionsCommandHandler(_authSessionService, keys, Substitute.For<IUnitOfWork>());
+        var unitOfWork = Substitute.For<IUnitOfWork>();
+        unitOfWork.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task<Result>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.Arg<Func<CancellationToken, Task<Result>>>()(call.Arg<CancellationToken>()));
+        _handler = new LogoutAllSessionsCommandHandler(_authSessionService, keys, unitOfWork);
     }
 
     [Fact]

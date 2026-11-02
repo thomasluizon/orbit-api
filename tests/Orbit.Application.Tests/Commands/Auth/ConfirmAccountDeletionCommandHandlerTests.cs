@@ -33,6 +33,9 @@ public class ConfirmAccountDeletionCommandHandlerTests
 
     public ConfirmAccountDeletionCommandHandlerTests()
     {
+        _unitOfWork.ExecuteInTransactionAsync(
+            Arg.Any<Func<CancellationToken, Task<Orbit.Domain.Common.Result<DateTime>>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.Arg<Func<CancellationToken, Task<Orbit.Domain.Common.Result<DateTime>>>>()(call.Arg<CancellationToken>()));
         _sessions.RevokeAllSessionsAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Orbit.Domain.Common.Result.Success());
         _keys.FindTrackedAsync(Arg.Any<System.Linq.Expressions.Expression<Func<ApiKey, bool>>>(), Arg.Any<CancellationToken>()).Returns(Array.Empty<ApiKey>());
         _handler = new ConfirmAccountDeletionCommandHandler(

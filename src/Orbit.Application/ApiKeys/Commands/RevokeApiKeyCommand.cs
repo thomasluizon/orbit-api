@@ -55,7 +55,7 @@ public class RevokeApiKeyCommandHandler(
             }
         }
 
-        cache.Remove(ReferenceCacheKeys.ApiKeys(request.UserId));
+        await CacheInvalidationHelper.InvalidateReferenceCacheAsync(cache, request.UserId, ReferenceCacheKeys.ApiKeys(request.UserId));
 
         return Result.Success();
     }

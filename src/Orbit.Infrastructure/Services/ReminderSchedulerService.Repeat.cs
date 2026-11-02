@@ -67,8 +67,6 @@ public partial class ReminderSchedulerService
         var time = localNext.ToString(format, CultureInfo.GetCultureInfo(LocaleHelper.IsPortuguese(user.Language) ? "pt-BR" : "en-US"));
         var body = LocaleHelper.IsPortuguese(user.Language) ? $"Próximo às {time}" : $"Next at {time}";
         var notification = Notification.Create(user.Id, habit.Title, body, NotificationUrls.Home, habit.Id);
-        if (!await TryRecordReminderAsync(habit, reminder, notification, db, zone, sentAtUtc, ct))
-            return false;
         using var scope = scopeFactory.CreateScope();
         var tokens = scope.ServiceProvider.GetRequiredService<IReminderActionTokenService>();
         var reminderAtUtc = DateTime.SpecifyKind(actionReminder.ReminderAtUtc!.Value, DateTimeKind.Utc);
@@ -83,6 +81,9 @@ public partial class ReminderSchedulerService
             ["doneToken"] = token,
             ["doneLabel"] = LocaleHelper.IsPortuguese(user.Language) ? "Concluir" : "Done"
         };
+        reminder.PreparePush(user.Id, habit.Title, body, data, sentAtUtc);
+        if (!await TryRecordReminderAsync(habit, reminder, notification, db, zone, sentAtUtc, ct))
+            return false;
         pending.Add(new PendingReminderPush(user.Id, habit.Title, body, habit.Id, data));
         return true;
     }

@@ -153,7 +153,7 @@ public partial class BulkLogHabitsCommandHandler(
             }
         }, cancellationToken);
 
-        CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, today, preserveDailyNarrative: true);
+        await CacheInvalidationHelper.InvalidateUserAiCachesAsync(cache, request.UserId, today, preserveDailyNarrative: true);
 
         return Result.Success(new BulkLogResult(results, previousStreak, currentStreak));
     }

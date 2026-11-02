@@ -60,7 +60,14 @@ public partial class StripeCouponRewardService(
     public async Task CancelCouponAsync(string couponId, CancellationToken cancellationToken = default)
     {
         var couponService = new CouponService();
-        await couponService.DeleteAsync(couponId, cancellationToken: cancellationToken);
+        try
+        {
+            await couponService.DeleteAsync(couponId, cancellationToken: cancellationToken);
+        }
+        catch (StripeException ex) when (ex.HttpStatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            logger.LogDebug("Consumed coupon {CouponId} is already absent", couponId);
+        }
 
         if (logger.IsEnabled(LogLevel.Information))
             LogCouponCanceled(logger, couponId);

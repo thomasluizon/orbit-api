@@ -11,15 +11,16 @@ public class LogoutAllSessionsCommandHandler(IAuthSessionService authSessionServ
     IGenericRepository<ApiKey> apiKeyRepository, IUnitOfWork unitOfWork)
     : IRequestHandler<LogoutAllSessionsCommand, Result>
 {
-    public async Task<Result> Handle(LogoutAllSessionsCommand request, CancellationToken cancellationToken)
+    public Task<Result> Handle(LogoutAllSessionsCommand request, CancellationToken cancellationToken)
+        => unitOfWork.ExecuteInTransactionAsync(async token =>
     {
-        var result = await authSessionService.RevokeAllSessionsAsync(request.UserId, cancellationToken);
+        var result = await authSessionService.RevokeAllSessionsAsync(request.UserId, token);
         if (result.IsFailure)
             return result;
         foreach (var key in await apiKeyRepository.FindTrackedAsync(
-            key => key.UserId == request.UserId && key.OAuthFamilyId != null && !key.IsRevoked, cancellationToken))
+            key => key.UserId == request.UserId && key.OAuthFamilyId != null && !key.IsRevoked, token))
             key.Revoke();
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(token);
         return Result.Success();
-    }
+    }, cancellationToken);
 }

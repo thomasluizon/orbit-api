@@ -96,6 +96,11 @@ public static partial class ServiceCollectionExtensions
                     serviceProvider.GetRequiredService<AccountEventTransactionInterceptor>()));
 
         builder.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
+        var authCacheSettings = builder.Configuration.GetSection(AuthCacheSettings.SectionName).Get<AuthCacheSettings>() ?? new();
+        authCacheSettings.Validate();
+        builder.Services.Configure<AuthCacheSettings>(builder.Configuration.GetSection(AuthCacheSettings.SectionName));
+        builder.Services.AddSingleton<AuthValidationCache>();
+        builder.Services.AddScoped<IApiKeyAuthenticationStore, ApiKeyAuthenticationStore>();
         builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
         builder.Services.AddScoped<EventTicketService>();
         builder.Services.AddScoped<IAccountResetRepository, AccountResetRepository>();
@@ -384,6 +389,10 @@ public static partial class ServiceCollectionExtensions
             .ConfigureHttpClient(c => c.Timeout = httpTimeout);
 
         builder.Services.AddMemoryCache();
+        builder.Services.AddSingleton<Microsoft.Extensions.Caching.Memory.MemoryCache>(sp =>
+            new Microsoft.Extensions.Caching.Memory.MemoryCache(sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<Microsoft.Extensions.Caching.Memory.MemoryCacheOptions>>()));
+        builder.Services.AddScoped<Orbit.Application.Common.IUserCacheVersions, UserCacheVersions>();
+        builder.Services.AddScoped<Microsoft.Extensions.Caching.Memory.IMemoryCache, VersionedMemoryCache>();
         AddOrbitDistributedCache(builder);
 
         builder.Services.AddValidatorsFromAssemblyContaining<CreateHabitCommandValidator>();

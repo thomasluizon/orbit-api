@@ -28,6 +28,9 @@ public class AuthSessionServiceTests
 
     public AuthSessionServiceTests()
     {
+        _unitOfWork.ExecuteInTransactionAsync(
+            Arg.Any<Func<CancellationToken, Task<Result<Orbit.Domain.Models.SessionTokens>>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.Arg<Func<CancellationToken, Task<Result<Orbit.Domain.Models.SessionTokens>>>>()(call.Arg<CancellationToken>()));
         _service = new AuthSessionService(
             _sessionRepository,
             _refreshTokenRepository,

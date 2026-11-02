@@ -22,6 +22,9 @@ public class AuthSessionServiceTests
 
     public AuthSessionServiceTests()
     {
+        _unitOfWork.ExecuteInTransactionAsync(
+            Arg.Any<Func<CancellationToken, Task<Result<Orbit.Domain.Models.SessionTokens>>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.Arg<Func<CancellationToken, Task<Result<Orbit.Domain.Models.SessionTokens>>>>()(call.Arg<CancellationToken>()));
         _tokenService.GenerateToken(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<Guid>()).Returns("access-token");
 
         _sut = new AuthSessionService(
@@ -43,8 +46,9 @@ public class AuthSessionServiceTests
     [Fact]
     public async Task CreateSessionAsync_AddsPersistedSessionAndReturnsTokens()
     {
-        var userId = Guid.NewGuid();
-
+        var user = User.Create("Alex", "alex@test.com").Value;
+        var userId = user.Id;
+        _userRepository.GetByIdAsync(userId, Arg.Any<CancellationToken>()).Returns(user);
         var result = await _sut.CreateSessionAsync(userId, "alex@test.com", CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
@@ -62,7 +66,9 @@ public class AuthSessionServiceTests
             Arg.Do<UserSession>(session => captured = session),
             Arg.Any<CancellationToken>());
 
-        await _sut.CreateSessionAsync(Guid.NewGuid(), "alex@test.com", CancellationToken.None);
+        var user = User.Create("Alex", "alex@test.com").Value;
+        _userRepository.GetByIdAsync(user.Id, Arg.Any<CancellationToken>()).Returns(user);
+        await _sut.CreateSessionAsync(user.Id, "alex@test.com", CancellationToken.None);
 
         captured.Should().NotBeNull();
         captured!.ExpiresAtUtc.Should().NotBeNull();

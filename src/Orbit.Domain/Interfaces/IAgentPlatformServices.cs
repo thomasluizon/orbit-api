@@ -185,6 +185,10 @@ public interface IDistributedRateLimitService
         TimeSpan leaseDuration,
         CancellationToken cancellationToken = default);
 
+    Task<(DistributedRateLimitDecision RateLimit, DistributedRateLimitDecision? Lease)> TryAcquireWithLeaseAsync(
+        string policyName, string partitionKey, string leasePolicy, int permitLimit, TimeSpan leaseDuration,
+        CancellationToken cancellationToken = default);
+
     Task ReleaseLeaseAsync(
         string policyName,
         string partitionKey,

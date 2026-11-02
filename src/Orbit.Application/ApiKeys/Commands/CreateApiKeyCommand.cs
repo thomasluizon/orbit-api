@@ -69,7 +69,7 @@ public class CreateApiKeyCommandHandler(
         await apiKeyRepository.AddAsync(apiKey, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        cache.Remove(ReferenceCacheKeys.ApiKeys(request.UserId));
+        await CacheInvalidationHelper.InvalidateReferenceCacheAsync(cache, request.UserId, ReferenceCacheKeys.ApiKeys(request.UserId));
 
         return Result.Success(new CreateApiKeyResponse(
             apiKey.Id,

@@ -20,7 +20,8 @@ public class GetChecklistTemplatesQueryHandler(
 {
     public async Task<Result<IReadOnlyList<ChecklistTemplateResponse>>> Handle(GetChecklistTemplatesQuery request, CancellationToken cancellationToken)
     {
-        var cacheKey = ReferenceCacheKeys.ChecklistTemplates(request.UserId);
+        var cacheVersion = await CacheInvalidationHelper.VersionSuffixAsync(cache, request.UserId, cancellationToken);
+        var cacheKey = ReferenceCacheKeys.ChecklistTemplates(request.UserId) + cacheVersion;
         if (!request.BypassCache && cache.TryGetValue(cacheKey, out IReadOnlyList<ChecklistTemplateResponse>? cached) && cached is not null)
             return Result.Success(cached);
 

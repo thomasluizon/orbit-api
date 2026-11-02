@@ -23,6 +23,7 @@ public partial class HandlePlayNotificationCommandHandler(
     IPlayBillingService playBilling,
     IPlayReferralCouponConsumer referralCouponConsumer,
     IGenericRepository<ProcessedPlayNotification> processedNotificationRepository,
+    IGenericRepository<PendingCouponCancellation> couponCancellationRepository,
     IOptions<GooglePlaySettings> playSettings,
     ILogger<HandlePlayNotificationCommandHandler> logger) : IRequestHandler<HandlePlayNotificationCommand, Result>
 {
@@ -76,6 +77,9 @@ public partial class HandlePlayNotificationCommandHandler(
         var consumedCouponId = ApplySubscriptionState(
             user, state, notification.PurchaseToken, notification.NotificationType, grantsPro);
 
+        if (!string.IsNullOrEmpty(consumedCouponId))
+            await couponCancellationRepository.AddAsync(PendingCouponCancellation.Create(user.Id, consumedCouponId), cancellationToken);
+
         if (!string.IsNullOrEmpty(decoded.MessageId))
             await processedNotificationRepository.AddAsync(ProcessedPlayNotification.Create(decoded.MessageId), cancellationToken);
 
@@ -92,9 +96,6 @@ public partial class HandlePlayNotificationCommandHandler(
             }
             throw;
         }
-
-        if (!string.IsNullOrEmpty(consumedCouponId))
-            await referralCouponConsumer.CancelConsumedCouponAsync(user.Id, consumedCouponId, cancellationToken);
 
         LogNotificationProcessed(logger, notification.NotificationType, user.Id, grantsPro);
         return Result.Success();

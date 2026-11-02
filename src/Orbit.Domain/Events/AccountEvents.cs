@@ -23,6 +23,7 @@ public interface IAccountEventBus
     bool TrySubscribe(Guid userId, Guid sessionId, string? lastEventId, out AccountEventSubscription? subscription);
     void Publish(Guid userId, AccountEventPayload payload, bool resync = false);
     void CloseSession(Guid sessionId);
+    void CloseSessions(IReadOnlyCollection<Guid> sessionIds);
     void CloseAccount(Guid userId);
 }
 

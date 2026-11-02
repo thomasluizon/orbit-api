@@ -30,6 +30,7 @@ public class GetRescheduleSuggestionQueryHandler(
         GetRescheduleSuggestionQuery request,
         CancellationToken cancellationToken)
     {
+        var cacheVersion = await CacheInvalidationHelper.VersionSuffixAsync(cache, request.UserId, cancellationToken);
         var gateCheck = await payGate.CanUseSmartReschedule(request.UserId, cancellationToken);
         if (gateCheck.IsFailure)
             return gateCheck.PropagateError<RescheduleSuggestionResponse>();
@@ -64,7 +65,7 @@ public class GetRescheduleSuggestionQueryHandler(
                 dueDateResolution.Contains(habit.Id)))
             return Result.Failure<RescheduleSuggestionResponse>(ErrorMessages.HabitNotOverdue);
 
-        var cacheKey = CacheKey(request.HabitId, habit.NextDueDate, effectiveLanguage);
+        var cacheKey = CacheKey(request.HabitId, habit.NextDueDate, effectiveLanguage) + cacheVersion;
         if (cache.TryGetValue(cacheKey, out RescheduleSuggestionResponse? cached) && cached is not null)
             return Result.Success(cached with { FromCache = true });
 
