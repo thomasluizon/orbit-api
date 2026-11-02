@@ -63,20 +63,13 @@ public class GetDailySummaryQueryHandler(
             ? TimeOnly.FromDateTime(userNow)
             : (TimeOnly?)null;
 
-        var scheduleItems = new List<HabitScheduleItem>();
-        var page = 1;
-        int totalPages;
-        do
-        {
-            var schedule = await mediator.Send(new GetHabitScheduleQuery(request.UserId,
-                request.DateFrom, request.DateTo, IncludeOverdue: true, Page: page,
-                PageSize: AppConstants.MaxQueryPageSize), cancellationToken);
-            if (schedule.IsFailure)
-                return schedule.PropagateError<DailySummaryResponse>();
-            scheduleItems.AddRange(schedule.Value.Items);
-            totalPages = schedule.Value.TotalPages;
-            page++;
-        } while (page <= totalPages);
+        var habits = await habitRepository.FindAsync(
+            h => h.UserId == request.UserId && h.Schedule != HabitSchedule.General,
+            q => q.Include(h => h.Goals), cancellationToken);
+        var schedule = await mediator.Send(new GetDailySummaryScheduleQuery(request.UserId,
+            request.DateFrom, request.DateTo, habits), cancellationToken);
+        if (schedule.IsFailure) return schedule.PropagateError<DailySummaryResponse>();
+        var scheduleItems = schedule.Value.Items;
 
         if (!request.GenerateNarrative && request.DateFrom == request.DateTo)
         {
@@ -91,11 +84,6 @@ public class GetDailySummaryQueryHandler(
         var cacheKey = $"{cacheScopeKey}:{nextStepId?.ToString("N") ?? "none"}";
         var cached = ReadCachedSummary(request, cacheKey);
         var fromCache = cached is not null;
-
-        var habits = await habitRepository.FindAsync(
-            h => h.UserId == request.UserId && h.Schedule != HabitSchedule.General,
-            q => q.Include(h => h.Goals),
-            cancellationToken);
 
         var windows = BuildLogWindows(habits, request.DateFrom, request.DateTo, userToday, user.WeekStartDay);
         var logFacts = await summaryLogReader.ReadAsync(windows, cancellationToken);
@@ -252,11 +240,9 @@ public class GetDailySummaryQueryHandler(
             return new Dictionary<Guid, DateOnly>();
 
         var slipDates = await habitLogRepository.ProjectAsync(
-            l => badHabitIds.Contains(l.HabitId) && l.Value > 0 && l.Date <= userToday,
-            query => query.GroupBy(log => log.HabitId)
-                .Select(group => new HabitSummarySlipDate(group.Key, group.Max(log => log.Date))),
-            cancellationToken);
-
+            log => badHabitIds.Contains(log.HabitId) && log.Value > 0 && log.Date <= userToday,
+            query => query.Where(log => !query.Any(later => later.HabitId == log.HabitId && later.Date > log.Date))
+                .Select(log => new HabitSummarySlipDate(log.HabitId, log.Date)).Distinct(), cancellationToken);
         return slipDates.ToDictionary(row => row.HabitId, row => row.Date);
     }
 

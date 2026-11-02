@@ -24,9 +24,6 @@ public class AchievementProgressService(
     IUserDateService userDateService) : IAchievementProgressService
 {
     private const int InitialStreakWindowDays = 64;
-    private const int TimeOfDayWindowDays = 90;
-    private const int EarlyBeforeHour = 7;
-    private const int NightFromHour = 22;
 
     public async Task<AchievementProgressMetrics> LoadAsync(
         User user, IReadOnlySet<string> earnedIds, CancellationToken cancellationToken)
@@ -115,27 +112,7 @@ public class AchievementProgressService(
         IReadOnlyList<Guid> habitIds, IReadOnlySet<string> earnedIds,
         TimeZoneInfo userTimeZone, CancellationToken cancellationToken)
     {
-        if (habitIds.Count == 0)
-            return (0, 0);
-        if (earnedIds.Contains(AchievementDefinitions.EarlyBird) && earnedIds.Contains(AchievementDefinitions.NightOwl))
-            return (0, 0);
-
-        var createdAtUtcCutoff = DateTime.UtcNow.AddDays(-TimeOfDayWindowDays);
-        var logs = await habitLogRepository.ProjectAsync(
-            l => habitIds.Contains(l.HabitId) && l.CreatedAtUtc >= createdAtUtcCutoff,
-            query => query.Select(log => log.CreatedAtUtc), cancellationToken);
-
-        var early = 0;
-        var night = 0;
-        foreach (var createdAtUtc in logs)
-        {
-            var localHour = TimeZoneInfo.ConvertTimeFromUtc(createdAtUtc, userTimeZone).Hour;
-            if (localHour < EarlyBeforeHour)
-                early++;
-            else if (localHour >= NightFromHour)
-                night++;
-        }
-
-        return (early, night);
+        var counts = await TimeOfDayAchievementCounts.ReadAsync(habitLogRepository, habitIds, earnedIds, userTimeZone, cancellationToken);
+        return (counts.Early, counts.Night);
     }
 }

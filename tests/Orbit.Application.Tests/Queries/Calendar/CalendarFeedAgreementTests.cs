@@ -44,6 +44,11 @@ public class CalendarFeedAgreementTests
 
     public CalendarFeedAgreementTests()
     {
+        Orbit.Tests.Shared.RepositoryProjections.FromFind<Habit, ImportedCalendarHabit>(_habitRepo);
+        Orbit.Tests.Shared.RepositoryProjections.FromFind<Habit, CalendarHabitMatch>(_habitRepo);
+        Orbit.Tests.Shared.RepositoryProjections.FromFind<GoogleCalendarSyncSuggestion, PendingCalendarEvent>(_suggestionRepo);
+        Orbit.Tests.Shared.RepositoryProjections.FromFind<GoogleCalendarSyncSuggestion, CalendarSuggestionRead>(_suggestionRepo);
+        Orbit.Tests.Shared.RepositoryProjections.FromFind<GoogleCalendarSyncSuggestion, string>(_suggestionRepo);
         _payGate.CanManageCalendar(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(Result.Success()));
         _payGate.CanAccessCalendar(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
@@ -318,6 +323,7 @@ public class CalendarFeedAgreementTests
         afterImport.IsSuccess.Should().BeTrue();
         afterImport.Value.Should().BeEmpty("the reader must match the legacy habit before the writer links its event id");
 
+        _timeProvider.SetUtcNow(new DateTime(2027, 1, 4, 17, 0, 0, DateTimeKind.Utc));
         var reconciliation = await _autoSync.Handle(
             new RunCalendarAutoSyncCommand(user.Id, IsOpportunistic: true), CancellationToken.None);
         reconciliation.IsSuccess.Should().BeTrue();

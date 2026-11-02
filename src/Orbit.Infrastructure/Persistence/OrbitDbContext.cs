@@ -52,6 +52,7 @@ public class OrbitDbContext : DbContext
     public DbSet<Referral> Referrals => Set<Referral>();
     public DbSet<UserAchievement> UserAchievements => Set<UserAchievement>();
     public DbSet<StreakFreeze> StreakFreezes => Set<StreakFreeze>();
+    public DbSet<XpDailyTotal> XpDailyTotals => Set<XpDailyTotal>();
     public DbSet<XpAwardLog> XpAwardLogs => Set<XpAwardLog>();
     public DbSet<UserSession> UserSessions => Set<UserSession>();
     public DbSet<UserSessionRefreshToken> UserSessionRefreshTokens => Set<UserSessionRefreshToken>();
@@ -426,6 +427,14 @@ public class OrbitDbContext : DbContext
 
     private static void ConfigureNotificationEntity(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<XpDailyTotal>(entity =>
+        {
+            entity.HasKey(row => row.Id);
+            entity.HasIndex(row => new { row.UserId, row.Date }).IsUnique();
+            entity.HasOne<User>().WithMany().HasForeignKey(row => row.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+        modelBuilder.Entity<XpAwardLog>().HasIndex(row => new { row.UserId, row.Source, row.SourceId });
+
         modelBuilder.Entity<Notification>(entity =>
         {
             entity.Property(n => n.ReminderDate).HasColumnType("date");
@@ -783,6 +792,7 @@ public class OrbitDbContext : DbContext
 
             entity.Property(u => u.GoogleCalendarSelectedIds).HasColumnType("text");
 
+            entity.HasIndex(u => new { u.GoogleCalendarAutoSyncEnabled, u.GoogleCalendarLastAttemptAtUtc });
             entity.HasIndex(u => new { u.GoogleCalendarAutoSyncEnabled, u.GoogleCalendarLastSyncedAt })
                 .HasFilter("\"GoogleCalendarAutoSyncEnabled\" = TRUE");
 

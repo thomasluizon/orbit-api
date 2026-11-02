@@ -6,7 +6,7 @@ using Orbit.Infrastructure.Persistence;
 
 namespace Orbit.Infrastructure.Tests.Persistence;
 
-public class BoundedReadIndexMigrationTests
+public class BoundedReadIndexMigrationTests(Xunit.Abstractions.ITestOutputHelper output)
 {
     [Fact]
     public void Migration_AddsReminderAndUserIndexesWithoutChangingTheUsageUniqueKey()
@@ -22,4 +22,30 @@ public class BoundedReadIndexMigrationTests
             .UseNpgsql("Host=unused;Database=unused").Options);
         db.Database.HasPendingModelChanges().Should().BeFalse();
     }
+    [PostgresFact]
+    public Task ReminderIndex_IsUsableForTheSchedulerPredicate() => PostgresTestDatabase.WithDatabase(async db =>
+    {
+        var user = Orbit.Domain.Entities.User.Create("Index", "reminder-index@example.test").Value;
+        db.Users.Add(user);
+        for (var index = 0; index < 1000; index++)
+            db.Habits.Add(Orbit.Domain.Entities.Habit.Create(new(Orbit.Domain.Enums.HabitSchedule.Recurring,
+                user.Id, "Reminder", Orbit.Domain.Enums.FrequencyUnit.Day, 1, new DateOnly(2026, 6, 1), ReminderEnabled: index == 0)).Value);
+        await db.SaveChangesAsync();
+        await db.Database.ExecuteSqlRawAsync("DROP INDEX IF EXISTS \"IX_Habits_Reminder\"");
+        await db.Database.ExecuteSqlRawAsync("ANALYZE \"Habits\"");
+        const string sql = """
+            EXPLAIN SELECT "Id", "NextDueDate" FROM "Habits"
+            WHERE "ReminderEnabled" AND NOT "IsCompleted" AND "Schedule" = 2 AND "NextDueDate" <= DATE '2026-06-15'
+            """;
+        var before = string.Join("\n", await db.Database.SqlQueryRaw<string>(sql).ToListAsync());
+        before.Should().NotContain("IX_Habits_Reminder");
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE INDEX IF NOT EXISTS "IX_Habits_Reminder" ON "Habits" ("ReminderEnabled", "IsCompleted")
+            WHERE "ReminderEnabled" AND NOT "IsCompleted"
+            """);
+        var after = string.Join("\n", await db.Database.SqlQueryRaw<string>(sql).ToListAsync());
+        after.Should().Contain("IX_Habits_Reminder");
+        output.WriteLine("Before:\n" + before + "\nAfter:\n" + after);
+    });
+
 }

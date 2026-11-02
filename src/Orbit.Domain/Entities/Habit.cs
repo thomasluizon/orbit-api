@@ -117,6 +117,14 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
     public string? GoogleEventId { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
     public DateTime UpdatedAtUtc { get; set; } = DateTime.UtcNow;
+    public int? LongestRecordedStreak { get; private set; }
+
+    public void RecordLongestStreak(int streak)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(streak);
+        LongestRecordedStreak = Math.Max(LongestRecordedStreak ?? 0, streak);
+    }
+
     public long ReminderProbeVersion { get; private set; }
     public bool IsDeleted { get; private set; }
     public DateTime? DeletedAtUtc { get; private set; }

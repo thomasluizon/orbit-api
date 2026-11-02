@@ -188,7 +188,7 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
 
     [HttpPost("transcribe")]
     [ConcurrentChatLimit("transcription-in-flight")]
-    [RequestSizeLimit(AppConstants.MaxAudioBytes)]
+    [RequestSizeLimit(AppConstants.MaxAudioRequestBytes)]
     [RequestFormLimits(MultipartBodyLengthLimit = AppConstants.MaxAudioBytes)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]

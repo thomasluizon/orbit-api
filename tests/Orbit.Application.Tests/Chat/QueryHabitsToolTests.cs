@@ -801,7 +801,7 @@ public class QueryHabitsToolTests
                 .ToList();
         });
         _scheduleLogReader.ReadResolvedDueDateIdsAsync(
-            Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<CancellationToken>()).Returns(callInfo =>
+            Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<CancellationToken>(), Arg.Any<DateOnly?>()).Returns(callInfo =>
         {
             var ids = callInfo.ArgAt<IReadOnlyCollection<Guid>>(0);
             return (IReadOnlySet<Guid>)habits.Where(habit => ids.Contains(habit.Id)

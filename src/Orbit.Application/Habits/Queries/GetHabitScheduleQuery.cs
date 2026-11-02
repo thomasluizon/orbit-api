@@ -198,7 +198,7 @@ public class GetHabitScheduleQueryHandler(
 
         IEnumerable<Habit> topLevel = lookup[null]
             .OrderBy(h => h.Position ?? int.MaxValue)
-            .ThenBy(h => h.CreatedAtUtc);
+            .ThenBy(h => h.CreatedAtUtc).ThenBy(h => h.Id);
 
         topLevel = HabitScheduleFilters.ApplyCommonFilters(topLevel, request, lookup, weekStartDay);
 
@@ -224,33 +224,37 @@ public class GetHabitScheduleQueryHandler(
             pagedItems, page, request.PageSize, totalCount, totalPages));
     }
 
+    internal Task<Result<PaginatedResponse<HabitScheduleItem>>> ReadForSummaryAsync(GetDailySummaryScheduleQuery request, CancellationToken ct) =>
+        HandleScheduledHabits(new GetHabitScheduleQuery(request.UserId, request.DateFrom, request.DateTo,
+            IncludeOverdue: true, PageSize: int.MaxValue), ct, request.Habits);
+
     private async Task<Result<PaginatedResponse<HabitScheduleItem>>> HandleScheduledHabits(
-        GetHabitScheduleQuery request, CancellationToken cancellationToken)
+        GetHabitScheduleQuery request, CancellationToken cancellationToken, IReadOnlyList<Habit>? summaryHabits = null)
     {
         var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         var weekStartDay = await userDateService.GetUserWeekStartDayAsync(request.UserId, cancellationToken);
-        await HabitScheduleService.AdvanceStaleBadHabitDueDates(
-            habitRepository,
-            unitOfWork,
-            request.UserId,
-            today,
-            cancellationToken,
-            weekStartDay);
+        var staleProvided = summaryHabits?.Where(HabitScheduleService.StaleBadHabitsFor(request.UserId, today).Compile()).ToArray();
+        if (summaryHabits is null || staleProvided is { Length: > 0 })
+        {
+            await HabitScheduleService.AdvanceStaleBadHabitDueDates(habitRepository, unitOfWork,
+                request.UserId, today, cancellationToken, weekStartDay);
+            foreach (var habit in staleProvided ?? []) habit.CatchUpDueDate(today, weekStartDay);
+        }
 
-        var overdueLookbackDays = request.IncludeOverdue
-            ? AppConstants.MaxReadRangeDays
-            : AppConstants.DefaultOverdueWindowDays;
+        var overdueLookbackDays = AppConstants.DefaultOverdueWindowDays;
         var referenceDate = request.DateFrom ?? today;
         var logFrom = referenceDate.AddDays(-overdueLookbackDays);
         var logTo = request.DateTo ?? today;
-        var flexibleFrom = new DateOnly(referenceDate.Year, 1, 1);
-        if (flexibleFrom < logFrom)
-            logFrom = flexibleFrom;
-        var allHabits = await LoadScheduleHabits(
-            request.UserId,
+        var allHabits = summaryHabits ?? await LoadScheduleHabits(
+            request,
             includeDescription: !string.IsNullOrWhiteSpace(request.Search),
             includeTags: HabitScheduleFilters.NeedsTagsForFiltering(request),
             cancellationToken);
+        foreach (var flexible in allHabits.Where(habit => habit.Schedule == HabitSchedule.Flexible))
+        {
+            var flexibleFrom = HabitScheduleService.GetWindowStart(flexible, referenceDate, weekStartDay);
+            if (flexibleFrom < logFrom) logFrom = flexibleFrom;
+        }
         var candidateIds = allHabits.Select(habit => habit.Id).ToArray();
         var logDays = await scheduleLogReader.ReadDaysAsync(candidateIds, logFrom, logTo, cancellationToken);
         var logFacts = new HabitScheduleLogFacts(logDays);
@@ -271,7 +275,7 @@ public class GetHabitScheduleQueryHandler(
             if (oldDueDateIds.Length > 0)
             {
                 var olderResolutions = await scheduleLogReader.ReadResolvedDueDateIdsAsync(
-                    oldDueDateIds, cancellationToken);
+                    oldDueDateIds, cancellationToken, allHabits.Where(h => oldDueDateIds.Contains(h.Id)).Min(h => h.NextDueDate));
                 dueDateResolution.UnionWith(olderResolutions);
             }
         }
@@ -280,7 +284,7 @@ public class GetHabitScheduleQueryHandler(
 
         IEnumerable<Habit> topLevel = lookup[null]
             .OrderBy(h => h.Position ?? int.MaxValue)
-            .ThenBy(h => h.CreatedAtUtc);
+            .ThenBy(h => h.CreatedAtUtc).ThenBy(h => h.Id);
 
         topLevel = HabitScheduleFilters.ApplyCommonFilters(
             topLevel,
@@ -319,7 +323,8 @@ public class GetHabitScheduleQueryHandler(
 
         var totalCount = filtered.Count;
         var totalPages = (int)Math.Ceiling((double)totalCount / request.PageSize);
-        var page = Math.Max(1, Math.Min(request.Page, Math.Max(1, totalPages)));
+        var page = request.IncludeGeneral ? Math.Max(1, request.Page)
+            : Math.Max(1, Math.Min(request.Page, Math.Max(1, totalPages)));
 
         var scheduledDatesCache = new Dictionary<Guid, List<DateOnly>>();
         foreach (var item in filtered)
@@ -335,7 +340,8 @@ public class GetHabitScheduleQueryHandler(
             lookup,
             pageLogFrom,
             dateTo,
-            cancellationToken);
+            cancellationToken,
+            summaryHabits);
 
         var ctx = new ScheduleMapContext(
             pagedLookup,
@@ -359,12 +365,12 @@ public class GetHabitScheduleQueryHandler(
             .ToList();
 
         if (request.IncludeGeneral)
-            await AppendGeneralHabits(
+            totalPages = Math.Max(totalPages, await AppendGeneralHabits(
                 pagedItems,
                 request,
                 GetCompletionDate(request, today),
                 weekStartDay,
-                cancellationToken);
+                cancellationToken));
 
         return Result.Success(new PaginatedResponse<HabitScheduleItem>(
             pagedItems,
@@ -375,13 +381,21 @@ public class GetHabitScheduleQueryHandler(
     }
 
     private async Task<IReadOnlyList<Habit>> LoadScheduleHabits(
-        Guid userId,
+        GetHabitScheduleQuery request,
         bool includeDescription,
         bool includeTags,
         CancellationToken cancellationToken)
     {
+        var userId = request.UserId;
+        var hasFrequency = Enum.TryParse<FrequencyUnit>(request.FrequencyUnitFilter, true, out var frequency);
+        var oneTimeOnly = string.Equals(request.FrequencyUnitFilter, "none", StringComparison.OrdinalIgnoreCase);
+        var tags = request.TagIds?.ToArray() ?? [];
         var candidates = await habitRepository.ProjectAsync(
-            h => h.UserId == userId && h.Schedule != HabitSchedule.General,
+            h => h.UserId == userId && h.Schedule != HabitSchedule.General
+                && (h.ParentHabitId != null || ((!request.IsCompleted.HasValue || h.IsCompleted == request.IsCompleted.Value)
+                    && (!hasFrequency || h.FrequencyUnit == frequency)
+                    && (!oneTimeOnly || h.Schedule == HabitSchedule.OneTime)
+                    && (tags.Length == 0 || h.Children.Any() || h.Tags.Any(t => tags.Contains(t.Id))))),
             q => q.Select(h => new HabitScheduleCandidate(
                 new HabitScheduleSnapshot(
                     h.Id,
@@ -420,7 +434,8 @@ public class GetHabitScheduleQueryHandler(
         ILookup<Guid?, Habit> baseLookup,
         DateOnly logFrom,
         DateOnly logTo,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IReadOnlyList<Habit>? summaryHabits = null)
     {
         var ids = new HashSet<Guid>();
         foreach (var habit in pageTopLevelHabits)
@@ -429,7 +444,7 @@ public class GetHabitScheduleQueryHandler(
         if (ids.Count == 0)
             return Enumerable.Empty<Habit>().ToLookup(h => h.ParentHabitId);
 
-        var pageHabits = (await habitRepository.FindAsync(
+        var pageHabits = (summaryHabits ?? await habitRepository.FindAsync(
             h => ids.Contains(h.Id), cancellationToken))
             .Where(h => ids.Contains(h.Id))
             .ToArray();
@@ -490,20 +505,29 @@ public class GetHabitScheduleQueryHandler(
             allPagedItems, allPage, request.PageSize, allTotalCount, allTotalPages));
     }
 
-    private async Task AppendGeneralHabits(
+    private async Task<int> AppendGeneralHabits(
         List<HabitScheduleItem> pagedItems,
         GetHabitScheduleQuery request,
         DateOnly completionDate,
         int weekStartDay,
         CancellationToken cancellationToken)
     {
-        var generalHabits = await habitRepository.FindAsync(
+        var candidates = await habitRepository.ProjectAsync(
             h => h.UserId == request.UserId && h.Schedule == HabitSchedule.General,
-            q => q.Include(h => h.Tags)
-                  .Include(h => h.Logs.Where(l => l.Date == completionDate))
-                  .Include(h => h.Goals),
-            cancellationToken);
-
+            q => q.Select(h => new GeneralCandidate(h.Id, h.ParentHabitId, h.Position, h.CreatedAtUtc)), cancellationToken);
+        var children = candidates.ToLookup(h => h.ParentId);
+        var roots = children[null].OrderBy(h => h.Position ?? int.MaxValue).ThenBy(h => h.CreatedAtUtc).ThenBy(h => h.Id).ToArray();
+        var ids = new HashSet<Guid>();
+        void AddSubtree(Guid id)
+        {
+            if (!ids.Add(id)) return;
+            foreach (var child in children[id]) AddSubtree(child.Id);
+        }
+        foreach (var root in roots.Skip((Math.Max(1, request.Page) - 1) * request.PageSize).Take(request.PageSize))
+            AddSubtree(root.Id);
+        var generalHabits = ids.Count == 0 ? [] : await habitRepository.FindAsync(
+            h => h.UserId == request.UserId && ids.Contains(h.Id),
+            q => q.Include(h => h.Tags).Include(h => h.Logs.Where(l => l.Date == completionDate)).Include(h => h.Goals), cancellationToken);
         var generalLookup = generalHabits.ToLookup(h => h.ParentHabitId);
         var generalTopLevel = generalLookup[null]
             .OrderBy(h => h.Position ?? int.MaxValue)
@@ -522,7 +546,10 @@ public class GetHabitScheduleQueryHandler(
             .ToList();
 
         pagedItems.AddRange(generalItems);
+        return (int)Math.Ceiling((double)roots.Length / request.PageSize);
     }
+
+    public sealed record GeneralCandidate(Guid Id, Guid? ParentId, int? Position, DateTime CreatedAtUtc);
 
     private static DateOnly GetCompletionDate(GetHabitScheduleQuery request, DateOnly today) =>
         request.DateFrom ?? request.DateTo ?? today;
@@ -532,7 +559,15 @@ public class GetHabitScheduleQueryHandler(
     {
         var offset = (page - 1) * request.PageSize;
         if (string.IsNullOrWhiteSpace(request.Search))
-            return habits.Skip(offset).Take(request.PageSize).ToList();
+        {
+            if (request.PageSize == int.MaxValue) return habits;
+            var ids = habits.Select(habit => habit.Id).ToArray();
+            var pageIds = await habitRepository.ProjectAsync(h => h.UserId == request.UserId && ids.Contains(h.Id),
+                q => q.OrderBy(h => h.Position ?? int.MaxValue).ThenBy(h => h.CreatedAtUtc).ThenBy(h => h.Id)
+                    .Skip(offset).Take(request.PageSize).Select(h => h.Id), cancellationToken);
+            var pageCandidates = habits.ToDictionary(habit => habit.Id);
+            return pageIds.Select(id => pageCandidates[id]).ToArray();
+        }
         if (habits.Count == 0)
             return [];
 

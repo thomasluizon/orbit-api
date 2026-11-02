@@ -254,7 +254,7 @@ public sealed partial class DistributedRateLimitFilter(
 }
 
 [AttributeUsage(AttributeTargets.Method)]
-public sealed class ConcurrentChatLimitAttribute(string policyName = "chat-in-flight") : Attribute, IFilterFactory
+public sealed class ConcurrentChatLimitAttribute(string policyName = ConcurrentChatLimitFilter.PolicyName) : Attribute, IFilterFactory
 {
     public bool IsReusable => false;
 
@@ -266,7 +266,7 @@ public sealed class ConcurrentChatLimitAttribute(string policyName = "chat-in-fl
 
 public sealed partial class ConcurrentChatLimitFilter(
     IDistributedRateLimitService distributedRateLimitService,
-    ILogger<ConcurrentChatLimitFilter> logger, string policyName = "chat-in-flight") : IAsyncActionFilter
+    ILogger<ConcurrentChatLimitFilter> logger, string policyName = ConcurrentChatLimitFilter.PolicyName) : IAsyncActionFilter
 {
     internal const string PolicyName = "chat-in-flight";
     private static readonly TimeSpan LeaseDuration = TimeSpan.FromMinutes(5);

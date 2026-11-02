@@ -19,7 +19,13 @@ public class GetNotificationsQueryHandlerTests
 
     public GetNotificationsQueryHandlerTests()
     {
-        _handler = new GetNotificationsQueryHandler(_notificationRepo);
+        var aggregate = Substitute.For<INotificationInboxAggregateReader>();
+        aggregate.ReadAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(async call =>
+        {
+            var count = await _notificationRepo.CountAsync(_ => true, call.Arg<CancellationToken>());
+            return new NotificationInboxAggregate(count, count, "revision");
+        });
+        _handler = new GetNotificationsQueryHandler(_notificationRepo, aggregate);
     }
 
     [Fact]
@@ -162,7 +168,7 @@ public class GetNotificationsQueryHandlerTests
             .ToList();
         context.Notifications.AddRange(notifications);
         await context.SaveChangesAsync();
-        var handler = new GetNotificationsQueryHandler(new GenericRepository<Notification>(context));
+        var handler = new GetNotificationsQueryHandler(new GenericRepository<Notification>(context), new NotificationInboxAggregateReader(context));
 
         var result = await handler.Handle(new GetNotificationsQuery(UserId), CancellationToken.None);
 
@@ -191,7 +197,7 @@ public class GetNotificationsQueryHandlerTests
         context.Notifications.AddRange(active.Concat(retired).Append(deleted)
             .Append(Notification.Create(Guid.NewGuid(), "Other account", "Body", "/chat")));
         await context.SaveChangesAsync();
-        var handler = new GetNotificationsQueryHandler(new GenericRepository<Notification>(context));
+        var handler = new GetNotificationsQueryHandler(new GenericRepository<Notification>(context), new NotificationInboxAggregateReader(context));
 
         var result = await handler.Handle(new GetNotificationsQuery(UserId), CancellationToken.None);
 
@@ -217,7 +223,7 @@ public class GetNotificationsQueryHandlerTests
             context.Entry(notifications[index]).Property(n => n.CreatedAtUtc).CurrentValue = createdAtUtc.AddMinutes(-index);
         }
         await context.SaveChangesAsync();
-        var handler = new GetNotificationsQueryHandler(new GenericRepository<Notification>(context));
+        var handler = new GetNotificationsQueryHandler(new GenericRepository<Notification>(context), new NotificationInboxAggregateReader(context));
 
         var result = await handler.Handle(new GetNotificationsQuery(UserId, Offset: 1, Limit: 2), CancellationToken.None);
 
@@ -242,7 +248,7 @@ public class GetNotificationsQueryHandlerTests
         var notification = Notification.Create(UserId, "Active", "Body", url);
         context.Notifications.Add(notification);
         await context.SaveChangesAsync();
-        var handler = new GetNotificationsQueryHandler(new GenericRepository<Notification>(context));
+        var handler = new GetNotificationsQueryHandler(new GenericRepository<Notification>(context), new NotificationInboxAggregateReader(context));
 
         var result = await handler.Handle(new GetNotificationsQuery(UserId), CancellationToken.None);
 
@@ -280,7 +286,7 @@ public class GetNotificationsQueryHandlerTests
 
         await _handler.Handle(new GetNotificationsQuery(UserId, Offset: 1, Limit: 2), CancellationToken.None);
 
-        translatedQueries.Should().HaveCount(3);
+        translatedQueries.Should().HaveCount(2);
         translatedQueries.Should().OnlyContain(sql => !string.IsNullOrWhiteSpace(sql));
     }
 

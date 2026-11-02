@@ -20,6 +20,8 @@ public class BulkHabitRoundTripTests
     [InlineData("log", 2)]
     [InlineData("skip", 1)]
     [InlineData("update", 1)]
+    [InlineData("delete", 1)]
+    [InlineData("move", 1)]
     public async Task Batch_SelectCountIsConstantAndWritesMatchTheMutatedRows(string operation, int writesPerHabit)
     {
         var small = await Run(operation, 2);
@@ -38,6 +40,9 @@ public class BulkHabitRoundTripTests
         var habits = Enumerable.Range(0, count).Select(index => Habit.Create(new HabitCreateParams(
             HabitSchedule.Recurring, user.Id, $"Habit {index}", FrequencyUnit.Day, 1, Today)).Value).ToArray();
         db.Habits.AddRange(habits);
+        var parent = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, user.Id, "Parent",
+            FrequencyUnit.Day, 1, Today)).Value;
+        db.Habits.Add(parent);
         await db.SaveChangesAsync();
         db.ChangeTracker.Clear();
         var repository = new GenericRepository<Habit>(db);
@@ -61,6 +66,21 @@ public class BulkHabitRoundTripTests
         {
             var result = await new BulkSkipHabitsCommandHandler(repository, logs, dates, unit, cache, notifications)
                 .Handle(new(user.Id, habits.Select(h => new BulkSkipItem(h.Id)).ToList()), default);
+            result.Value.Results.Should().OnlyContain(item => item.Status == BulkItemStatus.Success);
+        }
+        else if (operation == "delete")
+        {
+            var result = await new BulkDeleteHabitsCommandHandler(repository, Substitute.For<IUserStreakService>(),
+                unit, dates, cache).Handle(new(user.Id, habits.Select(h => h.Id).ToList()), default);
+            result.Value.Results.Should().OnlyContain(item => item.Status == BulkItemStatus.Success);
+        }
+        else if (operation == "move")
+        {
+            var configs = Substitute.For<IAppConfigService>();
+            configs.GetAsync(Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(5);
+            var result = await new BulkMoveHabitParentCommandHandler(repository, configs,
+                Substitute.For<IUserStreakService>(), unit, dates, cache)
+                .Handle(new(user.Id, habits.Select(h => h.Id).ToList(), parent.Id), default);
             result.Value.Results.Should().OnlyContain(item => item.Status == BulkItemStatus.Success);
         }
         else

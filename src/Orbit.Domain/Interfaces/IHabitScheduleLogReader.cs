@@ -17,5 +17,5 @@ public interface IHabitScheduleLogReader
 
     Task<IReadOnlySet<Guid>> ReadResolvedDueDateIdsAsync(
         IReadOnlyCollection<Guid> habitIds,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default, DateOnly? earliestDueDate = null);
 }

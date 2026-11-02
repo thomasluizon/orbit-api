@@ -46,7 +46,7 @@ public class FindAsyncPredicateBeforeTransformTests : IDisposable
     }
 
     private GetNotificationsQueryHandler Handler() =>
-        new(new GenericRepository<Notification>(_dbContext));
+        new(new GenericRepository<Notification>(_dbContext), new NotificationInboxAggregateReader(_dbContext));
 
     private async Task PersistAsync()
     {

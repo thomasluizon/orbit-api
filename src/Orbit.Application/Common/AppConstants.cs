@@ -67,6 +67,7 @@ public static class AppConstants
     public const int MaxAiToolPayloadJsonLength = 12_000;
     public const int MaxConcurrentChatRequestsPerUser = 1;
     public const long MaxAudioBytes = 26_214_400;
+    public const long MaxAudioRequestBytes = MaxAudioBytes + 64 * 1024;
     public const int MaxAiToolResultTextLength = 12_000;
     public const int MaxCalendarRangeDays = Orbit.Domain.Models.HabitCalendarWindow.MaxCalendarWindowDays;
     public const int MaxSelectedCalendars = 50;

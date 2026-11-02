@@ -84,9 +84,25 @@ internal sealed class CountingDbCommandInterceptor : DbCommandInterceptor
                 .ToArray());
         _commands.Enqueue(captured);
         _captured[command] = captured;
-        if (command.CommandText.TrimStart().StartsWith("SELECT", StringComparison.OrdinalIgnoreCase))
+        if (IsSelect(command.CommandText))
             Interlocked.Increment(ref _selectCommandCount);
     }
+    private static bool IsSelect(string sql)
+    {
+        var depth = 0;
+        foreach (System.Text.RegularExpressions.Match match in System.Text.RegularExpressions.Regex.Matches(sql,
+            """--[^\r\n]*|/\*[\s\S]*?\*/|'(?:''|[^'])*'|"(?:""|[^"])*"|[()]|[A-Za-z_]+"""))
+        {
+            var token = match.Value;
+            if (token == "(") { depth++; continue; }
+            if (token == ")") { depth--; continue; }
+            if (depth != 0 || !char.IsAsciiLetter(token[0])) continue;
+            if (token.Equals("SELECT", StringComparison.OrdinalIgnoreCase)) return true;
+            if (new[] { "INSERT", "UPDATE", "DELETE", "MERGE", "CREATE", "DROP", "ALTER" }.Contains(token, StringComparer.OrdinalIgnoreCase)) return false;
+        }
+        return false;
+    }
+
 }
 
 internal sealed class CapturedDbCommand(string sql, IReadOnlyList<string> parameters)

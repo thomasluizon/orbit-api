@@ -54,6 +54,8 @@ public partial class User : Entity
     public bool HasImportedCalendar { get; private set; } = false;
     public bool HasSeenImportPrompt { get; private set; } = false;
     public string? GoogleAccessToken { get; private set; }
+    public DateTime? GoogleAccessTokenExpiresAtUtc { get; private set; }
+    public DateTime? GoogleCalendarLastAttemptAtUtc { get; private set; }
     public string? GoogleRefreshToken { get; private set; }
     public bool GoogleCalendarAutoSyncEnabled { get; private set; }
     public string? GoogleCalendarSelectedIds { get; private set; }
@@ -488,10 +490,13 @@ public partial class User : Entity
         return AiMessagesWeekStart >= weekStart ? AiMessagesUsedThisWeek : 0;
     }
 
-    public void SetGoogleTokens(string accessToken, string? refreshToken)
+    public void SetGoogleTokens(string accessToken, string? refreshToken, DateTime? expiresAtUtc = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(accessToken);
+        if (expiresAtUtc is { Kind: not DateTimeKind.Utc })
+            throw new ArgumentException("Token expiry must be a UTC instant.", nameof(expiresAtUtc));
         GoogleAccessToken = accessToken;
+        GoogleAccessTokenExpiresAtUtc = expiresAtUtc;
         if (refreshToken is not null)
             GoogleRefreshToken = refreshToken;
 
@@ -532,7 +537,14 @@ public partial class User : Entity
         GoogleCalendarAutoSyncStatus = Enums.GoogleCalendarAutoSyncStatus.ReconnectRequired;
         GoogleCalendarLastSyncError = error;
         GoogleAccessToken = null;
+        GoogleAccessTokenExpiresAtUtc = null;
         GoogleRefreshToken = null;
+    }
+
+    public void MarkCalendarSyncAttempt(DateTime attemptedAtUtc)
+    {
+        if (attemptedAtUtc.Kind != DateTimeKind.Utc) throw new ArgumentException("A UTC attempt timestamp is required.", nameof(attemptedAtUtc));
+        GoogleCalendarLastAttemptAtUtc = attemptedAtUtc;
     }
 
     public void MarkCalendarSyncSuccess(DateTime utcNow)
@@ -560,6 +572,7 @@ public partial class User : Entity
         DeactivatedAt = DateTime.UtcNow;
         ScheduledDeletionAt = scheduledDeletion;
         GoogleAccessToken = null;
+        GoogleAccessTokenExpiresAtUtc = null;
         GoogleRefreshToken = null;
         GoogleCalendarAutoSyncEnabled = false;
     }
@@ -775,11 +788,13 @@ public partial class User : Entity
         PreGapLastActiveDate = null;
         HasImportedCalendar = false;
         GoogleAccessToken = null;
+        GoogleAccessTokenExpiresAtUtc = null;
         GoogleRefreshToken = null;
         GoogleCalendarAutoSyncEnabled = false;
         GoogleCalendarSelectedIds = null;
         GoogleCalendarAutoSyncStatus = null;
         GoogleCalendarLastSyncedAt = null;
+        GoogleCalendarLastAttemptAtUtc = null;
         GoogleCalendarLastSyncError = null;
         GoogleCalendarSyncReconciledAt = null;
     }

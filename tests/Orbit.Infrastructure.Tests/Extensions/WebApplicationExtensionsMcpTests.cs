@@ -26,9 +26,9 @@ public class WebApplicationExtensionsMcpTests
     [InlineData("{\"method\":\"ping\"}")]
     [InlineData("{\"method\":\"notifications/cancelled\"}")]
     [InlineData("{\"method\":\"notifications/initialized\"}")]
-    public void IsMcpLifecycleMethod_RecognizesHandshakeAndNotifications(string body)
+    public async Task IsMcpLifecycleMethod_RecognizesHandshakeAndNotifications(string body)
     {
-        using var document = WebApplicationExtensions.TryParseMcpBody(body);
+        using var document = await ReadMcpBodyAsync(body);
 
         WebApplicationExtensions.IsMcpLifecycleMethod(document?.RootElement).Should().BeTrue();
     }
@@ -37,9 +37,9 @@ public class WebApplicationExtensionsMcpTests
     [InlineData("{\"method\":\"tools/call\"}")]
     [InlineData("{\"method\":\"tools/list\"}")]
     [InlineData("{\"id\":1}")]
-    public void IsMcpLifecycleMethod_DoesNotRecognizeOtherMethods(string body)
+    public async Task IsMcpLifecycleMethod_DoesNotRecognizeOtherMethods(string body)
     {
-        using var document = WebApplicationExtensions.TryParseMcpBody(body);
+        using var document = await ReadMcpBodyAsync(body);
 
         WebApplicationExtensions.IsMcpLifecycleMethod(document?.RootElement).Should().BeFalse();
     }
@@ -50,9 +50,9 @@ public class WebApplicationExtensionsMcpTests
     [InlineData("[{\"method\":\"initialize\"}]")]
     [InlineData("true")]
     [InlineData("null")]
-    public void IsMcpLifecycleMethod_NonObjectBody_ReturnsFalseWithoutThrowing(string body)
+    public async Task IsMcpLifecycleMethod_NonObjectBody_ReturnsFalseWithoutThrowing(string body)
     {
-        using var document = WebApplicationExtensions.TryParseMcpBody(body);
+        using var document = await ReadMcpBodyAsync(body);
 
         var act = () => WebApplicationExtensions.IsMcpLifecycleMethod(document?.RootElement);
 
@@ -61,9 +61,9 @@ public class WebApplicationExtensionsMcpTests
     }
 
     [Fact]
-    public void IsMcpLifecycleMethod_MalformedJson_ReturnsFalse()
+    public async Task IsMcpLifecycleMethod_MalformedJson_ReturnsFalse()
     {
-        using var document = WebApplicationExtensions.TryParseMcpBody("{ not valid json");
+        using var document = await ReadMcpBodyAsync("{ not valid json");
 
         document.Should().BeNull();
         WebApplicationExtensions.IsMcpLifecycleMethod(document?.RootElement).Should().BeFalse();
@@ -144,9 +144,9 @@ public class WebApplicationExtensionsMcpTests
     [InlineData("{\"method\":\"tools/call\",\"params\":{}}")]
     [InlineData("123")]
     [InlineData("[1,2,3]")]
-    public void TryGetMcpToolCall_NonToolCallOrNonObject_ReturnsFalseWithoutThrowing(string body)
+    public async Task TryGetMcpToolCall_NonToolCallOrNonObject_ReturnsFalseWithoutThrowing(string body)
     {
-        using var document = WebApplicationExtensions.TryParseMcpBody(body);
+        using var document = await ReadMcpBodyAsync(body);
 
         var act = () => WebApplicationExtensions.TryGetMcpToolCall(
             document?.RootElement, out _, out _, out _, out _);
@@ -156,9 +156,9 @@ public class WebApplicationExtensionsMcpTests
     }
 
     [Fact]
-    public void TryGetMcpToolCall_MalformedJson_ReturnsFalse()
+    public async Task TryGetMcpToolCall_MalformedJson_ReturnsFalse()
     {
-        using var document = WebApplicationExtensions.TryParseMcpBody("}{");
+        using var document = await ReadMcpBodyAsync("}{");
 
         document.Should().BeNull();
         WebApplicationExtensions.TryGetMcpToolCall(
@@ -599,4 +599,14 @@ public class WebApplicationExtensionsMcpTests
         return JsonDocument.Parse(
             JsonSerializer.Serialize<JsonRpcMessage>(request, McpJsonUtilities.DefaultOptions));
     }
+    private static async Task<JsonDocument?> ReadMcpBodyAsync(string body)
+    {
+        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(body));
+        var context = new DefaultHttpContext();
+        context.Request.Body = stream;
+        var document = await WebApplicationExtensions.ReadBufferedMcpBodyAsync(context);
+        stream.Position.Should().Be(0);
+        return document;
+    }
+
 }

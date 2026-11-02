@@ -171,6 +171,13 @@ public class GamificationServiceTests
 
     private void SetupUserHabits(params Habit[] habits)
     {
+        _habitRepo.FindTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => habits.Where(call.Arg<Expression<Func<Habit, bool>>>().Compile()).ToArray());
+        _habitLogRepo.ProjectAsync(Arg.Any<Expression<Func<HabitLog, bool>>>(),
+            Arg.Any<Func<IQueryable<HabitLog>, IQueryable<CompletionDay>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.Arg<Func<IQueryable<HabitLog>, IQueryable<CompletionDay>>>()(
+                habits.SelectMany(h => h.Logs).Where(call.Arg<Expression<Func<HabitLog, bool>>>().Compile()).AsQueryable()).ToArray());
+
         _habitRepo.ProjectAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Guid>>>(),
@@ -261,7 +268,7 @@ public class GamificationServiceTests
             : [AchievementDefinitions.Comeback]);
         user.TotalXp.Should().Be(extraHabitCount == 0 ? 106 : 81);
         user.Level.Should().Be(extraHabitCount == 0 ? 2 : 1);
-        await _habitRepo.Received(2).ProjectAsync(
+        await _habitRepo.Received(1).ProjectAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<HabitScheduleSnapshot>>>(),
             Arg.Any<CancellationToken>());
@@ -271,9 +278,9 @@ public class GamificationServiceTests
     {
         _habitLogRepo.ProjectAsync(
             Arg.Any<Expression<Func<HabitLog, bool>>>(),
-            Arg.Any<Func<IQueryable<HabitLog>, IQueryable<DateTime>>>(),
+            Arg.Any<Func<IQueryable<HabitLog>, IQueryable<CompletionMinute>>>(),
             Arg.Any<CancellationToken>())
-            .Returns(call => call.ArgAt<Func<IQueryable<HabitLog>, IQueryable<DateTime>>>(1)(logs.AsQueryable()).ToList());
+            .Returns(call => call.ArgAt<Func<IQueryable<HabitLog>, IQueryable<CompletionMinute>>>(1)(logs.AsQueryable()).ToList());
     }
 
     private void SetupHabitCount(int count)
@@ -909,7 +916,7 @@ public class GamificationServiceTests
             Arg.Any<Expression<Func<HabitLog, bool>>>(),
             Arg.Any<Func<IQueryable<HabitLog>, IQueryable<LoggedHabitLog>>>(),
             Arg.Any<CancellationToken>());
-        await _habitRepo.Received(2).ProjectAsync(
+        await _habitRepo.Received(1).ProjectAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<HabitScheduleSnapshot>>>(),
             Arg.Any<CancellationToken>());

@@ -45,6 +45,8 @@ public static partial class WebApplicationExtensions
                 .Options;
             await using var migrationDb = new OrbitDbContext(migrationOptions);
             await migrationDb.Database.MigrateAsync();
+            await using var backfillScope = app.Services.CreateAsyncScope();
+            await backfillScope.ServiceProvider.GetRequiredService<BoundedReadStateBackfill>().RunAsync();
         });
 
         app.UseMiddleware<Orbit.Api.Middleware.ShutdownDrainMiddleware>();
@@ -287,18 +289,6 @@ public static partial class WebApplicationExtensions
             || (string.Equals(toolName, AgentOperationMcpTool, StringComparison.OrdinalIgnoreCase)
                 && operationId is not null
                 && AiBearingAgentOperations.Contains(operationId));
-    }
-
-    internal static JsonDocument? TryParseMcpBody(string body)
-    {
-        try
-        {
-            return JsonDocument.Parse(body);
-        }
-        catch (JsonException)
-        {
-            return null;
-        }
     }
 
     internal static async Task<JsonDocument?> ReadBufferedMcpBodyAsync(HttpContext context)

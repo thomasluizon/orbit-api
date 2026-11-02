@@ -53,12 +53,14 @@ public sealed partial class AiIntentService(
         if (!string.IsNullOrWhiteSpace(request.DynamicContext))
             messages.Add(ResponseItem.CreateSystemMessageItem(request.DynamicContext));
 
-        if (imageData != null && !string.IsNullOrWhiteSpace(imageMimeType))
+        var currentImage = imageData != null && !string.IsNullOrWhiteSpace(imageMimeType)
+            ? CurrentTurnImage.Create(imageData, imageMimeType) : null;
+        if (currentImage is not null)
         {
             messages.Add(ResponseItem.CreateUserMessageItem(
                 [ResponseContentPart.CreateInputTextPart(userMessage),
                 ResponseContentPart.CreateInputImagePart(
-                    new BinaryData(imageData, imageMimeType))]));
+                    new Uri(currentImage.Marker))]));
         }
         else
         {
@@ -72,7 +74,7 @@ public sealed partial class AiIntentService(
         foreach (var tool in tools.OrderBy(pair => pair.Key, StringComparer.Ordinal))
             options.Tools.Add(tool.Value);
         return await CallWithToolsAsync(messages, options, usageUserId, streamSink, cancellationToken,
-            telemetry: request.Telemetry, purpose: request.Purpose);
+            telemetry: request.Telemetry, purpose: request.Purpose, currentImage: currentImage);
     }
 
     private static void AppendStoredHistory(List<ResponseItem> messages, IReadOnlyList<ChatHistoryMessage> history)
@@ -227,7 +229,7 @@ public sealed partial class AiIntentService(
         Guid? userId,
         Func<AiStreamEvent, Task>? streamSink,
         CancellationToken cancellationToken,
-        AiTurnTelemetry? telemetry = null, string purpose = "chat")
+        AiTurnTelemetry? telemetry = null, string purpose = "chat", CurrentTurnImage? currentImage = null)
     {
         using var completionCancellation = aiClient.CreateCompletionCancellation(cancellationToken, streaming: streamSink is not null);
         cancellationToken = completionCancellation.Token;
@@ -239,7 +241,7 @@ public sealed partial class AiIntentService(
                 LogCallingAiWithTools(logger);
             SetInputItems(options, messages);
             var round = await aiClient.RunAsync(userId, client => CompleteObservedRoundAsync(client,
-                messages, options, userId, telemetry, streamSink, stopwatch, cancellationToken, purpose),
+                messages, options, userId, telemetry, streamSink, stopwatch, cancellationToken, purpose, currentImage),
                 cancellationToken, ModelReaderWriter.Write(options).ToString());
             if (round.RetryableIncomplete)
             {
@@ -247,7 +249,7 @@ public sealed partial class AiIntentService(
                     LogRetryIncomplete(logger, round.ResponseId, round.InputTokenCount, round.IncompleteReason);
                 stopwatch.Restart();
                 var retry = await aiClient.RunAsync(userId, client => CompleteObservedRoundAsync(client,
-                    messages, options, userId, telemetry, streamSink, stopwatch, cancellationToken, purpose),
+                    messages, options, userId, telemetry, streamSink, stopwatch, cancellationToken, purpose, currentImage),
                     cancellationToken, ModelReaderWriter.Write(options).ToString());
                 round = retry with
                 {
@@ -339,14 +341,14 @@ public sealed partial class AiIntentService(
         AiCompletionClient client, List<ResponseItem> messages, CreateResponseOptions options, Guid? userId,
         AiTurnTelemetry telemetry,
         Func<AiStreamEvent, Task>? streamSink, System.Diagnostics.Stopwatch stopwatch,
-        CancellationToken cancellationToken, string purpose)
+        CancellationToken cancellationToken, string purpose, CurrentTurnImage? currentImage)
     {
         var observation = new ModelCallObservation();
         try
         {
             return streamSink is null
-                ? await CompleteBufferedRoundAsync(client, messages, options, observation, cancellationToken, purpose)
-                : await CompleteStreamingRoundAsync(client, messages, options, observation, streamSink, stopwatch, cancellationToken, purpose);
+                ? await CompleteBufferedRoundAsync(client, messages, options, observation, cancellationToken, purpose, currentImage)
+                : await CompleteStreamingRoundAsync(client, messages, options, observation, streamSink, stopwatch, cancellationToken, purpose, currentImage);
         }
         finally
         {
@@ -394,13 +396,15 @@ public sealed partial class AiIntentService(
         List<ResponseItem> messages,
         CreateResponseOptions options,
         ModelCallObservation observation,
-        CancellationToken cancellationToken, string purpose)
+        CancellationToken cancellationToken, string purpose, CurrentTurnImage? currentImage)
     {
         SetInputItems(options, messages);
         options.StreamingEnabled = false;
-        var completion = await client.GetResponsesClient().CreateResponseAsync(options, cancellationToken);
-        observation.Response = completion.Value;
-        return FinishRound(completion.Value, messages, options, "buffered", purpose);
+        var response = currentImage is null
+            ? (await client.GetResponsesClient().CreateResponseAsync(options, cancellationToken)).Value
+            : await StreamingImageRequest.CompleteAsync(client.GetResponsesClient(), options, currentImage, cancellationToken);
+        observation.Response = response;
+        return FinishRound(response, messages, options, "buffered", purpose);
     }
 
     private async Task<CompletedRound> CompleteStreamingRoundAsync(
@@ -410,7 +414,7 @@ public sealed partial class AiIntentService(
         ModelCallObservation observation,
         Func<AiStreamEvent, Task> streamSink,
         System.Diagnostics.Stopwatch stopwatch,
-        CancellationToken cancellationToken, string purpose)
+        CancellationToken cancellationToken, string purpose, CurrentTurnImage? currentImage)
     {
         SetInputItems(options, messages);
         options.StreamingEnabled = true;
@@ -422,7 +426,7 @@ public sealed partial class AiIntentService(
         var argumentMonitor = new FunctionArgumentMonitor();
         using var streamCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
-        await foreach (var update in client.GetResponsesClient(streaming: true).CreateResponseStreamingAsync(options, streamCancellation.Token))
+        await foreach (var update in StreamingImageRequest.ReadUpdatesAsync(client.GetResponsesClient(streaming: true), options, currentImage, streamCancellation.Token))
         {
             if (argumentMonitor.Observe(update, observation) is { } toolName)
             {

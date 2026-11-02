@@ -71,6 +71,19 @@ public class NotionApiTests
         http.Requests[2].Path.Should().Be($"/v1/databases/{NotionExamples.DatabaseId}");
     }
 
+    [Fact]
+    public async Task PollQuery_StopsAfterFiveInputPagesEvenWhenEveryPageIsEmpty()
+    {
+        using var http = new NotionHttpStub();
+        for (var index = 0; index < 6; index++)
+            http.Responses.Enqueue(NotionHttpStub.List([], true, Guid.NewGuid().ToString()));
+        var rows = new List<JsonElement>();
+        await foreach (var row in http.Api.QueryAsync("access", NotionExamples.SourceId, default)) rows.Add(row);
+        rows.Should().BeEmpty();
+        http.Requests.Should().HaveCount(5);
+        http.Responses.Should().ContainSingle();
+    }
+
     [Theory]
     [InlineData(429)]
     [InlineData(529)]

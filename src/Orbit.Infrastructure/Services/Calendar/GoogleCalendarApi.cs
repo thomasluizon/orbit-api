@@ -12,13 +12,22 @@ namespace Orbit.Infrastructure.Services.Calendar;
 /// pagination via its page-token loop. Kept deliberately logic-free: filtering, dedup, and
 /// mapping live in <see cref="GoogleCalendarEventFetcher"/> so they stay unit-testable.
 /// </summary>
-internal sealed class GoogleCalendarApi(TimeSpan httpTimeout) : IGoogleCalendarApi
+internal sealed class GoogleCalendarApi(TimeSpan httpTimeout) : IGoogleCalendarApi, IDisposable
 {
     private const int EventsPageSize = 2500;
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, Lazy<CalendarService>> _services = new(StringComparer.Ordinal);
+
+    public void Dispose()
+    {
+        foreach (var service in _services.Values)
+            if (service.IsValueCreated) service.Value.Dispose();
+        _services.Clear();
+    }
+
 
     public async Task<IReadOnlyList<CalendarListEntry>> ListCalendarsAsync(string accessToken, CancellationToken ct)
     {
-        using var service = CreateCalendarService(accessToken);
+        var service = _services.GetOrAdd(accessToken, token => new Lazy<CalendarService>(() => CreateCalendarService(token))).Value;
 
         var entries = new List<CalendarListEntry>();
         string? pageToken = null;
@@ -39,7 +48,7 @@ internal sealed class GoogleCalendarApi(TimeSpan httpTimeout) : IGoogleCalendarA
     public async Task<IReadOnlyList<Event>> ListEventsAsync(
         string accessToken, string calendarId, DateTime? updatedMin, CancellationToken ct, CalendarReadWindow? window = null)
     {
-        using var service = CreateCalendarService(accessToken);
+        var service = _services.GetOrAdd(accessToken, token => new Lazy<CalendarService>(() => CreateCalendarService(token))).Value;
 
         var events = new List<Event>();
         string? pageToken = null;
@@ -59,7 +68,7 @@ internal sealed class GoogleCalendarApi(TimeSpan httpTimeout) : IGoogleCalendarA
 
     public async Task<Event> GetEventAsync(string accessToken, string calendarId, string eventId, CancellationToken ct)
     {
-        using var service = CreateCalendarService(accessToken);
+        var service = _services.GetOrAdd(accessToken, token => new Lazy<CalendarService>(() => CreateCalendarService(token))).Value;
         return await service.Events.Get(calendarId, eventId).ExecuteAsync(ct);
     }
 

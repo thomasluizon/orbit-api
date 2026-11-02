@@ -11536,6 +11536,72 @@
           }
         },
         {
+          "name": "GoogleAccessTokenExpiresAtUtc",
+          "type": "DateTime?",
+          "surfaces": {
+            "chat": {
+              "verdict": "deliberate",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "deliberate",
+                  "reason": "OAuth token expiry is managed by the provider refresh flow, not AI tools."
+                },
+                "read": {
+                  "status": "deliberate",
+                  "reason": "OAuth token expiry is managed by the provider refresh flow, not AI tools."
+                },
+                "update": {
+                  "status": "deliberate",
+                  "reason": "OAuth token expiry is managed by the provider refresh flow, not AI tools."
+                },
+                "delete": {
+                  "status": "deliberate",
+                  "reason": "OAuth token expiry is managed by the provider refresh flow, not AI tools."
+                },
+                "bulk": {
+                  "status": "deliberate",
+                  "reason": "OAuth token expiry is managed by the provider refresh flow, not AI tools."
+                },
+                "filterKeyedBulk": {
+                  "status": "deliberate",
+                  "reason": "OAuth token expiry is managed by the provider refresh flow, not AI tools."
+                }
+              }
+            },
+            "mcp": {
+              "verdict": "deliberate",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "deliberate",
+                  "reason": "OAuth token expiry is managed by the provider refresh flow, not AI tools."
+                },
+                "read": {
+                  "status": "deliberate",
+                  "reason": "OAuth token expiry is managed by the provider refresh flow, not AI tools."
+                },
+                "update": {
+                  "status": "deliberate",
+                  "reason": "OAuth token expiry is managed by the provider refresh flow, not AI tools."
+                },
+                "delete": {
+                  "status": "deliberate",
+                  "reason": "OAuth token expiry is managed by the provider refresh flow, not AI tools."
+                },
+                "bulk": {
+                  "status": "deliberate",
+                  "reason": "OAuth token expiry is managed by the provider refresh flow, not AI tools."
+                },
+                "filterKeyedBulk": {
+                  "status": "deliberate",
+                  "reason": "OAuth token expiry is managed by the provider refresh flow, not AI tools."
+                }
+              }
+            }
+          }
+        },
+        {
           "name": "GoogleCalendarAutoSyncEnabled",
           "type": "bool",
           "surfaces": {
@@ -11716,6 +11782,72 @@
                 },
                 "filterKeyedBulk": {
                   "status": "absent"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "GoogleCalendarLastAttemptAtUtc",
+          "type": "DateTime?",
+          "surfaces": {
+            "chat": {
+              "verdict": "deliberate",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "deliberate",
+                  "reason": "The sync worker records attempts to rotate its queue; AI tools cannot edit scheduling state."
+                },
+                "read": {
+                  "status": "deliberate",
+                  "reason": "The sync worker records attempts to rotate its queue; AI tools cannot edit scheduling state."
+                },
+                "update": {
+                  "status": "deliberate",
+                  "reason": "The sync worker records attempts to rotate its queue; AI tools cannot edit scheduling state."
+                },
+                "delete": {
+                  "status": "deliberate",
+                  "reason": "The sync worker records attempts to rotate its queue; AI tools cannot edit scheduling state."
+                },
+                "bulk": {
+                  "status": "deliberate",
+                  "reason": "The sync worker records attempts to rotate its queue; AI tools cannot edit scheduling state."
+                },
+                "filterKeyedBulk": {
+                  "status": "deliberate",
+                  "reason": "The sync worker records attempts to rotate its queue; AI tools cannot edit scheduling state."
+                }
+              }
+            },
+            "mcp": {
+              "verdict": "deliberate",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "deliberate",
+                  "reason": "The sync worker records attempts to rotate its queue; AI tools cannot edit scheduling state."
+                },
+                "read": {
+                  "status": "deliberate",
+                  "reason": "The sync worker records attempts to rotate its queue; AI tools cannot edit scheduling state."
+                },
+                "update": {
+                  "status": "deliberate",
+                  "reason": "The sync worker records attempts to rotate its queue; AI tools cannot edit scheduling state."
+                },
+                "delete": {
+                  "status": "deliberate",
+                  "reason": "The sync worker records attempts to rotate its queue; AI tools cannot edit scheduling state."
+                },
+                "bulk": {
+                  "status": "deliberate",
+                  "reason": "The sync worker records attempts to rotate its queue; AI tools cannot edit scheduling state."
+                },
+                "filterKeyedBulk": {
+                  "status": "deliberate",
+                  "reason": "The sync worker records attempts to rotate its queue; AI tools cannot edit scheduling state."
                 }
               }
             }
@@ -20749,6 +20881,91 @@
           }
         },
         {
+          "name": "LongestRecordedStreak",
+          "type": "int?",
+          "surfaces": {
+            "chat": {
+              "verdict": "deliberate",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "deliberate",
+                  "reason": "The persisted achievement maximum is derived from completion history and cannot be edited through AI tools."
+                },
+                "read": {
+                  "status": "deliberate",
+                  "reason": "The persisted achievement maximum is derived from completion history and cannot be edited through AI tools."
+                },
+                "update": {
+                  "status": "deliberate",
+                  "reason": "The persisted achievement maximum is derived from completion history and cannot be edited through AI tools."
+                },
+                "delete": {
+                  "status": "covered",
+                  "reason": "The persisted achievement maximum is derived from completion history and cannot be edited through AI tools.",
+                  "direct": [
+                    {
+                      "tool": "delete_habit",
+                      "status": "entity-operation"
+                    }
+                  ]
+                },
+                "bulk": {
+                  "status": "deliberate",
+                  "reason": "The persisted achievement maximum is derived from completion history and cannot be edited through AI tools."
+                },
+                "filterKeyedBulk": {
+                  "status": "deliberate",
+                  "reason": "The persisted achievement maximum is derived from completion history and cannot be edited through AI tools."
+                }
+              }
+            },
+            "mcp": {
+              "verdict": "deliberate",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "deliberate",
+                  "reason": "The persisted achievement maximum is derived from completion history and cannot be edited through AI tools."
+                },
+                "read": {
+                  "status": "deliberate",
+                  "reason": "The persisted achievement maximum is derived from completion history and cannot be edited through AI tools."
+                },
+                "update": {
+                  "status": "deliberate",
+                  "reason": "The persisted achievement maximum is derived from completion history and cannot be edited through AI tools."
+                },
+                "delete": {
+                  "status": "covered",
+                  "reason": "The persisted achievement maximum is derived from completion history and cannot be edited through AI tools.",
+                  "direct": [
+                    {
+                      "tool": "delete_habit",
+                      "status": "entity-operation"
+                    }
+                  ],
+                  "viaOperations": [
+                    {
+                      "tool": "delete_habit",
+                      "status": "entity-operation",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
+                },
+                "bulk": {
+                  "status": "deliberate",
+                  "reason": "The persisted achievement maximum is derived from completion history and cannot be edited through AI tools."
+                },
+                "filterKeyedBulk": {
+                  "status": "deliberate",
+                  "reason": "The persisted achievement maximum is derived from completion history and cannot be edited through AI tools."
+                }
+              }
+            }
+          }
+        },
+        {
           "name": "NextDueDate",
           "type": "DateOnly",
           "surfaces": {
@@ -29103,6 +29320,91 @@
           }
         },
         {
+          "name": "GoogleAccessTokenExpiresAtUtc",
+          "type": "DateTime?",
+          "surfaces": {
+            "chat": {
+              "verdict": "deliberate",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "deliberate",
+                  "reason": "OAuth token expiry is managed by the provider refresh flow, not AI tools."
+                },
+                "read": {
+                  "status": "deliberate",
+                  "reason": "OAuth token expiry is managed by the provider refresh flow, not AI tools."
+                },
+                "update": {
+                  "status": "deliberate",
+                  "reason": "OAuth token expiry is managed by the provider refresh flow, not AI tools."
+                },
+                "delete": {
+                  "status": "covered",
+                  "reason": "OAuth token expiry is managed by the provider refresh flow, not AI tools.",
+                  "direct": [
+                    {
+                      "tool": "manage_account",
+                      "status": "entity-operation"
+                    }
+                  ]
+                },
+                "bulk": {
+                  "status": "deliberate",
+                  "reason": "OAuth token expiry is managed by the provider refresh flow, not AI tools."
+                },
+                "filterKeyedBulk": {
+                  "status": "deliberate",
+                  "reason": "OAuth token expiry is managed by the provider refresh flow, not AI tools."
+                }
+              }
+            },
+            "mcp": {
+              "verdict": "deliberate",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "deliberate",
+                  "reason": "OAuth token expiry is managed by the provider refresh flow, not AI tools."
+                },
+                "read": {
+                  "status": "deliberate",
+                  "reason": "OAuth token expiry is managed by the provider refresh flow, not AI tools."
+                },
+                "update": {
+                  "status": "deliberate",
+                  "reason": "OAuth token expiry is managed by the provider refresh flow, not AI tools."
+                },
+                "delete": {
+                  "status": "covered",
+                  "reason": "OAuth token expiry is managed by the provider refresh flow, not AI tools.",
+                  "direct": [
+                    {
+                      "tool": "manage_account",
+                      "status": "entity-operation"
+                    }
+                  ],
+                  "viaOperations": [
+                    {
+                      "tool": "manage_account",
+                      "status": "entity-operation",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
+                },
+                "bulk": {
+                  "status": "deliberate",
+                  "reason": "OAuth token expiry is managed by the provider refresh flow, not AI tools."
+                },
+                "filterKeyedBulk": {
+                  "status": "deliberate",
+                  "reason": "OAuth token expiry is managed by the provider refresh flow, not AI tools."
+                }
+              }
+            }
+          }
+        },
+        {
           "name": "GoogleCalendarAutoSyncEnabled",
           "type": "bool",
           "surfaces": {
@@ -29269,6 +29571,91 @@
                 },
                 "filterKeyedBulk": {
                   "status": "absent"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "GoogleCalendarLastAttemptAtUtc",
+          "type": "DateTime?",
+          "surfaces": {
+            "chat": {
+              "verdict": "deliberate",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "deliberate",
+                  "reason": "The sync worker records attempts to rotate its queue; AI tools cannot edit scheduling state."
+                },
+                "read": {
+                  "status": "deliberate",
+                  "reason": "The sync worker records attempts to rotate its queue; AI tools cannot edit scheduling state."
+                },
+                "update": {
+                  "status": "deliberate",
+                  "reason": "The sync worker records attempts to rotate its queue; AI tools cannot edit scheduling state."
+                },
+                "delete": {
+                  "status": "covered",
+                  "reason": "The sync worker records attempts to rotate its queue; AI tools cannot edit scheduling state.",
+                  "direct": [
+                    {
+                      "tool": "manage_account",
+                      "status": "entity-operation"
+                    }
+                  ]
+                },
+                "bulk": {
+                  "status": "deliberate",
+                  "reason": "The sync worker records attempts to rotate its queue; AI tools cannot edit scheduling state."
+                },
+                "filterKeyedBulk": {
+                  "status": "deliberate",
+                  "reason": "The sync worker records attempts to rotate its queue; AI tools cannot edit scheduling state."
+                }
+              }
+            },
+            "mcp": {
+              "verdict": "deliberate",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "deliberate",
+                  "reason": "The sync worker records attempts to rotate its queue; AI tools cannot edit scheduling state."
+                },
+                "read": {
+                  "status": "deliberate",
+                  "reason": "The sync worker records attempts to rotate its queue; AI tools cannot edit scheduling state."
+                },
+                "update": {
+                  "status": "deliberate",
+                  "reason": "The sync worker records attempts to rotate its queue; AI tools cannot edit scheduling state."
+                },
+                "delete": {
+                  "status": "covered",
+                  "reason": "The sync worker records attempts to rotate its queue; AI tools cannot edit scheduling state.",
+                  "direct": [
+                    {
+                      "tool": "manage_account",
+                      "status": "entity-operation"
+                    }
+                  ],
+                  "viaOperations": [
+                    {
+                      "tool": "manage_account",
+                      "status": "entity-operation",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
+                },
+                "bulk": {
+                  "status": "deliberate",
+                  "reason": "The sync worker records attempts to rotate its queue; AI tools cannot edit scheduling state."
+                },
+                "filterKeyedBulk": {
+                  "status": "deliberate",
+                  "reason": "The sync worker records attempts to rotate its queue; AI tools cannot edit scheduling state."
                 }
               }
             }
@@ -40739,6 +41126,91 @@
                 },
                 "filterKeyedBulk": {
                   "status": "absent"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "LongestRecordedStreak",
+          "type": "int?",
+          "surfaces": {
+            "chat": {
+              "verdict": "deliberate",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "deliberate",
+                  "reason": "The persisted achievement maximum is derived from completion history and cannot be edited through AI tools."
+                },
+                "read": {
+                  "status": "deliberate",
+                  "reason": "The persisted achievement maximum is derived from completion history and cannot be edited through AI tools."
+                },
+                "update": {
+                  "status": "deliberate",
+                  "reason": "The persisted achievement maximum is derived from completion history and cannot be edited through AI tools."
+                },
+                "delete": {
+                  "status": "covered",
+                  "reason": "The persisted achievement maximum is derived from completion history and cannot be edited through AI tools.",
+                  "direct": [
+                    {
+                      "tool": "delete_habit",
+                      "status": "entity-operation"
+                    }
+                  ]
+                },
+                "bulk": {
+                  "status": "deliberate",
+                  "reason": "The persisted achievement maximum is derived from completion history and cannot be edited through AI tools."
+                },
+                "filterKeyedBulk": {
+                  "status": "deliberate",
+                  "reason": "The persisted achievement maximum is derived from completion history and cannot be edited through AI tools."
+                }
+              }
+            },
+            "mcp": {
+              "verdict": "deliberate",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "deliberate",
+                  "reason": "The persisted achievement maximum is derived from completion history and cannot be edited through AI tools."
+                },
+                "read": {
+                  "status": "deliberate",
+                  "reason": "The persisted achievement maximum is derived from completion history and cannot be edited through AI tools."
+                },
+                "update": {
+                  "status": "deliberate",
+                  "reason": "The persisted achievement maximum is derived from completion history and cannot be edited through AI tools."
+                },
+                "delete": {
+                  "status": "covered",
+                  "reason": "The persisted achievement maximum is derived from completion history and cannot be edited through AI tools.",
+                  "direct": [
+                    {
+                      "tool": "delete_habit",
+                      "status": "entity-operation"
+                    }
+                  ],
+                  "viaOperations": [
+                    {
+                      "tool": "delete_habit",
+                      "status": "entity-operation",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
+                },
+                "bulk": {
+                  "status": "deliberate",
+                  "reason": "The persisted achievement maximum is derived from completion history and cannot be edited through AI tools."
+                },
+                "filterKeyedBulk": {
+                  "status": "deliberate",
+                  "reason": "The persisted achievement maximum is derived from completion history and cannot be edited through AI tools."
                 }
               }
             }

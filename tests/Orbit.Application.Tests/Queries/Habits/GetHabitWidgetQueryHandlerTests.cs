@@ -131,7 +131,8 @@ public class GetHabitWidgetQueryHandlerTests
             Arg.Any<CancellationToken>()).Returns(Array.Empty<HabitScheduleLogDay>());
         scheduleLogReader.ReadResolvedDueDateIdsAsync(
             Arg.Any<IReadOnlyCollection<Guid>>(),
-            Arg.Any<CancellationToken>()).Returns(new HashSet<Guid>());
+            Arg.Any<CancellationToken>(), Arg.Any<DateOnly?>()).Returns(new HashSet<Guid>());
+        Orbit.Tests.Shared.RepositoryProjections.FromFind<Habit, Guid>(_habitRepository);
         var scheduleHandler = new GetHabitScheduleQueryHandler(
             _habitRepository,
             scheduleLogReader,

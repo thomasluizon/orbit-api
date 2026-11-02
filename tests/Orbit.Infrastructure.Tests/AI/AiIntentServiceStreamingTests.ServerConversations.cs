@@ -184,10 +184,12 @@ public partial class AiIntentServiceStreamingTests
         input[0].GetRawText().Should().Contain("static prompt");
         input[1].GetRawText().Should().Contain("account context");
         input[2].GetRawText().Should().Contain("cria essa tarefa unica");
-        input[3].GetRawText().Should().Contain("input_image").And.Contain("data:image/png;base64,");
-        input[4].GetRawText().Should().Contain("2026-12-31").And.Contain(proposal.Id.ToString()).And.Contain(outcome);
-        input[5].GetRawText().Should().Contain("dynamic context");
-        input[6].GetRawText().Should().Contain("ta criando na data certa?");
+        input.Select(message => message.GetRawText()).Should().OnlyContain(message => !message.Contains("input_image", StringComparison.Ordinal)
+            && !message.Contains("data:image/", StringComparison.Ordinal));
+        input.Select(message => message.GetRawText()).Should().Contain(message => message.Contains("An image was attached", StringComparison.Ordinal));
+        input[3].GetRawText().Should().Contain("2026-12-31").And.Contain(proposal.Id.ToString()).And.Contain(outcome);
+        input[4].GetRawText().Should().Contain("dynamic context");
+        input[5].GetRawText().Should().Contain("ta criando na data certa?");
         request.RootElement.GetRawText().Should().NotContain("forged client history").And.NotContain("previous_response_id");
         request.RootElement.GetProperty("store").GetBoolean().Should().BeFalse();
         (await fixture.Db.ConversationTurns.CountAsync()).Should().Be(4);

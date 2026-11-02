@@ -35,7 +35,7 @@ public class GetDailySummaryQueryHandlerTests
     public GetDailySummaryQueryHandlerTests()
     {
         _dates.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
-        _mediator.Send(Arg.Any<GetHabitScheduleQuery>(), Arg.Any<CancellationToken>())
+        _mediator.Send(Arg.Any<GetDailySummaryScheduleQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new PaginatedResponse<HabitScheduleItem>([], 1, 100, 0, 0)));
         _summaryLogReader.ReadAsync(Arg.Any<IReadOnlyCollection<HabitSummaryLogWindow>>(),
             Arg.Any<CancellationToken>()).Returns(Array.Empty<HabitSummaryLogFact>());

@@ -97,6 +97,28 @@ public class GoogleTokenServiceTests
         _handler.WasCalled.Should().BeFalse();
     }
 
+    [Fact]
+    public async Task ValidStoredToken_DoesNotPostAndExpiredTokenPostsOnceAndStoresExpiry()
+    {
+        var user = UserWithRefreshToken();
+        user.SetGoogleTokens("valid", "refresh-old", DateTime.UtcNow.AddHours(1));
+        (await _sut.GetValidAccessTokenAsync(user)).Should().Be("valid");
+        _handler.CallCount.Should().Be(0);
+        user.SetGoogleTokens("expired", "refresh-old", DateTime.UtcNow.AddHours(-1));
+        var providerResponse = new Google.Apis.Auth.OAuth2.Responses.TokenResponse
+        {
+            AccessToken = "renewed",
+            RefreshToken = "rotated",
+            ExpiresInSeconds = 3600
+        };
+        _handler.Response = JsonResponse(HttpStatusCode.OK, Newtonsoft.Json.JsonConvert.SerializeObject(providerResponse));
+        (await _sut.GetValidAccessTokenAsync(user)).Should().Be("renewed");
+        _handler.CallCount.Should().Be(1);
+        user.GoogleAccessTokenExpiresAtUtc.Should().BeAfter(DateTime.UtcNow.AddMinutes(59));
+        (await _sut.GetValidAccessTokenAsync(user)).Should().Be("renewed");
+        _handler.CallCount.Should().Be(1);
+    }
+
     private static User UserWithRefreshToken()
     {
         var user = User.Create("Test", "test@example.com").Value;
@@ -112,11 +134,13 @@ public class GoogleTokenServiceTests
         public HttpResponseMessage? Response { get; set; }
         public Exception? ExceptionToThrow { get; set; }
         public bool WasCalled { get; private set; }
+        public int CallCount { get; private set; }
 
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)
         {
             WasCalled = true;
+            CallCount++;
             cancellationToken.ThrowIfCancellationRequested();
 
             if (ExceptionToThrow is not null)

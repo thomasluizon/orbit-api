@@ -11,7 +11,6 @@ namespace Orbit.Infrastructure.Tests.Persistence;
 public class HabitSchedulePostgresTests
 {
     private static readonly DateOnly Start = new(2026, 4, 3);
-    private const string Drop = "20261025042524_DropLegacyHabitScheduleColumns";
     private const string BeforeDrop = "20261025033041_UnmapLegacyHabitScheduleColumns";
 
     [PostgresFact]
@@ -103,7 +102,7 @@ public class HabitSchedulePostgresTests
             var indexes = await ScalarAsync(context, IndexDefinitionsSql);
 
             var migrator = context.GetService<IMigrator>();
-            await migrator.MigrateAsync(Drop);
+            await migrator.MigrateAsync();
             (await ReadHabitsAsync(context)).Should().Equal(before);
             (await context.HabitLogs.AsNoTracking().SingleAsync()).Id.Should().Be(log.Id);
             await AssertCompatibilityObjectsAbsentAsync(context);
@@ -164,7 +163,7 @@ public class HabitSchedulePostgresTests
             await AssertLegacyColumnsAsync(context);
             (await context.Habits.AsNoTracking().Where(row => row.Id == restored.Id)
                 .Select(row => row.NextDueDate).SingleAsync()).Should().Be(Start.AddDays(20));
-            await migrator.MigrateAsync(Drop);
+            await migrator.MigrateAsync();
             await AssertCompatibilityObjectsAbsentAsync(context);
             (await context.HabitLogs.AsNoTracking().SingleAsync()).Id.Should().Be(log.Id);
             await migrator.MigrateAsync();
@@ -222,7 +221,9 @@ public class HabitSchedulePostgresTests
                 AND table_name = 'Habits' AND column_name IN ('IsGeneral', 'IsFlexible', 'DueDate')
             """)).Should().Be(0);
         (await ScalarAsync(context, TriggerDefinitionsSql)).Should().Be(DBNull.Value);
-        (await ScalarAsync(context, IndexDefinitionsSql)).Should().Be(DBNull.Value);
+        (await ScalarAsync(context, IndexDefinitionsSql))?.ToString().Should()
+            .NotContain("\"DueDate\"").And.NotContain("\"IsGeneral\"").And.NotContain("\"IsFlexible\"")
+            .And.NotContain("IX_Habits_DueDateAdvancement");
         Convert.ToBoolean(await ScalarAsync(context, """
             SELECT to_regprocedure('sync_habit_schedule_expand()') IS NULL
                 AND to_regprocedure('sync_habit_next_due_date_expand()') IS NULL

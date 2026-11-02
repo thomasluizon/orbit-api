@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using Orbit.Application.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -588,15 +589,17 @@ public static class HabitScheduleService
     /// <summary>
     /// Advances stale bad habit DueDates so they appear on the correct next scheduled day.
     /// </summary>
+    public static Expression<Func<Habit, bool>> StaleBadHabitsFor(Guid userId, DateOnly today) =>
+        h => h.UserId == userId && h.IsBadHabit
+            && (h.Schedule == HabitSchedule.Recurring || h.Schedule == HabitSchedule.Flexible)
+            && h.FrequencyQuantity != null && h.NextDueDate < today
+            && (!h.EndDate.HasValue || h.EndDate.Value >= today);
+
     public static async Task AdvanceStaleBadHabitDueDates(
         IGenericRepository<Habit> habitRepository, IUnitOfWork unitOfWork,
         Guid userId, DateOnly today, CancellationToken ct, int weekStartDay = 1)
     {
-        var staleBadHabits = await habitRepository.FindTrackedAsync(
-            h => h.UserId == userId && h.IsBadHabit
-                && (h.Schedule == HabitSchedule.Recurring || h.Schedule == HabitSchedule.Flexible)
-                && h.FrequencyQuantity != null && h.NextDueDate < today
-                && (!h.EndDate.HasValue || h.EndDate.Value >= today), ct);
+        var staleBadHabits = await habitRepository.FindTrackedAsync(StaleBadHabitsFor(userId, today), ct);
         if (staleBadHabits.Count > 0)
         {
             foreach (var habit in staleBadHabits)

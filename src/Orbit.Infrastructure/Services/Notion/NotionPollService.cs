@@ -51,12 +51,8 @@ internal sealed class NotionPollService(OrbitDbContext db, NotionAccessGate gate
             foreach (var mapper in mappers)
             {
                 if (tasks.Count == 100) break;
-                await foreach (var page in api.QueryAsync(connection.AccessToken, mapper.DataSourceId, ct))
-                {
-                    var task = mapper.Map(page, userId, today, userTimeZone, nowUtc);
-                    if (task is not null && pageIds.Add(task.PageId)) tasks.Add(task);
-                    if (tasks.Count == 100) break;
-                }
+                await ReadSourceAsync(mapper, connection.AccessToken,
+                    new PollReadContext(userId, today, userTimeZone, nowUtc), tasks, pageIds, ct);
             }
         }
         catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
@@ -83,4 +79,18 @@ internal sealed class NotionPollService(OrbitDbContext db, NotionAccessGate gate
             await db.SaveChangesAsync(transactionToken);
         }, ct);
     }
+    private sealed record PollReadContext(Guid UserId, DateOnly Today, TimeZoneInfo Zone, DateTime NowAtUtc);
+
+    private async Task ReadSourceAsync(NotionTaskMapper mapper, string token, PollReadContext context,
+        List<NotionTask> tasks, HashSet<Guid> pageIds, CancellationToken ct)
+    {
+        var inputCount = 0;
+        await foreach (var page in api.QueryAsync(token, mapper.DataSourceId, ct))
+        {
+            var task = mapper.Map(page, context.UserId, context.Today, context.Zone, context.NowAtUtc);
+            if (task is not null && pageIds.Add(task.PageId)) tasks.Add(task);
+            if (tasks.Count == 100 || ++inputCount >= 500) break;
+        }
+    }
+
 }
