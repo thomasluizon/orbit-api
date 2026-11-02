@@ -44,7 +44,7 @@ The daily `AI cost` line includes every purpose's calls, dollar cost per call, c
 input, uncached input, output and reasoning totals, plus per-call token averages.
 Uncached input includes cache writes; reasoning is a subset of output and is billed once.
 The cache hit fraction is `cached_input / (cached_input + uncached_input)`. Startup also
-emits the same current UTC day cost line marked `(partial)` in both scheduler modes;
+emits the same current UTC day cost line marked `(partial)` through the durable scheduler;
 the partial line is a snapshot, not an additional accounting charge.
 Historical rows default reasoning to zero because past reasoning usage cannot be recovered.
 
@@ -281,6 +281,127 @@ The coordinator performs the cutover after merge, with no service replacement:
    `environment=production`, `branch=main`, and the same full `sha`. Require the
    promoted digest, a `live` deploy with no Render build or pre-deploy task, and
    `https://api.useorbit.org/health` reporting that commit and `status: Healthy`.
+
+### Recurring jobs and health
+
+Recurring schedules run through Hangfire in the `hangfire` schema. The API runs six
+general workers and one worker dedicated to the `marketing` queue. `ConnectionStrings__HangfireConnection` can select a dedicated job-store
+connection; otherwise the session endpoint is reused with the `orbit-hangfire`
+application name and a separate pool capped at 12 connections. Job leases use the
+session endpoint with the `orbit-job-locks` application name and a separate pool
+capped at eight connections. These endpoints must support session advisory locks.
+
+`/health` checks database reachability and retains the `status` and `commit` release
+fields. `/health/jobs` checks the enabled recurring jobs against shared
+`BackgroundJobHeartbeats` rows and returns 503 with stale job names. A registration
+without a successful tick becomes stale after its expected interval. Registration
+on another instance preserves that first registration time. A successful occurrence
+records its heartbeat after its work completes. A concurrent occurrence skips when
+its job lease is held; separate job names can run concurrently. Startup removes known
+disabled schedules from Hangfire so operational switches also clear persisted cron
+registrations.
+
+Apply the additive `DurableJobHeartbeats` migration before starting the recurring
+registrar. Startup migration failures or recurring registration failures stop startup.
+A heartbeat write failure logs a warning and leaves the successful job result intact.
+Billing cleanup attempts both provider purges, then propagates any failures so a
+partial purge cannot refresh its successful heartbeat; hosted ticks log and retry.
+Job staleness does not fail Render's `/health` probe.
+
+The `orbit-production-health` Lambda polls both production reports every minute.
+Its `Orbit/ProductionHealth` metrics have separate `Endpoint` dimensions for
+`/health` and `/health/jobs`. CloudWatch alarms after two consecutive failing
+minutes, including missing measurements, and sends alarm and recovery notices to
+the existing production operations SNS topic `orbit-ses-dead-letter-alerts`.
+The confirmed email subscription delivers to `contact@useorbit.org`. Redirects,
+timeouts and non-success responses count as failures. The monitor runs outside
+Render and remains active when the API is unavailable. Its Terraform resources
+live in `production-health.tf`; its dependency-free handler is
+`workers/production-health.mjs`. The staging pinger remains independent.
+
+### Bounded recurring work and email
+
+`BackgroundServices:ScanPageSize` defaults to 400 and accepts at most 500 rows.
+Goal deadlines, streak goal synchronization, period close, streak freezes, proactive
+checks and due-date advancement use keyset pages. `BackgroundServices:TimeoutMinutes`
+sets a deadline by job name. `BackgroundServices:PushParallelism` defaults to four
+and is capped at eight. The proactive engine processes four accounts concurrently,
+with `BackgroundServices:ProactiveUserTimeoutSeconds` per account. It loads rule data
+once per page, computes old standard-goal completion totals in SQL, and queues pushes
+after saving each account. Calendar claims precede network calls to preserve dedupe;
+Google token refresh runs without a transaction or user row lock. Due-date scans
+prefetch dates before the following UTC date, then apply each user's local date guard;
+recently stale habits in eastern timezones remain candidates.
+
+The XP startup backfill saves `XpAwardLogBackfillCursor` after each 200-user page.
+A failed page is retried after the last completed page, and existing XP audit rows
+keep individual replays idempotent. The XP and encryption backfills acquire separate
+nonblocking cluster leases. Encryption uses 50-row keyset pages and retains its
+`EncryptionMigrationComplete_v2` guard until the live flag can be verified.
+
+The `hangfire-history-retention` job runs daily. Failed jobs older than thirty days
+move to Deleted and expire. Successful and deleted jobs also expire after seven days.
+`BackgroundServices:SucceededListSize` and `BackgroundServices:DeletedListSize`, both
+defaulting to 1,000, bound retained finished history by expiring overflow. The storage
+expiration sweep removes expired rows within an hour. State locks prevent a retried
+job from expiring on an obsolete monitoring snapshot. These are application settings;
+the installed PostgreSql provider exposes no options with those list-size names.
+
+Marketing broadcasts enqueue pages identified by broadcast id and page number.
+`Marketing:BroadcastPageSize` defaults to 500, `Marketing:BroadcastParallelism` to three,
+and `Marketing:MaxSendsPerSecond` to ten. Page jobs share a distributed method lock;
+the separate queue keeps their waits away from reminder workers. Send starts are
+paced by the greater of `Marketing:SendDelayMilliseconds` and the configured rate.
+The rate is capped at fourteen, matching the verified SES quota. SES requests have a
+thirty-second timeout. Each successful send records a `MarketingBroadcastDeliveries`
+checkpoint keyed by broadcast and recipient. A page retry reads those checkpoints
+and sends only to recipients without one, including after cancellation or a restart.
+Checkpoint writes finish independently of the page's cancellation token. SES delivery
+and the checkpoint are separate operations: a process loss after provider acceptance
+but before the checkpoint commits can still repeat that individual send.
+`BackgroundServices:Retention:MarketingBroadcastDeliveriesDays` retains successful
+delivery checkpoints for 31 days by default, covering the thirty-day failed-job
+retry window and a daily cleanup interval. Every page carries the same UTC expiry,
+thirty days after the broadcast was queued. Expired pages stop before reading
+checkpoints or sending, so an old manual retry cannot replay emails after cleanup.
+The retention window must be at least 31 days or zero to disable the purge.
+Account erasure removes the user's checkpoints in the erasure transaction. Account
+reset keeps them so a pending broadcast retry still skips delivered recipients.
+Waitlist confirmation is also queued and no longer waits on SES in the request.
+
+### Application history retention
+
+The daily `sync-cleanup` occurrence purges application history using the configured
+`BackgroundServices:Retention` windows. Each delete orders by its primary key and
+commits at most `BackgroundServices:CleanupBatchSize` rows, defaulting to 5,000.
+A window of zero disables that table's age purge. Notification age retention
+soft-deletes live rows and updates their synchronization timestamps. Clients receive
+the deletion on their next sync; tombstone cleanup removes it after the sync window.
+`SessionsDays` controls both sessions and their refresh tokens; an active session keeps its tokens. OAuth state
+expiry runs here instead of on sign-in requests. AI budget rows inside a stored
+allowance period survive the age purge until that period can no longer be active.
+Changing week start from Monday to Sunday can extend that period to thirteen days;
+the guard also carries a timezone margin so a western user's active budget survives.
+The eight-day setting still applies outside that state. Soft-delete cleanup keeps its
+sync-window margin and updates completion watermarks in one set-based statement.
+
+Proactive history keeps recent rows and at most three older ended items per user
+and trigger. Those rows are the evidence for the existing rest rule, whose three
+ignored observations can span more than thirty days. Purging that bounded evidence
+would change which proactive items the engine produces. Calendar-day claims retain
+thirty days. Issued Astra blocks are not read to render conversation history;
+conversation turns contain the rendered content.
+
+The `ScheduledJobIndexes` migration builds indexes concurrently outside migration
+transactions. Before releasing it, create its new indexes on staging, inspect
+`EXPLAIN` for active-goal and stale-due-date scans, and compare user-scoped habit
+plans before dropping `IX_Habits_UserId`. Each index is dropped concurrently before
+being recreated concurrently, including valid prebuilt indexes. This repairs invalid
+indexes left by interrupted builds using plain SQL statements outside transactions.
+A five-second lock timeout bounds waits in both migration directions. Existing
+application indexes remain available while the new job indexes are rebuilt.
+Take a database export before enabling the first
+retention sweep; it can remove a backlog.
 
 ### Startup migrations and long migrations
 

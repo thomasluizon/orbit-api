@@ -1,4 +1,5 @@
 using FluentAssertions;
+using System.Reflection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations.Operations;
@@ -65,9 +66,38 @@ public class BoundedReadIndexMigrationTests(Xunit.Abstractions.ITestOutputHelper
             "20261102193912_CompleteBoundedReadIndexes");
         var history = script.IndexOf("VALUES ('20261102113348_AddBoundedReadState'", StringComparison.Ordinal);
         history.Should().BePositive();
-        var firstBuild = script.IndexOf("CREATE INDEX CONCURRENTLY", StringComparison.Ordinal);
-        firstBuild.Should().BeGreaterThan(history);
-        script[history..firstBuild].Should().Contain("COMMIT;");
+        foreach (var index in new CompleteBoundedReadIndexes().UpOperations.OfType<CreateIndexOperation>())
+        {
+            var build = script.IndexOf($"CREATE INDEX CONCURRENTLY \"{index.Name}\"", StringComparison.Ordinal);
+            build.Should().BeGreaterThan(history);
+            script[history..build].Should().Contain("COMMIT;");
+        }
+    }
+
+    [Theory]
+    [InlineData(typeof(RestoreBoundedReadIndexes))]
+    [InlineData(typeof(CompleteBoundedReadIndexes))]
+    public void ConcurrentBuilds_AlwaysDropTheSameIndexBeforeCreatingIt(Type type)
+    {
+        var migration = (Migration)(Activator.CreateInstance(type) ?? throw new InvalidOperationException());
+        var operations = migration.UpOperations;
+        for (var position = 0; position < operations.Count; position++)
+        {
+            if (operations[position] is not CreateIndexOperation index) continue;
+            position.Should().BePositive();
+            var drop = operations[position - 1].Should().BeOfType<SqlOperation>().Subject;
+            drop.SuppressTransaction.Should().BeTrue();
+            drop.Sql.Should().Contain($"DROP INDEX CONCURRENTLY IF EXISTS \"{index.Name}\";");
+            index["Npgsql:CreatedConcurrently"].Should().Be(true);
+        }
+    }
+
+    [Fact]
+    public void BoundedSchemaAndIndexes_FollowTheMainSchedulerChangesToTheirTables()
+    {
+        var migrations = new[] { typeof(Orbit.Infrastructure.Migrations.ScheduledJobIndexes), typeof(AddBoundedReadState), typeof(CompleteBoundedReadIndexes) };
+        migrations.Select(type => type.GetCustomAttribute<MigrationAttribute>()!.Id)
+            .Should().BeInAscendingOrder(StringComparer.Ordinal);
     }
 
     [PostgresFact]

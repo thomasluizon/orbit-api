@@ -19,23 +19,6 @@ public class XpAwardLogBackfillService(
     private const int GoalCompletedXp = 100;
 
     /// <summary>
-    /// Backfills every user. Returns the number of users for which rows were written (users that
-    /// already had rows are skipped).
-    /// </summary>
-    public async Task<int> BackfillAllAsync(CancellationToken ct = default)
-    {
-        var users = await userRepository.GetAllAsync(ct);
-        var processed = 0;
-        foreach (var user in users)
-        {
-            if (await BackfillUserAsync(user.Id, ct))
-                processed++;
-        }
-
-        return processed;
-    }
-
-    /// <summary>
     /// Replays and persists one user's XP audit rows. Returns false without writing anything when the
     /// user is unknown or already has <see cref="XpAwardLog"/> rows (idempotency guard).
     /// </summary>

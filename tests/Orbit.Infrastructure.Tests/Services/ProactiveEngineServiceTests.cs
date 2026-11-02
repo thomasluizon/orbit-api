@@ -1,4 +1,7 @@
 using System.Text.Json;
+using Hangfire;
+using Hangfire.Common;
+using Hangfire.States;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Distributed;
@@ -895,11 +898,13 @@ public sealed class ProactiveEngineServiceTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task HourlyRun_UsesSameReadCountForTenAndThousandEligibleAccounts(bool accountTargets)
+    public async Task HourlyRun_ReadCountScalesWithPagesAndNotAccounts(bool accountTargets)
     {
         var small = await CountReads(10, accountTargets);
+        var fullPage = await CountReads(400, accountTargets);
         var large = await CountReads(1000, accountTargets);
-        large.Should().Be(small);
+        fullPage.Should().Be(small);
+        large.Should().Be(small + 12);
         small.Should().BeGreaterThan(0);
     }
 
@@ -925,6 +930,8 @@ public sealed class ProactiveEngineServiceTests
         interceptor.Reset();
         await h.Engine.EvaluateAsync(default);
         var queries = interceptor.SelectCommandCount;
+        interceptor.Commands.Where(command => command.Sql.Contains("FROM \"Users\"", StringComparison.Ordinal))
+            .Should().OnlyContain(command => command.Rows <= 400);
         h.Db.ProactiveItems.Count().Should().Be(accountTargets ? count / 2 : count);
         return queries;
     }
@@ -939,6 +946,18 @@ public sealed class ProactiveEngineServiceTests
         $"event-{start}", "Meeting", null, (day ?? Today).ToString("yyyy-MM-dd"), $"{start}:00", $"{end}:00", false, null, [],
         (day ?? Today).ToDateTime(new TimeOnly(start, 0), DateTimeKind.Utc),
         EndUtc: (day ?? Today).ToDateTime(new TimeOnly(end, 0), DateTimeKind.Utc));
+
+    internal static IBackgroundJobClient ExecutingJobs(IPushNotificationService push)
+    {
+        var jobs = Substitute.For<IBackgroundJobClient>();
+        jobs.Create(Arg.Any<Job>(), Arg.Any<IState>()).Returns(call =>
+        {
+            var args = call.Arg<Job>().Args;
+            new ProactivePushJob(push).ExecuteAsync((Guid)args[0], (string)args[1], default).GetAwaiter().GetResult();
+            return Guid.NewGuid().ToString();
+        });
+        return jobs;
+    }
 
     internal sealed class FixedClock(DateTime now) : TimeProvider
     {
@@ -976,7 +995,7 @@ public sealed class ProactiveEngineServiceTests
             var dates = new UserDateService(Substitute.For<IGenericRepository<User>>(),
                 new MemoryDistributedCache(Options.Create(new MemoryDistributedCacheOptions())), Clock, Substitute.For<IUnitOfWork>());
             Flags = new(Db, _flagCache, Substitute.For<Microsoft.Extensions.Hosting.IHostEnvironment>(), new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build());
-            Engine = new(Db, Clock, Messages, Push, Calendar, tokens, Analytics, dates, Flags,
+            Engine = new(Db, Clock, Messages, ExecutingJobs(Push), Calendar, tokens, Analytics, dates, Flags,
                 NullLogger<ProactiveEngineService>.Instance);
         }
 

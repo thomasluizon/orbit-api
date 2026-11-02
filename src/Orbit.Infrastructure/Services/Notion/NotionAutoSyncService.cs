@@ -48,7 +48,6 @@ public sealed class NotionAutoSyncService(IServiceScopeFactory scopeFactory, Tim
                 }
             }
         });
-        BackgroundServiceHealthCheck.RecordTick("NotionAutoSync");
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)

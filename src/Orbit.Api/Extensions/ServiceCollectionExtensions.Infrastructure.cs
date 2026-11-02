@@ -83,7 +83,8 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddSingleton<Amazon.SimpleEmailV2.IAmazonSimpleEmailServiceV2>(_ =>
             new Amazon.SimpleEmailV2.AmazonSimpleEmailServiceV2Client(
                 new BasicAWSCredentials(ses.AccessKeyId, ses.SecretAccessKey),
-                RegionEndpoint.GetBySystemName(ses.Region)));
+                new Amazon.SimpleEmailV2.AmazonSimpleEmailServiceV2Config
+                { RegionEndpoint = RegionEndpoint.GetBySystemName(ses.Region), Timeout = TimeSpan.FromSeconds(30) }));
         builder.Services.AddScoped<IEmailService, SesEmailService>();
         builder.Services.AddHttpClient("SnsCertificate", client => client.Timeout = httpTimeout).ConfigurePrimaryHttpMessageHandler(() =>
             new HttpClientHandler { AllowAutoRedirect = false });

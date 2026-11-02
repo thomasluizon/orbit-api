@@ -26,6 +26,23 @@ public class RollingMigrationGateTests
         CheckBoundedReadBarrier(root, ReadBarriers(root)).Should().BeEmpty();
     }
 
+    [Theory]
+    [InlineData(typeof(RestoreBoundedReadIndexes))]
+    [InlineData(typeof(CompleteBoundedReadIndexes))]
+    public void BoundedReadIndexRecovery_RequiresRecordedCompatibilityEvidenceFromTheReleasedBase(Type type)
+    {
+        var migration = (Migration)(Activator.CreateInstance(type) ?? throw new InvalidOperationException());
+        migration.ActiveProvider = "Npgsql.EntityFrameworkCore.PostgreSQL";
+        var id = type.GetCustomAttribute<MigrationAttribute>()!.Id;
+        var root = RepositoryRoot();
+
+        RollingMigrationGate.Check(id, migration.UpOperations).Should()
+            .ContainSingle().Which.Should().Contain(nameof(SqlOperation));
+        RollingMigrationGate.Check(id, migration.UpOperations, ReadBarriers(root),
+            (commit, descendant) => Git(root, "merge-base", "--is-ancestor", commit, descendant).ExitCode == 0,
+            MigrationBaseRef(root)).Should().BeEmpty();
+    }
+
     [Fact]
     public void BoundedReadExpansion_UsesPullRequestBaseWithoutALocalBaseBranch()
     {

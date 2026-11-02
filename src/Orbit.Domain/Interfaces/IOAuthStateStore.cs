@@ -6,7 +6,6 @@ public interface IOAuthStateStore
     string? Read(string secret, string kind, DateTime nowAtUtc);
     OAuthStateSnapshot? ReadState(string secret, string kind, DateTime nowAtUtc);
     string? Take(string secret, string kind, DateTime nowAtUtc);
-    void RemoveExpired(DateTime nowAtUtc);
 }
 
 public sealed record OAuthStateSnapshot(string Payload, bool IsConsumed);

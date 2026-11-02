@@ -2,6 +2,8 @@ using System.Data.Common;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Npgsql;
 using Orbit.Infrastructure.Persistence;
 using Xunit.Abstractions;
@@ -11,9 +13,32 @@ namespace Orbit.Infrastructure.Tests.Persistence;
 public class BoundedReadMigrationRetryTests(ITestOutputHelper output)
 {
     private const string StateBaseline = "20261102102120_PersistStripeCustomerErasureRecovery";
+    private const string StateMigration = "20261102113348_AddBoundedReadState";
+    private const string IndexMigration = "20261102193912_CompleteBoundedReadIndexes";
     private const string UsageIndex = "IX_AiUsageDaily_UserId";
     private const string AwardIndex = "IX_XpAwardLogs_UserId_Source_SourceId";
     private const string AttemptIndex = "IX_Users_GoogleCalendarAutoSyncEnabled_GoogleCalendarLastAttem~";
+
+    [PostgresFact]
+    public Task CleanMigration_LeavesExactlyOneValidUsageIndex() =>
+        PostgresTestDatabase.WithDatabase(async db =>
+        {
+            await RetryAndVerify(db, UsageIndex);
+        }, Baseline("AiUsageDaily"));
+
+    [PostgresFact]
+    public Task RestartAfterSchemaCommit_CompletesOnlyTheRemainingMigrations() =>
+        PostgresTestDatabase.WithDatabase(async db =>
+        {
+            await using (var expanding = CreateContext(db))
+                await expanding.GetService<IMigrator>().MigrateAsync(StateMigration);
+
+            var applied = await db.Database.GetAppliedMigrationsAsync();
+            applied.Should().Contain(StateMigration).And.NotContain(IndexMigration);
+            (await IndexValidity(db, AwardIndex)).Should().BeNull();
+            (await IndexValidity(db, AttemptIndex)).Should().BeNull();
+            await RetryAndVerify(db, AwardIndex);
+        }, StateBaseline);
 
     [PostgresTheory]
     [InlineData("AiUsageDaily", UsageIndex, false)]
@@ -41,6 +66,11 @@ public class BoundedReadMigrationRetryTests(ITestOutputHelper output)
             var valid = await IndexValidity(db, index);
             if (leaveInvalid) valid.Should().BeFalse("the failed PostgreSQL build leaves an unusable index");
             else valid.Should().BeNull("the build was blocked before creating its catalog entry");
+            var applied = await db.Database.GetAppliedMigrationsAsync();
+            applied.Should().NotContain(table == "AiUsageDaily"
+                ? "20261102072150_RestoreBoundedReadIndexes" : IndexMigration);
+            if (table != "AiUsageDaily")
+                applied.Should().Contain(StateMigration, "the schema must be recorded before concurrent work can fail");
             await RetryAndVerify(db, index);
         }, Baseline(table));
 
@@ -88,7 +118,7 @@ public class BoundedReadMigrationRetryTests(ITestOutputHelper output)
             await blocker.CloseAsync();
             (await IndexValidity(db, index)).Should().BeFalse();
             (await db.Database.GetAppliedMigrationsAsync()).Should().NotContain(table == "AiUsageDaily"
-                ? "20261102072150_RestoreBoundedReadIndexes" : "20261102193912_CompleteBoundedReadIndexes");
+                ? "20261102072150_RestoreBoundedReadIndexes" : IndexMigration);
             await RetryAndVerify(db, index);
         }, Baseline(table));
 
@@ -98,7 +128,13 @@ public class BoundedReadMigrationRetryTests(ITestOutputHelper output)
         var migration = () => retry.Database.MigrateAsync();
         await migration.Should().NotThrowAsync("a fresh release invocation must recover without schema repair");
         foreach (var name in new[] { UsageIndex, AwardIndex, AttemptIndex })
+        {
             (await IndexValidity(db, name)).Should().BeTrue();
+            (await retry.Database.SqlQuery<int>($"""
+                SELECT COUNT(*)::int AS "Value" FROM pg_indexes
+                WHERE schemaname = 'public' AND indexname = {name}
+                """).SingleAsync()).Should().Be(1);
+        }
         (await retry.Database.GetPendingMigrationsAsync()).Should().BeEmpty();
         retry.Database.HasPendingModelChanges().Should().BeFalse();
         output.WriteLine("Fresh-context retry recovered " + index);

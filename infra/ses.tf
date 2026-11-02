@@ -277,7 +277,10 @@ resource "aws_sns_topic_policy" "ses_dead_letter_alerts" {
       Action    = "SNS:Publish"
       Resource  = aws_sns_topic.ses_dead_letter_alerts.arn
       Condition = {
-        ArnEquals    = { "aws:SourceArn" = aws_cloudwatch_metric_alarm.ses_events_dead_letter.arn }
+        ArnEquals = { "aws:SourceArn" = concat(
+          [aws_cloudwatch_metric_alarm.ses_events_dead_letter.arn],
+          [for alarm in aws_cloudwatch_metric_alarm.production_health : alarm.arn]
+        ) }
         StringEquals = { "aws:SourceAccount" = "713285551626" }
       }
     }]

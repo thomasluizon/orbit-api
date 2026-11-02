@@ -34,7 +34,6 @@ public partial class CalendarAutoSyncService(
     public async Task RunAsync(CancellationToken cancellationToken)
     {
         await ProcessTick(cancellationToken);
-        BackgroundServiceHealthCheck.RecordTick("CalendarAutoSync");
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -48,7 +47,6 @@ public partial class CalendarAutoSyncService(
                 try
                 {
                     await ProcessTick(stoppingToken);
-                    BackgroundServiceHealthCheck.RecordTick("CalendarAutoSync");
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {

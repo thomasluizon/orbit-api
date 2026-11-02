@@ -167,7 +167,7 @@ public class RetiredTableCallerTests
         await new SyncCleanupService(scopes, NullLogger<SyncCleanupService>.Instance)
             .PurgeSoftDeletedEntities(CancellationToken.None);
         using var migration = new DataEncryptionMigrationService(scopes, encryption,
-            NullLogger<DataEncryptionMigrationService>.Instance);
+            NullLogger<DataEncryptionMigrationService>.Instance, new Orbit.Infrastructure.Tests.BackgroundJobs.TestScheduledJobLeaseProvider());
         await migration.RunMigrationAsync(CancellationToken.None);
 
         AssertNoRetiredCommands(commands);

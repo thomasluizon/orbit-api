@@ -85,7 +85,7 @@ or another account's id returns `404` with `CONVERSATION_NOT_FOUND`.
 
 There is no time-based `ConversationTurns` expiry. The obsolete
 `conversation-retention` schedule is removed. `ChatTurnRetentionJob`, registered
-as `chat-turn-retention` with cron `15 * * * *` in both scheduler modes, purges
+as `chat-turn-retention` with cron `15 * * * *` through Hangfire, purges
 only `ChatTurns` idempotency rows whose `ExpiresAtUtc` is more than 30 days old.
 This includes terminal response copies and runs independently of the recording
 flag. Unexpired and recently expired idempotency rows remain. Fresh Start and

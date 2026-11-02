@@ -22,6 +22,24 @@ namespace Orbit.Infrastructure.Tests.Services;
 
 public class OwedSubscriptionCancellationTests
 {
+    [Fact]
+    public async Task Scanner_LargeDueSet_ProcessesAtMostFiftyRecords()
+    {
+        using var fixture = new Fixture();
+        using (var seed = fixture.Factory.CreateContext())
+        {
+            for (var index = 0; index < 100; index++)
+                seed.OwedSubscriptionCancellations.Add(OwedSubscriptionCancellation.Create(SubscriptionSource.Stripe, $"sub_{index}"));
+            await seed.SaveChangesAsync();
+        }
+        fixture.Clock.UtcNow = DateTimeOffset.UtcNow.AddSeconds(1);
+
+        await fixture.ScanAsync();
+
+        using var read = fixture.Factory.CreateContext();
+        (await read.OwedSubscriptionCancellations.CountAsync()).Should().Be(50);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -334,7 +352,7 @@ public class OwedSubscriptionCancellationTests
 
     private sealed class Fixture : IDisposable
     {
-        public SqliteOrbitDbContextFactory Factory { get; } = new();
+        public SqliteOrbitDbContextFactory Factory { get; } = new(Path.Combine(Path.GetTempPath(), $"owed-{Guid.NewGuid():N}.db"));
         public IBillingService Stripe { get; } = Substitute.For<IBillingService>();
         public IPlayBillingService Play { get; } = Substitute.For<IPlayBillingService>();
         public MutableClock Clock { get; } = new();
