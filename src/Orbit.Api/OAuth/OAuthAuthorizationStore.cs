@@ -13,7 +13,6 @@ public sealed class OAuthAuthorizationStore(IOAuthStateStore states, TimeProvide
     public GoogleAuthorizationRequest? TryCreateGoogleRequest(string clientId, string redirectUri, string clientState,
         string codeChallenge, string? nonce, string googleRedirectUri, string language, IReadOnlyList<string>? scopes = null)
     {
-        Cleanup();
         var verifier = NewSecret();
         var challenge = Challenge(verifier);
         var request = new GoogleAuthorizationRequest(NewSecret(), clientId, redirectUri, clientState,
@@ -28,7 +27,6 @@ public sealed class OAuthAuthorizationStore(IOAuthStateStore states, TimeProvide
     public string CreateCode(Guid userId, string codeChallenge, string redirectUri, string clientId, string? nonce = null,
         IReadOnlyList<string>? scopes = null, bool isReadOnly = false)
     {
-        Cleanup();
         var code = NewSecret();
 #pragma warning disable ORBIT0004 // CreateCode stamps AuthorizationEntry.CreatedAt for the authorization code TTL, independently of the user timezone. https://github.com/thomasluizon/orbit-tickets/issues/230
         var entry = new AuthorizationEntry(userId, codeChallenge, redirectUri, clientId, nonce, DateTime.UtcNow, scopes, isReadOnly);
@@ -86,17 +84,9 @@ public sealed class OAuthAuthorizationStore(IOAuthStateStore states, TimeProvide
 
     private string PutUntil<T>(string kind, T entry, DateTime expiresAtUtc)
     {
-        Cleanup();
         var secret = NewSecret();
         states.Put(secret, kind, JsonSerializer.Serialize(entry), expiresAtUtc);
         return secret;
-    }
-
-    private void Cleanup()
-    {
-#pragma warning disable ORBIT0004 // Cleanup evicts authorization codes whose CreatedAt instant precedes the CodeExpiry cutoff. https://github.com/thomasluizon/orbit-tickets/issues/230
-        states.RemoveExpired(DateTime.UtcNow);
-#pragma warning restore ORBIT0004
     }
 
     private static T? Deserialize<T>(string? payload) => payload is null ? default : JsonSerializer.Deserialize<T>(payload);

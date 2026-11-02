@@ -48,7 +48,6 @@ public partial class ReminderSchedulerService(
     protected override async Task ExecuteTickAsync(CancellationToken stoppingToken)
     {
         await CheckAndSendReminders(stoppingToken);
-        BackgroundServiceHealthCheck.RecordTick("ReminderScheduler");
     }
 
     protected override void LogStarted() => LogServiceStarted(logger);
@@ -59,8 +58,8 @@ public partial class ReminderSchedulerService(
 
     internal async Task CheckAndSendReminders(CancellationToken ct)
     {
+        if (!await _tickGate.WaitAsync(0, ct)) return;
         var pending = new List<PendingReminderPush>();
-        await _tickGate.WaitAsync(ct);
         try
         {
             using var scope = scopeFactory.CreateScope();

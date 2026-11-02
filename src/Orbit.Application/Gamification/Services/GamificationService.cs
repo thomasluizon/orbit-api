@@ -453,10 +453,44 @@ public partial class GamificationService(
         }
     }
 
+    public async Task<IReadOnlyList<FoundingReconciliationResult>> ReconcileFoundingAchievementPageAsync(
+        IReadOnlyCollection<Guid> userIds, CancellationToken ct = default)
+    {
+        var pushes = new List<PendingPush>();
+        var results = await unitOfWork.ExecuteInTransactionAsync(async token =>
+        {
+            pushes.Clear();
+            var ids = userIds.Distinct().Order().ToList();
+            foreach (var id in ids)
+                await unitOfWork.AcquireAdvisoryLockAsync(ClosedMonthRecapLock.ForUser(id), token);
+            var evidence = await repos.FoundingAchievementReader.ReadEvidencePageAsync(ids, token);
+            var outcomes = new List<FoundingReconciliationResult>(ids.Count);
+            foreach (var id in ids)
+            {
+                if (!evidence.TryGetValue(id, out var found)) continue;
+                var pending = new List<PendingPush>();
+                try
+                {
+                    var granted = await unitOfWork.ExecuteInSavepointAsync(
+                        inner => ComputeFoundingReconciliationAsync(id, pending, inner, found), token);
+                    outcomes.Add(new(id, granted));
+                    pushes.AddRange(pending);
+                }
+                catch (Exception exception) when (exception is not OperationCanceledException)
+                {
+                    outcomes.Add(new(id, [], exception));
+                }
+            }
+            return (IReadOnlyList<FoundingReconciliationResult>)outcomes;
+        }, ct);
+        await FlushPushesAsync(pushes, ct);
+        return results;
+    }
+
     private async Task<IReadOnlyList<string>> ComputeFoundingReconciliationAsync(
         Guid userId,
         List<PendingPush> pushes,
-        CancellationToken ct)
+        CancellationToken ct, FoundingAchievementEvidence? prefetchedEvidence = null)
     {
         if (!await IsGamificationUnlockedForUserAsync(userId, ct))
             return [];
@@ -465,7 +499,7 @@ public partial class GamificationService(
         if (FoundingAchievementIds.All(earned.Contains))
             return [];
 
-        var evidence = await repos.FoundingAchievementReader.ReadEvidenceAsync(userId, ct);
+        var evidence = prefetchedEvidence ?? await repos.FoundingAchievementReader.ReadEvidenceAsync(userId, ct);
         if (evidence is null)
             return [];
 

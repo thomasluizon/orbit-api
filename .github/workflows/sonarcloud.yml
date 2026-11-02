@@ -90,7 +90,7 @@ jobs:
           mkdir -p coverage
           node --experimental-test-coverage --test --test-coverage-include=infra/check-web-plan.mjs --test-reporter=lcov --test-reporter-destination=coverage/web-plan.lcov infra/check-web-plan.test.mjs
           node --experimental-test-coverage --test --test-coverage-include=infra/check-production-plan.mjs --test-reporter=lcov --test-reporter-destination=coverage/production-plan.lcov infra/check-production-plan.test.mjs
-          node --experimental-test-coverage --test --test-coverage-include=infra/workers/staging-pinger.mjs --test-reporter=lcov --test-reporter-destination=coverage/staging-pinger.lcov infra/staging-pinger.test.mjs
+          node --experimental-test-coverage --test --test-coverage-include=infra/workers/staging-pinger.mjs --test-coverage-include=infra/workers/production-health.mjs --test-reporter=lcov --test-reporter-destination=coverage/staging-pinger.lcov infra/staging-pinger.test.mjs infra/production-health.test.mjs
 
       - name: SonarScanner End
         env:

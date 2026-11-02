@@ -10,7 +10,7 @@ namespace Orbit.Infrastructure.Tests.Persistence;
 public class OAuthConsentStateTests
 {
     [Fact]
-    public void Take_Consent_RetainsUsedRowUntilExpiry()
+    public async Task Take_Consent_RetainsUsedRowUntilScheduledCleanup()
     {
         using var database = new SqliteOrbitDbContextFactory();
         var store = new OAuthStateStore(database.Context, TimeProvider.System);
@@ -24,12 +24,12 @@ public class OAuthConsentStateTests
         store.Read("ticket", "consent", nowAtUtc).Should().Be("payload");
         store.ReadState("ticket", "consent", nowAtUtc).Should().Be(new OAuthStateSnapshot("payload", true));
         database.Context.OAuthStates.AsNoTracking().Should().ContainSingle().Which.ConsumedAtUtc.Should().Be(nowAtUtc);
-        store.RemoveExpired(expiresAtUtc.AddTicks(-1));
+        await BatchedDelete.ExecuteAsync(database.Context.OAuthStates.Where(state => state.ExpiresAtUtc <= expiresAtUtc.AddTicks(-1)), default);
         database.Context.OAuthStates.AsNoTracking().Should().ContainSingle();
         store.Read("ticket", "consent", expiresAtUtc).Should().BeNull();
         store.ReadState("ticket", "consent", expiresAtUtc).Should().BeNull();
         store.Take("ticket", "consent", expiresAtUtc).Should().BeNull();
-        store.RemoveExpired(expiresAtUtc);
+        await BatchedDelete.ExecuteAsync(database.Context.OAuthStates.Where(state => state.ExpiresAtUtc <= expiresAtUtc), default);
         database.Context.OAuthStates.AsNoTracking().Should().BeEmpty();
     }
 

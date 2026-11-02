@@ -15,7 +15,8 @@ namespace Orbit.Infrastructure.Services;
 public partial class HabitDueDateAdvancementService(
     IServiceScopeFactory scopeFactory,
     ILogger<HabitDueDateAdvancementService> logger,
-    IConfiguration configuration) : BackgroundService, IScheduledJob
+    IConfiguration configuration,
+    TimeProvider clock) : BackgroundService, IScheduledJob
 {
     private readonly TimeSpan _interval = TimeSpan.FromMinutes(
         configuration.GetValue("BackgroundServices:DueDateAdvancementIntervalMinutes", 30));
@@ -27,7 +28,6 @@ public partial class HabitDueDateAdvancementService(
     public async Task RunAsync(CancellationToken cancellationToken)
     {
         await AdvanceStaleDueDates(cancellationToken);
-        BackgroundServiceHealthCheck.RecordTick("HabitDueDateAdvancement");
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -41,7 +41,6 @@ public partial class HabitDueDateAdvancementService(
                 try
                 {
                     await AdvanceStaleDueDates(stoppingToken);
-                    BackgroundServiceHealthCheck.RecordTick("HabitDueDateAdvancement");
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
@@ -57,10 +56,8 @@ public partial class HabitDueDateAdvancementService(
         }
     }
 
-    internal static DateOnly ConservativeCutoffUtc() =>
-#pragma warning disable ORBIT0004 // ConservativeCutoffUtc is the widened stale-habit prefetch floor; ShouldAdvanceForUserToday checks the separately converted userToday before mutation. https://github.com/thomasluizon/orbit-tickets/issues/230
-        DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1));
-#pragma warning restore ORBIT0004
+    internal static DateOnly ConservativeCutoffUtc(TimeProvider clock) =>
+        DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime.AddDays(1));
 
     internal static Expression<Func<Habit, bool>> StaleBadHabitFilter(DateOnly cutoff) =>
         h => !h.IsCompleted
@@ -77,68 +74,74 @@ public partial class HabitDueDateAdvancementService(
         using var scope = scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
 
-        var cutoff = ConservativeCutoffUtc();
-        var habits = await dbContext.Habits
-            .AsNoTracking()
-            .Where(StaleBadHabitFilter(cutoff))
-            .ToListAsync(ct);
-
-        if (habits.Count == 0) return;
-
-        var userIds = habits.Select(h => h.UserId).Distinct().ToList();
-        var users = await dbContext.Users
-            .Where(u => userIds.Contains(u.Id))
-            .ToDictionaryAsync(u => u.Id, ct);
-
-        var advanced = 0;
-        foreach (var habit in habits)
+        var cutoff = ConservativeCutoffUtc(clock);
+        Guid? cursor = null;
+        while (true)
         {
-            try
+            var habits = await dbContext.Habits
+                .AsNoTracking()
+                .Where(StaleBadHabitFilter(cutoff)).Page(cursor, configuration.GetValue("BackgroundServices:ScanPageSize", JobPaging.DefaultPageSize))
+                .ToListAsync(ct);
+
+            if (habits.Count == 0) return;
+            cursor = habits[^1].Id;
+
+            var userIds = habits.Select(h => h.UserId).Distinct().ToList();
+            var users = await dbContext.Users
+                .Where(u => userIds.Contains(u.Id))
+                .ToDictionaryAsync(u => u.Id, ct);
+
+            var advanced = 0;
+            foreach (var habit in habits)
             {
-                if (!users.TryGetValue(habit.UserId, out var user)) continue;
-
-                var tz = TimeZoneHelper.FindTimeZone(user.TimeZone, logger, user.Id);
-                var userNow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz);
-                var userToday = DateOnly.FromDateTime(userNow);
-
-                if (!ShouldAdvanceForUserToday(habit, userToday)) continue;
-
-                var loadedVersion = habit.ReminderProbeVersion;
-                var result = habit.CatchUpDueDate(userToday, user.WeekStartDay);
-                if (result.IsFailure)
+                try
                 {
-                    LogHabitSkipped(logger, habit.Id, result.ErrorCode);
-                    continue;
+                    if (!users.TryGetValue(habit.UserId, out var user)) continue;
+
+                    var tz = TimeZoneHelper.FindTimeZone(user.TimeZone, logger, user.Id);
+                    var userNow = TimeZoneInfo.ConvertTimeFromUtc(clock.GetUtcNow().UtcDateTime, tz);
+                    var userToday = DateOnly.FromDateTime(userNow);
+
+                    if (!ShouldAdvanceForUserToday(habit, userToday)) continue;
+
+                    var loadedVersion = habit.ReminderProbeVersion;
+                    var result = habit.CatchUpDueDate(userToday, user.WeekStartDay);
+                    if (result.IsFailure)
+                    {
+                        LogHabitSkipped(logger, habit.Id, result.ErrorCode);
+                        continue;
+                    }
+
+                    var changed = await dbContext.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+                    {
+                        await using var transaction = await dbContext.Database.BeginTransactionAsync(ct);
+                        var updated = await dbContext.Habits
+                            .Where(row => row.Id == habit.Id && row.ReminderProbeVersion == loadedVersion)
+                            .ExecuteUpdateAsync(setters => setters
+                                .SetProperty(row => row.NextDueDate, habit.NextDueDate)
+                                .SetProperty(row => row.IsCompleted, habit.IsCompleted)
+                                .SetProperty(row => row.ScheduledStartDate, habit.ScheduledStartDate)
+                                .SetProperty(row => row.UpdatedAtUtc, clock.GetUtcNow().UtcDateTime)
+                                .SetProperty(row => row.ReminderProbeVersion, row => row.ReminderProbeVersion + 1), ct);
+                        if (updated > 0)
+                            await new UserCacheVersions(dbContext).BumpAsync(habit.UserId, ct);
+                        await transaction.CommitAsync(ct);
+                        return updated;
+                    });
+                    advanced += changed;
                 }
-
-                var changed = await dbContext.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+                catch (Exception ex) when (ex is not OperationCanceledException)
                 {
-                    await using var transaction = await dbContext.Database.BeginTransactionAsync(ct);
-                    var updated = await dbContext.Habits
-                    .Where(row => row.Id == habit.Id && row.ReminderProbeVersion == loadedVersion)
-                    .ExecuteUpdateAsync(setters => setters
-                        .SetProperty(row => row.NextDueDate, habit.NextDueDate)
-                        .SetProperty(row => row.IsCompleted, habit.IsCompleted)
-                        .SetProperty(row => row.ScheduledStartDate, habit.ScheduledStartDate)
-                        .SetProperty(row => row.UpdatedAtUtc, DateTime.UtcNow)
-                        .SetProperty(row => row.ReminderProbeVersion, row => row.ReminderProbeVersion + 1), ct);
-                    if (updated > 0)
-                        await new UserCacheVersions(dbContext).BumpAsync(habit.UserId, ct);
-                    await transaction.CommitAsync(ct);
-                    return updated;
-                });
-                advanced += changed;
+                    LogHabitUnexpectedError(logger, ex, habit.Id);
+                }
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                LogHabitUnexpectedError(logger, ex, habit.Id);
-            }
-        }
 
-        if (advanced > 0)
-        {
-            if (logger.IsEnabled(LogLevel.Debug))
-                LogDueDatesAdvanced(logger, advanced);
+            if (advanced > 0)
+            {
+                if (logger.IsEnabled(LogLevel.Debug))
+                    LogDueDatesAdvanced(logger, advanced);
+            }
+            dbContext.ChangeTracker.Clear();
         }
     }
 

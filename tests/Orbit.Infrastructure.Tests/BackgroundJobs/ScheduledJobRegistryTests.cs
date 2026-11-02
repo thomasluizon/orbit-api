@@ -47,6 +47,14 @@ public class ScheduledJobRegistryTests
     }
 
     [Fact]
+    public void RegistryFixture_CoversEveryScheduledJobType()
+    {
+        var jobTypes = typeof(IScheduledJob).Assembly.GetTypes()
+            .Where(type => type.IsClass && !type.IsAbstract && typeof(IScheduledJob).IsAssignableFrom(type));
+        BuildAll().Select(job => job.GetType()).Should().BeEquivalentTo(jobTypes);
+    }
+
+    [Fact]
     public void JobNames_AreUnique()
     {
         var names = BuildAll().Select(job => job.Name).ToList();
@@ -57,64 +65,33 @@ public class ScheduledJobRegistryTests
     [Fact]
     public void AllRecurringSchedulers_AreRegisteredAsJobs()
     {
-        BuildAll().Should().HaveCount(16);
+        BuildAll().Should().HaveCount(20);
         BuildAll().Select(job => job.Name).Should().NotContain("openai-batch-poller");
     }
 
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void MemoryPollerIsAbsentFromBothSchedulerModes(bool durable)
+    [Fact]
+    public void EveryRegisteredJob_HasHeartbeatInterval()
     {
-        var builder = WebApplication.CreateBuilder();
-        if (durable)
-            OrbitServiceCollectionExtensions.AddDurableRecurringJobs(builder);
-        else
-            OrbitServiceCollectionExtensions.AddInProcessSchedulers(builder);
-
-        builder.Services.Select(descriptor => descriptor.ImplementationType?.Name)
-            .Should().NotContain("OpenAiBatchPollerService");
-        builder.Services.Select(descriptor => descriptor.ServiceType.Name)
-            .Should().NotContain("OpenAiBatchPollerService");
+        foreach (var job in BuildAll())
+            BackgroundServiceHealthCheck.ExpectedIntervals.Should().ContainKey(job.Name);
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void OwedCancellationWorker_IsRegisteredInBothSchedulerModes(bool durable)
+    [InlineData("auth-state-cleanup")]
+    [InlineData("durable-delivery-recovery")]
+    public void DurableAuthJobs_HavePersistedHeartbeatIntervals(string name)
     {
-        var builder = WebApplication.CreateBuilder();
-        if (durable)
-        {
-            OrbitServiceCollectionExtensions.AddDurableRecurringJobs(builder);
-            builder.Services.Any(descriptor => descriptor.ServiceType == typeof(OwedSubscriptionCancellationService))
-                .Should().BeTrue();
-        }
-        else
-        {
-            OrbitServiceCollectionExtensions.AddInProcessSchedulers(builder);
-            builder.Services.Any(descriptor => descriptor.ServiceType == typeof(IHostedService)
-                && descriptor.ImplementationType == typeof(OwedSubscriptionCancellationService)).Should().BeTrue();
-        }
+        BackgroundServiceHealthCheck.ExpectedIntervals.Should().ContainKey(name);
     }
 
-    [Theory]
-    [InlineData(null, true)]
-    [InlineData("true", true)]
-    [InlineData("false", false)]
-    public void InProcessRegistration_RespectsDefaultOnStreakFreezeFlag(
-        string? configuredValue,
-        bool expectedRegistered)
+    [Fact]
+    public void DurableRegistration_IncludesAllRecurringSchedulers()
     {
         var builder = WebApplication.CreateBuilder();
-        builder.Configuration["BackgroundServices:StreakFreezeAutoActivationEnabled"] = configuredValue;
-
-        OrbitServiceCollectionExtensions.AddInProcessSchedulers(builder);
-
-        builder.Services.Any(descriptor =>
-            descriptor.ServiceType == typeof(IHostedService)
-            && descriptor.ImplementationType == typeof(StreakFreezeAutoActivationService))
-            .Should().Be(expectedRegistered);
+        builder.Configuration["BackgroundServices:PeriodCloseNotificationEnabled"] = "true";
+        OrbitServiceCollectionExtensions.AddDurableRecurringJobs(builder);
+        foreach (var job in BuildAll().Where(job => job is not ChatTurnRetentionJob))
+            builder.Services.Should().Contain(descriptor => descriptor.ServiceType == job.GetType());
     }
 
     [Theory]
@@ -139,25 +116,6 @@ public class ScheduledJobRegistryTests
     [InlineData(null, false)]
     [InlineData("true", true)]
     [InlineData("false", false)]
-    public void InProcessRegistration_RespectsDefaultOffPeriodCloseFlag(
-        string? configuredValue,
-        bool expectedRegistered)
-    {
-        var builder = WebApplication.CreateBuilder();
-        builder.Configuration["BackgroundServices:PeriodCloseNotificationEnabled"] = configuredValue;
-
-        OrbitServiceCollectionExtensions.AddInProcessSchedulers(builder);
-
-        builder.Services.Any(descriptor =>
-            descriptor.ServiceType == typeof(IHostedService)
-            && descriptor.ImplementationType == typeof(PeriodCloseNotificationService))
-            .Should().Be(expectedRegistered);
-    }
-
-    [Theory]
-    [InlineData(null, false)]
-    [InlineData("true", true)]
-    [InlineData("false", false)]
     public void DurableRegistration_RespectsDefaultOffPeriodCloseFlag(
         string? configuredValue,
         bool expectedRegistered)
@@ -173,7 +131,7 @@ public class ScheduledJobRegistryTests
     }
 
     [Fact]
-    public async Task RunAsync_ExecutesUnderlyingScan_WithoutDoubleRunningSideEffects()
+    public async Task RunAsync_EmptyScan_SendsNothing()
     {
         using var factory = new SqliteOrbitDbContextFactory();
         var dbContext = factory.Context;
@@ -191,7 +149,10 @@ public class ScheduledJobRegistryTests
 
     private static List<IScheduledJob> BuildAll() =>
     [
+        new HangfireHistoryRetentionJob(Substitute.For<Hangfire.JobStorage>(), Substitute.For<Hangfire.IBackgroundJobClient>(), TimeProvider.System, EmptyConfiguration),
         new ChatTurnRetentionJob(ScopeFactory()),
+        new Orbit.Infrastructure.Services.Notion.NotionAutoSyncService(ScopeFactory(), TimeProvider.System,
+            NullLogger<Orbit.Infrastructure.Services.Notion.NotionAutoSyncService>.Instance),
         new ReminderSchedulerService(ScopeFactory(), NullLogger<ReminderSchedulerService>.Instance, EmptyConfiguration),
         new GoalDeadlineNotificationService(ScopeFactory(), NullLogger<GoalDeadlineNotificationService>.Instance, EmptyConfiguration),
         new PeriodCloseNotificationService(ScopeFactory(), NullLogger<PeriodCloseNotificationService>.Instance, EmptyConfiguration),
@@ -199,7 +160,7 @@ public class ScheduledJobRegistryTests
         new ProactiveEngineSchedulerService(ScopeFactory(), NullLogger<ProactiveEngineSchedulerService>.Instance),
         new AccountDeletionService(AccountDeletionScopeFactory(), NullLogger<AccountDeletionService>.Instance, EmptyConfiguration),
         new OwedSubscriptionCancellationService(ScopeFactory(), NullLogger<OwedSubscriptionCancellationService>.Instance, TimeProvider.System),
-        new HabitDueDateAdvancementService(ScopeFactory(), NullLogger<HabitDueDateAdvancementService>.Instance, EmptyConfiguration),
+        new HabitDueDateAdvancementService(ScopeFactory(), NullLogger<HabitDueDateAdvancementService>.Instance, EmptyConfiguration, TimeProvider.System),
         new StreakFreezeAutoActivationService(
             ScopeFactory(),
             NullLogger<StreakFreezeAutoActivationService>.Instance,
@@ -207,6 +168,8 @@ public class ScheduledJobRegistryTests
         new StreakGoalSyncService(ScopeFactory(), NullLogger<StreakGoalSyncService>.Instance, EmptyConfiguration),
         new SyncCleanupService(ScopeFactory(), NullLogger<SyncCleanupService>.Instance),
         new PlayNotificationCleanupService(ScopeFactory(), NullLogger<PlayNotificationCleanupService>.Instance),
+        new AuthStateCleanupService(ScopeFactory(), TimeProvider.System, NullLogger<AuthStateCleanupService>.Instance),
+        new DurableDeliveryRecoveryService(ScopeFactory(), NullLogger<DurableDeliveryRecoveryService>.Instance),
         new CalendarAutoSyncService(ScopeFactory(), NullLogger<CalendarAutoSyncService>.Instance, EmptyConfiguration, TimeProvider.System),
         new AiUsageSummaryService(ScopeFactory(), NullLogger<AiUsageSummaryService>.Instance, EmptyConfiguration, Options.Create(new AiSettings())),
         new FoundingAchievementReconciliationService(

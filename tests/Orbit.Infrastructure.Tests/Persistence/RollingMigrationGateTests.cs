@@ -44,10 +44,7 @@ public class RollingMigrationGateTests
     {
         var migration = new CompleteDurableAuthAndDeliveryState { ActiveProvider = "Npgsql.EntityFrameworkCore.PostgreSQL" };
 
-        RollingMigrationGate.Check("20261102083947_CompleteDurableAuthAndDeliveryState", migration.UpOperations)
-            .Should().BeEmpty();
-        var dispatchMigration = new TrackMarketingDispatch { ActiveProvider = "Npgsql.EntityFrameworkCore.PostgreSQL" };
-        RollingMigrationGate.Check("20261102123116_TrackMarketingDispatch", dispatchMigration.UpOperations)
+        RollingMigrationGate.Check("20261102214043_CompleteDurableAuthAndDeliveryState", migration.UpOperations)
             .Should().BeEmpty();
     }
 

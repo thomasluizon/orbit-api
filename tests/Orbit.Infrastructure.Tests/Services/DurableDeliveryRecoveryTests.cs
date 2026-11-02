@@ -26,6 +26,39 @@ namespace Orbit.Infrastructure.Tests.Services;
 public class DurableDeliveryRecoveryTests
 {
     [Fact]
+    public async Task BroadcastDispatch_DoesNotRetainTrackedRecipientsFromEarlierPages()
+    {
+        using var factory = new SqliteOrbitDbContextFactory();
+        for (var index = 0; index < 7; index++)
+        {
+            var user = User.Create("Recipient", $"recipient{index}@example.com").Value;
+            user.SetMarketingConsent(true);
+            factory.Context.Users.Add(user);
+        }
+        await factory.Context.SaveChangesAsync();
+        using var db = factory.CreateContext();
+        var maximumTracked = 0;
+        var jobs = Substitute.For<IBackgroundJobClient>();
+        jobs.Create(Arg.Any<Job>(), Arg.Any<IState>()).Returns(_ =>
+        {
+            maximumTracked = Math.Max(maximumTracked, db.ChangeTracker.Entries<MarketingDelivery>().Count());
+            return "101";
+        });
+        var handler = new SendMarketingBroadcastCommandHandler(new GenericRepository<User>(db),
+            new GenericRepository<MarketingContact>(db), jobs, Substitute.For<IMarketingUnsubscribeTokenService>(),
+            new GenericRepository<MarketingDelivery>(db), new UnitOfWork(db, new DatabaseConnectionSettings()),
+            Options.Create(new MarketingSettings { BroadcastPageSize = 2, SendDelayMilliseconds = 0 }),
+            NullLogger<SendMarketingBroadcastCommandHandler>.Instance, TimeProvider.System);
+
+        var result = await handler.Handle(new("Subject", "Assunto", "<p>Body</p>", "<p>Corpo</p>", null), default);
+
+        result.Value.RecipientCount.Should().Be(7);
+        (await db.MarketingDeliveries.CountAsync()).Should().Be(7);
+        jobs.Received(7).Create(Arg.Any<Job>(), Arg.Any<IState>());
+        maximumTracked.Should().BeLessThanOrEqualTo(2);
+    }
+
+    [Fact]
     public async Task RecipientJob_RendersInTheJobAndDoesNotRepeatARecordedSuccess()
     {
         using var factory = new SqliteOrbitDbContextFactory();
@@ -126,7 +159,7 @@ public class DurableDeliveryRecoveryTests
                 new GenericRepository<MarketingContact>(db), jobs, Substitute.For<IMarketingUnsubscribeTokenService>(),
                 new GenericRepository<MarketingDelivery>(db), new UnitOfWork(db, new DatabaseConnectionSettings()),
                 Options.Create(new MarketingSettings { SendDelayMilliseconds = 0 }),
-                NullLogger<SendMarketingBroadcastCommandHandler>.Instance);
+                NullLogger<SendMarketingBroadcastCommandHandler>.Instance, TimeProvider.System);
             (await handler.Handle(new("Subject", "Assunto", "<p>Body</p>", "<p>Corpo</p>", null), default)).IsSuccess.Should().BeTrue();
         }
         using (var db = factory.CreateContext())

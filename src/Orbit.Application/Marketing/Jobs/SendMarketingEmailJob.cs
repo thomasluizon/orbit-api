@@ -1,4 +1,5 @@
 using FluentValidation;
+using Hangfire;
 using Orbit.Application.Marketing.Validators;
 using Microsoft.Extensions.Options;
 using Orbit.Application.Common;
@@ -14,6 +15,7 @@ public sealed class SendMarketingEmailJob(IEmailService emailService,
     public Task ExecuteAsync(string toEmail, string subject, string bodyHtml, string language, string unsubscribeUrl) =>
         emailService.SendMarketingEmailAsync(toEmail, subject, bodyHtml, language, unsubscribeUrl);
 
+    [Queue("marketing")]
     public async Task ExecuteRecipientAsync(Guid broadcastId, Guid recipientId, string email, string language)
     {
         await new MarketingRecipientDeliveryValidator().ValidateAndThrowAsync(new(broadcastId, recipientId, email, language));
@@ -40,8 +42,9 @@ public sealed class SendMarketingEmailJob(IEmailService emailService,
                 delivery.Language, url, cancellationToken);
             delivery.MarkSent(DateTime.UtcNow);
             await unitOfWork.SaveChangesAsync(cancellationToken);
-            if (settings.Value.SendDelayMilliseconds > 0)
-                await Task.Delay(settings.Value.SendDelayMilliseconds, cancellationToken);
+            var delay = TimeSpan.FromMilliseconds(Math.Max(settings.Value.SendDelayMilliseconds,
+                1000d / Math.Clamp(settings.Value.MaxSendsPerSecond, 1, 14)));
+            await Task.Delay(delay, cancellationToken);
         });
     }
 }

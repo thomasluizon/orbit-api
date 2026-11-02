@@ -12,8 +12,8 @@ using Orbit.Infrastructure.Persistence;
 namespace Orbit.Infrastructure.Migrations
 {
     [DbContext(typeof(OrbitDbContext))]
-    [Migration("20261102072852_PersistEmailChallenges")]
-    partial class PersistEmailChallenges
+    [Migration("20261102214043_CompleteDurableAuthAndDeliveryState")]
+    partial class CompleteDurableAuthAndDeliveryState
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -135,6 +135,8 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("CreatedAtUtc");
+
                     b.HasIndex("CapabilityId", "CreatedAtUtc");
 
                     b.HasIndex("UserId", "CreatedAtUtc");
@@ -208,6 +210,8 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.HasIndex("EvalDateUtc")
                         .HasFilter("\"EvalDateUtc\" IS NOT NULL");
+
+                    b.HasIndex("LocalDate");
 
                     b.HasIndex("UserId", "LocalDate");
 
@@ -412,6 +416,36 @@ namespace Orbit.Infrastructure.Migrations
                         },
                         new
                         {
+                            Key = "SendCodeEmailsPerIpPerDay",
+                            Description = "Daily code email limit per resolved client IP",
+                            Value = "100"
+                        },
+                        new
+                        {
+                            Key = "SendCodeEmailsPerDay",
+                            Description = "Global daily code email safety limit",
+                            Value = "10000"
+                        },
+                        new
+                        {
+                            Key = "OnboardingAttestationCallsPerHour",
+                            Description = "Global hourly onboarding challenge and enrollment limit",
+                            Value = "1000"
+                        },
+                        new
+                        {
+                            Key = "OnboardingAttestationCallsPerDay",
+                            Description = "Global daily onboarding challenge and enrollment limit",
+                            Value = "10000"
+                        },
+                        new
+                        {
+                            Key = "OnboardingEnrollAttemptsPerInstallPerHour",
+                            Description = "Hourly enrollment attempt limit per signed installation subject",
+                            Value = "3"
+                        },
+                        new
+                        {
                             Key = "OnboardingIpCallsPerHour",
                             Description = "Hourly anonymous onboarding call limit per IP address",
                             Value = "10"
@@ -467,6 +501,13 @@ namespace Orbit.Infrastructure.Migrations
                     b.ToTable("AppFeatureFlags");
 
                     b.HasData(
+                        new
+                        {
+                            Key = "gamification_free_tier",
+                            Description = "Unlock gamification for free accounts",
+                            Enabled = false,
+                            UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, 0, DateTimeKind.Utc)
+                        },
                         new
                         {
                             Key = "astra_block_first",
@@ -655,6 +696,8 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("ExpiresAtUtc");
+
                     b.HasIndex("UserId", "KeyHash")
                         .IsUnique();
 
@@ -694,6 +737,9 @@ namespace Orbit.Infrastructure.Migrations
                         .HasColumnType("uuid");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("DeletedAtUtc")
+                        .HasFilter("\"IsDeleted\" = TRUE");
 
                     b.HasIndex("UserId");
 
@@ -770,6 +816,26 @@ namespace Orbit.Infrastructure.Migrations
                     b.ToTable("ContentBlocks");
                 });
 
+            modelBuilder.Entity("Orbit.Domain.Entities.ConversationObjectCleanup", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ConversationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "ConversationId")
+                        .IsUnique();
+
+                    b.ToTable("ConversationObjectCleanups");
+                });
+
             modelBuilder.Entity("Orbit.Domain.Entities.ConversationOffer", b =>
                 {
                     b.Property<Guid>("Id")
@@ -833,6 +899,9 @@ namespace Orbit.Infrastructure.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<string>("ModelContextJson")
+                        .HasColumnType("text");
+
                     b.Property<string>("PreviewOutcomesJson")
                         .IsRequired()
                         .HasColumnType("text");
@@ -867,6 +936,8 @@ namespace Orbit.Infrastructure.Migrations
                     b.HasIndex("ConversationId");
 
                     b.HasIndex("CreatedAtUtc");
+
+                    b.HasIndex("ConversationId", "UserId");
 
                     b.HasIndex("TurnId", "Role")
                         .IsUnique();
@@ -955,6 +1026,8 @@ namespace Orbit.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("PolicyName", "WindowEndsAtUtc");
 
                     b.HasIndex("PolicyName", "PartitionKey", "WindowStartUtc")
                         .IsUnique();
@@ -1076,11 +1149,20 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("DeletedAtUtc")
+                        .HasFilter("\"IsDeleted\" = TRUE");
+
                     b.HasIndex("UserId");
+
+                    b.HasIndex("Status", "Deadline")
+                        .HasFilter("\"Status\" = 0 AND \"IsDeleted\" = FALSE");
 
                     b.HasIndex("UserId", "IsDeleted");
 
                     b.HasIndex("UserId", "UpdatedAtUtc");
+
+                    b.HasIndex(new[] { "UserId" }, "IX_Goals_ActiveUser")
+                        .HasFilter("\"Status\" = 0 AND \"IsDeleted\" = FALSE");
 
                     b.ToTable("Goals");
                 });
@@ -1116,6 +1198,9 @@ namespace Orbit.Infrastructure.Migrations
                         .HasColumnType("numeric");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("DeletedAtUtc")
+                        .HasFilter("\"IsDeleted\" = TRUE");
 
                     b.HasIndex("GoalId");
 
@@ -1164,6 +1249,9 @@ namespace Orbit.Infrastructure.Migrations
                         .HasColumnType("uuid");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("DiscoveredAtUtc")
+                        .HasFilter("\"ImportedAtUtc\" IS NULL");
 
                     b.HasIndex("UserId");
 
@@ -1312,9 +1400,13 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ParentHabitId");
+                    b.HasIndex("DeletedAtUtc")
+                        .HasFilter("\"IsDeleted\" = TRUE");
 
-                    b.HasIndex("UserId");
+                    b.HasIndex("NextDueDate")
+                        .HasFilter("\"IsCompleted\" = FALSE AND \"Schedule\" = 1 AND \"FrequencyQuantity\" IS NOT NULL AND \"IsBadHabit\" = TRUE AND \"IsDeleted\" = FALSE");
+
+                    b.HasIndex("ParentHabitId");
 
                     b.HasIndex("UserId", "GoogleEventId")
                         .IsUnique()
@@ -1323,6 +1415,10 @@ namespace Orbit.Infrastructure.Migrations
                     b.HasIndex("UserId", "IsDeleted");
 
                     b.HasIndex("UserId", "UpdatedAtUtc");
+
+                    b.HasIndex(new[] { "ReminderEnabled", "IsCompleted", "Schedule" }, "IX_Habits_Reminder")
+                        .HasFilter("\"ReminderEnabled\" = TRUE AND \"IsCompleted\" = FALSE")
+                        .HasAnnotation("Npgsql:CreatedConcurrently", true);
 
                     b.ToTable("Habits");
                 });
@@ -1375,6 +1471,9 @@ namespace Orbit.Infrastructure.Migrations
                         .HasColumnType("numeric");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("DeletedAtUtc")
+                        .HasFilter("\"IsDeleted\" = TRUE");
 
                     b.HasIndex("HabitId", "UpdatedAtUtc");
 
@@ -1483,6 +1582,33 @@ namespace Orbit.Infrastructure.Migrations
                     b.ToTable("IssuedAstraBlocks");
                 });
 
+            modelBuilder.Entity("Orbit.Domain.Entities.MarketingBroadcastDelivery", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("BroadcastId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("DeliveredAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("RecipientId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DeliveredAtUtc");
+
+                    b.HasIndex("RecipientId");
+
+                    b.HasIndex("BroadcastId", "RecipientId")
+                        .IsUnique();
+
+                    b.ToTable("MarketingBroadcastDeliveries");
+                });
+
             modelBuilder.Entity("Orbit.Domain.Entities.MarketingContact", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1519,6 +1645,68 @@ namespace Orbit.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("MarketingContacts");
+                });
+
+            modelBuilder.Entity("Orbit.Domain.Entities.MarketingDelivery", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("BackgroundJobId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("BodyHtmlEn")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("BodyHtmlPt")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("BroadcastId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("character varying(320)");
+
+                    b.Property<string>("Language")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTime>("NextRecoveryAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("NotBeforeAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("RecipientId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("SentAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("SubjectEn")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("SubjectPt")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BroadcastId", "RecipientId")
+                        .IsUnique();
+
+                    b.HasIndex("SentAtUtc", "NextRecoveryAtUtc");
+
+                    b.HasIndex("SentAtUtc", "NotBeforeAtUtc");
+
+                    b.ToTable("MarketingDeliveries");
                 });
 
             modelBuilder.Entity("Orbit.Domain.Entities.Notification", b =>
@@ -1567,9 +1755,14 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("CreatedAtUtc");
+
                     b.HasIndex("DedupeKey")
                         .IsUnique()
                         .HasFilter("\"DedupeKey\" IS NOT NULL");
+
+                    b.HasIndex("DeletedAtUtc")
+                        .HasFilter("\"IsDeleted\" = TRUE");
 
                     b.HasIndex("Url")
                         .HasFilter("\"Url\" IS NOT NULL");
@@ -1743,6 +1936,8 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("ExpiresAtUtc");
+
                     b.HasIndex("SecretHash")
                         .IsUnique();
 
@@ -1878,6 +2073,8 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("ExpiresAtUtc");
+
                     b.HasIndex("UserId", "CapabilityId");
 
                     b.HasIndex("UserId", "OperationFingerprint");
@@ -1937,6 +2134,36 @@ namespace Orbit.Infrastructure.Migrations
                     b.ToTable("PendingClarifications");
                 });
 
+            modelBuilder.Entity("Orbit.Domain.Entities.PendingCouponCancellation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("CouponId")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<DateTime>("NextAttemptAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CouponId")
+                        .IsUnique();
+
+                    b.HasIndex("NextAttemptAtUtc");
+
+                    b.ToTable("PendingCouponCancellations");
+                });
+
             modelBuilder.Entity("Orbit.Domain.Entities.ProactiveCalendarDay", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1956,6 +2183,8 @@ namespace Orbit.Infrastructure.Migrations
                         .HasColumnType("uuid");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("LocalDate");
 
                     b.HasIndex("UserId", "LocalDate")
                         .IsUnique();
@@ -2025,6 +2254,8 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("LocalDate");
+
                     b.HasIndex("UserId", "LocalDate")
                         .IsUnique()
                         .HasFilter("\"PushedAtUtc\" IS NOT NULL");
@@ -2068,6 +2299,13 @@ namespace Orbit.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("ConsumedCouponId")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<Guid?>("CouponUserId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("MessageId")
                         .IsRequired()
                         .HasMaxLength(255)
@@ -2076,10 +2314,18 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<DateTime>("ProcessedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<DateTime?>("ProcessingLeaseExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ProcessingLeaseId")
+                        .HasColumnType("uuid");
+
                     b.HasKey("Id");
 
                     b.HasIndex("MessageId")
                         .IsUnique();
+
+                    b.HasIndex("ProcessedAtUtc");
 
                     b.ToTable("ProcessedPlayNotifications");
                 });
@@ -2141,6 +2387,8 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.HasIndex("EventId")
                         .IsUnique();
+
+                    b.HasIndex("ProcessedAtUtc");
 
                     b.ToTable("ProcessedStripeEvents");
                 });
@@ -2276,6 +2524,21 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<Guid?>("ParentReminderId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("PushBody")
+                        .HasColumnType("text");
+
+                    b.Property<string>("PushDataJson")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("PushSentAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PushTitle")
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("PushUserId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTime?>("ReminderAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -2290,9 +2553,16 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("Date");
+
+                    b.HasIndex("HabitId", "Date")
+                        .HasAnnotation("Npgsql:CreatedConcurrently", true);
+
                     b.HasIndex("HabitId", "ReminderAtUtc")
                         .IsUnique()
                         .HasFilter("\"ReminderAtUtc\" IS NOT NULL");
+
+                    b.HasIndex("PushSentAtUtc", "SentAtUtc");
 
                     b.HasIndex("HabitId", "Date", "MinutesBefore", "ReminderTimeUtc", "When")
                         .IsUnique()
@@ -2319,6 +2589,8 @@ namespace Orbit.Infrastructure.Migrations
                         .HasColumnType("date");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("WeekStart");
 
                     b.HasIndex("HabitId", "WeekStart")
                         .IsUnique();
@@ -2385,6 +2657,9 @@ namespace Orbit.Infrastructure.Migrations
                         .HasColumnType("uuid");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("DeletedAtUtc")
+                        .HasFilter("\"IsDeleted\" = TRUE");
 
                     b.HasIndex("UserId", "IsDeleted");
 
@@ -2670,7 +2945,15 @@ namespace Orbit.Infrastructure.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
 
+                    b.Property<int>("StripeCustomerGeneration")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
                     b.Property<string>("StripeCustomerId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("StripeCustomerPendingDeletionId")
                         .HasColumnType("text");
 
                     b.Property<bool>("StripeRenewalStoppedByDeletion")
@@ -2733,6 +3016,9 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("AiMessagesLocalDate")
+                        .HasFilter("\"AiMessagesUsedToday\" > 0");
+
                     b.HasIndex("AppStoreOriginalTransactionId")
                         .IsUnique()
                         .HasFilter("\"AppStoreOriginalTransactionId\" IS NOT NULL");
@@ -2789,6 +3075,20 @@ namespace Orbit.Infrastructure.Migrations
                     b.ToTable("UserAchievements");
                 });
 
+            modelBuilder.Entity("Orbit.Domain.Entities.UserCacheVersion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("Version")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("UserCacheVersions");
+                });
+
             modelBuilder.Entity("Orbit.Domain.Entities.UserSession", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2822,6 +3122,10 @@ namespace Orbit.Infrastructure.Migrations
                         .HasColumnName("xmin");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ExpiresAtUtc");
+
+                    b.HasIndex("RevokedAtUtc");
 
                     b.HasIndex("TokenHash")
                         .IsUnique();
@@ -2886,6 +3190,38 @@ namespace Orbit.Infrastructure.Migrations
                     b.HasIndex("UserId", "AwardedAtUtc");
 
                     b.ToTable("XpAwardLogs");
+                });
+
+            modelBuilder.Entity("Orbit.Infrastructure.Persistence.BackgroundJobHeartbeat", b =>
+                {
+                    b.Property<string>("JobName")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime?>("LastSuccessfulTickAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("RegisteredAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("JobName");
+
+                    b.ToTable("BackgroundJobHeartbeats", (string)null);
+                });
+
+            modelBuilder.Entity("Orbit.Infrastructure.Persistence.ReminderScheduleProbe", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("Version")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(0L);
+
+                    b.HasKey("UserId");
+
+                    b.ToTable("ReminderScheduleProbes", (string)null);
                 });
 
             modelBuilder.Entity("Orbit.Infrastructure.Persistence.TransactionCommit", b =>
@@ -3172,11 +3508,13 @@ namespace Orbit.Infrastructure.Migrations
 
             modelBuilder.Entity("Orbit.Domain.Entities.UserSession", b =>
                 {
-                    b.HasOne("Orbit.Domain.Entities.User", null)
+                    b.HasOne("Orbit.Domain.Entities.User", "User")
                         .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("Orbit.Domain.Entities.UserSessionRefreshToken", b =>
@@ -3189,6 +3527,15 @@ namespace Orbit.Infrastructure.Migrations
                 });
 
             modelBuilder.Entity("Orbit.Domain.Entities.XpAwardLog", b =>
+                {
+                    b.HasOne("Orbit.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Orbit.Infrastructure.Persistence.ReminderScheduleProbe", b =>
                 {
                     b.HasOne("Orbit.Domain.Entities.User", null)
                         .WithMany()

@@ -140,12 +140,12 @@ public class RequireBotProtectionFilterTests
     public async Task Waitlist_MissingToken_DoesNotSendEmailOrCache()
     {
         using var cache = new MemoryCache(new MemoryCacheOptions());
-        var email = Substitute.For<IEmailService>();
+        var jobs = Substitute.For<IBackgroundJobClient>();
         var tokens = Substitute.For<IWaitlistConfirmationTokenService>();
         var handler = new JoinWaitlistCommandHandler(
             ChallengeTestDatabase.For(cache).Store(),
             tokens,
-            email,
+            jobs,
             Options.Create(new WaitlistSettings()));
         var context = CreateContext(new WaitlistController.JoinWaitlistRequest("person@example.com"));
 
@@ -157,7 +157,7 @@ public class RequireBotProtectionFilterTests
 
         context.Result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(400);
         ChallengeTestDatabase.For(cache).Row("waitlist:person@example.com").Should().BeNull();
-        await email.DidNotReceiveWithAnyArgs().SendWaitlistConfirmationAsync(default!, default!, default!, default);
+        jobs.DidNotReceive().Create(Arg.Any<Job>(), Arg.Any<IState>());
     }
 
     [Fact]

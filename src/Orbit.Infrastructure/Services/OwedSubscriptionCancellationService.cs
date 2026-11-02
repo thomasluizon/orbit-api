@@ -24,20 +24,21 @@ public sealed class OwedSubscriptionCancellationService(
         var nowAtUtc = clock.GetUtcNow().UtcDateTime;
         var ids = await context.OwedSubscriptionCancellations.AsNoTracking()
             .Where(record => record.NextAttemptAtUtc <= nowAtUtc)
-            .Select(record => record.Id).ToListAsync(cancellationToken);
-        foreach (var id in ids)
+            .OrderBy(record => record.NextAttemptAtUtc).ThenBy(record => record.Id)
+            .Take(50).Select(record => record.Id).ToListAsync(cancellationToken);
+        await Parallel.ForEachAsync(ids, new ParallelOptions { MaxDegreeOfParallelism = 3, CancellationToken = cancellationToken }, async (id, token) =>
         {
             using var attemptScope = scopeFactory.CreateScope();
             try
             {
                 await attemptScope.ServiceProvider.GetRequiredService<OwedSubscriptionCancellationJob>()
-                    .ExecuteAsync(id, cancellationToken);
+                    .ExecuteAsync(id, token);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 logger.LogError(ex, "Failed to process owed cancellation {CancellationId}", id);
             }
-        }
+        });
     }
 
     protected override Task ExecuteTickAsync(CancellationToken stoppingToken) => RunAsync(stoppingToken);

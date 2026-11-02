@@ -152,7 +152,7 @@ public sealed class XpAwardLogBackfillHostedServiceTests : IDisposable
     }
 
     private XpAwardLogBackfillHostedService CreateSut(IServiceScopeFactory? scopeFactory = null) =>
-        new(scopeFactory ?? _scopeFactory, _logger);
+        new(scopeFactory ?? _scopeFactory, _logger, new Orbit.Infrastructure.Tests.BackgroundJobs.TestScheduledJobLeaseProvider());
 
     private async Task SeedUserAsync(int totalXp)
     {

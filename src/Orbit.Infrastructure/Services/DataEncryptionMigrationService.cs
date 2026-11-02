@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.Persistence;
+using Orbit.Infrastructure.BackgroundJobs;
 
 namespace Orbit.Infrastructure.Services;
 
@@ -17,7 +18,8 @@ namespace Orbit.Infrastructure.Services;
 public sealed partial class DataEncryptionMigrationService(
     IServiceScopeFactory scopeFactory,
     IEncryptionService encryptionService,
-    ILogger<DataEncryptionMigrationService> logger) : BackgroundService
+    ILogger<DataEncryptionMigrationService> logger,
+    IScheduledJobLeaseProvider leases) : BackgroundService
 {
     private const int BatchSize = 50;
 
@@ -33,6 +35,8 @@ public sealed partial class DataEncryptionMigrationService(
     {
         try
         {
+            await using var lease = await leases.TryAcquireAsync("encryption-backfill", stoppingToken);
+            if (lease is null) return;
             if (await HasAlreadyRun(stoppingToken))
             {
                 LogMigrationAlreadyComplete(logger);
@@ -91,11 +95,11 @@ public sealed partial class DataEncryptionMigrationService(
     /// (encrypt) converts all plaintext to ciphertext.
     /// Returns false if any batch failed.
     /// </summary>
-    private async Task<bool> MigrateEntities<T>(string entityName, CancellationToken stoppingToken) where T : class
+    private async Task<bool> MigrateEntities<T>(string entityName, CancellationToken stoppingToken) where T : Orbit.Domain.Common.Entity
     {
         var totalProcessed = 0;
         var hadErrors = false;
-        var offset = 0;
+        Guid? cursor = null;
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -106,9 +110,7 @@ public sealed partial class DataEncryptionMigrationService(
 
                 var batch = await db.Set<T>()
                     .IgnoreQueryFilters()
-                    .OrderBy(e => EF.Property<Guid>(e, "Id"))
-                    .Skip(offset)
-                    .Take(BatchSize)
+                    .Page(cursor, BatchSize)
                     .ToListAsync(stoppingToken);
 
                 if (batch.Count == 0)
@@ -119,12 +121,12 @@ public sealed partial class DataEncryptionMigrationService(
 
                 await db.SaveChangesAsync(stoppingToken);
                 totalProcessed += batch.Count;
-                offset += batch.Count;
+                cursor = batch[^1].Id;
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 if (logger.IsEnabled(LogLevel.Warning))
-                    LogBatchFailed(logger, ex, entityName, offset);
+                    LogBatchFailed(logger, ex, entityName, cursor);
                 hadErrors = true;
                 break;
             }
@@ -154,8 +156,8 @@ public sealed partial class DataEncryptionMigrationService(
     [LoggerMessage(EventId = 5, Level = LogLevel.Error, Message = "Data encryption migration failed -- will retry on next startup")]
     private static partial void LogMigrationFailed(ILogger logger, Exception ex);
 
-    [LoggerMessage(EventId = 6, Level = LogLevel.Warning, Message = "Batch failed for {Entity} at offset {Offset} -- halting migration, will retry on next startup")]
-    private static partial void LogBatchFailed(ILogger logger, Exception ex, string entity, int offset);
+    [LoggerMessage(EventId = 6, Level = LogLevel.Warning, Message = "Batch failed for {Entity} after {Cursor} -- halting migration, will retry on next startup")]
+    private static partial void LogBatchFailed(ILogger logger, Exception ex, string entity, Guid? cursor);
 
     [LoggerMessage(EventId = 7, Level = LogLevel.Information, Message = "Encrypted {Count} {Entity}")]
     private static partial void LogEntitiesEncrypted(ILogger logger, int count, string entity);

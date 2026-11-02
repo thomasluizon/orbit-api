@@ -756,6 +756,7 @@ public partial class DistributedRateLimitServiceTests : IDisposable
     {
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
+            modelBuilder.Ignore<BackgroundJobHeartbeat>();
             modelBuilder.Ignore<User>();
             modelBuilder.Ignore<Habit>();
             modelBuilder.Ignore<HabitLog>();

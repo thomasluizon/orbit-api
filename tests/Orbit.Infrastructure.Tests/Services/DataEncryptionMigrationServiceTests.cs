@@ -101,7 +101,7 @@ public class DataEncryptionMigrationServiceTests
             .BuildServiceProvider();
         var scopeFactory = serviceProvider.GetRequiredService<IServiceScopeFactory>();
         return new DataEncryptionMigrationService(
-            scopeFactory, encryption, NullLogger<DataEncryptionMigrationService>.Instance);
+            scopeFactory, encryption, NullLogger<DataEncryptionMigrationService>.Instance, new Orbit.Infrastructure.Tests.BackgroundJobs.TestScheduledJobLeaseProvider());
     }
 
     private sealed class ThrowingOrbitDbContext(DbContextOptions<OrbitDbContext> options) : OrbitDbContext(options)

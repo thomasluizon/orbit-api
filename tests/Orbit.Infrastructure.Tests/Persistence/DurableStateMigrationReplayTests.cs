@@ -1,4 +1,5 @@
 using System.Data.Common;
+using System.Reflection;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -11,20 +12,33 @@ namespace Orbit.Infrastructure.Tests.Persistence;
 
 public class DurableStateMigrationReplayTests
 {
-    private const string DurableId = "20261102083947_CompleteDurableAuthAndDeliveryState";
-    private const string DispatchId = "20261102123116_TrackMarketingDispatch";
+    private const string MigrationId = "20261102214043_CompleteDurableAuthAndDeliveryState";
 
     [Fact]
-    public void EmailChallenges_HasNoIndependentlyCommittedOperations()
+    public void BranchMigrations_FollowTheMergedBaseSchema()
+    {
+        var baseId = typeof(PersistMarketingBroadcastDeliveries).GetCustomAttribute<MigrationAttribute>()!.Id;
+        foreach (var type in new[] { typeof(CompleteDurableAuthAndDeliveryState) })
+            string.CompareOrdinal(type.GetCustomAttribute<MigrationAttribute>()!.Id, baseId).Should().BePositive();
+    }
+
+    [Fact]
+    public void SchemaAdditions_AreReplaySafeBeforeConcurrentIndexes()
     {
         using var db = Context("Host=unused;Database=unused");
-        var commands = db.GetService<IMigrationsSqlGenerator>().Generate(new PersistEmailChallenges().UpOperations);
-        commands.Should().NotBeEmpty().And.OnlyContain(command => !command.TransactionSuppressed);
+        var commands = db.GetService<IMigrationsSqlGenerator>().Generate(new CompleteDurableAuthAndDeliveryState().UpOperations);
+        commands.Should().Contain(command => !command.TransactionSuppressed);
+        foreach (var command in commands.Where(command => !command.TransactionSuppressed))
+        {
+            if (command.CommandText.Contains("ALTER TABLE", StringComparison.Ordinal))
+                command.CommandText.Should().Contain("ADD COLUMN IF NOT EXISTS");
+            if (command.CommandText.Contains("CREATE TABLE", StringComparison.Ordinal))
+                command.CommandText.Should().Contain("CREATE TABLE IF NOT EXISTS");
+        }
     }
 
     [Theory]
     [InlineData(typeof(CompleteDurableAuthAndDeliveryState))]
-    [InlineData(typeof(TrackMarketingDispatch))]
     public void ConcurrentMigrations_UseReplaySafeSchemaAndRebuildInterruptedIndexes(Type type)
     {
         var migration = (Migration)Activator.CreateInstance(type)!;
@@ -51,45 +65,45 @@ public class DurableStateMigrationReplayTests
     }
 
     [PostgresFact]
-    public Task Dispatch_RestartsAfterSchemaCommit() => Restart(DispatchId, false, false);
+    public Task Dispatch_RestartsAfterSchemaCommit() => Restart(true, false, false);
 
     [PostgresFact]
-    public Task Dispatch_RestartsBeforeHistoryInsert() => Restart(DispatchId, true, false);
+    public Task Dispatch_RestartsBeforeHistoryInsert() => Restart(true, true, false);
 
     [PostgresFact]
-    public Task Dispatch_ReplacesInvalidIndex() => Restart(DispatchId, false, true);
+    public Task Dispatch_ReplacesInvalidIndex() => Restart(true, false, true);
 
     [PostgresFact]
-    public Task DurableState_RestartsAfterSchemaCommit() => Restart(DurableId, false, false);
+    public Task DurableState_RestartsAfterSchemaCommit() => Restart(false, false, false);
 
     [PostgresFact]
-    public Task DurableState_RestartsBeforeHistoryInsert() => Restart(DurableId, true, false);
+    public Task DurableState_RestartsBeforeHistoryInsert() => Restart(false, true, false);
 
     [PostgresFact]
-    public Task DurableState_ReplacesInvalidIndex() => Restart(DurableId, false, true);
+    public Task DurableState_ReplacesInvalidIndex() => Restart(false, false, true);
 
-    private static Task Restart(string target, bool beforeHistory, bool invalidIndex)
+    private static Task Restart(bool dispatch, bool beforeHistory, bool invalidIndex)
         => PostgresTestDatabase.WithDatabase(async db =>
         {
             var connection = db.Database.GetConnectionString()!;
             await using (var interrupted = Context(connection, new StopMigration(beforeHistory)))
             {
-                var migrate = () => interrupted.GetService<IMigrator>().MigrateAsync(target);
+                var migrate = () => interrupted.GetService<IMigrator>().MigrateAsync(MigrationId);
                 await migrate.Should().ThrowAsync<MigrationInterruptedException>();
             }
-            (await db.Database.GetAppliedMigrationsAsync()).Should().NotContain(target);
-            var column = target == DispatchId ? "BackgroundJobId" : "PushBody";
+            (await db.Database.GetAppliedMigrationsAsync()).Should().NotContain(MigrationId);
+            var column = dispatch ? "BackgroundJobId" : "PushBody";
             (await db.Database.SqlQueryRaw<int>(
                 "SELECT count(*)::int AS \"Value\" FROM information_schema.columns WHERE column_name = {0}", column)
                 .SingleAsync()).Should().Be(1, "the schema step committed before the simulated process stop");
 
-            var index = target == DispatchId ? "IX_MarketingDeliveries_SentAtUtc_NextRecoveryAtUtc"
+            var index = dispatch ? "IX_MarketingDeliveries_SentAtUtc_NextRecoveryAtUtc"
                 : "IX_MarketingDeliveries_BroadcastId_RecipientId";
             if (invalidIndex)
             {
-                var dispatchValues = target == DispatchId ? ", \"BackgroundJobId\", \"NextRecoveryAtUtc\"" : "";
-                var dispatchData = target == DispatchId ? ", NULL, now()" : "";
-                var broadcast = target == DispatchId ? "gen_random_uuid()" : "'00000000-0000-0000-0000-000000000001'::uuid";
+                var dispatchValues = dispatch ? ", \"BackgroundJobId\", \"NextRecoveryAtUtc\"" : "";
+                var dispatchData = dispatch ? ", NULL, now()" : "";
+                var broadcast = dispatch ? "gen_random_uuid()" : "'00000000-0000-0000-0000-000000000001'::uuid";
                 var seed = $"""
                     INSERT INTO "MarketingDeliveries" ("Id", "BroadcastId", "RecipientId", "Email", "Language",
                         "SubjectEn", "SubjectPt", "BodyHtmlEn", "BodyHtmlPt", "NotBeforeAtUtc", "SentAtUtc"{dispatchValues})
@@ -98,7 +112,7 @@ public class DurableStateMigrationReplayTests
                         'subject', 'subject', 'body', 'body', now(), now(){dispatchData} FROM generate_series(1, 2);
                     """;
                 await db.Database.ExecuteSqlRawAsync(seed);
-                var columns = target == DispatchId ? "\"SentAtUtc\", \"NextRecoveryAtUtc\"" : "\"BroadcastId\", \"RecipientId\"";
+                var columns = dispatch ? "\"SentAtUtc\", \"NextRecoveryAtUtc\"" : "\"BroadcastId\", \"RecipientId\"";
                 var buildSql = $"CREATE UNIQUE INDEX CONCURRENTLY \"{index}\" ON \"MarketingDeliveries\" ({columns});";
                 var build = () => db.Database.ExecuteSqlRawAsync(buildSql);
                 await build.Should().ThrowAsync<Npgsql.PostgresException>().Where(exception => exception.SqlState == "23505");
@@ -107,8 +121,8 @@ public class DurableStateMigrationReplayTests
             }
 
             await using var restarted = Context(connection);
-            await restarted.GetService<IMigrator>().MigrateAsync(target);
-            (await restarted.Database.GetAppliedMigrationsAsync()).Should().Contain(target);
+            await restarted.GetService<IMigrator>().MigrateAsync(MigrationId);
+            (await restarted.Database.GetAppliedMigrationsAsync()).Should().Contain(MigrationId);
             (await IndexValid(restarted, index)).Should().BeTrue();
             await restarted.Database.ExecuteSqlRawAsync("""
                 INSERT INTO "MarketingDeliveries" ("Id", "BroadcastId", "RecipientId", "Email", "Language",
@@ -116,7 +130,7 @@ public class DurableStateMigrationReplayTests
                 VALUES (gen_random_uuid(), gen_random_uuid(), gen_random_uuid(), 'recovered@example.test', 'en',
                     'subject', 'subject', 'body', 'body', now());
                 """);
-        }, target == DispatchId ? "20261102102120_PersistStripeCustomerErasureRecovery" : "20261102081729_AddReminderScheduleProbes");
+        }, "20261102152831_PersistMarketingBroadcastDeliveries");
 
     private static Task<bool> IndexValid(OrbitDbContext db, string name)
         => db.Database.SqlQueryRaw<bool>("""

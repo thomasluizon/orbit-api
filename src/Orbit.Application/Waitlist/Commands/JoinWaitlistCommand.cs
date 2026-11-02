@@ -1,3 +1,4 @@
+using Hangfire;
 using MediatR;
 using Orbit.Application.Auth.Services;
 using Microsoft.Extensions.Options;
@@ -12,7 +13,7 @@ public record JoinWaitlistCommand(string Email, string Language = "en") : IReque
 public class JoinWaitlistCommandHandler(
     IEmailChallengeStore challenges,
     IWaitlistConfirmationTokenService tokenService,
-    IEmailService emailService,
+    IBackgroundJobClient jobs,
     IOptions<WaitlistSettings> waitlistOptions) : IRequestHandler<JoinWaitlistCommand, Result>
 {
     private readonly WaitlistSettings _settings = waitlistOptions.Value;
@@ -29,7 +30,7 @@ public class JoinWaitlistCommandHandler(
         var token = tokenService.CreateToken(email, language);
         var confirmUrl = $"{_settings.ApiBaseUrl.TrimEnd('/')}/api/waitlist/confirm?token={Uri.EscapeDataString(token)}";
 
-        await emailService.SendWaitlistConfirmationAsync(email, confirmUrl, language, cancellationToken);
+        jobs.Enqueue<SendWaitlistConfirmationJob>(job => job.ExecuteAsync(email, confirmUrl, language, CancellationToken.None));
 
         return Result.Success();
     }

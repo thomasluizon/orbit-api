@@ -14,7 +14,7 @@ namespace Orbit.Infrastructure.Services;
 /// </summary>
 public partial class PlayNotificationCleanupService(
     IServiceScopeFactory scopeFactory,
-    ILogger<PlayNotificationCleanupService> logger) : BackgroundService, IScheduledJob
+    ILogger<PlayNotificationCleanupService> logger, TimeProvider? clock = null) : BackgroundService, IScheduledJob
 {
     private static readonly TimeSpan Interval = TimeSpan.FromHours(24);
     private static readonly TimeSpan PlayRetentionPeriod = TimeSpan.FromDays(30);
@@ -27,7 +27,6 @@ public partial class PlayNotificationCleanupService(
     public async Task RunAsync(CancellationToken cancellationToken)
     {
         await PurgeOldNotifications(cancellationToken);
-        BackgroundServiceHealthCheck.RecordTick("PlayNotificationCleanup");
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -41,14 +40,13 @@ public partial class PlayNotificationCleanupService(
                 try
                 {
                     await PurgeOldNotifications(stoppingToken);
-                    BackgroundServiceHealthCheck.RecordTick("PlayNotificationCleanup");
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
                     LogServiceError(logger, ex);
                 }
 
-                await Task.Delay(Interval, stoppingToken);
+                await Task.Delay(Interval, clock ?? TimeProvider.System, stoppingToken);
             }
         }
         finally
@@ -62,25 +60,32 @@ public partial class PlayNotificationCleanupService(
         using var scope = scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
 
-#pragma warning disable ORBIT0004 // playCutoff removes processed Play notification dedupe entries by ProcessedAtUtc retention age. https://github.com/thomasluizon/orbit-tickets/issues/230
-        var playCutoff = DateTime.UtcNow - PlayRetentionPeriod;
-#pragma warning restore ORBIT0004
-        var purgedNotifications = await dbContext.ProcessedPlayNotifications
-            .Where(n => n.ProcessedAtUtc < playCutoff && n.ConsumedCouponId == null && n.ProcessingLeaseId == null)
-            .ExecuteDeleteAsync(ct);
+        var nowAtUtc = TimeProvider.System.GetUtcNow().UtcDateTime;
+        var failures = new List<Exception>();
+        await PurgeAsync(async () =>
+        {
+            var count = await BatchedDelete.ExecuteAsync(dbContext.ProcessedPlayNotifications
+                .Where(n => n.ProcessedAtUtc < nowAtUtc - PlayRetentionPeriod
+                    && n.ConsumedCouponId == null && n.ProcessingLeaseId == null), ct);
+            if (count > 0) LogNotificationsPurged(logger, count);
+        }, failures, "ProcessedPlayNotifications");
+        await PurgeAsync(async () =>
+        {
+            var count = await BatchedDelete.ExecuteAsync(dbContext.ProcessedStripeEvents
+                .Where(e => e.ProcessedAtUtc < nowAtUtc - StripeRetentionPeriod), ct);
+            if (count > 0) LogStripeEventsPurged(logger, count);
+        }, failures, "ProcessedStripeEvents");
+        if (failures.Count > 0) throw new AggregateException("Billing history cleanup failed.", failures);
+    }
 
-        if (purgedNotifications > 0)
-            LogNotificationsPurged(logger, purgedNotifications);
-
-#pragma warning disable ORBIT0004 // stripeCutoff removes processed Stripe event dedupe entries by ProcessedAtUtc retention age. https://github.com/thomasluizon/orbit-tickets/issues/230
-        var stripeCutoff = DateTime.UtcNow - StripeRetentionPeriod;
-#pragma warning restore ORBIT0004
-        var purgedEvents = await dbContext.ProcessedStripeEvents
-            .Where(e => e.ProcessedAtUtc < stripeCutoff)
-            .ExecuteDeleteAsync(ct);
-
-        if (purgedEvents > 0)
-            LogStripeEventsPurged(logger, purgedEvents);
+    private async Task PurgeAsync(Func<Task> purge, List<Exception> failures, string table)
+    {
+        try { await purge(); }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            failures.Add(exception);
+            LogPurgeFailed(logger, exception, table);
+        }
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "PlayNotificationCleanupService started")]
@@ -89,7 +94,7 @@ public partial class PlayNotificationCleanupService(
     [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "PlayNotificationCleanupService stopped")]
     private static partial void LogServiceStopped(ILogger logger);
 
-    [LoggerMessage(EventId = 3, Level = LogLevel.Error, Message = "Error purging processed Play notifications")]
+    [LoggerMessage(EventId = 3, Level = LogLevel.Error, Message = "Billing history cleanup failed")]
     private static partial void LogServiceError(ILogger logger, Exception ex);
 
     [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "Purged {Count} processed Play notifications older than 30 days")]
@@ -97,4 +102,7 @@ public partial class PlayNotificationCleanupService(
 
     [LoggerMessage(EventId = 5, Level = LogLevel.Information, Message = "Purged {Count} processed Stripe events older than 90 days")]
     private static partial void LogStripeEventsPurged(ILogger logger, int count);
+    [LoggerMessage(EventId = 6, Level = LogLevel.Warning, Message = "Billing history purge failed for {Table}")]
+    private static partial void LogPurgeFailed(ILogger logger, Exception exception, string table);
+
 }

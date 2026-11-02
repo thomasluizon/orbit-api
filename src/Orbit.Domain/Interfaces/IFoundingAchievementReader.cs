@@ -11,6 +11,9 @@ public sealed record FoundingAchievementCursor(Guid UserId, DateTime CreatedAtUt
 
 public interface IFoundingAchievementReader
 {
+    Task<IReadOnlyDictionary<Guid, FoundingAchievementEvidence>> ReadEvidencePageAsync(
+        IReadOnlyCollection<Guid> userIds, CancellationToken cancellationToken = default);
+
     Task<FoundingAchievementEvidence?> ReadEvidenceAsync(
         Guid userId,
         CancellationToken cancellationToken = default);

@@ -184,9 +184,7 @@ public class MigrationLockGateTests
     }
 
     [Theory]
-    [InlineData(typeof(PersistEmailChallenges))]
     [InlineData(typeof(CompleteDurableAuthAndDeliveryState))]
-    [InlineData(typeof(TrackMarketingDispatch))]
     public void DurableAuthAndDeliveryMigrations_UpAndDownMeetLockRulesWithoutExceptions(Type type)
     {
         var migration = (Migration)Activator.CreateInstance(type)!;

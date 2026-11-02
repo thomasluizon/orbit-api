@@ -13,6 +13,8 @@ public readonly record struct GoalCompletionUpdate(
     decimal TargetValue,
     bool JustCompleted);
 
+public sealed record DerivedGoalPreferences(int WeekStartDay, TimeZoneInfo TimeZone);
+
 public interface IGoalCompletionService
 {
     Task SaveCompletedGoalAsync(
@@ -25,7 +27,8 @@ public interface IGoalCompletionService
         IReadOnlyCollection<Guid> goalIds,
         DateOnly userToday,
         bool passiveSync = false,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        DerivedGoalPreferences? preferences = null);
 }
 
 public sealed class GoalCompletionService(
@@ -51,26 +54,24 @@ public sealed class GoalCompletionService(
         IReadOnlyCollection<Guid> goalIds,
         DateOnly userToday,
         bool passiveSync = false,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        DerivedGoalPreferences? preferences = null)
     {
         ArgumentNullException.ThrowIfNull(goalIds);
-        var weekStartDay = await userDateService.GetUserWeekStartDayAsync(userId, cancellationToken);
+        var weekStartDay = preferences?.WeekStartDay ?? await userDateService.GetUserWeekStartDayAsync(userId, cancellationToken);
 
         var candidateIds = goalIds.Distinct().ToList();
         if (passiveSync)
-        {
-            return candidateIds.Count == 0
-                ? []
-                : await SyncDerivedBatchAsync(userId, candidateIds, userToday, weekStartDay, passiveSync, cancellationToken);
-        }
-
+            return candidateIds.Count == 0 ? [] : await SyncDerivedBatchAsync(userId, candidateIds, userToday,
+                weekStartDay, true, preferences?.TimeZone, cancellationToken);
         return await unitOfWork.ExecuteInTransactionAsync<IReadOnlyList<GoalCompletionUpdate>>(async transactionToken =>
         {
+            await unitOfWork.AcquireUserRowLockAsync(userId, transactionToken);
             await unitOfWork.SaveChangesAsync(transactionToken);
             if (candidateIds.Count == 0)
                 return [];
 
-            return await SyncDerivedBatchAsync(userId, candidateIds, userToday, weekStartDay, passiveSync, transactionToken);
+            return await SyncDerivedBatchAsync(userId, candidateIds, userToday, weekStartDay, passiveSync, preferences?.TimeZone, transactionToken);
         }, cancellationToken);
     }
 
@@ -80,6 +81,7 @@ public sealed class GoalCompletionService(
         DateOnly userToday,
         int weekStartDay,
         bool passiveSync,
+        TimeZoneInfo? preferredTimeZone,
         CancellationToken cancellationToken)
     {
         var streakLogCutoff = HabitMetricsCalculator.GetStreakLogCutoff(userToday);
@@ -92,9 +94,9 @@ public sealed class GoalCompletionService(
             .Select(goal => goal.Id).ToList();
         var standardCounts = await GoalStandardCompletionReader.ReadCountsAsync(
             goalRepository, userId, standardIds, cancellationToken);
-        var timeZone = passiveSync
+        var timeZone = preferredTimeZone ?? (passiveSync
             ? await userDateService.GetUserTimeZoneAsync(userId, cancellationToken)
-            : TimeZoneInfo.Utc;
+            : TimeZoneInfo.Utc);
         var snapshots = candidates
             .Select(goal => CreateSnapshot(
                 goal, userToday, weekStartDay, passiveSync, standardCounts.GetValueOrDefault(goal.Id), timeZone))
@@ -192,6 +194,7 @@ public sealed class GoalCompletionService(
     {
         return unitOfWork.ExecuteInTransactionAsync<IReadOnlyList<GoalCompletionUpdate>>(async transactionToken =>
         {
+            await unitOfWork.AcquireUserRowLockAsync(userId, transactionToken);
             var snapshotById = snapshots.ToDictionary(snapshot => snapshot.GoalId);
             var goalIds = snapshotById.Keys.ToList();
             var goals = await goalRepository.FindTrackedAsync(
@@ -232,6 +235,7 @@ public sealed class GoalCompletionService(
     {
         return unitOfWork.ExecuteInTransactionAsync<GoalCompletionUpdate?>(async transactionToken =>
         {
+            await unitOfWork.AcquireUserRowLockAsync(userId, transactionToken);
             var goal = await goalRepository.FindOneTrackedAsync(
                 candidate => candidate.Id == snapshot.GoalId && candidate.UserId == userId,
                 snapshot.Type == GoalType.Standard ? query => query.Include(candidate => candidate.Habits) : null,

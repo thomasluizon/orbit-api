@@ -162,24 +162,17 @@ public class UpdateMarketingConsentCommandHandlerTests
         _userRepo.FindIgnoringFiltersAsync(
             Arg.Any<Expression<Func<User, bool>>>(),
             Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(),
-            Arg.Any<CancellationToken>()).Returns(new[] { user });
-        _contactRepo.GetAllAsync(Arg.Any<CancellationToken>()).Returns(new[] { contact });
+            Arg.Any<CancellationToken>()).Returns(call => new[] { user }.Where(call.Arg<Expression<Func<User, bool>>>().Compile()).ToArray());
+        _contactRepo.FindAsync(Arg.Any<Expression<Func<MarketingContact, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => new[] { contact }.Where(call.Arg<Expression<Func<MarketingContact, bool>>>().Compile()).ToArray());
+        _contactRepo.FindAsync(Arg.Any<Expression<Func<MarketingContact, bool>>>(), Arg.Any<Func<IQueryable<MarketingContact>, IQueryable<MarketingContact>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => new[] { contact }.Where(call.Arg<Expression<Func<MarketingContact, bool>>>().Compile()).ToArray());
 
-        var provider = Substitute.For<IServiceProvider>();
-        provider.GetService(typeof(IEmailService)).Returns(Substitute.For<IEmailService>());
-        provider.GetService(typeof(IMarketingUnsubscribeTokenService))
-            .Returns(Substitute.For<IMarketingUnsubscribeTokenService>());
-        provider.GetService(typeof(ILogger<SendMarketingBroadcastCommandHandler>))
-            .Returns(NullLogger<SendMarketingBroadcastCommandHandler>.Instance);
-        var scope = Substitute.For<IServiceScope>();
-        scope.ServiceProvider.Returns(provider);
-        var scopeFactory = Substitute.For<IServiceScopeFactory>();
-        scopeFactory.CreateScope().Returns(scope);
         var broadcast = new SendMarketingBroadcastCommandHandler(
             _userRepo, _contactRepo, Substitute.For<Hangfire.IBackgroundJobClient>(),
             Substitute.For<IMarketingUnsubscribeTokenService>(), Substitute.For<IGenericRepository<MarketingDelivery>>(), _unitOfWork,
             Options.Create(new MarketingSettings { ApiBaseUrl = "https://api.useorbit.org", SendDelayMilliseconds = 0 }),
-            NullLogger<SendMarketingBroadcastCommandHandler>.Instance);
+            NullLogger<SendMarketingBroadcastCommandHandler>.Instance, TimeProvider.System);
 
         var result = await broadcast.Handle(
             new SendMarketingBroadcastCommand("Subject", "Assunto", "<p>Body</p>", "<p>Corpo</p>", null),
