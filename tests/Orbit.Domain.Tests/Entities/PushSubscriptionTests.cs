@@ -84,10 +84,10 @@ public class PushSubscriptionTests
         PushSubscription.ClassifyTransport(marker).Should().Be(expected);
 
     [Fact]
-    public void MatchesCredentials_Apns_RequiresSameTransport()
+    public void MatchesCredentials_Apns_RequiresSameTransportAndSecret()
     {
         var subscription = PushSubscription.Create(ValidUserId, "device-token", "apns", "auth").Value;
-        subscription.MatchesCredentials("apns", "different-auth").Should().BeTrue();
+        subscription.MatchesCredentials("apns", "different-auth").Should().BeFalse();
         subscription.MatchesCredentials("fcm", "auth").Should().BeFalse();
     }
 
@@ -127,14 +127,27 @@ public class PushSubscriptionTests
     }
 
     [Theory]
-    [InlineData(PushSubscription.FcmSentinel, PushSubscription.FcmSentinel, true)]
-    [InlineData(PushSubscription.FcmSentinel, "any-auth", true)]
+    [InlineData(PushSubscription.FcmSentinel, PushSubscription.FcmSentinel, false)]
+    [InlineData(PushSubscription.FcmSentinel, "any-auth", false)]
     [InlineData("p256dh-key", "auth-secret", false)]
-    public void MatchesCredentials_Fcm_RequiresTheFcmTransport(string p256dh, string auth, bool expected)
+    public void MatchesCredentials_LegacyFcm_RejectsClaims(string p256dh, string auth, bool expected)
     {
         var subscription = PushSubscription.Create(ValidUserId, "device-token", PushSubscription.FcmSentinel, PushSubscription.FcmSentinel).Value;
 
         subscription.MatchesCredentials(p256dh, auth).Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("fcm", "device-token")]
+    [InlineData("apns", "device-token")]
+    [InlineData("wns", "https://notify.windows.com/?token=channel")]
+    public void MatchesCredentials_Native_RequiresInstallSecret(string transport, string endpoint)
+    {
+        var subscription = PushSubscription.Create(ValidUserId, endpoint, transport, "install-secret",
+            deviceId: transport == "wns" ? Guid.NewGuid() : null).Value;
+        subscription.MatchesCredentials(transport, "install-secret").Should().BeTrue();
+        subscription.MatchesCredentials(transport, "wrong-secret").Should().BeFalse();
+        subscription.MatchesCredentials(transport, transport).Should().BeFalse();
     }
 
     [Fact]

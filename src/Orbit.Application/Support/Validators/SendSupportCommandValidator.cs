@@ -8,13 +8,6 @@ public class SendSupportCommandValidator : AbstractValidator<SendSupportCommand>
 {
     public SendSupportCommandValidator()
     {
-        RuleFor(x => x.Name)
-            .NotEmpty().WithFieldCopy(ValidationCopyKeys.NameRequired);
-
-        RuleFor(x => x.Email)
-            .NotEmpty().WithFieldCopy(ValidationCopyKeys.EmailRequired)
-            .EmailAddress().WithFieldCopy(ValidationCopyKeys.EmailFormat);
-
         RuleFor(x => x.Subject)
             .NotEmpty().WithFieldCopy(ValidationCopyKeys.SupportSubjectRequired)
             .MaximumLength(200).WithFieldCopy(ValidationCopyKeys.SupportSubjectLength);

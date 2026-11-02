@@ -37,6 +37,27 @@ public partial class AppStoreCommandTests
     }
 
     [Fact]
+    public async Task Notification_AppleCallRunsOutsideTransaction()
+    {
+        var active = false;
+        _work.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task<Result>>>(), Arg.Any<CancellationToken>())
+            .Returns(async call =>
+            {
+                active = true;
+                try { return await call.Arg<Func<CancellationToken, Task<Result>>>()(default); }
+                finally { active = false; }
+            });
+        _apple.VerifyNotification("signed").Returns(new AppStoreNotification(Guid.NewGuid(), "DID_RENEW", "Sandbox", Transaction));
+        _apple.GetCurrentStateAsync(Arg.Any<AppStoreTransaction>(), Arg.Any<CancellationToken>()).Returns(call =>
+        {
+            active.Should().BeFalse();
+            var tx = call.Arg<AppStoreTransaction>();
+            return new AppStoreSubscriptionState(tx, true, tx.ExpiresAtUtc, tx.SignedAtUtc, false, true);
+        });
+        (await new HandleAppStoreNotificationCommandHandler(_apple, _users, _notifications, _work).Handle(new("signed"), default)).IsSuccess.Should().BeTrue();
+    }
+
+    [Fact]
     public async Task Verify_GrantsAndPreservesOldStrictSourceSchema()
     {
         var result = await new VerifyAppStorePurchaseCommandHandler(_apple, _users, _work).Handle(new(_user.Id, "signed"), default);

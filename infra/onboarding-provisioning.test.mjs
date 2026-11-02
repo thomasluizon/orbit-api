@@ -44,7 +44,7 @@ test("onboarding origins and widget-approved hostnames bind as indexed settings"
   assert.match(onboarding, /for index, hostname in sort\(setintersection\(/)
   assert.match(onboarding, /\[for origin in origins : trimprefix\(origin, "https:\/\/"\)\]/)
   assert.match(onboarding, /toset\(cloudflare_turnstile_widget\.orbit\.domains\)/)
-  assert.match(onboarding, /"OnboardingSecurity__TurnstileHostnames__\$\{index\}" => hostname/)
+  assert.match(onboarding, /"BotProtection__AllowedHostnames__\$\{index\}" => hostname/)
   assert.doesNotMatch(onboarding, /localhost|tauri:\/\/|org\.useorbit\.desktop:\/\//)
 })
 

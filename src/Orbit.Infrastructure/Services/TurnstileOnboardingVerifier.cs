@@ -6,7 +6,7 @@ using Orbit.Domain.Models;
 namespace Orbit.Infrastructure.Services;
 
 public sealed class TurnstileOnboardingVerifier(ITurnstileVerificationService turnstile,
-    IOptions<BotProtectionSettings> botOptions, IOptions<OnboardingSecuritySettings> options)
+    IOptions<BotProtectionSettings> botOptions)
     : IOnboardingAttestationVerifier
 {
     public bool Supports(string platform) => platform is "web" or "desktop";
@@ -14,7 +14,7 @@ public sealed class TurnstileOnboardingVerifier(ITurnstileVerificationService tu
         && !botOptions.Value.SecretKey.StartsWith("1x", StringComparison.Ordinal)
         && !botOptions.Value.SecretKey.StartsWith("2x", StringComparison.Ordinal)
         && !botOptions.Value.SecretKey.StartsWith("3x", StringComparison.Ordinal)
-        && options.Value.TurnstileHostnames.Length > 0;
+        && botOptions.Value.AllowedHostnames.Length > 0;
 
     public async Task<VerifiedOnboardingAttestation?> VerifyAsync(OnboardingAttestation evidence,
         string challenge, string? publicKey, uint counter, CancellationToken cancellationToken)
@@ -23,8 +23,7 @@ public sealed class TurnstileOnboardingVerifier(ITurnstileVerificationService tu
             || evidence.Token.Length > 2048)
             return null;
         var result = await turnstile.VerifyAsync(evidence.Token, cancellationToken);
-        return result.Success && result.Hostname is not null
-            && options.Value.TurnstileHostnames.Contains(result.Hostname, StringComparer.OrdinalIgnoreCase)
+        return result.Success && botOptions.Value.AllowsHostname(result.Hostname)
             ? new VerifiedOnboardingAttestation(null, 0) : null;
     }
 }

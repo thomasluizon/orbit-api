@@ -1,6 +1,10 @@
 using System.Text.Json;
 using System.Security.Claims;
 using FluentAssertions;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.Extensions.Hosting;
+using Orbit.Api.Extensions;
+using Orbit.Api.Hosting;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -272,4 +276,60 @@ public class MinimumVersionMiddlewareTests
     }
 
     private sealed record LogEntry(LogLevel Level, EventId EventId, string Message, Dictionary<string, object?> Fields);
+    [Theory]
+    [InlineData("1.10.0", "1.9.0", true)]
+    [InlineData("1.9.0", "1.10.0", false)]
+    [InlineData("1.1", "1.1.0", true)]
+    public async Task VersionGate_ComparesSegmentsNumerically(string version, string floor, bool allowed)
+    {
+        var (next, context) = await InvokeWithVersion(version, floor);
+        next.Should().Be(allowed);
+        if (!allowed) context.Response.StatusCode.Should().Be(426);
+    }
+
+    [Fact]
+    public async Task Pipeline_VersionBelowFloorWithoutCredentials_Returns426()
+    {
+        var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = Environments.Production });
+        builder.Configuration["Database:MigrateOnStartup"] = "false";
+        builder.Configuration["Logging:LogLevel:Orbit.Api.Middleware.MinimumVersionMiddleware"] = "Warning";
+        builder.Logging.SetMinimumLevel(LogLevel.Warning);
+        builder.Services.AddOrbitShutdownDrain();
+        builder.Services.AddResponseCompression();
+        builder.Services.AddExceptionHandler(options => options.ExceptionHandler = _ => Task.CompletedTask);
+        builder.Services.AddCors(options => options.AddPolicy("ThirdParty", policy => policy.WithOrigins("https://client.example.com")));
+        builder.Services.AddRateLimiter(_ => { });
+        builder.Services.AddAuthentication("test").AddScheme<Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions, NoCredentialsHandler>("test", _ => { });
+        builder.Services.AddAuthorization();
+        builder.Services.AddControllers();
+        builder.Services.AddMcpServer().WithHttpTransport();
+        builder.Services.AddHealthChecks();
+        builder.Services.AddSingleton(BuildConfigService("1.10.0"));
+        await using var app = builder.Build();
+        await app.ConfigureOrbitPipeline();
+        app.MapGet("/private", () => "private").RequireAuthorization();
+        var invoke = ((IApplicationBuilder)app).Build();
+        var context = BuildContext("1.9.0");
+        context.RequestServices = app.Services;
+        context.Request.Method = "GET";
+        context.Request.Path = "/private";
+        context.Request.Scheme = "https";
+        await invoke(context);
+        context.Response.StatusCode.Should().Be(426);
+        context.Items.Should().NotContainKey("authenticated");
+        context.Response.Body.Position = 0;
+        using var body = await JsonDocument.ParseAsync(context.Response.Body);
+        body.RootElement.GetProperty("errorCode").GetString().Should().Be("UPGRADE_REQUIRED");
+    }
+
+    public sealed class NoCredentialsHandler(Microsoft.Extensions.Options.IOptionsMonitor<AuthenticationSchemeOptions> options,
+        ILoggerFactory logger, System.Text.Encodings.Web.UrlEncoder encoder) : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
+    {
+        protected override Task<AuthenticateResult> HandleAuthenticateAsync()
+        {
+            Context.Items["authenticated"] = true;
+            return Task.FromResult(AuthenticateResult.NoResult());
+        }
+    }
+
 }

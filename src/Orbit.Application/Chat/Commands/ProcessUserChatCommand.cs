@@ -243,7 +243,7 @@ public partial class ProcessUserChatCommandHandler(
         }
         finally
         {
-            if (!await RecordConversationAsync(request, recording, response, cancellationToken))
+            if (!await RecordConversationAsync(request, recording, response, CancellationToken.None))
             {
                 evalTrace = null;
                 response = Result.Success(await ConversationErasedReplyAsync(request, recording, cancellationToken));
@@ -275,6 +275,7 @@ public partial class ProcessUserChatCommandHandler(
             if (preparedConversation.IsFailure) return preparedConversation.PropagateError<ChatResponse>();
             request = preparedConversation.Value;
             recording.Enabled = true;
+            var moderationFlags = await data.FeatureFlagService.GetEnabledKeysForUserAsync(request.UserId, cancellationToken);
             ChatContext? choiceContext = null;
             var answerService = new AstraBlockAnswerService(execution.BlockStore, execution.UnitOfWork,
                 execution.PayGateService, execution.OperationExecutor, data.UserRepository, execution.ProductAnalytics,
@@ -298,9 +299,9 @@ public partial class ProcessUserChatCommandHandler(
                     ? HandleCrisisTurnAsync(request with { Message = prepared.Message }, prepared.Crisis, captureMessage: true)
                     : HandleTurnAsync(request with { Message = prepared.Message }, recording, evalTrace, cancellationToken,
                         prepared.AnsweredAtUtc, choiceContext, prepared.SafetyText);
-            }, cancellationToken, (safetyText, token) => ModerateInputAsync(request, token, safetyText), async (safetyText, token) =>
+            }, cancellationToken, (safetyText, token) => ModerateInputAsync(request, token, safetyText, moderationFlags), async (safetyText, token) =>
             {
-                var loaded = await LoadModeratedContextAsync(request, token, safetyText);
+                var loaded = await LoadModeratedContextAsync(request, token, safetyText, moderationFlags);
                 choiceContext = loaded.Context;
                 return loaded.Check;
             });
@@ -333,10 +334,10 @@ public partial class ProcessUserChatCommandHandler(
     }
 
     private async Task<(Result<ModerationResult> Check, ChatContext? Context)> LoadModeratedContextAsync(
-        ProcessUserChatCommand request, CancellationToken cancellationToken, string? safetyText = null)
+        ProcessUserChatCommand request, CancellationToken cancellationToken, string? safetyText = null, IReadOnlyList<string>? enabledFlags = null)
     {
         using var contextCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        var moderationTask = ModerateInputAsync(request, cancellationToken, safetyText);
+        var moderationTask = ModerateInputAsync(request, cancellationToken, safetyText, enabledFlags);
         if (moderationTask.IsCompleted)
         {
             var completedCheck = await moderationTask;
@@ -384,13 +385,14 @@ public partial class ProcessUserChatCommandHandler(
     }
 
     private async Task<Result<ModerationResult>> ModerateInputAsync(ProcessUserChatCommand request, CancellationToken cancellationToken,
-        string? safetyText = null)
+        string? safetyText = null, IReadOnlyList<string>? enabledFlags = null)
     {
         using var phase = ChatTurnTimer.Measure(ChatPhase.Moderation);
         var input = safetyText is null
             ? JsonSerializer.Serialize(new { request.Message, request.History, request.BlockAnswer })
             : JsonSerializer.Serialize(new { Message = safetyText, request.History });
-        var check = await moderation.CheckTextAsync(input, cancellationToken);
+        var check = enabledFlags is null ? await moderation.CheckTextAsync(input, cancellationToken)
+            : await moderation.CheckTextAsync(input, enabledFlags, cancellationToken);
         if (check.Unavailable)
             return Result.Failure<ModerationResult>(ErrorMessages.AiUnavailable);
         return Result.Success(check);

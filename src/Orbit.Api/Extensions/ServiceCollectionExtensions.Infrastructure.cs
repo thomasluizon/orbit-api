@@ -110,6 +110,10 @@ public static partial class ServiceCollectionExtensions
         if (settings.Enabled && string.IsNullOrWhiteSpace(settings.SecretKey))
             throw new InvalidOperationException("BotProtection:Enabled is true but BotProtection:SecretKey is not configured.");
 
+        if (settings.Enabled && (settings.AllowedHostnames.Length == 0
+            || settings.AllowedHostnames.Any(string.IsNullOrWhiteSpace)))
+            throw new InvalidOperationException("BotProtection:Enabled is true but BotProtection:AllowedHostnames is empty.");
+
         builder.Services.Configure<BotProtectionSettings>(
             builder.Configuration.GetSection(BotProtectionSettings.SectionName));
         builder.Services.AddHttpClient(TurnstileVerificationService.HttpClientName, client =>
@@ -216,8 +220,9 @@ public static partial class ServiceCollectionExtensions
         builder.Services.Configure<VapidSettings>(
             builder.Configuration.GetSection(VapidSettings.SectionName));
         builder.Services.AddSingleton<IReminderActionTokenService, ReminderActionTokenService>();
+        builder.Services.Configure<PushDeliverySettings>(builder.Configuration.GetSection(PushDeliverySettings.SectionName));
         builder.Services.AddHttpClient<IPushNotificationService, PushNotificationService>()
-            .ConfigureHttpClient(c => c.Timeout = httpTimeout)
+            .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromSeconds(10))
             .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
         builder.Services.AddScoped<IReferralRewardService, StripeCouponRewardService>();
         builder.Services.AddScoped<Orbit.Application.Referrals.Commands.ReferralRepositories>(sp =>
@@ -466,6 +471,7 @@ public static partial class ServiceCollectionExtensions
 
     private static void InitializeFirebase(ConfigurationManager configuration)
     {
+        var delivery = configuration.GetSection(PushDeliverySettings.SectionName).Get<PushDeliverySettings>() ?? new();
         var firebaseCredJson = configuration["Firebase:CredentialsJson"];
         if (!string.IsNullOrEmpty(firebaseCredJson))
         {
@@ -473,7 +479,8 @@ public static partial class ServiceCollectionExtensions
             {
                 Credential = Google.Apis.Auth.OAuth2.CredentialFactory
                     .FromJson<Google.Apis.Auth.OAuth2.ServiceAccountCredential>(firebaseCredJson)
-                    .ToGoogleCredential()
+                    .ToGoogleCredential(),
+                HttpClientFactory = new FcmDeliveryHttpClientFactory(delivery)
             });
             return;
         }
@@ -485,7 +492,8 @@ public static partial class ServiceCollectionExtensions
             {
                 Credential = Google.Apis.Auth.OAuth2.CredentialFactory
                     .FromFile<Google.Apis.Auth.OAuth2.ServiceAccountCredential>(firebaseCredPath)
-                    .ToGoogleCredential()
+                    .ToGoogleCredential(),
+                HttpClientFactory = new FcmDeliveryHttpClientFactory(delivery)
             });
         }
     }

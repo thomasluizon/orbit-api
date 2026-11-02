@@ -555,4 +555,53 @@ public class PayGateServiceTests
             Environment.SetEnvironmentVariable("SMOKE_TEST_EMAIL", priorEmail);
         }
     }
+    [Theory]
+    [InlineData("smart", "pro", true)]
+    [InlineData("smart", "free", true)]
+    [InlineData("smart", "free", false)]
+    [InlineData("smart", "missing", true)]
+    [InlineData("slip", "pro", true)]
+    [InlineData("slip", "free", true)]
+    [InlineData("slip", "missing", true)]
+    [InlineData("summary", "pro", true)]
+    [InlineData("summary", "free", true)]
+    [InlineData("summary", "missing", true)]
+    [InlineData("calendar", "pro", true)]
+    [InlineData("calendar", "free", true)]
+    [InlineData("calendar", "missing", true)]
+    public async Task ManagementGates_EnforcePlanAndMissingAccount(string gate, string plan, bool proOnly)
+    {
+        var user = plan == "pro" ? CreateProUser() : plan == "free" ? CreateFreeUser() : null;
+        if (plan == "free" && user is not null) user.StartTrial(DateTime.UtcNow.AddDays(-1));
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        _appConfig.GetAsync(AppConfigKeys.SmartRescheduleProOnly, true, Arg.Any<CancellationToken>()).Returns(proOnly);
+        var result = await (gate switch
+        {
+            "smart" => _sut.CanUseSmartReschedule(UserId),
+            "slip" => _sut.CanUseSlipAlerts(UserId),
+            "summary" => _sut.CanManageAiSummary(UserId),
+            _ => _sut.CanManageCalendar(UserId)
+        });
+        var allowed = plan == "pro" || plan == "free" && gate == "smart" && !proOnly;
+        result.IsSuccess.Should().Be(allowed);
+        if (!allowed)
+        {
+            result.ErrorCode.Should().Be(plan == "missing" ? ErrorCodes.UserNotFound : ErrorCodes.PayGate);
+            if (plan == "free") result.Error.Should().Be(gate switch
+            {
+                "slip" => "Slip alerts are a Pro feature. Upgrade to unlock!",
+                "summary" => "AI summaries are a Pro feature. Upgrade to unlock!",
+                "calendar" => "Calendar integration is a Pro feature. Upgrade to unlock!",
+                _ => ErrorMessages.ProFeature.Message
+            });
+        }
+        if (gate == "calendar")
+        {
+            var access = await _sut.CanAccessCalendar(UserId);
+            access.IsSuccess.Should().Be(result.IsSuccess);
+            access.ErrorCode.Should().Be(result.ErrorCode);
+            access.Error.Should().Be(result.Error);
+        }
+    }
+
 }

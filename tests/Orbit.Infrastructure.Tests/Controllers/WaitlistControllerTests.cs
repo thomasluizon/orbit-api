@@ -146,6 +146,19 @@ public class WaitlistControllerTests
         redirect.Url.Should().Be("https://useorbit.org/waitlist-confirmed?status=ok");
     }
 
+    [Fact]
+    public async Task Join_HandlerFailure_Returns400WithErrorBody()
+    {
+        var mediator = Substitute.For<IMediator>();
+        mediator.Send(Arg.Any<JoinWaitlistCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Failure("Unsupported waitlist language."));
+        var result = await NewController(mediator, _settings).Join(
+            new WaitlistController.JoinWaitlistRequest("user@test.com"), default);
+        var error = result.Should().BeOfType<ObjectResult>().Subject;
+        error.StatusCode.Should().Be(400);
+        JsonSerializer.Serialize(error.Value).Should().Contain("Unsupported waitlist language.");
+    }
+
     private WaitlistController BuildControllerWithRealPipeline()
     {
         var provider = new ServiceCollection()

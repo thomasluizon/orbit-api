@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using System.Text.Json;
 using Microsoft.Extensions.Caching.Distributed;
 using Orbit.Application.Common;
@@ -11,7 +12,8 @@ public class UserDateService(
     IGenericRepository<User> userRepository,
     IDistributedCache cache,
     TimeProvider timeProvider,
-    IUnitOfWork unitOfWork) : IUserDateService
+    IUnitOfWork unitOfWork,
+    ILogger<UserDateService>? logger = null) : IUserDateService
 {
     private static readonly DistributedCacheEntryOptions CacheEntryOptions = new()
     {
@@ -25,7 +27,7 @@ public class UserDateService(
     public async Task<TimeZoneInfo> GetUserTimeZoneAsync(Guid userId, CancellationToken cancellationToken = default)
     {
         var preferences = await GetPreferencesAsync(userId, cancellationToken);
-        return TimeZoneHelper.FindTimeZone(preferences.TimeZone, userId: userId);
+        return TimeZoneHelper.FindTimeZone(preferences.TimeZone, logger, userId);
     }
 
     public async Task<DateOnly> GetUserTodayAsync(Guid userId, CancellationToken cancellationToken = default)
@@ -40,7 +42,7 @@ public class UserDateService(
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var timeZone = TimeZoneHelper.FindTimeZone(timeZoneId, userId: userId);
+        var timeZone = TimeZoneHelper.FindTimeZone(timeZoneId, logger, userId);
         var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(timeProvider.GetUtcNow().UtcDateTime, timeZone));
         return Task.FromResult(today);
     }

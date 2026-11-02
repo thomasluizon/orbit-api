@@ -9,6 +9,8 @@ internal static class ModerationTestDouble
     {
         var service = Substitute.For<IContentModerationService>();
         service.CheckTextAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(new ModerationResult(false, false, []));
+        service.CheckTextAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+            .Returns(call => service.CheckTextAsync(call.Arg<string>(), call.Arg<CancellationToken>()));
         return service;
     }
 }

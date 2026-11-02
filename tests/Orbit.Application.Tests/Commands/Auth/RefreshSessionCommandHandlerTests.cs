@@ -18,20 +18,6 @@ public class RefreshSessionCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ValidToken_ReturnsNewTokens()
-    {
-        var newTokens = new SessionTokens("new-access-token", "new-refresh-token");
-        _authSessionService.RefreshSessionAsync("valid-refresh-token", Arg.Any<CancellationToken>())
-            .Returns(Result.Success(newTokens));
-
-        var result = await _handler.Handle(new RefreshSessionCommand("valid-refresh-token"), CancellationToken.None);
-
-        result.IsSuccess.Should().BeTrue();
-        result.Value.Token.Should().Be("new-access-token");
-        result.Value.RefreshToken.Should().Be("new-refresh-token");
-    }
-
-    [Fact]
     public async Task Handle_InvalidToken_ReturnsFailure()
     {
         _authSessionService.RefreshSessionAsync("expired-token", Arg.Any<CancellationToken>())

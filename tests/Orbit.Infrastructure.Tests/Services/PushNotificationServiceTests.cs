@@ -143,8 +143,8 @@ public sealed partial class PushNotificationServiceTests : IDisposable
             PushSubscription.Create(_userId, "https://dm3p.notify.windows.com/?token=channel", "wns", "wns", deviceId: Guid.NewGuid()).Value);
         await _dbContext.SaveChangesAsync();
         using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
-        var apnsPayloads = new List<string>();
-        var topics = new List<string>();
+        var apnsPayloads = new System.Collections.Concurrent.ConcurrentBag<string>();
+        var topics = new System.Collections.Concurrent.ConcurrentBag<string>();
         var handler = new StubHttpMessageHandler(request =>
         {
             request.RequestUri!.Host.Should().Be(sandbox ? "api.sandbox.push.apple.com" : "api.push.apple.com");
@@ -493,7 +493,7 @@ public sealed partial class PushNotificationServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task SendToUserAsync_WebPushTransportErrorThenSuccess_RetriesAndKeepsSubscription()
+    public async Task SendToUserAsync_WebPushTransportError_DoesNotRetryAndKeepsSubscription()
     {
         await SeedWebPushSubscription("https://fcm.googleapis.com/sub/transport");
 
@@ -505,7 +505,7 @@ public sealed partial class PushNotificationServiceTests : IDisposable
 
         await service.SendToUserAsync(_userId, "Title", "Body");
 
-        handler.CallCount.Should().Be(2);
+        handler.CallCount.Should().Be(1);
         (await _dbContext.PushSubscriptions.CountAsync()).Should().Be(1);
     }
 
@@ -556,6 +556,7 @@ public sealed partial class PushNotificationServiceTests : IDisposable
     }
 
     [Theory]
+    [InlineData(MessagingErrorCode.InvalidArgument)]
     [InlineData(MessagingErrorCode.QuotaExceeded)]
     [InlineData(MessagingErrorCode.ThirdPartyAuthError)]
     [InlineData(MessagingErrorCode.Internal)]
@@ -566,7 +567,6 @@ public sealed partial class PushNotificationServiceTests : IDisposable
 
     [Theory]
     [InlineData(MessagingErrorCode.Unregistered)]
-    [InlineData(MessagingErrorCode.InvalidArgument)]
     [InlineData(MessagingErrorCode.SenderIdMismatch)]
     public void IsStaleFcmError_PermanentlyInvalidTokens_PrunesSubscription(MessagingErrorCode code) =>
         PushNotificationService.IsStaleFcmError(code).Should().BeTrue();
@@ -703,12 +703,13 @@ public sealed partial class PushNotificationServiceTests : IDisposable
 
     private sealed class StubHttpMessageHandler(Func<HttpRequestMessage, HttpResponseMessage> responder) : HttpMessageHandler
     {
-        public int CallCount { get; private set; }
+        private int _callCount;
+        public int CallCount => Volatile.Read(ref _callCount);
         public long? LastRequestContentLength { get; private set; }
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
-            CallCount++;
+            Interlocked.Increment(ref _callCount);
             if (request.Content is not null)
                 LastRequestContentLength = request.Content.ReadAsByteArrayAsync(cancellationToken).GetAwaiter().GetResult().LongLength;
             return Task.FromResult(responder(request));

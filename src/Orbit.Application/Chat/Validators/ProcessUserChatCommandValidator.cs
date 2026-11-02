@@ -14,9 +14,9 @@ public class ProcessUserChatCommandValidator : AbstractValidator<ProcessUserChat
 
         RuleFor(x => x.Message)
             .NotEmpty()
-            .WithCopy(ValidationErrorCodes.ChatMessageRequired)
+            .WithCopy(ErrorCodes.MessageTooLong, AppConstants.MaxChatMessageLength)
             .MaximumLength(AppConstants.MaxChatMessageLength)
-            .WithCopy(ValidationErrorCodes.ChatMessageLength);
+            .WithCopy(ErrorCodes.MessageTooLong, AppConstants.MaxChatMessageLength);
 
         When(x => x.BlockAnswer is not null, () =>
             RuleFor(x => x.BlockAnswer!).SetValidator(new AstraBlockAnswerValidator()));
@@ -49,15 +49,15 @@ public class ProcessUserChatCommandValidator : AbstractValidator<ProcessUserChat
 
         RuleFor(x => x.History)
             .Must(history => history is null || history.Count <= AppConstants.MaxChatHistoryMessages)
-            .WithCopy(ValidationErrorCodes.ChatHistoryLimit);
+            .WithCopy(ErrorCodes.ChatHistoryTooLarge);
 
         RuleForEach(x => x.History)
-            .Must(message => ChatHistoryMessage.IsSupportedRole(message.Role))
-            .WithCopy(ValidationErrorCodes.ChatHistoryRole);
+            .Must(message => message is not null && ChatHistoryMessage.IsSupportedRole(message.Role))
+            .WithCopy(ErrorCodes.InvalidChatHistory);
 
         RuleForEach(x => x.History)
-            .Must(message => !string.IsNullOrWhiteSpace(message.Content) &&
+            .Must(message => message is not null && !string.IsNullOrWhiteSpace(message.Content) &&
                              message.Content.Length <= AppConstants.MaxChatHistoryMessageLength)
-            .WithCopy(ValidationErrorCodes.ChatHistoryMessageLength);
+            .WithCopy(ErrorCodes.InvalidChatHistory);
     }
 }

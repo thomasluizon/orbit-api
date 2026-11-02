@@ -44,6 +44,9 @@ public sealed class ConversationOfferStore(OrbitDbContext db, IEncryptionService
 
     public async Task DismissAsync(Guid userId, Guid conversationId, IReadOnlyList<string> keys, CancellationToken ct)
     {
+        if (!await db.ConversationTurns.AnyAsync(turn => turn.UserId == userId && turn.ConversationId == conversationId, ct)
+            && !await db.ConversationOffers.AnyAsync(offer => offer.UserId == userId && offer.ConversationId == conversationId, ct))
+            return;
         foreach (var key in keys.Distinct(StringComparer.Ordinal))
         {
             var created = ConversationOffer.Create(userId, conversationId, key);

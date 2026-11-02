@@ -53,6 +53,7 @@ public class GetRescheduleSuggestionQueryHandler(
             return Result.Failure<RescheduleSuggestionResponse>(ErrorMessages.HabitNotFound);
 
         var dueDateResolution = await HabitDueDateResolutionLoader.LoadAsync(
+            request.UserId,
             habitLogRepository,
             [habit],
             logWindowStart,

@@ -2,6 +2,8 @@ using Amazon.SimpleEmailV2;
 using Amazon.SimpleEmailV2.Model;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Logging;
+using Orbit.Application.Auth.Jobs;
 using Microsoft.Extensions.Options;
 using NSubstitute;
 using Orbit.Application.Common;
@@ -24,6 +26,69 @@ public sealed class SesEmailServiceTests
             Options.Create(new SesSettings { SupportEmail = "support@useorbit.org", MarketingRetryBaseDelayMs = 1 }),
             Options.Create(new FrontendSettings { BaseUrl = "https://app.useorbit.org" }),
             NullLogger<SesEmailService>.Instance);
+    }
+
+    [Fact]
+    public async Task SupportRequest_UsesAccountReplyToAndIncludesUserId()
+    {
+        var user = Orbit.Domain.Entities.User.Create("Account owner", "owner@example.com").Value;
+        var users = Substitute.For<Orbit.Domain.Interfaces.IGenericRepository<Orbit.Domain.Entities.User>>();
+        users.GetByIdAsync(user.Id, Arg.Any<CancellationToken>()).Returns(user);
+        var handler = new Orbit.Application.Support.Commands.SendSupportCommandHandler(_service, users);
+        var result = await handler.Handle(new(user.Id, "Impostor", "someone@example.com", "Help", "Question"), default);
+        result.IsSuccess.Should().BeTrue();
+        var request = _requests.Should().ContainSingle().Which;
+        request.ReplyToAddresses.Should().Equal(user.Email);
+        request.Content.Simple.Body.Text.Data.Should().Contain(user.Id.ToString()).And.Contain(user.Name).And.Contain(user.Email)
+            .And.NotContain("someone@example.com").And.NotContain("Impostor");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SendVerificationCode_SesThrows_LogsOnceAndThrows(bool throughJob)
+    {
+        var failure = new InvalidOperationException("SES unavailable");
+        _client.SendEmailAsync(Arg.Any<SendEmailRequest>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromException<SendEmailResponse>(failure));
+        var logger = Substitute.For<ILogger<SesEmailService>>();
+        logger.IsEnabled(LogLevel.Error).Returns(true);
+        var service = new SesEmailService(_client, Options.Create(new SesSettings()),
+            Options.Create(new FrontendSettings { BaseUrl = "https://app.useorbit.org" }), logger);
+        Func<Task> send = () => throughJob
+            ? new SendVerificationCodeEmailJob(service).ExecuteAsync("recipient@example.com", "123456", "en")
+            : service.SendVerificationCodeAsync("recipient@example.com", "123456");
+
+        (await send.Should().ThrowAsync<InvalidOperationException>()).Which.Should().BeSameAs(failure);
+        await _client.Received(1).SendEmailAsync(Arg.Any<SendEmailRequest>(), Arg.Any<CancellationToken>());
+        logger.ReceivedCalls().Count(c => c.GetMethodInfo().Name == "Log" && c.GetArguments()[0] is LogLevel.Error)
+            .Should().Be(1);
+    }
+
+    [Fact]
+    public async Task SendMarketing_NonThrottleFailure_LogsOnceAndReturns()
+    {
+        var logger = Substitute.For<ILogger<SesEmailService>>();
+        logger.IsEnabled(LogLevel.Error).Returns(true);
+        _client.SendEmailAsync(Arg.Any<SendEmailRequest>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromException<SendEmailResponse>(new InvalidOperationException("SES unavailable")));
+        var service = new SesEmailService(_client, Options.Create(new SesSettings()),
+            Options.Create(new FrontendSettings { BaseUrl = "https://app.useorbit.org" }), logger);
+        await service.SendMarketingEmailAsync("recipient@example.com", "News", "<p>Update</p>", "en", "https://api.useorbit.org/u");
+        await _client.Received(1).SendEmailAsync(Arg.Any<SendEmailRequest>(), Arg.Any<CancellationToken>());
+        logger.ReceivedCalls().Count(c => c.GetMethodInfo().Name == "Log" && c.GetArguments()[0] is LogLevel.Error)
+            .Should().Be(1);
+    }
+
+    [Fact]
+    public async Task SendTransactional_CallerCancels_PropagatesCancellation()
+    {
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        _client.SendEmailAsync(Arg.Any<SendEmailRequest>(), cts.Token)
+            .Returns(Task.FromCanceled<SendEmailResponse>(cts.Token));
+        var send = () => _service.SendVerificationCodeAsync("recipient@example.com", "123456", "en", cts.Token);
+        await send.Should().ThrowAsync<OperationCanceledException>();
     }
 
     [Theory]

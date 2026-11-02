@@ -71,7 +71,6 @@ public static partial class WebApplicationExtensions
         app.UseCors();
         app.UseCookiePolicy();
         app.UseMiddleware<Orbit.Api.Middleware.UploadObjectKeyValidationMiddleware>();
-        app.UseRateLimiter();
 
         app.UseMiddleware<Orbit.Api.Middleware.MinimumVersionMiddleware>();
 

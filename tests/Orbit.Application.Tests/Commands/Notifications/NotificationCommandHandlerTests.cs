@@ -326,11 +326,11 @@ public class SubscribePushCommandHandlerTests
     public async Task Handle_SameNativeDeviceUnderNewAccount_TransfersTheRowToTheNewAccount(string token, string marker)
     {
         var otherUserId = Guid.NewGuid();
-        var existing = PushSubscription.Create(otherUserId, token, marker, marker).Value;
+        var existing = PushSubscription.Create(otherUserId, token, marker, "install-secret").Value;
         ArrangeExistingEndpoint(existing);
         ArrangeUserSubscriptions();
 
-        var command = new SubscribePushCommand(UserId, token, marker, marker);
+        var command = new SubscribePushCommand(UserId, token, marker, "install-secret");
 
         var result = await _handler.Handle(command, CancellationToken.None);
 

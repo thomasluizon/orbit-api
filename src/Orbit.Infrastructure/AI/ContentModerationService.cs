@@ -25,8 +25,16 @@ public partial class ContentModerationService(
     private const string ModerationModel = "omni-moderation-latest";
     private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
 
-    public async Task<ModerationResult> CheckTextAsync(string text, CancellationToken cancellationToken = default)
+    public Task<ModerationResult> CheckTextAsync(string text, CancellationToken cancellationToken = default) =>
+        CheckAsync(text, null, cancellationToken);
+
+    public Task<ModerationResult> CheckTextAsync(string text, IReadOnlyList<string> enabledFlags, CancellationToken cancellationToken = default) =>
+        CheckAsync(text, enabledFlags, cancellationToken);
+
+    private async Task<ModerationResult> CheckAsync(string text, IReadOnlyList<string>? enabledFlags, CancellationToken cancellationToken)
     {
+        var account = default(AiEvalAccount);
+        var accountResolved = false;
         var settings = aiSettings.Value;
         for (var attempt = 0; attempt < 2; attempt++)
         {
@@ -35,11 +43,16 @@ public partial class ContentModerationService(
 
             try
             {
+                if (!accountResolved)
+                {
+                    account = enabledFlags is null ? await ResolveAccountAsync(deadline.Token)
+                        : AiEvalAccount.Resolve(AiEvalAccount.CurrentUserId(http), enabledFlags, configuration);
+                    accountResolved = true;
+                }
                 using var request = new HttpRequestMessage(HttpMethod.Post, $"{settings.BaseUrl.TrimEnd('/')}/moderations")
                 {
                     Content = JsonContent.Create(new ModerationRequest(ModerationModel, text), options: SerializerOptions)
                 };
-                var account = await ResolveAccountAsync(deadline.Token);
                 request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", AiEvalCredentials.Resolve(settings, account));
                 request.Options.Set(HandlesFailedResponse, true);
 

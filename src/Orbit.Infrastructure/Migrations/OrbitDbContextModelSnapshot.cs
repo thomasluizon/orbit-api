@@ -409,6 +409,36 @@ namespace Orbit.Infrastructure.Migrations
                         },
                         new
                         {
+                            Key = "SendCodeEmailsPerIpPerDay",
+                            Description = "Daily code email limit per resolved client IP",
+                            Value = "100"
+                        },
+                        new
+                        {
+                            Key = "SendCodeEmailsPerDay",
+                            Description = "Global daily code email safety limit",
+                            Value = "10000"
+                        },
+                        new
+                        {
+                            Key = "OnboardingAttestationCallsPerHour",
+                            Description = "Global hourly onboarding challenge and enrollment limit",
+                            Value = "1000"
+                        },
+                        new
+                        {
+                            Key = "OnboardingAttestationCallsPerDay",
+                            Description = "Global daily onboarding challenge and enrollment limit",
+                            Value = "10000"
+                        },
+                        new
+                        {
+                            Key = "OnboardingEnrollAttemptsPerInstallPerHour",
+                            Description = "Hourly enrollment attempt limit per signed installation subject",
+                            Value = "3"
+                        },
+                        new
+                        {
                             Key = "OnboardingIpCallsPerHour",
                             Description = "Hourly anonymous onboarding call limit per IP address",
                             Value = "10"
@@ -772,6 +802,26 @@ namespace Orbit.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("ContentBlocks");
+                });
+
+            modelBuilder.Entity("Orbit.Domain.Entities.ConversationObjectCleanup", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ConversationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "ConversationId")
+                        .IsUnique();
+
+                    b.ToTable("ConversationObjectCleanups");
                 });
 
             modelBuilder.Entity("Orbit.Domain.Entities.ConversationOffer", b =>
@@ -1286,6 +1336,10 @@ namespace Orbit.Infrastructure.Migrations
                     b.HasIndex("UserId", "IsDeleted");
 
                     b.HasIndex("UserId", "UpdatedAtUtc");
+
+                    b.HasIndex(new[] { "ReminderEnabled", "IsCompleted", "Schedule" }, "IX_Habits_Reminder")
+                        .HasFilter("\"ReminderEnabled\" = TRUE AND \"IsCompleted\" = FALSE")
+                        .HasAnnotation("Npgsql:CreatedConcurrently", true);
 
                     b.ToTable("Habits");
                 });
@@ -2031,6 +2085,13 @@ namespace Orbit.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("ConsumedCouponId")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<Guid?>("CouponUserId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("MessageId")
                         .IsRequired()
                         .HasMaxLength(255)
@@ -2038,6 +2099,12 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.Property<DateTime>("ProcessedAtUtc")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("ProcessingLeaseExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ProcessingLeaseId")
+                        .HasColumnType("uuid");
 
                     b.HasKey("Id");
 
@@ -2252,6 +2319,9 @@ namespace Orbit.Infrastructure.Migrations
                         .HasColumnType("integer");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("HabitId", "Date")
+                        .HasAnnotation("Npgsql:CreatedConcurrently", true);
 
                     b.HasIndex("HabitId", "ReminderAtUtc")
                         .IsUnique()
@@ -2633,7 +2703,15 @@ namespace Orbit.Infrastructure.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
 
+                    b.Property<int>("StripeCustomerGeneration")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
                     b.Property<string>("StripeCustomerId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("StripeCustomerPendingDeletionId")
                         .HasColumnType("text");
 
                     b.Property<bool>("StripeRenewalStoppedByDeletion")
@@ -2849,6 +2927,21 @@ namespace Orbit.Infrastructure.Migrations
                     b.HasIndex("UserId", "AwardedAtUtc");
 
                     b.ToTable("XpAwardLogs");
+                });
+
+            modelBuilder.Entity("Orbit.Infrastructure.Persistence.ReminderScheduleProbe", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("Version")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(0L);
+
+                    b.HasKey("UserId");
+
+                    b.ToTable("ReminderScheduleProbes", (string)null);
                 });
 
             modelBuilder.Entity("Orbit.Infrastructure.Persistence.TransactionCommit", b =>
@@ -3152,6 +3245,15 @@ namespace Orbit.Infrastructure.Migrations
                 });
 
             modelBuilder.Entity("Orbit.Domain.Entities.XpAwardLog", b =>
+                {
+                    b.HasOne("Orbit.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Orbit.Infrastructure.Persistence.ReminderScheduleProbe", b =>
                 {
                     b.HasOne("Orbit.Domain.Entities.User", null)
                         .WithMany()
