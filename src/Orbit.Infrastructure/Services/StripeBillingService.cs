@@ -30,8 +30,27 @@ public sealed partial class StripeBillingService(
 {
     private const string RequestThreeDSecureWhenSupported = "any";
 
-    public async Task<string> CreateCustomerAsync(string email, string name, Guid userId, CancellationToken cancellationToken)
+    public async Task DeleteCustomerAsync(string customerId, CancellationToken cancellationToken)
     {
+        try
+        {
+            await StripeRetryPolicy.ExecuteWithRetryAsync(
+                () => clients.Customers.DeleteAsync(customerId, cancellationToken: cancellationToken), cancellationToken);
+        }
+        catch (StripeException ex) when (IsMissingSubscription(ex))
+        {
+            return;
+        }
+        catch (StripeException ex)
+        {
+            throw new BillingProviderException("Failed to delete customer", ex);
+        }
+    }
+
+    public async Task<string> CreateCustomerAsync(string email, string name, Guid userId, CancellationToken cancellationToken,
+        int customerGeneration = 0)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(customerGeneration);
         try
         {
             var customer = await StripeRetryPolicy.ExecuteWithRetryAsync(
@@ -40,7 +59,12 @@ public sealed partial class StripeBillingService(
                     Email = email,
                     Name = name,
                     Metadata = new Dictionary<string, string> { ["userId"] = userId.ToString() },
-                }, new RequestOptions { IdempotencyKey = $"orbit-customer-create-{userId}" }, cancellationToken),
+                }, new RequestOptions
+                {
+                    IdempotencyKey = customerGeneration == 0
+                    ? $"orbit-customer-create-{userId}"
+                    : $"orbit-customer-create-{userId}-{customerGeneration}"
+                }, cancellationToken),
                 cancellationToken);
             return customer.Id;
         }

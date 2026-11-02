@@ -62,7 +62,7 @@ public partial class BulkLogHabitsCommandHandler(
 
         var habitMap = await BulkHabitLoader.LoadHabitsWithRecentLogsAsync(
             habitRepository, request.Items.Select(i => i.HabitId), request.UserId, today, cancellationToken);
-        var dueDateResolution = await HabitDueDateResolutionLoader.LoadAsync(
+        var dueDateResolution = await HabitDueDateResolutionLoader.LoadAsync(request.UserId,
             habitLogRepository,
             habitMap.Values,
             today.AddDays(-AppConstants.MaxRangeDays),

@@ -43,13 +43,10 @@ public class DeleteHabitCommandHandler(
 
     private async Task<Result> DeleteSubtreeAsync(DeleteHabitCommand request, CancellationToken cancellationToken)
     {
-        var habit = await habitRepository.GetByIdAsync(request.HabitId, cancellationToken);
+        var habit = await habitRepository.FindOneTrackedAsync(h => h.Id == request.HabitId && h.UserId == request.UserId, cancellationToken: cancellationToken);
 
         if (habit is null)
             return Result.Failure(ErrorMessages.HabitNotFound);
-
-        if (habit.UserId != request.UserId)
-            return Result.Failure(ErrorMessages.NoPermission);
 
         var userHabits = await habitRepository.FindTrackedAsync(
             h => h.UserId == request.UserId,

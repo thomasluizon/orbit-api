@@ -60,6 +60,23 @@ public sealed class ChatTurnStreamTests(Xunit.Abstractions.ITestOutputHelper out
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public async Task ReadOrComplete_OtherUsersTurn_ThrowsAndLeavesTurnUnchanged(bool complete)
+    {
+        var owner = Guid.NewGuid();
+        using var services = new ChatTurnStreamTestServices(Substitute.For<IMediator>(), owner);
+        var store = services.Provider.GetRequiredService<IChatTurnStore>();
+        var candidate = ChatTurn.Create(owner, ChatTurnIdentity.HashKey("private-turn"), new string('f', 64), DateTime.UtcNow.AddMinutes(1));
+        await store.ClaimAsync(candidate, default);
+        var attacker = Guid.NewGuid();
+        Func<Task> call = () => complete ? store.CompleteAsync(attacker, candidate.Id, "foreign response", default)
+            : store.ReadAsync(attacker, candidate.Id, default);
+        await call.Should().ThrowAsync<InvalidOperationException>();
+        (await store.ReadAsync(owner, candidate.Id, default)).TerminalEvent.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public async Task LostAcknowledgement_ConcurrentRetryAndReplay_PersistAndChargeOnce(bool cancelledWrite)
     {
         var mediator = Substitute.For<IMediator>();
@@ -170,7 +187,7 @@ public sealed class ChatTurnStreamTests(Xunit.Abstractions.ITestOutputHelper out
             dates.GetUserTodayAsync(userId, Arg.Any<CancellationToken>()).Returns(new DateOnly(2026, 1, 1));
             var reset = new ResetAccountCommandHandler(new GenericRepository<User>(db),
                 new AccountResetRepository(db, Substitute.For<IAccountEventCollector>()),
-                new UnitOfWork(db, new DatabaseConnectionSettings()), dates, cache);
+                new UnitOfWork(db, new DatabaseConnectionSettings()), dates, cache, NSubstitute.Substitute.For<Orbit.Application.Connections.INotionConnectionService>(), NSubstitute.Substitute.For<Orbit.Domain.Interfaces.IGoogleTokenService>());
             (await reset.Handle(new ResetAccountCommand(userId), default)).IsSuccess.Should().BeTrue();
         }
 

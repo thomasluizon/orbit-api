@@ -118,7 +118,7 @@ public class AccountChangeSetRegressionTests
         db.Users.Add(user);
         db.SaveChanges();
         var email = Substitute.For<IEmailService>();
-        var supportHandler = new SendSupportCommandHandler(email);
+        var supportHandler = new SendSupportCommandHandler(email, new GenericRepository<User>(db));
         var mediator = Substitute.For<IMediator>();
         mediator.Send(Arg.Any<CheckChatCommandQuery>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
         mediator.Send(Arg.Any<SendSupportCommand>(), Arg.Any<CancellationToken>())

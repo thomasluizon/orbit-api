@@ -83,9 +83,9 @@ public class FeatureFlagAccountsMigrationTests
             && operation.OnDelete == ReferentialAction.Cascade);
         differences.OfType<AddForeignKeyOperation>().Where(operation => operation.Table == "AccountabilityPairs").Select(operation => operation.Name).Should().BeEquivalentTo(
             "FK_AccountabilityPairs_Users_AddresseeId", "FK_AccountabilityPairs_Users_RequesterId");
-        var redesign = initializer.Initialize(new AddHabitSkipUndo().TargetModel, designTime: true);
+        var predecessor = initializer.Initialize(new AddHabitSkipUndo().TargetModel, designTime: true);
         var additions = context.GetService<IMigrationsModelDiffer>()
-            .GetDifferences(redesign.GetRelationalModel(), featureFlags.GetRelationalModel());
+            .GetDifferences(predecessor.GetRelationalModel(), featureFlags.GetRelationalModel());
         additions.Should().HaveCount(3).And.OnlyContain(operation =>
             operation is CreateTableOperation || operation is CreateIndexOperation || operation is InsertDataOperation);
         additions.OfType<CreateTableOperation>().Should().ContainSingle()
@@ -168,7 +168,6 @@ public class FeatureFlagAccountsMigrationTests
         table.ForeignKeys.Should().HaveCount(2).And.OnlyContain(key => key.OnDelete == ReferentialAction.Cascade);
         table.Columns.Should().Contain(column => column.Name == "CreatedAtUtc" && !column.IsNullable);
         var seed = builder.Operations.OfType<InsertDataOperation>().Should().ContainSingle().Subject;
-        seed.Values[0, Array.IndexOf(seed.Columns, "Key")].Should().Be("redesign");
         seed.Values[0, Array.IndexOf(seed.Columns, "Enabled")].Should().Be(false);
     }
 

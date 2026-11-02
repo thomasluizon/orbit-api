@@ -781,6 +781,8 @@ public class OrbitDbContext : DbContext
             entity.HasIndex(u => u.PublicProfileSlug).IsUnique().HasFilter("\"PublicProfileSlug\" IS NOT NULL");
 
             entity.Property(u => u.StripeCoverageExpiresAtUtc);
+            entity.Property(u => u.StripeCustomerPendingDeletionId);
+            entity.Property(u => u.StripeCustomerGeneration).HasDefaultValue(0);
             entity.Property(u => u.StripeCoverageInterval);
             entity.Property(u => u.StripeCoverageLapseReason).HasConversion<string>().HasMaxLength(32);
             entity.Property(u => u.PlayCoverageExpiresAtUtc);

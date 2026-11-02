@@ -26,13 +26,13 @@ public class SendSupportCommandValidatorTests
     }
 
     [Fact]
-    public void Validate_EmptyName_HasError()
+    public void Validate_EmptyName_IsIgnored()
     {
         var command = ValidCommand() with { Name = "" };
 
         var result = _validator.TestValidate(command);
 
-        result.ShouldHaveValidationErrorFor(x => x.Name);
+        result.ShouldNotHaveValidationErrorFor(x => x.Name);
     }
 
     [Fact]
@@ -76,12 +76,12 @@ public class SendSupportCommandValidatorTests
     }
 
     [Fact]
-    public void Validate_InvalidEmail_HasError()
+    public void Validate_InvalidEmail_IsIgnored()
     {
         var command = ValidCommand() with { Email = "not-an-email" };
 
         var result = _validator.TestValidate(command);
 
-        result.ShouldHaveValidationErrorFor(x => x.Email);
+        result.ShouldNotHaveValidationErrorFor(x => x.Email);
     }
 }

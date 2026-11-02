@@ -94,12 +94,12 @@ public partial class DistributedRateLimitServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task UploadReads_AreNotAStoredRateLimitPolicy()
+    public async Task UploadReads_StoresDistributedBudget()
     {
-        var acquire = () => _service.TryAcquireAsync("upload-reads", "ip:203.0.113.7");
-
-        await acquire.Should().ThrowAsync<InvalidOperationException>();
-        _dbContext.DistributedRateLimitBuckets.Should().BeEmpty();
+        for (var index = 0; index < 300; index++)
+            (await _service.TryAcquireAsync("upload-reads", "user:one")).Allowed.Should().BeTrue();
+        (await _service.TryAcquireAsync("upload-reads", "user:one")).Allowed.Should().BeFalse();
+        (await _service.TryAcquireAsync("upload-reads", "user:two")).Allowed.Should().BeTrue();
     }
 
     [Theory]

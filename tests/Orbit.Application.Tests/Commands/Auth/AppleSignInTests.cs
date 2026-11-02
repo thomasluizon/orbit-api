@@ -125,6 +125,60 @@ public partial class AppleSignInTests
     }
 
     [Fact]
+    public async Task RevokeAppleJob_ProviderThrows_RethrowsAndKeepsToken()
+    {
+        var user = User.Create("Apple", "apple-failure@example.com").Value;
+        user.SetAppleIdentity("subject", "refresh", "client");
+        user.Deactivate(DateTime.UtcNow.AddDays(-1));
+        _users.FindOneTrackedIgnoringFiltersAsync(Arg.Any<Expression<Func<User, bool>>>(), Arg.Any<CancellationToken>()).Returns(user);
+        _apple.RevokeAsync("refresh", "client", Arg.Any<CancellationToken>()).Returns(Task.FromException(new HttpRequestException("unavailable")));
+        var job = new RevokeAppleTokenOnDeletionJob(_apple, _users, _work);
+        var execute = () => job.ExecuteAsync(user.Id, default);
+        await execute.Should().ThrowAsync<HttpRequestException>();
+        user.AppleRefreshToken.Should().Be("refresh");
+        await _work.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RevokeAppleJob_UserMissing_MakesNoCall()
+    {
+        await new RevokeAppleTokenOnDeletionJob(_apple, _users, _work).ExecuteAsync(Guid.NewGuid(), default);
+        await _apple.DidNotReceive().RevokeAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RevokeAppleJob_TwoConcurrentRuns_RevokeOnce()
+    {
+        var user = User.Create("Apple", "apple-concurrent@example.com").Value;
+        user.SetAppleIdentity("subject", "refresh", "client");
+        user.Deactivate(DateTime.UtcNow.AddDays(-1));
+        _users.FindOneTrackedIgnoringFiltersAsync(Arg.Any<Expression<Func<User, bool>>>(), Arg.Any<CancellationToken>()).Returns(user);
+        using var transactionLock = new SemaphoreSlim(1);
+        _work.ExecuteOnceInTransactionAsync(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>()).Returns(async call =>
+        {
+            await transactionLock.WaitAsync();
+            try { await call.Arg<Func<CancellationToken, Task>>()(default); }
+            finally { transactionLock.Release(); }
+        });
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _apple.RevokeAsync("refresh", "client", Arg.Any<CancellationToken>()).Returns(async _ =>
+        {
+            entered.SetResult();
+            await release.Task;
+        });
+        var job = new RevokeAppleTokenOnDeletionJob(_apple, _users, _work);
+        var first = job.ExecuteAsync(user.Id, default);
+        await entered.Task;
+        var second = job.ExecuteAsync(user.Id, default);
+        release.SetResult();
+        await Task.WhenAll(first, second);
+        await _apple.Received(1).RevokeAsync("refresh", "client", Arg.Any<CancellationToken>());
+        await _work.Received(2).AcquireUserRowLockAsync(user.Id, Arg.Any<CancellationToken>());
+        user.AppleRefreshToken.Should().BeNull();
+    }
+
+    [Fact]
     public void Validators_RejectMissingAndOversizedCredentials()
     {
         new AppleNativeSignInCommandValidator().Validate(new AppleNativeSignInCommand("", "", "", null, null)).IsValid.Should().BeFalse();

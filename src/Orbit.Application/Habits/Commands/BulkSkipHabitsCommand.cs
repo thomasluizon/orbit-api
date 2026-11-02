@@ -53,7 +53,7 @@ public class BulkSkipHabitsCommandHandler(
                 if (!await habitRepository.TryRefreshAsync(habit, ct))
                     return false;
             }
-            var dueDateResolution = await HabitDueDateResolutionLoader.LoadAsync(
+            var dueDateResolution = await HabitDueDateResolutionLoader.LoadAsync(request.UserId,
                 habitLogRepository, habitMap.Values, today.AddDays(-AppConstants.MaxRangeDays), ct);
 
             for (int i = 0; i < request.Items.Count; i++)
@@ -112,7 +112,7 @@ public class BulkSkipHabitsCommandHandler(
         var ownership = OwnershipValidation.AllResolved(ids, selected, h => h.Id, ErrorMessages.HabitNotFound);
         if (ownership.IsFailure)
             return ownership;
-        var resolution = await HabitDueDateResolutionLoader.LoadAsync(logs, selected, today.AddDays(-AppConstants.MaxRangeDays), ct);
+        var resolution = await HabitDueDateResolutionLoader.LoadAsync(request.UserId, logs, selected, today.AddDays(-AppConstants.MaxRangeDays), ct);
         var byId = selected.ToDictionary(h => h.Id);
         Result? generalRejection = null;
         var hasEligibleItem = false;

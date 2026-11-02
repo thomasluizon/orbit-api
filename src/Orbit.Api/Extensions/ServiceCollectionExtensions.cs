@@ -427,11 +427,6 @@ public static partial class ServiceCollectionExtensions
             builder.Configuration.GetSection(BffForwardingSettings.SectionName));
         builder.Services.AddScoped<BffClientIpResolver>();
         builder.Services.AddScoped<IDistributedRateLimitService, DistributedRateLimitService>();
-        builder.Services.AddRateLimiter(options =>
-        {
-            options.AddPolicy(UploadReadRateLimitPolicy.Name, UploadReadRateLimitPolicy.GetPartition);
-            options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-        });
 
         return builder;
     }
@@ -460,9 +455,6 @@ public static partial class ServiceCollectionExtensions
 
     public static WebApplicationBuilder AddOrbitObservability(this WebApplicationBuilder builder)
     {
-        builder.Services.Configure<SentrySettings>(
-            builder.Configuration.GetSection(SentrySettings.SectionName));
-
         var sentrySettings = builder.Configuration.GetSection(SentrySettings.SectionName).Get<SentrySettings>()
             ?? new SentrySettings();
 
@@ -474,7 +466,7 @@ public static partial class ServiceCollectionExtensions
             if (!string.IsNullOrWhiteSpace(commit))
                 options.Release = $"Orbit.Api@{commit}";
             options.TracesSampleRate = sentrySettings.TracesSampleRate;
-            options.EnableLogs = sentrySettings.EnableLogs;
+            options.EnableLogs = false;
             options.SendDefaultPii = false;
             options.AddExceptionFilterForType<FluentValidation.ValidationException>();
             options.AddExceptionFilterForType<OperationCanceledException>();

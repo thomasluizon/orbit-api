@@ -3,7 +3,6 @@ using System.Text.Json.Serialization;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Logging;
 using Orbit.Api.Extensions;
 using Orbit.Api.RateLimiting;
@@ -42,13 +41,16 @@ public partial class UploadsController(IMediator mediator, IObjectStorageReadSer
         return result.ToPayGateAwareResult(value => Ok(value));
     }
 
-    [AllowAnonymous]
     [HttpGet("object/{userId}/{fileName}")]
-    [EnableRateLimiting(UploadReadRateLimitPolicy.Name)]
+    [DistributedRateLimit("upload-reads")]
     [ProducesResponseType(StatusCodes.Status302Found)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> ReadObject(string userId, string fileName, CancellationToken cancellationToken)
     {
+        if (User.Identity?.IsAuthenticated != true)
+            return Unauthorized();
+        if (!Guid.TryParse(userId, out var ownerId) || ownerId != HttpContext.GetUserId())
+            return NotFound();
         if (!UploadObjectKey.TryCreate(userId, fileName, out var objectKey))
             return NotFound();
         if (!await mediator.Send(new UploadOwnerExistsQuery(Guid.Parse(userId)), cancellationToken))
