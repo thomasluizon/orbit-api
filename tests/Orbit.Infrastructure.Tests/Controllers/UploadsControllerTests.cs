@@ -23,7 +23,7 @@ public class UploadsControllerTests
     private readonly ILogger<UploadsController> _logger = Substitute.For<ILogger<UploadsController>>();
     private readonly IObjectStorageReadService _objectStorage = Substitute.For<IObjectStorageReadService>();
     private readonly UploadsController _controller;
-    private static readonly Guid UserId = Guid.NewGuid();
+    private static readonly Guid UserId = Guid.Parse("2b3b1fc7-813c-4eb6-ad02-bd7754299703");
 
     public UploadsControllerTests()
     {
@@ -130,13 +130,34 @@ public class UploadsControllerTests
     }
 
     [Fact]
-    public void ReadObject_UsesInProcessRateLimit()
+    public async Task ReadObject_OtherOwner_ReturnsNotFoundWithoutLookupOrPresigning()
+    {
+        var result = await _controller.ReadObject(Guid.NewGuid().ToString(), $"{Guid.NewGuid()}.png", CancellationToken.None);
+
+        result.Should().BeOfType<NotFoundResult>();
+        await _mediator.DidNotReceive().Send(Arg.Any<UploadOwnerExistsQuery>(), Arg.Any<CancellationToken>());
+        await _objectStorage.DidNotReceive().CreateReadUrlAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ReadObject_Anonymous_ReturnsUnauthorized()
+    {
+        _controller.HttpContext.User = new ClaimsPrincipal(new ClaimsIdentity());
+        var result = await _controller.ReadObject(UserId.ToString(), $"{Guid.NewGuid()}.png", CancellationToken.None);
+
+        result.Should().BeOfType<UnauthorizedResult>();
+        await _objectStorage.DidNotReceive().CreateReadUrlAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public void ReadObject_RequiresAuthenticationAndDistributedRateLimit()
     {
         var method = typeof(UploadsController).GetMethod(nameof(UploadsController.ReadObject))
             ?? throw new InvalidOperationException("ReadObject action is missing.");
 
-        method.GetCustomAttribute<AllowAnonymousAttribute>().Should().NotBeNull();
-        method.GetCustomAttribute<EnableRateLimitingAttribute>().Should().NotBeNull();
-        method.GetCustomAttribute<DistributedRateLimitAttribute>().Should().BeNull();
+        method.GetCustomAttribute<AllowAnonymousAttribute>().Should().BeNull();
+        typeof(UploadsController).GetCustomAttribute<AuthorizeAttribute>().Should().NotBeNull();
+        method.GetCustomAttribute<EnableRateLimitingAttribute>().Should().BeNull();
+        method.GetCustomAttribute<DistributedRateLimitAttribute>().Should().NotBeNull();
     }
 }

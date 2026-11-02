@@ -6,5 +6,5 @@ public sealed class SentrySettings
     public string Dsn { get; init; } = "";
     public string Environment { get; init; } = "production";
     public double TracesSampleRate { get; init; }
-    public bool EnableLogs { get; init; } = true;
+    public bool EnableLogs { get; init; }
 }

@@ -411,7 +411,6 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<IDistributedRateLimitService, DistributedRateLimitService>();
         builder.Services.AddRateLimiter(options =>
         {
-            options.AddPolicy(UploadReadRateLimitPolicy.Name, UploadReadRateLimitPolicy.GetPartition);
             options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
         });
 
@@ -456,7 +455,7 @@ public static partial class ServiceCollectionExtensions
             if (!string.IsNullOrWhiteSpace(commit))
                 options.Release = $"Orbit.Api@{commit}";
             options.TracesSampleRate = sentrySettings.TracesSampleRate;
-            options.EnableLogs = sentrySettings.EnableLogs;
+            options.EnableLogs = false;
             options.SendDefaultPii = false;
             options.AddExceptionFilterForType<FluentValidation.ValidationException>();
             options.AddExceptionFilterForType<OperationCanceledException>();
