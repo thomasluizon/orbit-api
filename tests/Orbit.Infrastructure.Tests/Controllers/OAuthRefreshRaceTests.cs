@@ -25,7 +25,7 @@ using Orbit.Infrastructure.Tests.Persistence;
 
 namespace Orbit.Infrastructure.Tests.Controllers;
 
-public class OAuthRefreshRaceTests
+public partial class OAuthRefreshRaceTests
 {
     [Theory]
     [InlineData(false)]

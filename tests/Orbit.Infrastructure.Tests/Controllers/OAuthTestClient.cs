@@ -1,4 +1,7 @@
 using Microsoft.AspNetCore.Http;
+using MediatR;
+using Orbit.Domain.Entities;
+using Orbit.Application.Auth.Commands;
 using NSubstitute;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
@@ -16,6 +19,13 @@ internal static class OAuthTestClient
         service.GetAsync(ClientId, Arg.Any<CancellationToken>()).Returns(
             OAuthClientMetadata.Create(ClientId, "Claude", [RedirectUri], "none").Value);
         return service;
+    }
+
+    internal static void RegisterWith(IMediator mediator, IGenericRepository<OAuthClient> clients, IUnitOfWork work)
+    {
+        var handler = new RegisterOAuthClientCommandHandler(clients, work);
+        mediator.Send(Arg.Any<RegisterOAuthClientCommand>(), Arg.Any<CancellationToken>())
+            .Returns(call => handler.Handle(call.Arg<RegisterOAuthClientCommand>(), call.Arg<CancellationToken>()));
     }
 
     internal static void Bind(HttpContext context, params string[] states)

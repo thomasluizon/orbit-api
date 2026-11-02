@@ -87,7 +87,7 @@ public class FeatureFlagToolsTests
         _mediator.Send(Arg.Is<ListFeatureFlagsQuery>(query => query.AdminId == _userId), Arg.Any<CancellationToken>())
             .Returns(Result.Success<IReadOnlyList<AdminFeatureFlag>>([new("flag", "Description", false, null, ["account@example.com"])]));
 
-        var result = await new FeatureFlagTools(_mediator, new McpExecutorBridge(_executor), services).ManageFeatureFlags(User, "list");
+        var result = (await new FeatureFlagTools(_mediator, new McpExecutorBridge(_executor), services).ManageFeatureFlags(User, "list")).AsText();
 
         result.Should().Contain("account@example.com").And.Contain("Description");
         _executor.ReceivedCalls().Should().BeEmpty();
@@ -106,8 +106,8 @@ public class FeatureFlagToolsTests
             .Returns(new AgentExecuteOperationResponse(new AgentOperationResult(FeatureFlagActions.ToolName, FeatureFlagActions.ToolName,
                 AgentRiskClass.Low, AgentConfirmationRequirement.None, AgentOperationStatus.Succeeded, "Updated", Payload: new { key = "flag" })));
 
-        await new FeatureFlagTools(_mediator, new McpExecutorBridge(_executor), services)
-            .ManageFeatureFlags(User, action, "flag", ["account@example.com"], "Description");
+        (await new FeatureFlagTools(_mediator, new McpExecutorBridge(_executor), services)
+            .ManageFeatureFlags(User, action, "flag", ["account@example.com"], "Description")).AsText();
 
         await _executor.Received(1).ExecuteAsync(Arg.Is<AgentExecuteOperationRequest>(request =>
             request.UserId == _userId && request.OperationId == FeatureFlagActions.ToolName &&
@@ -127,6 +127,18 @@ public class FeatureFlagToolsTests
         catalog.GetOperation(FeatureFlagActions.ToolName).Should().NotBeNull();
         catalog.GetOperations().Should().NotContain(operation => operation.Id == FeatureFlagActions.ToolName);
         catalog.GetCapabilities().Should().NotContain(capability => capability.Id == FeatureFlagActions.CapabilityId);
+    }
+
+    [Fact]
+    public async Task WriteDeniedByExecutor_IsError()
+    {
+        using var services = BuildServices(true);
+        _executor.ExecuteAsync(Arg.Any<AgentExecuteOperationRequest>(), Arg.Any<CancellationToken>()).Returns(
+            new AgentExecuteOperationResponse(new(FeatureFlagActions.ToolName, FeatureFlagActions.ToolName,
+                AgentRiskClass.Low, AgentConfirmationRequirement.None, AgentOperationStatus.Denied, PolicyReason: "read_only_credential")));
+        var result = await new FeatureFlagTools(_mediator, new McpExecutorBridge(_executor), services)
+            .ManageFeatureFlags(User, FeatureFlagActions.EnableForEveryone, "flag");
+        result.IsError.Should().BeTrue();
     }
 
     private ServiceProvider BuildServices(bool isAdmin)

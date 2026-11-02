@@ -72,9 +72,9 @@ public sealed class FieldReadbackTests
         rows.Single(row => row.Id == child.Id.ToString()).Should().Match<HabitListCardItem>(row =>
             row.StartDate == child.StartDate && row.ParentHabitId == parent.Id && row.ParentTitle == parent.Title);
         rows.Should().OnlyContain(row => row.Tags != null && row.Tags.Single().Id == tag.Id && row.Tags.Single().Name == tag.Name);
-        var detailText = await mcp.GetHabit(Principal(user.Id), parent.Id.ToString());
-        var childText = await mcp.GetHabit(Principal(user.Id), child.Id.ToString());
-        var listText = await mcp.ListHabits(Principal(user.Id), "2026-10-19", "2026-10-19");
+        var detailText = (await mcp.GetHabit(Principal(user.Id), parent.Id.ToString())).AsText();
+        var childText = (await mcp.GetHabit(Principal(user.Id), child.Id.ToString())).AsText();
+        var listText = (await mcp.ListHabits(Principal(user.Id), "2026-10-19", "2026-10-19")).AsText();
         foreach (var text in new[] { chat.EntityName!, detailText, listText })
         {
             text.Should().Contain("Start date: 2026-10-09").And.Contain("Start date: 2026-10-14");
@@ -118,7 +118,7 @@ public sealed class FieldReadbackTests
         chat.Payload.Should().BeOfType<GoalListCard>().Subject.Items.Single().LinkedHabits
             .Should().ContainSingle().Which.Should().Be(new LinkedHabitDto(habit.Id, habit.Title));
         var mcp = new GoalTools(mediator, Bridge());
-        foreach (var text in new[] { chat.EntityName!, await mcp.ListGoals(Principal(user.Id)), await mcp.GetGoal(Principal(user.Id), goal.Id.ToString()) })
+        foreach (var text in new[] { chat.EntityName!, (await mcp.ListGoals(Principal(user.Id))).AsText(), (await mcp.GetGoal(Principal(user.Id), goal.Id.ToString())).AsText() })
             text.Should().Contain($"Read ({habit.Id})");
         var promptGoal = await goals.FindAsync(g => g.Id == goal.Id, q => Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.Include(q, g => g.Habits));
         new ActiveGoalsSection().Build(new PromptContext([], false, null, null, Today, null, promptGoal))
@@ -158,7 +158,7 @@ public sealed class FieldReadbackTests
         mediator.Send(Arg.Any<GetCalendarEventsQuery>(), Arg.Any<CancellationToken>()).Returns(Result.Success(new List<CalendarEventItem>()));
         mediator.Send(Arg.Any<GetCalendarSyncSuggestionsQuery>(), Arg.Any<CancellationToken>()).Returns(Result.Success(new List<CalendarSyncSuggestionItem>()));
         var chat = await new GetCalendarOverviewTool(mediator).ExecuteAsync(JsonSerializer.SerializeToElement(new { include_auto_sync_state = false }), user.Id, default);
-        var mcp = await new CalendarTools(mediator, Bridge()).GetCalendarOverview(Principal(user.Id));
+        var mcp = (await new CalendarTools(mediator, Bridge()).GetCalendarOverview(Principal(user.Id))).AsText();
         foreach (var json in new[] { JsonSerializer.Serialize(chat.Payload), mcp })
         {
             var payload = JsonDocument.Parse(json).RootElement;

@@ -127,15 +127,15 @@ public class OAuthConnectorConfirmationTests : IDisposable
             NullLogger<AgentOperationExecutor>.Instance);
         var tools = new HabitTools(mediator, dates, new McpExecutorBridge(executor));
 
-        (await tools.GetHabit(user, habit.Id.ToString())).Should().Contain("QA habit");
-        (await tools.DeleteHabit(user, habit.Id.ToString())).Should().Contain("confirm_agent_operation_v2");
+        ((await tools.GetHabit(user, habit.Id.ToString())).AsText()).Should().Contain("QA habit");
+        ((await tools.DeleteHabit(user, habit.Id.ToString())).AsText()).Should().Contain("confirm_agent_operation_v2");
         habit.IsDeleted.Should().BeFalse();
         var id = _db.PendingAgentOperations.Single().Id;
         var confirmation = Payload<PendingAgentOperationConfirmation>(_tools.ConfirmAgentOperation(user, id.ToString()));
-        (await tools.DeleteHabit(user, habit.Id.ToString(), confirmation.ConfirmationToken))
+        ((await tools.DeleteHabit(user, habit.Id.ToString(), confirmation.ConfirmationToken)).AsText())
             .Should().Be($"Deleted habit {habit.Id}");
         habit.IsDeleted.Should().BeTrue();
-        (await tools.GetHabit(user, habit.Id.ToString())).Should().StartWith("Error:");
+        ((await tools.GetHabit(user, habit.Id.ToString())).AsText()).Should().StartWith("Error:");
         await audit.Received().RecordAsync(Arg.Is<AgentAuditEntry>(entry =>
             entry.AuthMethod.ToString() == "OAuth" && entry.OutcomeStatus == AgentOperationStatus.Succeeded),
             Arg.Any<CancellationToken>());

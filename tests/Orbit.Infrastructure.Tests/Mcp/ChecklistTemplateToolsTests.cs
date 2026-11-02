@@ -41,7 +41,7 @@ public class ChecklistTemplateToolsTests
         _mediator.Send(Arg.Any<GetChecklistTemplatesQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success<IReadOnlyList<ChecklistTemplateResponse>>([]));
 
-        var result = await _tools.GetChecklistTemplates(_user);
+        var result = (await _tools.GetChecklistTemplates(_user)).AsText();
 
         result.Should().Contain("No checklist templates");
     }
@@ -56,7 +56,7 @@ public class ChecklistTemplateToolsTests
         _mediator.Send(Arg.Any<GetChecklistTemplatesQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success<IReadOnlyList<ChecklistTemplateResponse>>(templates));
 
-        var result = await _tools.GetChecklistTemplates(_user);
+        var result = (await _tools.GetChecklistTemplates(_user)).AsText();
 
         result.Should().Contain("Morning routine");
         result.Should().Contain("brush teeth");
@@ -68,7 +68,7 @@ public class ChecklistTemplateToolsTests
         var templateId = Guid.NewGuid();
         StubExecutor(AgentOperationStatus.Succeeded, targetId: templateId.ToString());
 
-        var result = await _tools.CreateChecklistTemplate(_user, "Morning routine", "brush teeth, stretch");
+        var result = (await _tools.CreateChecklistTemplate(_user, "Morning routine", "brush teeth, stretch")).AsText();
 
         var request = (AgentExecuteOperationRequest)_executor.ReceivedCalls()
             .Single(call => call.GetMethodInfo().Name == nameof(IAgentOperationExecutor.ExecuteAsync))
@@ -83,7 +83,7 @@ public class ChecklistTemplateToolsTests
         var templateId = Guid.NewGuid();
         StubExecutor(AgentOperationStatus.Succeeded);
 
-        var result = await _tools.DeleteChecklistTemplate(_user, templateId.ToString());
+        var result = (await _tools.DeleteChecklistTemplate(_user, templateId.ToString())).AsText();
 
         var request = (AgentExecuteOperationRequest)_executor.ReceivedCalls()
             .Single(call => call.GetMethodInfo().Name == nameof(IAgentOperationExecutor.ExecuteAsync))

@@ -58,6 +58,7 @@ public class OAuthCimdControllerTests : IDisposable
             .Returns(call => call.Arg<Func<CancellationToken, Task<IActionResult>>>()(default));
         work.SaveChangesAsync(Arg.Any<CancellationToken>()).Returns(call => _db.Context.SaveChangesAsync(call.Arg<CancellationToken>()));
         _keys.AddAsync(Arg.Do<ApiKey>(key => _minted = key), Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
+        OAuthTestClient.RegisterWith(_mediator, new GenericRepository<OAuthClient>(_db.Context), work);
         _controller = new OAuthController(_mediator, _store, _keys, work,
             Options.Create(new GoogleSettings { ClientId = "google-client", AllowedRedirectUris = ["https://api.useorbit.org/oauth/google/callback"] }),
             new ConfigurationBuilder().Build(), NullLogger<OAuthController>.Instance, metadata, new GenericRepository<OAuthClient>(_db.Context))
@@ -150,6 +151,14 @@ public class OAuthCimdControllerTests : IDisposable
         Error(await Verify(ClientId, unlisted)).Should().Be("invalid_redirect_uri");
         Error(await _controller.GoogleStart(ClientId, unlisted, "state", Challenge(), "S256")).Should().Be("invalid_redirect_uri");
         await _mediator.DidNotReceive().Send(Arg.Any<VerifyCodeCommand>(), Arg.Any<CancellationToken>());
+        _db.Context.OAuthStates.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task MetadataRedirectOutsideServerAllowlist_IsRejected()
+    {
+        _handler.Body = _handler.Body.Replace(RedirectUri, "https://claude.ai/unlisted");
+        Error(await Authorize(ClientId, "https://claude.ai/unlisted")).Should().Be("invalid_redirect_uri");
         _db.Context.OAuthStates.Should().BeEmpty();
     }
 

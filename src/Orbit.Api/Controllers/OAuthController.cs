@@ -78,15 +78,12 @@ public partial class OAuthController(
             || uris.EnumerateArray().Any(uri => uri.ValueKind != JsonValueKind.String))
             return BadRequest(new { error = "invalid_client_metadata" });
         var requestedUris = uris.EnumerateArray().Select(uri => uri.GetString()!).ToArray();
-        var registration = new Orbit.Application.Auth.Validators.OAuthClientRegistration(name.GetString(), requestedUris);
-        var validation = await new Orbit.Application.Auth.Validators.OAuthClientRegistrationValidator().ValidateAsync(registration, ct);
-        if (!validation.IsValid)
+        var clientName = name.GetString();
+        if (string.IsNullOrWhiteSpace(clientName) || clientName.Length > OAuthClient.MaxNameLength || requestedUris.Length is 0 or > 50)
             return BadRequest(new { error = "invalid_client_metadata" });
         if (requestedUris.Any(uri => !IsRedirectUriAllowed(uri)))
             return BadRequest(new { error = InvalidRedirectUriError, error_description = "One or more redirect_uris are not in the allowlist." });
-        var client = OAuthClient.Create(registration.ClientName!, requestedUris);
-        await clients.AddAsync(client, ct);
-        await unitOfWork.SaveChangesAsync(ct);
+        var client = await mediator.Send(new RegisterOAuthClientCommand(clientName, requestedUris), ct);
         return StatusCode(201, new
         {
             client_id = client.Id.ToString(),

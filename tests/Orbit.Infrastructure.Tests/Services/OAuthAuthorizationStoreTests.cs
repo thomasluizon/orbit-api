@@ -246,10 +246,12 @@ public class OAuthAuthorizationStoreTests : IDisposable
     [Fact]
     public void TryCreateGoogleRequest_RefusesOnceTheCapIsReached()
     {
-        for (var i = 0; i < OAuthAuthorizationStore.MaxPendingGoogleRequests; i++)
+        var first = CreatePending(_store, "first-ip")!;
+        for (var i = 1; i < OAuthAuthorizationStore.MaxPendingGoogleRequests; i++)
             CreatePending(_store, $"ip-{i / 20}").Should().NotBeNull();
 
         CreatePending(_store, "overflow").Should().BeNull();
+        _store.ConsumeGoogleRequest(first.GoogleState).Should().NotBeNull();
     }
 
     [Fact]

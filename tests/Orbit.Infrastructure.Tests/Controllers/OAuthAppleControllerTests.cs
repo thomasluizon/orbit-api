@@ -70,6 +70,15 @@ public class OAuthAppleControllerTests
     }
 
     [Fact]
+    public async Task UnknownClient_AppleStart_IsInvalidClient()
+    {
+        var result = await _controller.AppleStart(_flow, "x", Redirect, "state", "challenge", "S256");
+        JsonSerializer.SerializeToElement(result.Should().BeOfType<BadRequestObjectResult>().Subject.Value)
+            .GetProperty("error").GetString().Should().Be("invalid_client");
+        _entries.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task CimdClient_PreservesValidatedNameThroughAppleCallback()
     {
         const string clientId = "https://claude.ai/oauth/mcp-oauth-client-metadata";

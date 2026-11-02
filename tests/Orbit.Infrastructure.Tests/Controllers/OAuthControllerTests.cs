@@ -79,6 +79,7 @@ public partial class OAuthControllerTests : IDisposable
             })
             .Build();
 
+        OAuthTestClient.RegisterWith(_mediator, new GenericRepository<OAuthClient>(_oauthDb.Context), _unitOfWork);
         _controller = new OAuthController(
             _mediator, _authStore, _apiKeyRepo, _unitOfWork, googleSettings, config, _logger, _clientMetadata, new GenericRepository<OAuthClient>(_oauthDb.Context));
 

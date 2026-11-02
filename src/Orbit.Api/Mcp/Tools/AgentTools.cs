@@ -33,14 +33,14 @@ public class AgentTools(
     public IReadOnlyList<UserDataCatalogEntry> ListUserDataCatalog() => catalogService.GetUserDataCatalog();
 
     [McpServerTool(Name = "execute_agent_operation_v2"), Description("Execute a typed Orbit AI operation through the shared policy and execution layer.")]
-    public Task<AgentExecuteOperationResponse> ExecuteAgentOperation(
+    public async Task<CallToolResult> ExecuteAgentOperation(
         ClaimsPrincipal user,
         [Description("Operation ID from list_agent_operations_v2")] string operationId,
         [Description("JSON object containing the operation arguments")] JsonElement? arguments = null,
         [Description("Confirmation token returned after confirming a pending operation, when required")] string? confirmationToken = null,
         CancellationToken cancellationToken = default)
     {
-        return operationExecutor.ExecuteAsync(new AgentExecuteOperationRequest(
+        var response = await operationExecutor.ExecuteAsync(new AgentExecuteOperationRequest(
             user.GetUserId(),
             operationId,
             OptionalToolArguments.NormalizeExternalClears(operationId, arguments?.Clone() ?? EmptyArguments),
@@ -49,6 +49,9 @@ public class AgentTools(
             user.GetGrantedAgentScopes(),
             user.IsReadOnlyCredential(),
             confirmationToken), cancellationToken);
+        var result = Success(response);
+        result.IsError = response.Operation.Status is not (AgentOperationStatus.Succeeded or AgentOperationStatus.PendingConfirmation);
+        return result;
     }
 
     [McpServerTool(Name = "confirm_agent_operation_v2"), Description("Confirm a pending destructive or high-risk Orbit AI operation and receive a short-lived confirmation token. Available through the Claude connector; manual API keys must connect through the Claude connector or make this change in the Orbit app.")]
@@ -124,11 +127,8 @@ public class AgentTools(
     private static CallToolResult Error(string code, string message)
     {
         var payload = JsonSerializer.SerializeToElement(new { code, message });
-        return new CallToolResult
-        {
-            IsError = true,
-            StructuredContent = payload,
-            Content = [new TextContentBlock { Text = payload.GetRawText() }]
-        };
+        var result = McpToolHelpers.Error(payload.GetRawText());
+        result.StructuredContent = payload;
+        return result;
     }
 }

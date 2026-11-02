@@ -11,18 +11,15 @@ public static class HttpContextExtensions
 
     public static Guid GetUserId(this HttpContext context)
     {
-        var userIdClaim = context.User.FindFirst(ClaimTypes.NameIdentifier)?.Value
-            ?? throw new UnauthorizedAccessException("User ID not found in token");
-
-        return Guid.Parse(userIdClaim);
+        return context.User.GetUserId();
     }
 
     public static Guid GetUserId(this ClaimsPrincipal user)
     {
-        var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value
+        var claim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value
             ?? throw new UnauthorizedAccessException("User ID not found in token");
-
-        return Guid.Parse(userIdClaim);
+        return Guid.TryParse(claim, out var id) ? id
+            : throw new UnauthorizedAccessException("User ID claim is not a valid GUID");
     }
 
     public static AgentAuthMethod GetAgentAuthMethod(this ClaimsPrincipal user)

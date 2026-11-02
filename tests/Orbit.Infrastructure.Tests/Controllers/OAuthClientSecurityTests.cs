@@ -21,13 +21,15 @@ public partial class OAuthClientSecurityTests : IDisposable
 {
     private const string RedirectUri = "https://claude.ai/api/mcp/auth_callback";
     private readonly SqliteOrbitDbContextFactory _db = new();
+    private readonly IMediator _mediator = Substitute.For<IMediator>();
     private readonly OAuthController _controller;
     private readonly OAuthAuthorizationStore _store;
 
     public OAuthClientSecurityTests()
     {
         _store = new OAuthAuthorizationStore(new OAuthStateStore(_db.Context, TimeProvider.System), TimeProvider.System);
-        _controller = new OAuthController(Substitute.For<IMediator>(), _store,
+        OAuthTestClient.RegisterWith(_mediator, new GenericRepository<OAuthClient>(_db.Context), new UnitOfWork(_db.Context, new DatabaseConnectionSettings()));
+        _controller = new OAuthController(_mediator, _store,
             Substitute.For<IGenericRepository<ApiKey>>(), new UnitOfWork(_db.Context, new DatabaseConnectionSettings()),
             Options.Create(new GoogleSettings()), new ConfigurationBuilder().Build(),
             NullLogger<OAuthController>.Instance, Substitute.For<IOAuthClientMetadataService>(), new GenericRepository<OAuthClient>(_db.Context))
@@ -36,7 +38,9 @@ public partial class OAuthClientSecurityTests : IDisposable
         };
     }
 
-    [Fact]
+    [Theory]
+    [InlineData(RedirectUri)]
+    [InlineData("https://claude.ai/anything")]
     public async Task Authorize_UnknownClient_FailsClosed()
     {
         var result = await _controller.Authorize(new OAuthController.AuthorizeRequest

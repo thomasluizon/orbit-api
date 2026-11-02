@@ -18,38 +18,52 @@ internal static class McpToolHelpers
     private static readonly JsonSerializerOptions CaseInsensitiveJsonOptions =
         new() { PropertyNameCaseInsensitive = true };
 
-    public static Guid GetUserId(ClaimsPrincipal user)
+    public static Guid GetUserId(ClaimsPrincipal user) => Orbit.Api.Extensions.HttpContextExtensions.GetUserId(user);
+
+    public static ModelContextProtocol.Protocol.CallToolResult Text(string text) => new()
     {
-        var claim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value
-            ?? throw new UnauthorizedAccessException("User ID not found in token");
-        if (!Guid.TryParse(claim, out var userId))
-            throw new UnauthorizedAccessException("User ID claim is not a valid GUID");
-        return userId;
-    }
+        Content = [new ModelContextProtocol.Protocol.TextContentBlock { Text = text }]
+    };
+
+    public static ModelContextProtocol.Protocol.CallToolResult Error(string message, string? code = null) => new()
+    {
+        IsError = true,
+        StructuredContent = code is null ? null : JsonSerializer.SerializeToElement(new { code, message }),
+        Content = [new ModelContextProtocol.Protocol.TextContentBlock { Text = message }]
+    };
 
     public static List<Guid> ParseGuidCsv(string value) =>
-        value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Select(Guid.Parse)
-            .ToList();
+        value.Split(',', StringSplitOptions.TrimEntries)
+            .Select(item => McpInputParser.ParseGuid(item, "ids")).ToList();
 
-    public static T? DeserializeJson<T>(string json) =>
-        JsonSerializer.Deserialize<T>(json, CaseInsensitiveJsonOptions);
+    public static T DeserializeJson<T>(string json) =>
+        ParseJson(json, JsonValueKind.Array, "list").Deserialize<T>(CaseInsensitiveJsonOptions)
+            ?? throw new ArgumentException("Invalid list: a JSON array is required.");
 
-    public static string? AddJsonArguments(Dictionary<string, object?> arguments,
+    public static JsonElement ParseJson(string json, JsonValueKind kind, string field, bool allowNull = false)
+    {
+        try
+        {
+            var value = JsonSerializer.Deserialize<JsonElement>(json);
+            if (allowNull && value.ValueKind == JsonValueKind.Null)
+                return value;
+            if (kind == JsonValueKind.Array && value.ValueKind == kind && value.EnumerateArray().Any(item => item.ValueKind == JsonValueKind.Null))
+                throw new ArgumentException($"Invalid {field}: list items cannot be null.");
+            if (value.ValueKind != kind)
+                throw new ArgumentException($"Invalid {field}: a JSON {kind.ToString().ToLowerInvariant()} is required.");
+            return value;
+        }
+        catch (JsonException)
+        {
+            throw new ArgumentException($"Error: {field} must be valid JSON.");
+        }
+    }
+
+    public static void AddJsonArguments(Dictionary<string, object?> arguments,
         params (string Field, string? Json)[] fields)
     {
         foreach (var (field, json) in fields.Where(value => value.Json is not null))
-        {
-            try
-            {
-                arguments[field] = JsonSerializer.Deserialize<JsonElement>(json!);
-            }
-            catch (JsonException)
-            {
-                return $"Error: {field} must be valid JSON.";
-            }
-        }
-        return null;
+            arguments[field] = ParseJson(json!, field is "repeat_reminder" ? JsonValueKind.Object : JsonValueKind.Array, field, allowNull: field is "repeat_reminder");
     }
 
     public static object ToBulkHabitArgs(BulkHabitItemDto dto) => new

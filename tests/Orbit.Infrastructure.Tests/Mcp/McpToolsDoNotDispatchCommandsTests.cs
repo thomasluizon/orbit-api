@@ -11,7 +11,7 @@ namespace Orbit.Infrastructure.Tests.Mcp;
 /// </summary>
 public partial class McpToolsDoNotDispatchCommandsTests
 {
-    [GeneratedRegex(@"mediator\s*\.\s*Send\s*\(\s*(new\s+\w*Command\b|\w*[Cc]ommand)\b", RegexOptions.Singleline)]
+    [GeneratedRegex(@"\b\w+\s*\.\s*Send\s*\(\s*(new\s+(?:\w+\.)*\w*Command\b|\w*[Cc]ommand)\b", RegexOptions.Singleline)]
     private static partial Regex CommandDispatchPattern();
 
     [Fact]
@@ -20,14 +20,11 @@ public partial class McpToolsDoNotDispatchCommandsTests
         var toolsDirectory = LocateMcpToolsDirectory();
         var offenders = new List<string>();
 
-        foreach (var file in Directory.EnumerateFiles(toolsDirectory, "*.cs", SearchOption.TopDirectoryOnly))
+        foreach (var file in Directory.EnumerateFiles(toolsDirectory, "*.cs", SearchOption.AllDirectories))
         {
-            var lines = File.ReadAllLines(file);
-            for (var index = 0; index < lines.Length; index++)
-            {
-                if (CommandDispatchPattern().IsMatch(lines[index]))
-                    offenders.Add($"{Path.GetFileName(file)}:{index + 1}: {lines[index].Trim()}");
-            }
+            var source = File.ReadAllText(file);
+            if (CommandDispatchPattern().IsMatch(source))
+                offenders.Add(Path.GetRelativePath(toolsDirectory, file));
         }
 
         offenders.Should().BeEmpty(
@@ -36,12 +33,18 @@ public partial class McpToolsDoNotDispatchCommandsTests
             string.Join("\n", offenders));
     }
 
+    [Theory]
+    [InlineData("sender.Send(\n new FooCommand(value));")]
+    [InlineData("mediator.Send(\n new FooCommand(value));")]
+    public void Guard_DetectsCommandDispatchAcrossLinesAndSenderNames(string source) =>
+        CommandDispatchPattern().IsMatch(source).Should().BeTrue();
+
     private static string LocateMcpToolsDirectory()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
         while (directory is not null)
         {
-            var candidate = Path.Combine(directory.FullName, "src", "Orbit.Api", "Mcp", "Tools");
+            var candidate = Path.Combine(directory.FullName, "src", "Orbit.Api", "Mcp");
             if (Directory.Exists(candidate))
                 return candidate;
 
@@ -49,6 +52,6 @@ public partial class McpToolsDoNotDispatchCommandsTests
         }
 
         throw new DirectoryNotFoundException(
-            "Could not locate src/Orbit.Api/Mcp/Tools by walking up from the test output directory.");
+            "Could not locate src/Orbit.Api/Mcp by walking up from the test output directory.");
     }
 }

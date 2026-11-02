@@ -91,19 +91,19 @@ public sealed class BadHabitParentSlipMcpTests
         var user = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, userId.ToString())], "Test"));
 
         if (bulk)
-            await mcp.BulkLogHabits(user, $"{first.Id},{second.Id}");
+            (await mcp.BulkLogHabits(user, $"{first.Id},{second.Id}")).AsText();
         else
         {
-            await mcp.LogHabit(user, first.Id.ToString());
+            (await mcp.LogHabit(user, first.Id.ToString())).AsText();
             (await context.HabitLogs.Where(log => log.HabitId == parent.Id).ToListAsync()).Should().BeEmpty();
-            await mcp.LogHabit(user, second.Id.ToString());
+            (await mcp.LogHabit(user, second.Id.ToString())).AsText();
         }
         (await context.HabitLogs.Where(log => log.HabitId == parent.Id).ToListAsync())
             .Should().ContainSingle().Which.IsSlip.Should().BeTrue();
-        await mcp.BulkLogHabits(user, $"{first.Id},{second.Id}");
+        (await mcp.BulkLogHabits(user, $"{first.Id},{second.Id}")).AsText();
         (await context.HabitLogs.Where(log => log.HabitId == parent.Id).ToListAsync()).Should().ContainSingle();
 
-        await mcp.UnlogHabit(user, first.Id.ToString());
+        (await mcp.UnlogHabit(user, first.Id.ToString())).AsText();
 
         context.ChangeTracker.Clear();
         (await context.HabitLogs.Where(log => log.HabitId == parent.Id || log.HabitId == first.Id).ToListAsync())

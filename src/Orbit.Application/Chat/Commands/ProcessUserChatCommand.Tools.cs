@@ -797,14 +797,14 @@ public partial class ProcessUserChatCommandHandler
                 AgentRiskClass.Low,
                 AgentConfirmationRequirement.None,
                 AgentOperationStatus.UnsupportedByPolicy,
-                PolicyReason: UnsupportedByPolicyReason,
+                PolicyReason: Orbit.Application.Common.AgentPolicyReasons.UnsupportedByPolicy,
                 Access: capability is null ? null : capability.IsMutation ? "write" : "read"),
             new AgentPolicyDenial(
                 call.Name,
                 call.Name,
                 AgentRiskClass.Low,
                 AgentConfirmationRequirement.None,
-                UnsupportedByPolicyReason),
+                Orbit.Application.Common.AgentPolicyReasons.UnsupportedByPolicy),
             null);
     }
 
@@ -820,14 +820,14 @@ public partial class ProcessUserChatCommandHandler
                 AgentConfirmationRequirement.None,
                 AgentOperationStatus.UnsupportedByPolicy,
                 Summary: BuildOperationSummary(call),
-                PolicyReason: UnsupportedByPolicyReason,
+                PolicyReason: Orbit.Application.Common.AgentPolicyReasons.UnsupportedByPolicy,
                 Access: tool.IsReadOnly ? "read" : "write"),
             new AgentPolicyDenial(
                 call.Name,
                 call.Name,
                 AgentRiskClass.Low,
                 AgentConfirmationRequirement.None,
-                UnsupportedByPolicyReason),
+                Orbit.Application.Common.AgentPolicyReasons.UnsupportedByPolicy),
             null);
     }
 
