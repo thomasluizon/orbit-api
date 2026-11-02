@@ -34,9 +34,11 @@ public class OrbitDbContext : DbContext
     /// <summary>Keeps database batch cleanup on the server deadline when the caller disconnects.</summary>
     internal CancellationToken? TransactionCompletionToken { get; set; }
 
+    public DbSet<BackgroundJobHeartbeat> BackgroundJobHeartbeats => Set<BackgroundJobHeartbeat>();
     public DbSet<OwedSubscriptionCancellation> OwedSubscriptionCancellations => Set<OwedSubscriptionCancellation>();
     public DbSet<User> Users => Set<User>();
     public DbSet<MarketingContact> MarketingContacts => Set<MarketingContact>();
+    public DbSet<MarketingBroadcastDelivery> MarketingBroadcastDeliveries => Set<MarketingBroadcastDelivery>();
     public DbSet<Habit> Habits => Set<Habit>();
     public DbSet<HabitSkipUndo> HabitSkipUndos => Set<HabitSkipUndo>();
     public DbSet<HabitLog> HabitLogs => Set<HabitLog>();
@@ -87,6 +89,13 @@ public class OrbitDbContext : DbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        ScheduledJobIndexes.Configure(modelBuilder);
+        modelBuilder.Entity<BackgroundJobHeartbeat>(entity =>
+        {
+            entity.ToTable("BackgroundJobHeartbeats");
+            entity.HasKey(row => row.JobName);
+            entity.Property(row => row.JobName).HasMaxLength(100);
+        });
         modelBuilder.Entity<TransactionCommit>(entity =>
         {
             entity.ToTable("TransactionCommits");
@@ -112,6 +121,13 @@ public class OrbitDbContext : DbContext
         });
         ConfigureUserEntity(modelBuilder, nullableEncConverter);
         ConfigureMarketingContactEntity(modelBuilder);
+        modelBuilder.Entity<MarketingBroadcastDelivery>(entity =>
+        {
+            entity.HasKey(delivery => delivery.Id);
+            entity.HasIndex(delivery => delivery.DeliveredAtUtc);
+            entity.HasIndex(delivery => delivery.RecipientId);
+            entity.HasIndex(delivery => new { delivery.BroadcastId, delivery.RecipientId }).IsUnique();
+        });
         ConfigureHabitEntity(modelBuilder, isPostgres, encConverter, nullableEncConverter);
 
         if (isPostgres)
@@ -861,7 +877,6 @@ public class OrbitDbContext : DbContext
             entity.HasIndex(h => new { h.ReminderEnabled, h.IsCompleted, h.Schedule }, "IX_Habits_Reminder")
                 .HasFilter("\"ReminderEnabled\" = TRUE AND \"IsCompleted\" = FALSE")
                 .IsCreatedConcurrently();
-            entity.HasIndex(h => h.UserId);
             entity.HasIndex(h => new { h.UserId, h.IsDeleted });
             entity.HasIndex(h => new { h.UserId, h.UpdatedAtUtc });
             entity.HasQueryFilter(h => !h.IsDeleted);

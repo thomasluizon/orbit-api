@@ -10,6 +10,9 @@ using Orbit.Application.Waitlist.Commands;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.Tests.RateLimiting;
 using FluentAssertions;
+using Hangfire;
+using Hangfire.Common;
+using Hangfire.States;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
 using Orbit.Api.Controllers;
@@ -62,11 +65,11 @@ public class WaitlistControllerRateLimitTests
     {
         using var scope = new RateLimitFilterTestScope();
         using var cache = new MemoryCache(new MemoryCacheOptions());
-        var email = Substitute.For<IEmailService>();
+        var jobs = Substitute.For<IBackgroundJobClient>();
         var tokens = Substitute.For<IWaitlistConfirmationTokenService>();
         tokens.CreateToken(Arg.Any<string>(), Arg.Any<string>()).Returns("confirmation-token");
         var options = Options.Create(new WaitlistSettings { ApiBaseUrl = "https://api.useorbit.org" });
-        var handler = new JoinWaitlistCommandHandler(cache, tokens, email, options);
+        var handler = new JoinWaitlistCommandHandler(cache, tokens, jobs, options);
         var mediator = Substitute.For<IMediator>();
         mediator.Send(Arg.Any<JoinWaitlistCommand>(), Arg.Any<CancellationToken>())
             .Returns(call => handler.Handle(call.Arg<JoinWaitlistCommand>(), call.Arg<CancellationToken>()));
@@ -86,8 +89,7 @@ public class WaitlistControllerRateLimitTests
             });
             RateLimitFilterTestScope.AssertOutcome(context, attempt <= 15);
         }
-        await email.Received(15).SendWaitlistConfirmationAsync(
-            Arg.Any<string>(), Arg.Any<string>(), "en", Arg.Any<CancellationToken>());
+        jobs.Received(15).Create(Arg.Is<Job>(job => job.Type == typeof(SendWaitlistConfirmationJob)), Arg.Any<IState>());
     }
 
     private static MethodInfo GetAction(string actionName)

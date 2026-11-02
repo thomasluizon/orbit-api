@@ -29,6 +29,32 @@ public static class OrbitConnectionStringFactory
         }.ConnectionString;
     }
 
+    public static string ForHangfire(IConfiguration configuration)
+    {
+        var source = configuration.GetConnectionString("HangfireConnection");
+        if (string.IsNullOrWhiteSpace(source)) source = ForSession(configuration);
+        if (string.IsNullOrWhiteSpace(source)) return string.Empty;
+        return new NpgsqlConnectionStringBuilder(source)
+        {
+            ApplicationName = "orbit-hangfire",
+            MaxPoolSize = 12,
+            MinPoolSize = 1,
+            KeepAlive = 30
+        }.ConnectionString;
+    }
+
+    public static string ForJobLocks(IConfiguration configuration)
+    {
+        var source = ForSession(configuration);
+        if (string.IsNullOrWhiteSpace(source)) return string.Empty;
+        return new NpgsqlConnectionStringBuilder(source)
+        {
+            ApplicationName = "orbit-job-locks",
+            MaxPoolSize = 8,
+            MinPoolSize = 0
+        }.ConnectionString;
+    }
+
     private static string ApplyPoolCap(string? connectionString, int maxPoolSize)
     {
         if (string.IsNullOrWhiteSpace(connectionString))

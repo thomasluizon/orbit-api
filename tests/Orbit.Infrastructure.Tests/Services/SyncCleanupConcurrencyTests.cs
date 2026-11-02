@@ -95,19 +95,32 @@ public class SyncCleanupConcurrencyTests
         });
 
     [PostgresFact]
-    public Task Purge_DeleteFails_RollsBackCompletionAndDeletedRows() =>
+    public Task Purge_DeleteFails_KeepsCommittedBatchesAndResumes() =>
         PostgresTestDatabase.WithDatabase(async db =>
         {
-            var (user, _) = await SeedAsync(db);
+            var (user, completion) = await SeedAsync(db);
+            var goal = Goal.Create(user.Id, "Old goal", 1, "times").Value;
+            goal.SoftDelete();
+            typeof(Goal).GetProperty(nameof(Goal.DeletedAtUtc))!.SetValue(goal,
+                DateTime.UtcNow.AddDays(-AppConstants.MaxSyncWindowDays - AppConstants.SyncCleanupMarginDays - 1));
+            db.Goals.Add(goal);
+            await db.SaveChangesAsync();
             using var services = Services(db, new RejectGoalDelete());
 
             var act = () => Service(services).PurgeSoftDeletedEntities(default);
             await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("Injected purge failure");
 
             (await db.Users.AsNoTracking().SingleAsync(item => item.Id == user.Id))
-                .LastPurgedCompletionDate.Should().BeNull();
-            (await db.Habits.IgnoreQueryFilters().CountAsync()).Should().Be(1);
-            (await db.HabitLogs.IgnoreQueryFilters().CountAsync()).Should().Be(1);
+                .LastPurgedCompletionDate.Should().Be(completion);
+            (await db.Habits.IgnoreQueryFilters().CountAsync()).Should().Be(0);
+            (await db.HabitLogs.IgnoreQueryFilters().CountAsync()).Should().Be(0);
+            (await db.Goals.IgnoreQueryFilters().CountAsync()).Should().Be(1);
+
+            await Service(services).PurgeSoftDeletedEntities(default);
+
+            (await db.Users.AsNoTracking().SingleAsync(item => item.Id == user.Id))
+                .LastPurgedCompletionDate.Should().Be(completion);
+            (await db.Goals.IgnoreQueryFilters().CountAsync()).Should().Be(0);
         });
 
     private static async Task<(User User, DateOnly Completion)> SeedAsync(OrbitDbContext db)
@@ -138,23 +151,10 @@ public class SyncCleanupConcurrencyTests
         public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private int _arrivals;
-        public override async ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(DbCommand command,
-            CommandEventData eventData, InterceptionResult<DbDataReader> result, CancellationToken cancellationToken = default)
-        {
-            if (command.CommandText.Contains("FROM \"Habits\"", StringComparison.Ordinal)
-                && !command.CommandText.Contains("WITH RECURSIVE", StringComparison.Ordinal)
-                && Interlocked.Increment(ref _arrivals) == 1)
-            {
-                Started.TrySetResult();
-                await Release.Task.WaitAsync(TimeSpan.FromSeconds(20), cancellationToken);
-            }
-            return result;
-        }
-
         public override async ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(DbCommand command,
             CommandEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
         {
-            if (command.CommandText.StartsWith("UPDATE \"Users\"", StringComparison.Ordinal)
+            if (command.CommandText.Contains("UPDATE \"Users\" SET \"LastPurgedCompletionDate\"", StringComparison.Ordinal)
                 && Interlocked.Increment(ref _arrivals) == 1)
             {
                 Started.TrySetResult();
@@ -166,10 +166,12 @@ public class SyncCleanupConcurrencyTests
 
     private sealed class RejectGoalDelete : DbCommandInterceptor
     {
+        private int _rejected;
         public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(DbCommand command,
             CommandEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
         {
-            if (command.CommandText.Contains("DELETE FROM \"Goals\"", StringComparison.Ordinal))
+            if (command.CommandText.Contains("DELETE FROM \"Goals\"", StringComparison.Ordinal)
+                && Interlocked.Exchange(ref _rejected, 1) == 0)
                 throw new InvalidOperationException("Injected purge failure");
             return ValueTask.FromResult(result);
         }

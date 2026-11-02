@@ -10,15 +10,13 @@ namespace Orbit.Infrastructure.Tests.Services;
 
 public class FoundingAchievementReconciliationServiceTests
 {
-    [Fact]
-    public async Task ReconcileCandidatesAsync_UsesBoundedCursorPagesAndProcessesEveryCandidate()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ReconcileCandidatesAsync_CandidateFailureDoesNotPreventCursorAdvancing(bool failFirst)
     {
         var reader = Substitute.For<IFoundingAchievementReader>();
         var gamificationService = Substitute.For<IGamificationService>();
-        gamificationService.ReconcileFoundingAchievementsAsync(
-                Arg.Any<Guid>(),
-                Arg.Any<CancellationToken>())
-            .Returns(Array.Empty<string>());
 
         var firstPage = Enumerable.Range(0, FoundingAchievementReconciliationService.PageSize)
             .Select(index => new FoundingAchievementCursor(
@@ -28,6 +26,9 @@ public class FoundingAchievementReconciliationServiceTests
         var finalCandidate = new FoundingAchievementCursor(
             Guid.Parse("00000000-0000-0000-0000-000000000101"),
             new DateTime(2026, 8, 1, 0, 2, 0, DateTimeKind.Utc));
+        gamificationService.ReconcileFoundingAchievementPageAsync(Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.Arg<IReadOnlyCollection<Guid>>().Select(id => new FoundingReconciliationResult(id, [],
+                failFirst && id == firstPage[0].UserId ? new InvalidOperationException("candidate failed") : null)).ToList());
         reader.ReadCandidatePageAsync(
                 null,
                 FoundingAchievementReconciliationService.PageSize,
@@ -51,10 +52,8 @@ public class FoundingAchievementReconciliationServiceTests
         var granted = await service.ReconcileCandidatesAsync(CancellationToken.None);
 
         granted.Should().Be(0);
-        await gamificationService.Received(FoundingAchievementReconciliationService.PageSize + 1)
-            .ReconcileFoundingAchievementsAsync(
-                Arg.Any<Guid>(),
-                Arg.Any<CancellationToken>());
+        await gamificationService.Received(2).ReconcileFoundingAchievementPageAsync(
+            Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<CancellationToken>());
         await reader.Received(1).ReadCandidatePageAsync(
             firstPage[^1],
             FoundingAchievementReconciliationService.PageSize,

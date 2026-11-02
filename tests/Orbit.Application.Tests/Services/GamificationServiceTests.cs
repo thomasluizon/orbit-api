@@ -1418,6 +1418,97 @@ public class GamificationServiceTests
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ReconcileFoundingPage_ReadsEvidenceOnceUnderLocks_AndContinuesAfterCandidateFailure(bool failFirst)
+    {
+        var users = new[] { User.Create("First", "first@example.com").Value, User.Create("Second", "second@example.com").Value };
+        foreach (var user in users) user.GrantLifetimePro();
+        var earned = new List<UserAchievement>();
+        ConfigurePageTransactions();
+        _userRepo.FindOneTrackedAsync(Arg.Any<Expression<Func<User, bool>>>(),
+            Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(), Arg.Any<CancellationToken>()).Returns(call =>
+        {
+            var user = users.FirstOrDefault(call.Arg<Expression<Func<User, bool>>>().Compile());
+            if (failFirst && user?.Id == users[0].Id) throw new InvalidOperationException("candidate failed");
+            return user;
+        });
+        _achievementRepo.FindAsync(Arg.Any<Expression<Func<UserAchievement, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => earned.Where(call.Arg<Expression<Func<UserAchievement, bool>>>().Compile()).ToList());
+        _achievementRepo.AddAsync(Arg.Any<UserAchievement>(), Arg.Any<CancellationToken>())
+            .Returns(call => { earned.Add(call.Arg<UserAchievement>()); return Task.CompletedTask; });
+        var locked = new HashSet<Guid>();
+        _unitOfWork.AcquireAdvisoryLockAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(call =>
+        {
+            foreach (var user in users)
+                if (call.Arg<string>() == ClosedMonthRecapLock.ForUser(user.Id)) locked.Add(user.Id);
+            return Task.CompletedTask;
+        });
+        _foundingAchievementReader.ReadEvidencePageAsync(Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                call.Arg<IReadOnlyCollection<Guid>>().Should().OnlyContain(id => locked.Contains(id));
+                return users.ToDictionary(user => user.Id, _ => new FoundingAchievementEvidence(true, false, false, false, false));
+            });
+
+        var results = await _sut.ReconcileFoundingAchievementPageAsync(users.Select(user => user.Id).ToArray());
+
+        results.Should().HaveCount(2);
+        results.Single(result => result.UserId == users[1].Id).Granted.Should().Equal(AchievementDefinitions.Liftoff);
+        if (failFirst) results.Single(result => result.UserId == users[0].Id).Error.Should().BeOfType<InvalidOperationException>();
+        else results.Single(result => result.UserId == users[0].Id).Error.Should().BeNull();
+        earned.Should().HaveCount(failFirst ? 1 : 2);
+        await _foundingAchievementReader.Received(1).ReadEvidencePageAsync(Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<CancellationToken>());
+        await _foundingAchievementReader.DidNotReceive().ReadEvidenceAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ReconcileFoundingPage_TwoConcurrentPasses_GrantOnce()
+    {
+        var user = CreateProUser();
+        SetupUserLookup(user);
+        var earned = new List<UserAchievement>();
+        _achievementRepo.FindAsync(Arg.Any<Expression<Func<UserAchievement, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(_ => earned.ToList());
+        _achievementRepo.AddAsync(Arg.Any<UserAchievement>(), Arg.Any<CancellationToken>())
+            .Returns(call => { earned.Add(call.Arg<UserAchievement>()); return Task.CompletedTask; });
+        ConfigurePageTransactions();
+        using var gate = new SemaphoreSlim(1, 1);
+        _unitOfWork.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task<IReadOnlyList<FoundingReconciliationResult>>>>(), Arg.Any<CancellationToken>())
+            .Returns(async call =>
+            {
+                await gate.WaitAsync();
+                try { return await call.Arg<Func<CancellationToken, Task<IReadOnlyList<FoundingReconciliationResult>>>>()(default); }
+                finally { gate.Release(); }
+            });
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _foundingAchievementReader.ReadEvidencePageAsync(Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<CancellationToken>())
+            .Returns<Task<IReadOnlyDictionary<Guid, FoundingAchievementEvidence>>>(async _ =>
+            {
+                started.TrySetResult();
+                await release.Task;
+                return new Dictionary<Guid, FoundingAchievementEvidence> { [UserId] = new(true, false, false, false, false) };
+            });
+        var first = _sut.ReconcileFoundingAchievementPageAsync([UserId]);
+        await started.Task;
+        var second = _sut.ReconcileFoundingAchievementPageAsync([UserId]);
+        second.IsCompleted.Should().BeFalse();
+        release.SetResult();
+        var results = await Task.WhenAll(first, second);
+        results.SelectMany(page => page).Sum(result => result.Granted.Count).Should().Be(1);
+        earned.Should().ContainSingle();
+    }
+
+    private void ConfigurePageTransactions()
+    {
+        _unitOfWork.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task<IReadOnlyList<FoundingReconciliationResult>>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.Arg<Func<CancellationToken, Task<IReadOnlyList<FoundingReconciliationResult>>>>()(call.Arg<CancellationToken>()));
+        _unitOfWork.ExecuteInSavepointAsync(Arg.Any<Func<CancellationToken, Task<IReadOnlyList<string>>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.Arg<Func<CancellationToken, Task<IReadOnlyList<string>>>>()(call.Arg<CancellationToken>()));
+    }
+
     [Fact]
     public async Task ReconcileFoundingAchievementsAsync_ThreeEligible_GrantsExactlyThree()
     {

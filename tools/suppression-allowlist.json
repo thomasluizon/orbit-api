@@ -33,18 +33,6 @@
     }
   },
   "pragmas": {
-    "src/Orbit.Infrastructure/AI/AiCompletionClient.cs": {
-      "OPENAI001": {
-        "count": 1,
-        "reason": "The installed OpenAI SDK marks its typed Responses API experimental. Astra requires Responses for reasoning with function tools."
-      }
-    },
-    "src/Orbit.Infrastructure/Services/AiIntentService.cs": {
-      "OPENAI001": {
-        "count": 1,
-        "reason": "The installed OpenAI SDK marks Responses request, output and streaming event types experimental. Astra maps those types at its AI boundary."
-      }
-    },
     "src/Orbit.Api/Controllers/OAuthController.cs": {
       "S6931": {
         "count": 1,
@@ -69,8 +57,8 @@
     },
     "src/Orbit.Api/OAuth/OAuthAuthorizationStore.cs": {
       "ORBIT0004": {
-        "count": 3,
-        "reason": "CreateCode stamps AuthorizationEntry.CreatedAt for the authorization code TTL, independently of the user timezone. ExchangeCode compares elapsed time since AuthorizationEntry.CreatedAt with CodeExpiry before accepting a code. Cleanup evicts authorization codes whose CreatedAt instant precedes the CodeExpiry cutoff."
+        "count": 2,
+        "reason": "Authorization code issuance and exchange use UTC instants for their elapsed lifetime, independently of user calendar dates."
       }
     },
     "src/Orbit.Api/RateLimiting/DistributedRateLimitAttribute.cs": {
@@ -113,6 +101,12 @@
         "reason": "The _resolvedAtUtc field must remain mapped and writable by EF for atomic clarification resolution; absence of a C# assignment does not mean it is unused."
       }
     },
+    "src/Orbit.Infrastructure/AI/AiCompletionClient.cs": {
+      "OPENAI001": {
+        "count": 1,
+        "reason": "The installed OpenAI SDK marks its typed Responses API experimental. Astra requires Responses for reasoning with function tools."
+      }
+    },
     "src/Orbit.Infrastructure/AI/AiUsageRecorder.cs": {
       "ORBIT0004": {
         "count": 1,
@@ -131,6 +125,12 @@
         "reason": "cooldownBoundary bounds CreatedAtUtc by StepUpChallengeCooldownSeconds to throttle issuance of another step-up challenge. CanVerify checks the step-up challenge ExpiresAtUtc TTL and attempt limit against the current instant."
       }
     },
+    "src/Orbit.Infrastructure/Services/AiIntentService.cs": {
+      "OPENAI001": {
+        "count": 1,
+        "reason": "The installed OpenAI SDK marks Responses request, output and streaming event types experimental. Astra maps those types at its AI boundary."
+      }
+    },
     "src/Orbit.Infrastructure/Services/AiUsageSummaryService.cs": {
       "ORBIT0004": {
         "count": 1,
@@ -143,28 +143,10 @@
         "reason": "CreateSessionAsync computes the refresh-token ExpiresAtUtc instant through GetRefreshExpiry; no calendar date is derived. RefreshSessionAsync uses nowUtc for CanUse validity, refresh expiry and Rotate audit stamps, all session instants. HasSessionForTokenAsync compares ExpiresAtUtc with nowUtc to reject expired refresh tokens."
       }
     },
-    "src/Orbit.Infrastructure/Services/BackgroundServiceHealthCheck.cs": {
-      "ORBIT0004": {
-        "count": 2,
-        "reason": "RecordTick stores a UTC liveness instant in LastSuccessfulTicks for background-service monitoring. CheckHealthAsync subtracts the last liveness instant to report elapsed minutes and detect a stale service."
-      }
-    },
-    "src/Orbit.Infrastructure/Services/GoalDeadlineNotificationService.cs": {
-      "ORBIT0004": {
-        "count": 1,
-        "reason": "streakWindowStart widens the batched log prefetch by a timezone-skew day; ComputeReadValue receives the separately converted userToday."
-      }
-    },
     "src/Orbit.Infrastructure/Services/GooglePlayBillingService.cs": {
       "ORBIT0004": {
         "count": 2,
         "reason": "expiresAt falls back to the current UTC instant when Play provides no subscription expiry; it remains an absolute expiry value. The isActive check compares the Play expiry instant with the current UTC instant, independently of calendar dates."
-      }
-    },
-    "src/Orbit.Infrastructure/Services/HabitDueDateAdvancementService.cs": {
-      "ORBIT0004": {
-        "count": 1,
-        "reason": "ConservativeCutoffUtc is the widened stale-habit prefetch floor; ShouldAdvanceForUserToday checks the separately converted userToday before mutation."
       }
     },
     "src/Orbit.Infrastructure/Services/JwtTokenService.cs": {
@@ -183,12 +165,6 @@
       "ORBIT0004": {
         "count": 1,
         "reason": "GetForResolutionAsync compares ExpiresAtUtc with now to exclude expired clarification operations without selecting a user date."
-      }
-    },
-    "src/Orbit.Infrastructure/Services/PlayNotificationCleanupService.cs": {
-      "ORBIT0004": {
-        "count": 2,
-        "reason": "playCutoff removes processed Play notification dedupe entries by ProcessedAtUtc retention age. stripeCutoff removes processed Stripe event dedupe entries by ProcessedAtUtc retention age."
       }
     },
     "src/Orbit.Infrastructure/Services/StripeBillingService.cs": {

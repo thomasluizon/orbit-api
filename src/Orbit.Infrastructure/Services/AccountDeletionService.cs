@@ -31,7 +31,6 @@ public partial class AccountDeletionService(
     {
         await ProcessScheduledDeletions(cancellationToken);
         await CleanupStaleSentRecords(cancellationToken);
-        BackgroundServiceHealthCheck.RecordTick("AccountDeletion");
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -46,7 +45,6 @@ public partial class AccountDeletionService(
                 {
                     await ProcessScheduledDeletions(stoppingToken);
                     await CleanupStaleSentRecords(stoppingToken);
-                    BackgroundServiceHealthCheck.RecordTick("AccountDeletion");
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
@@ -236,6 +234,7 @@ public partial class AccountDeletionService(
         foreach (var store in stores)
             await DeleteObjectsWithRetryAsync(store, userId, ct);
 
+        await dbContext.MarketingBroadcastDeliveries.Where(delivery => delivery.RecipientId == userId).ExecuteDeleteAsync(ct);
         await dbContext.AiUsageDaily.Where(u => u.UserId == userId).ExecuteDeleteAsync(ct);
         await services.GetRequiredService<IAccountResetRepository>().DeleteAllUserDataAsync(userId, ct);
         dbContext.Users.Remove(user);
@@ -282,20 +281,14 @@ public partial class AccountDeletionService(
         var cutoff = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-90));
 #pragma warning restore ORBIT0004
 
-        var deletedReminders = await dbContext.SentReminders
-            .Where(r => r.Date < cutoff)
-            .ExecuteDeleteAsync(ct);
+        var deletedReminders = await BatchedDelete.ExecuteAsync(dbContext.SentReminders.Where(r => r.Date < cutoff), ct);
 
-        var deletedSlipAlerts = await dbContext.SentSlipAlerts
-            .Where(a => a.WeekStart < cutoff)
-            .ExecuteDeleteAsync(ct);
+        var deletedSlipAlerts = await BatchedDelete.ExecuteAsync(dbContext.SentSlipAlerts.Where(a => a.WeekStart < cutoff), ct);
 
 #pragma warning disable ORBIT0004 // processedRequestCutoff expires ProcessedRequests by elapsed retention days against CreatedAtUtc. https://github.com/thomasluizon/orbit-tickets/issues/230
         var processedRequestCutoff = DateTime.UtcNow.AddDays(-ProcessedRequestRetentionDays);
 #pragma warning restore ORBIT0004
-        var deletedProcessedRequests = await dbContext.ProcessedRequests
-            .Where(r => r.CreatedAtUtc < processedRequestCutoff)
-            .ExecuteDeleteAsync(ct);
+        var deletedProcessedRequests = await BatchedDelete.ExecuteAsync(dbContext.ProcessedRequests.Where(r => r.CreatedAtUtc < processedRequestCutoff), ct);
 
         if ((deletedReminders > 0 || deletedSlipAlerts > 0 || deletedProcessedRequests > 0) && logger.IsEnabled(LogLevel.Information))
             LogStaleRecordsCleaned(logger, deletedReminders, deletedSlipAlerts, deletedProcessedRequests);

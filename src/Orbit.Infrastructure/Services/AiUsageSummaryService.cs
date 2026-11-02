@@ -29,6 +29,7 @@ public partial class AiUsageSummaryService(
 
     private readonly IReadOnlyDictionary<string, AiModelPrice> _pricing = aiOptions.Value.Pricing;
 
+    private readonly SemaphoreSlim _summaryGate = new(1, 1);
     private DateOnly? _lastSummarizedDate;
     private bool _startupSummarized;
 
@@ -46,7 +47,6 @@ public partial class AiUsageSummaryService(
             await SummarizeYesterdayAsync(stoppingToken);
         else
             await SummarizeStartupAsync(stoppingToken);
-        BackgroundServiceHealthCheck.RecordTick("AiUsageSummary");
     }
 
     protected override void LogStarted() => LogServiceStarted(logger);
@@ -55,21 +55,33 @@ public partial class AiUsageSummaryService(
 
     protected override void LogTickError(Exception ex) => LogServiceError(logger, ex);
 
-    internal async Task SummarizeStartupAsync(CancellationToken cancellationToken)
+    internal Task SummarizeStartupAsync(CancellationToken cancellationToken) =>
+        SerializeAsync(SummarizeStartupCoreAsync, cancellationToken);
+
+    internal Task SummarizeYesterdayAsync(CancellationToken cancellationToken) =>
+        SerializeAsync(SummarizeYesterdayCoreAsync, cancellationToken);
+
+    private async Task SerializeAsync(Func<CancellationToken, Task> summary, CancellationToken cancellationToken)
+    {
+        await _summaryGate.WaitAsync(cancellationToken);
+        try { await summary(cancellationToken); }
+        finally { _summaryGate.Release(); }
+    }
+
+    private async Task SummarizeStartupCoreAsync(CancellationToken cancellationToken)
     {
         if (_startupSummarized) return;
-        await SummarizeYesterdayAsync(cancellationToken);
+        await SummarizeYesterdayCoreAsync(cancellationToken);
         var today = DateOnly.FromDateTime(TimeProvider.System.GetUtcNow().UtcDateTime);
         using var scope = scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
-        var rows = await dbContext.AiUsageDaily.AsNoTracking()
-            .Where(usage => usage.Date == today).ToListAsync(cancellationToken);
+        var rows = await AiUsageSummaryReader.ReadUsageAsync(dbContext, today, cancellationToken);
         if (logger.IsEnabled(LogLevel.Information))
             LogAiUsageSummary(logger, BuildSummaryLine(today, rows, _pricing, partial: true));
         _startupSummarized = true;
     }
 
-    internal async Task SummarizeYesterdayAsync(CancellationToken cancellationToken)
+    private async Task SummarizeYesterdayCoreAsync(CancellationToken cancellationToken)
     {
 #pragma warning disable ORBIT0004 // yesterday selects the UTC AiUsageDaily accounting partition and operator quota summary log; user scheduling and quota enforcement do not consume it. https://github.com/thomasluizon/orbit-tickets/issues/230
         var yesterday = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-1);
@@ -80,15 +92,7 @@ public partial class AiUsageSummaryService(
         using var scope = scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
 
-        var rows = await dbContext.AiUsageDaily
-            .AsNoTracking()
-            .Where(usage => usage.Date == yesterday)
-            .ToListAsync(cancellationToken);
-
-        var activeUsers = await dbContext.Users
-            .AsNoTracking()
-            .Where(user => user.AiMessagesLocalDate == yesterday && user.AiMessagesUsedToday > 0)
-            .ToListAsync(cancellationToken);
+        var rows = await AiUsageSummaryReader.ReadUsageAsync(dbContext, yesterday, cancellationToken);
 
         var appConfig = scope.ServiceProvider.GetRequiredService<IAppConfigService>();
         var freeLimit = await appConfig.GetAsync(
@@ -100,10 +104,12 @@ public partial class AiUsageSummaryService(
             AppConstants.DefaultProAiMessages,
             cancellationToken);
 
+        var quota = await AiUsageSummaryReader.ReadQuotaAsync(dbContext, yesterday, TimeProvider.System.GetUtcNow().UtcDateTime,
+            freeLimit, proLimit, cancellationToken);
         if (logger.IsEnabled(LogLevel.Information))
         {
             var summaryLine = $"{BuildSummaryLine(yesterday, rows, _pricing)}; " +
-                BuildQuotaSummaryLine(yesterday, activeUsers, freeLimit, proLimit);
+                BuildQuotaSummaryLine(yesterday, quota);
             LogAiUsageSummary(logger, summaryLine);
         }
         _lastSummarizedDate = yesterday;
@@ -157,6 +163,11 @@ public partial class AiUsageSummaryService(
 
         return line;
     }
+
+    internal static string BuildQuotaSummaryLine(DateOnly date, AiUsageSummaryReader.QuotaSummary quota) =>
+        quota.ActiveUsers == 0
+            ? string.Create(CultureInfo.InvariantCulture, $"Astra quota {date:yyyy-MM-dd}: no active users")
+            : string.Create(CultureInfo.InvariantCulture, $"Astra quota {date:yyyy-MM-dd}: free_cap_hits={quota.FreeCapHits}; pro_cap_hits={quota.ProCapHits}; mean_messages_per_active_user={quota.Mean:F2}; p95_messages_per_active_user={quota.P95}");
 
     internal static string BuildQuotaSummaryLine(
         DateOnly date,
