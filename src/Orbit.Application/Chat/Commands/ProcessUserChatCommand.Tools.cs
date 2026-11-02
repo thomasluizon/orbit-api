@@ -605,9 +605,8 @@ public partial class ProcessUserChatCommandHandler
     {
         if (hasWrites && !executionResults.HasMutationContext)
         {
-            var habits = ChatTurnReadScope.For(request.UserId)?.Habits
-                ?? await data.HabitRepository.FindAsync(habit => habit.UserId == request.UserId,
-                    query => query.Include(habit => habit.Tags), cancellationToken);
+            var habits = await data.HabitRepository.FindAsync(habit => habit.UserId == request.UserId,
+                query => query.Include(habit => habit.Tags), cancellationToken);
             executionResults.AllHabits = habits;
             executionResults.Habits = habits.Where(habit => !habit.IsCompleted).ToList();
             executionResults.HasMutationContext = true;
