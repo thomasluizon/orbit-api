@@ -121,6 +121,25 @@ public class MigrationLockGateTests
     }
 
     [Fact]
+    public void AppliedQuotaSeedUsesOnlyItsRecordedLockTimeoutException()
+    {
+        var migration = new SeedPublicEndpointAbuseQuotas();
+        var id = migration.GetType().GetCustomAttribute<MigrationAttribute>()!.Id;
+        var policy = ReadPolicy();
+        var evidence = policy.Exceptions.Should().ContainKey(id).WhoseValue.Should().ContainSingle().Subject;
+        evidence.Rule.Should().Be("lock-timeout");
+        evidence.RowCount.Should().Be(26);
+        evidence.ExpectedLockMilliseconds.Should().BePositive();
+        evidence.EvidenceUrl.Should().Be("https://github.com/thomasluizon/orbit-api/actions/runs/41427050907");
+        evidence.Reason.Should().Be("applied in production by Release API run 41427050907 before this gate; AppConfigs held 26 rows in the 2026-11-02T12:28Z export");
+        MigrationLockGate.Check(id, migration.UpOperations, policy).Should().BeEmpty();
+        MigrationLockGate.Check(id, [new CreateIndexOperation { Table = "AppConfigs", Name = "IX_Fixture", Columns = ["Value"] }], policy)
+            .Should().ContainSingle().Which.Should().Contain("concurrent-index");
+        policy.Exceptions.Remove(id);
+        MigrationLockGate.Check(id, migration.UpOperations, policy).Should().ContainSingle().Which.Should().Contain("lock-timeout");
+    }
+
+    [Fact]
     public void EveryMigrationAfterTheAppliedBaselineMeetsLockRules()
     {
         var policy = ReadPolicy();

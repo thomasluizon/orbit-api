@@ -1,5 +1,15 @@
 {
   "baselineId": "20261101210800_PersistServerConversations",
   "reason": "applied in production before this gate",
-  "exceptions": {}
+  "exceptions": {
+    "20261102072521_SeedPublicEndpointAbuseQuotas": [
+      {
+        "Rule": "lock-timeout",
+        "RowCount": 26,
+        "ExpectedLockMilliseconds": 1000,
+        "EvidenceUrl": "https://github.com/thomasluizon/orbit-api/actions/runs/41427050907",
+        "Reason": "applied in production by Release API run 41427050907 before this gate; AppConfigs held 26 rows in the 2026-11-02T12:28Z export"
+      }
+    ]
+  }
 }
