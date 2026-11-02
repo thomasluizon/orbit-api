@@ -64,37 +64,39 @@ public partial class StreakGoalSyncService(
 
         Guid? cursor = null;
         var synced = 0;
+        var pageSize = configuration.GetValue("BackgroundServices:ScanPageSize", JobPaging.DefaultPageSize);
         while (true)
         {
-            var candidates = dbContext.Goals
+            var goals = await dbContext.Goals
                 .Where(g => g.Status == GoalStatus.Active
                             && !g.IsDeleted
                             && (g.Type == GoalType.Streak
                                 || (g.Type == GoalType.Standard && g.Habits.Any())))
-                .Page(cursor, configuration.GetValue("BackgroundServices:ScanPageSize", JobPaging.DefaultPageSize))
-                .AsNoTracking();
-            var goals = await (from goal in candidates
-                               join user in dbContext.Users.AsNoTracking() on goal.UserId equals user.Id
-                               select new { goal.Id, goal.UserId, user.TimeZone, user.WeekStartDay }).ToListAsync(ct);
+                .Page(cursor, pageSize)
+                .AsNoTracking()
+                .Select(goal => new { goal.Id, goal.UserId }).ToListAsync(ct);
 
             if (goals.Count == 0) break;
             cursor = goals[^1].Id;
+            var ownerIds = goals.Select(goal => goal.UserId).Distinct().ToList();
+            var owners = await dbContext.Users.AsNoTracking().Where(user => ownerIds.Contains(user.Id))
+                .Select(user => new { user.Id, user.TimeZone, user.WeekStartDay }).ToDictionaryAsync(user => user.Id, ct);
             foreach (var userGoals in goals.GroupBy(g => g.UserId))
             {
-                var user = userGoals.First();
-                var userToday = await userDateService.GetUserTodayAsync(user.TimeZone, user.UserId, ct);
+                if (!owners.TryGetValue(userGoals.Key, out var user)) continue;
+                var userToday = await userDateService.GetUserTodayAsync(user.TimeZone, user.Id, ct);
                 var updates = await goalCompletionService.SyncDerivedGoalsAsync(
                     userGoals.Key,
                     userGoals.Select(g => g.Id).ToList(),
                     userToday,
                     passiveSync: true,
                     cancellationToken: ct,
-                    preferences: new DerivedGoalPreferences(user.WeekStartDay, TimeZoneHelper.FindTimeZone(user.TimeZone, logger, user.UserId)));
+                    preferences: new DerivedGoalPreferences(user.WeekStartDay, TimeZoneHelper.FindTimeZone(user.TimeZone, logger, user.Id)));
                 synced += updates.Count;
             }
 
             dbContext.ChangeTracker.Clear();
-            if (goals.Count < configuration.GetValue("BackgroundServices:ScanPageSize", JobPaging.DefaultPageSize)) break;
+            if (goals.Count < pageSize) break;
         }
 
         if (synced > 0 && logger.IsEnabled(LogLevel.Information))

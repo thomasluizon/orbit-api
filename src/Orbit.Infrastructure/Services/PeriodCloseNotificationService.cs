@@ -44,7 +44,6 @@ public partial class PeriodCloseNotificationService(
     {
         using var scope = scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
-        var pushService = scope.ServiceProvider.GetRequiredService<IPushNotificationService>();
         var userDateService = scope.ServiceProvider.GetRequiredService<IUserDateService>();
 
         Guid? cursor = null;
@@ -81,7 +80,6 @@ public partial class PeriodCloseNotificationService(
                     monthGroup.Key.Year,
                     monthGroup.Key.Month,
                     dbContext,
-                    pushService,
                     cancellationToken);
             }
             dbContext.ChangeTracker.Clear();
@@ -93,7 +91,6 @@ public partial class PeriodCloseNotificationService(
         int year,
         int month,
         OrbitDbContext dbContext,
-        IPushNotificationService pushService,
         CancellationToken cancellationToken)
     {
         var dateFrom = new DateOnly(year, month, 1);
@@ -152,6 +149,8 @@ public partial class PeriodCloseNotificationService(
             {
                 try
                 {
+                    using var deliveryScope = scopeFactory.CreateScope();
+                    var pushService = deliveryScope.ServiceProvider.GetRequiredService<IPushNotificationService>();
                     if (!await pushService.TrySendToUserAsync(claim.UserId, claim.Title, claim.Body, claim.Url, token))
                     {
                         failed.Add(claim);

@@ -79,6 +79,7 @@ public static partial class ServiceCollectionExtensions
             options.WorkerCount = 1;
         });
         builder.Services.AddScoped<SendMarketingBroadcastPageJob>();
+        builder.Services.AddScoped<IMarketingBroadcastDeliveryStore, MarketingBroadcastDeliveryStore>();
         builder.Services.AddScoped<Orbit.Application.Waitlist.Commands.SendWaitlistConfirmationJob>();
         builder.Services.AddScoped<SendMarketingEmailJob>();
         builder.Services.AddScoped<ProactivePushJob>();

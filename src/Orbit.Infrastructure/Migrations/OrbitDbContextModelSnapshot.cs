@@ -1519,6 +1519,29 @@ namespace Orbit.Infrastructure.Migrations
                     b.ToTable("IssuedAstraBlocks");
                 });
 
+            modelBuilder.Entity("Orbit.Domain.Entities.MarketingBroadcastDelivery", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("BroadcastId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("DeliveredAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("RecipientId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BroadcastId", "RecipientId")
+                        .IsUnique();
+
+                    b.ToTable("MarketingBroadcastDeliveries");
+                });
+
             modelBuilder.Entity("Orbit.Domain.Entities.MarketingContact", b =>
                 {
                     b.Property<Guid>("Id")

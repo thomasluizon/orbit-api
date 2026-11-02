@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Orbit.Domain.Entities;
 using Orbit.Infrastructure.Configuration;
 using Orbit.Infrastructure.Persistence;
@@ -56,5 +57,42 @@ public sealed class AiUsageSummaryReaderTests
             new DateTime(2030, 6, 15, 12, 0, 0, DateTimeKind.Utc), 5, 250).ToQueryString();
         sql.Should().Contain("percentile_disc(0.95) WITHIN GROUP").And.Contain("COUNT(*) FILTER")
             .And.Contain("EXTRACT(DOW").And.Contain("AiMessagesWeekStart").And.Contain("IsDeactivated");
+        var user = db.Model.FindEntityType(typeof(User))!;
+        var table = StoreObjectIdentifier.Table(user.GetTableName()!, user.GetSchema());
+        foreach (var property in new[] { nameof(User.SubscriptionPlan), nameof(User.SubscriptionExpiresAtUtc) })
+            sql.Should().Contain($"\"{user.FindProperty(property)!.GetColumnName(table)}\"");
+    }
+
+    [PostgresFact]
+    public async Task PostgresQuota_ExecutesMappedSubscriptionColumnsAndMatchesReference()
+    {
+        await PostgresTestDatabase.WithDatabase(async db =>
+        {
+            var date = new DateOnly(2030, 6, 15);
+            var nowAtUtc = date.ToDateTime(new TimeOnly(12, 0), DateTimeKind.Utc);
+            var users = Enumerable.Range(0, 6).Select(index =>
+            {
+                var user = User.Create($"Quota {index}", $"quota{index}@example.com").Value;
+                user.StartTrial(nowAtUtc.AddYears(-1));
+                if (index == 1) user.SetStripeSubscription("paid", nowAtUtc.AddDays(1));
+                if (index == 2) user.SetStripeSubscription("expired", nowAtUtc.AddDays(-1));
+                if (index == 3) user.GrantLifetimePro();
+                user.SetWeekStartDay(1).IsSuccess.Should().BeTrue();
+                for (var message = 0; message < 5 + index; message++) user.IncrementAiMessageCount(index == 5 ? date.AddDays(-1) : date);
+                if (index == 4) user.Deactivate(nowAtUtc.AddDays(30));
+                return user;
+            }).ToList();
+            db.Users.AddRange(users);
+            await db.SaveChangesAsync();
+            db.ChangeTracker.Clear();
+
+            var quota = await AiUsageSummaryReader.ReadQuotaAsync(db, date, nowAtUtc, 5, 5, default);
+
+            quota.ActiveUsers.Should().Be(4);
+            quota.FreeCapHits.Should().Be(2);
+            quota.ProCapHits.Should().Be(2);
+            quota.Mean.Should().Be(6.5);
+            quota.P95.Should().Be(8);
+        });
     }
 }

@@ -48,7 +48,6 @@ public partial class StreakFreezeAutoActivationService(
     {
         using var scope = scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
-        var pushService = scope.ServiceProvider.GetRequiredService<IPushNotificationService>();
         var userDateService = scope.ServiceProvider.GetRequiredService<IUserDateService>();
 
         Guid? cursor = null;
@@ -95,7 +94,7 @@ public partial class StreakFreezeAutoActivationService(
 
             if (await TrySaveBatchAsync(dbContext, cancellationToken))
             {
-                await NotifyActivatedAsync(staged, pushService, cancellationToken);
+                await NotifyActivatedAsync(staged, cancellationToken);
                 dbContext.ChangeTracker.Clear();
                 if (candidates.Count < configuration.GetValue("BackgroundServices:ScanPageSize", JobPaging.DefaultPageSize)) return;
                 continue;
@@ -105,7 +104,6 @@ public partial class StreakFreezeAutoActivationService(
             await ActivatePerUserFallbackAsync(
                 staged.Select(freeze => freeze.User.Id).ToList(),
                 freeTierAccounts,
-                pushService,
                 dbContext,
                 userDateService,
                 cancellationToken);
@@ -240,21 +238,21 @@ public partial class StreakFreezeAutoActivationService(
 
     private async Task NotifyActivatedAsync(
         List<StagedFreeze> staged,
-        IPushNotificationService pushService,
         CancellationToken cancellationToken)
     {
         await Parallel.ForEachAsync(staged, new ParallelOptions
         { MaxDegreeOfParallelism = Math.Clamp(configuration.GetValue("BackgroundServices:PushParallelism", 4), 1, 8), CancellationToken = cancellationToken },
-            async (freeze, token) => await NotifyFreezeActivatedAsync(freeze, pushService, token));
+            async (freeze, token) => await NotifyFreezeActivatedAsync(freeze, token));
     }
 
     private async Task NotifyFreezeActivatedAsync(
         StagedFreeze freeze,
-        IPushNotificationService pushService,
         CancellationToken cancellationToken)
     {
         try
         {
+            using var deliveryScope = scopeFactory.CreateScope();
+            var pushService = deliveryScope.ServiceProvider.GetRequiredService<IPushNotificationService>();
             await pushService.SendToUserAsync(
                 freeze.User.Id,
                 freeze.Title,
@@ -274,7 +272,6 @@ public partial class StreakFreezeAutoActivationService(
     private async Task ActivatePerUserFallbackAsync(
         List<Guid> candidateIds,
         HashSet<Guid> freeTierAccounts,
-        IPushNotificationService pushService,
         OrbitDbContext dbContext,
         IUserDateService userDateService,
         CancellationToken cancellationToken)
@@ -301,7 +298,7 @@ public partial class StreakFreezeAutoActivationService(
             if (!await TrySaveUserFreezeAsync(user.Id, dbContext, cancellationToken))
                 continue;
 
-            await NotifyFreezeActivatedAsync(staged, pushService, cancellationToken);
+            await NotifyFreezeActivatedAsync(staged, cancellationToken);
         }
     }
 

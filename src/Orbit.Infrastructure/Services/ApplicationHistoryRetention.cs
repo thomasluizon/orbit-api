@@ -20,7 +20,21 @@ internal static class ApplicationHistoryRetention
             ArgumentOutOfRangeException.ThrowIfNegative(days);
             if (days > 0) deleted += await BatchedDelete.ExecuteAsync(query(days), cancellationToken, batchSize);
         }
-        await Purge("Notifications", 90, days => db.Notifications.Where(row => row.CreatedAtUtc < nowAtUtc.AddDays(-days)));
+        var notificationDays = configuration.GetValue("BackgroundServices:Retention:NotificationsDays", 90);
+        ArgumentOutOfRangeException.ThrowIfNegative(notificationDays);
+        ArgumentOutOfRangeException.ThrowIfLessThan(batchSize, 1);
+        if (notificationDays > 0)
+        {
+            while (true)
+            {
+                var updated = await db.Notifications.Where(row => !row.IsDeleted && row.CreatedAtUtc < nowAtUtc.AddDays(-notificationDays))
+                    .OrderBy(row => row.Id).Take(batchSize)
+                    .ExecuteUpdateAsync(setters => setters.SetProperty(row => row.IsDeleted, true)
+                        .SetProperty(row => row.DeletedAtUtc, nowAtUtc).SetProperty(row => row.UpdatedAtUtc, nowAtUtc), cancellationToken);
+                deleted += updated;
+                if (updated < batchSize) break;
+            }
+        }
         var earliestUserToday = today.AddDays(-1);
         await Purge("AiBudgetCalls", 8, days => db.AiBudgetCalls.Where(row => row.LocalDate < today.AddDays(-days)
             && !db.Users.IgnoreQueryFilters().Any(user => user.Id == row.UserId && user.AiMessagesWeekStart.HasValue

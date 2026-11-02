@@ -353,8 +353,12 @@ and `Marketing:MaxSendsPerSecond` to ten. Page jobs share a distributed method l
 the separate queue keeps their waits away from reminder workers. Send starts are
 paced by the greater of `Marketing:SendDelayMilliseconds` and the configured rate.
 The rate is capped at fourteen, matching the verified SES quota. SES requests have a
-thirty-second timeout. A failed page retries that page's recipients; confirmed sends
-within a failed page can be repeated. Delivery deduplication is tracked separately.
+thirty-second timeout. Each successful send records a `MarketingBroadcastDeliveries`
+checkpoint keyed by broadcast and recipient. A page retry reads those checkpoints
+and sends only to recipients without one, including after cancellation or a restart.
+Checkpoint writes finish independently of the page's cancellation token. SES delivery
+and the checkpoint are separate operations: a process loss after provider acceptance
+but before the checkpoint commits can still repeat that individual send.
 Waitlist confirmation is also queued and no longer waits on SES in the request.
 
 ### Application history retention
@@ -363,7 +367,8 @@ The daily `sync-cleanup` occurrence purges application history using the configu
 `BackgroundServices:Retention` windows. Each delete orders by its primary key and
 commits at most `BackgroundServices:CleanupBatchSize` rows, defaulting to 5,000.
 A window of zero disables that table's age purge. Notification age retention
-applies to live rows; recently deleted notifications retain their sync tombstones.
+soft-deletes live rows and updates their synchronization timestamps. Clients receive
+the deletion on their next sync; tombstone cleanup removes it after the sync window.
 `SessionsDays` controls both sessions and their refresh tokens; an active session keeps its tokens. OAuth state
 expiry runs here instead of on sign-in requests. AI budget rows inside a stored
 allowance period survive the age purge until that period can no longer be active.
@@ -383,7 +388,8 @@ The `ScheduledJobIndexes` migration builds indexes concurrently outside migratio
 transactions. Before releasing it, create its new indexes on staging, inspect
 `EXPLAIN` for active-goal and stale-due-date scans, and compare user-scoped habit
 plans before dropping `IX_Habits_UserId`. The migration's idempotent index creation
-accepts those prebuilt indexes. Take a database export before enabling the first
+accepts those prebuilt indexes and replaces invalid indexes left by interrupted
+concurrent builds before retrying each creation. Take a database export before enabling the first
 retention sweep; it can remove a backlog.
 
 ### Startup migrations and long migrations

@@ -63,7 +63,8 @@ public class SendMarketingBroadcastCommandHandlerTests
     {
         email.MarketingSends.Should().BeEmpty();
         foreach (var queued in _pages.Where(job => job.Type == typeof(SendMarketingBroadcastPageJob)))
-            await new SendMarketingBroadcastPageJob(email, _tokenService, Options.Create(_settings), TimeProvider.System)
+            await new SendMarketingBroadcastPageJob(email, _tokenService, Options.Create(_settings), TimeProvider.System,
+                Substitute.For<IMarketingBroadcastDeliveryStore>())
                 .ExecuteAsync((Guid)queued.Args[0], (int)queued.Args[1], (SendMarketingBroadcastCommand)queued.Args[2],
                     (MarketingRecipient[])queued.Args[3], default);
         email.MarketingSends.Should().HaveCount(expected);

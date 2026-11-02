@@ -1,6 +1,11 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
+using Orbit.Api.Controllers;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -134,7 +139,7 @@ public sealed class ApplicationHistoryRetentionTests
     }
 
     [Fact]
-    public async Task NotificationRetention_OldLiveRowIsPurged_RecentSyncTombstoneSurvives()
+    public async Task NotificationRetention_OldLiveRowBecomesSyncTombstone_RecentTombstoneSurvives()
     {
         using var factory = new SqliteOrbitDbContextFactory();
         var db = factory.Context;
@@ -151,7 +156,25 @@ public sealed class ApplicationHistoryRetentionTests
 
         await ApplicationHistoryRetention.PurgeAsync(db, new ConfigurationBuilder().Build(), new Clock(), default);
 
-        (await db.Notifications.IgnoreQueryFilters().Select(row => row.Id).ToListAsync()).Should().Equal(tombstone.Id);
+        var rows = await db.Notifications.IgnoreQueryFilters().AsNoTracking().ToListAsync();
+        rows.Should().HaveCount(2);
+        var deleted = rows.Single(row => row.Id == live.Id);
+        deleted.IsDeleted.Should().BeTrue();
+        deleted.DeletedAtUtc.Should().Be(NowAtUtc);
+        deleted.UpdatedAtUtc.Should().Be(NowAtUtc);
+        rows.Single(row => row.Id == tombstone.Id).DeletedAtUtc.Should().Be(NowAtUtc.AddDays(-1));
+        var controller = new SyncController(db, NullLogger<SyncController>.Instance)
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext
+                { User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, user.Id.ToString())], "test")) }
+            }
+        };
+        var response = (await controller.GetChangesV2(NowAtUtc.AddMinutes(-1), default))
+            .Should().BeOfType<OkObjectResult>().Subject.Value.Should().BeOfType<SyncController.SyncChangesV2Response>().Subject;
+        response.Notifications.Deleted.Should().ContainSingle(row => row.Id == live.Id && row.DeletedAtUtc == NowAtUtc);
+        response.Notifications.Updated.Should().BeEmpty();
     }
 
     private static Task<bool> ExistsAsync(DbContext db, Entity row) => row switch

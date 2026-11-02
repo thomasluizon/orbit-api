@@ -42,7 +42,7 @@ internal static class AiUsageSummaryReader
                     SELECT "AiMessagesUsedToday" AS "Messages", "AiMessagesUsedThisWeek" AS "Weekly",
                         "AiMessagesWeekStart" AS "StoredStart",
                         ("IsLifetimePro" OR "BonusProExpiresAtUtc" > {nowAtUtc}
-                            OR ("SubscriptionPlan" = {(int)UserPlan.Pro} AND "SubscriptionExpiresAtUtc" > {nowAtUtc})
+                            OR ("Plan" = {(int)UserPlan.Pro} AND "PlanExpiresAt" > {nowAtUtc})
                             OR "TrialEndsAt" > {nowAtUtc}) IS TRUE AS "Pro",
                         CASE WHEN "AiMessagesWeekStart" IS NOT NULL
                             AND {date} < "AiMessagesWeekStart" + (7 + ("WeekStartDay" - EXTRACT(DOW FROM "AiMessagesWeekStart")::int + 7) % 7)

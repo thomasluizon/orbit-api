@@ -36,6 +36,7 @@ public class OrbitDbContext : DbContext
     public DbSet<OwedSubscriptionCancellation> OwedSubscriptionCancellations => Set<OwedSubscriptionCancellation>();
     public DbSet<User> Users => Set<User>();
     public DbSet<MarketingContact> MarketingContacts => Set<MarketingContact>();
+    public DbSet<MarketingBroadcastDelivery> MarketingBroadcastDeliveries => Set<MarketingBroadcastDelivery>();
     public DbSet<Habit> Habits => Set<Habit>();
     public DbSet<HabitSkipUndo> HabitSkipUndos => Set<HabitSkipUndo>();
     public DbSet<HabitLog> HabitLogs => Set<HabitLog>();
@@ -118,6 +119,11 @@ public class OrbitDbContext : DbContext
         });
         ConfigureUserEntity(modelBuilder, nullableEncConverter);
         ConfigureMarketingContactEntity(modelBuilder);
+        modelBuilder.Entity<MarketingBroadcastDelivery>(entity =>
+        {
+            entity.HasKey(delivery => delivery.Id);
+            entity.HasIndex(delivery => new { delivery.BroadcastId, delivery.RecipientId }).IsUnique();
+        });
         ConfigureHabitEntity(modelBuilder, isPostgres, encConverter, nullableEncConverter);
 
         if (isPostgres)
