@@ -347,26 +347,23 @@ expiration sweep removes expired rows within an hour. State locks prevent a retr
 job from expiring on an obsolete monitoring snapshot. These are application settings;
 the installed PostgreSql provider exposes no options with those list-size names.
 
-Marketing broadcasts enqueue pages identified by broadcast id and page number.
-`Marketing:BroadcastPageSize` defaults to 500, `Marketing:BroadcastParallelism` to three,
-and `Marketing:MaxSendsPerSecond` to ten. Page jobs share a distributed method lock;
-the separate queue keeps their waits away from reminder workers. Send starts are
-paced by the greater of `Marketing:SendDelayMilliseconds` and the configured rate.
-The rate is capped at fourteen, matching the verified SES quota. SES requests have a
-thirty-second timeout. Each successful send records a `MarketingBroadcastDeliveries`
-checkpoint keyed by broadcast and recipient. A page retry reads those checkpoints
-and sends only to recipients without one, including after cancellation or a restart.
-Checkpoint writes finish independently of the page's cancellation token. SES delivery
-and the checkpoint are separate operations: a process loss after provider acceptance
-but before the checkpoint commits can still repeat that individual send.
-`BackgroundServices:Retention:MarketingBroadcastDeliveriesDays` retains successful
-delivery checkpoints for 31 days by default, covering the thirty-day failed-job
-retry window and a daily cleanup interval. Every page carries the same UTC expiry,
-thirty days after the broadcast was queued. Expired pages stop before reading
-checkpoints or sending, so an old manual retry cannot replay emails after cleanup.
-The retention window must be at least 31 days or zero to disable the purge.
-Account erasure removes the user's checkpoints in the erasure transaction. Account
-reset keeps them so a pending broadcast retry still skips delivered recipients.
+Marketing broadcasts persist one `MarketingDelivery` row per recipient, page by page,
+and schedule one `SendMarketingEmailJob.ExecuteRecipientAsync` per row on the `marketing`
+queue. `Marketing:BroadcastPageSize` defaults to 500 and `Marketing:MaxSendsPerSecond`
+to ten. Recipient jobs share a distributed advisory lock; the separate queue keeps
+their waits away from reminder workers. Sends are paced by the greater of
+`Marketing:SendDelayMilliseconds` and the configured rate. The rate is capped at
+fourteen, matching the verified SES quota. SES requests have a thirty-second timeout.
+A retried broadcast sends only pending recipients, including after cancellation or
+a restart. Successful sends set `MarketingDelivery.SentAtUtc`. SES delivery and the
+database commit are separate operations: a process loss after provider acceptance
+but before the commit can still repeat that individual send.
+`BackgroundServices:Retention:MarketingDeliveriesDays` purges sent rows after 31 days
+by default; zero disables the purge. Pending rows stay recoverable. Account erasure
+deletes the account's delivery rows by recipient id and email in the erasure
+transaction. Account reset keeps them so a pending broadcast retry still skips
+delivered recipients. The unmapped `MarketingBroadcastDeliveries` table is dropped
+by a later release once the rolling migration barrier allows it.
 Waitlist confirmation is also queued and no longer waits on SES in the request.
 
 ### Application history retention
