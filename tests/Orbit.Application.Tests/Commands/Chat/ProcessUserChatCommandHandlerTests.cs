@@ -4750,27 +4750,22 @@ public partial class ProcessUserChatCommandHandlerTests
             User? trackedUser = null;
             var trackedVersion = -1;
 
-            repository.GetByIdAsync(userId, Arg.Any<CancellationToken>())
-                .Returns(_ => CreateFreeUserSnapshot(PersistedCount));
-            repository.FindOneTrackedAsync(
-                    Arg.Any<Expression<Func<User, bool>>>(),
-                    Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(),
-                    Arg.Any<CancellationToken>())
-                .Returns(async _ =>
+            async Task<User?> LoadInitialAsync()
+            {
+                lock (_gate)
                 {
-                    lock (_gate)
-                    {
-                        trackedUser = CreateFreeUserSnapshot(_persistedCount);
-                        trackedVersion = _version;
-                        _initialSnapshots.Add(trackedUser);
-                        _initialSnapshotCount++;
-                        if (_initialSnapshotCount == expectedInitialLoads)
-                            _initialLoadsReady.TrySetResult();
-                    }
-
-                    await _initialLoadsReady.Task;
-                    return (User?)trackedUser;
-                });
+                    trackedUser = CreateFreeUserSnapshot(_persistedCount);
+                    trackedVersion = _version;
+                    _initialSnapshots.Add(trackedUser);
+                    _initialSnapshotCount++;
+                    if (_initialSnapshotCount == expectedInitialLoads) _initialLoadsReady.TrySetResult();
+                }
+                await _initialLoadsReady.Task;
+                return trackedUser;
+            }
+            repository.GetByIdAsync(userId, Arg.Any<CancellationToken>()).Returns(_ => LoadInitialAsync());
+            repository.FindOneTrackedAsync(Arg.Any<Expression<Func<User, bool>>>(),
+                Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(), Arg.Any<CancellationToken>()).Returns(_ => LoadInitialAsync());
             repository.ReloadAsync(Arg.Any<User>(), Arg.Any<CancellationToken>())
                 .Returns(callInfo =>
                 {

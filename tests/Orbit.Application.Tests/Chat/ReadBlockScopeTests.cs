@@ -55,6 +55,10 @@ public sealed class ReadBlockScopeTests
         var habits = Substitute.For<IGenericRepository<Habit>>();
         habits.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>()).Returns(new[] { habit });
+        habits.ProjectAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<ChatHabitCandidate>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.ArgAt<Func<IQueryable<Habit>, IQueryable<ChatHabitCandidate>>>(1)(
+                new[] { habit }.Where(call.ArgAt<Expression<Func<Habit, bool>>>(0).Compile()).AsQueryable()).ToArray());
         var logs = Substitute.For<IHabitScheduleLogReader>();
         logs.ReadDaysAsync(Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<DateOnly>(), Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
             .Returns(new[] { new HabitScheduleLogDay(habit.Id, _day, 0, 1, true) });

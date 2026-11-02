@@ -3,6 +3,7 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Orbit.Application.Common;
+using Orbit.Application.Chat;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.Persistence;
@@ -19,7 +20,9 @@ public class FeatureFlagService(OrbitDbContext dbContext, IMemoryCache cache, IH
 
     public IReadOnlyList<ResolvedFeatureFlag> ResolveForUser(Guid userId)
     {
-        var user = dbContext.Users.AsNoTracking().FirstOrDefault(item => item.Id == userId);
+        var turn = ChatTurnReadScope.For(userId);
+        if (turn?.ResolvedFlags is { } resolved) return resolved;
+        var user = turn?.User ?? dbContext.Users.AsNoTracking().FirstOrDefault(item => item.Id == userId);
         if (user is null)
             return [];
 
@@ -29,17 +32,23 @@ public class FeatureFlagService(OrbitDbContext dbContext, IMemoryCache cache, IH
             cache.Set(FlagsCacheKey, flags, CacheTtl);
         }
 
-        return Resolve(user, flags);
+        var result = Resolve(user, flags);
+        if (turn is not null) turn.ResolvedFlags = result;
+        return result;
     }
 
     public async Task<IReadOnlyList<ResolvedFeatureFlag>> ResolveForUserAsync(
         Guid userId, CancellationToken cancellationToken = default)
     {
-        var user = await dbContext.Users.AsNoTracking().FirstOrDefaultAsync(item => item.Id == userId, cancellationToken);
+        var turn = ChatTurnReadScope.For(userId);
+        var user = turn?.User ?? await dbContext.Users.AsNoTracking().FirstOrDefaultAsync(item => item.Id == userId, cancellationToken);
         if (user is null)
             return [];
 
-        return Resolve(user, await GetSnapshotAsync(cancellationToken));
+        if (turn?.ResolvedFlags is { } resolved) return resolved;
+        var result = Resolve(user, await GetSnapshotAsync(cancellationToken));
+        if (turn is not null) turn.ResolvedFlags = result;
+        return result;
     }
 
     public async Task<IReadOnlyDictionary<Guid, IReadOnlyList<string>>> GetEnabledKeysForUsersAsync(
@@ -60,17 +69,32 @@ public class FeatureFlagService(OrbitDbContext dbContext, IMemoryCache cache, IH
         return flags;
     }
 
-    public async Task<IReadOnlyList<string>> GetEnabledKeysForUserAsync(
-        Guid userId, CancellationToken cancellationToken = default, bool forceRefresh = false)
+    public Task<IReadOnlyList<string>> GetEnabledKeysForUserAsync(Guid userId,
+        CancellationToken cancellationToken = default, bool forceRefresh = false)
     {
-        var user = await dbContext.Users.AsNoTracking().FirstOrDefaultAsync(item => item.Id == userId, cancellationToken);
+        var scope = ChatTurnReadScope.For(userId);
+        if (!forceRefresh && scope?.EnabledFlags is { } cached) return Task.FromResult(cached);
+        return !forceRefresh && scope is not null
+            ? scope.ReadEnabledFlagsAsync(() => GetEnabledKeysCoreAsync(userId, cancellationToken, false))
+            : GetEnabledKeysCoreAsync(userId, cancellationToken, forceRefresh);
+    }
+
+    private async Task<IReadOnlyList<string>> GetEnabledKeysCoreAsync(Guid userId, CancellationToken cancellationToken, bool forceRefresh)
+    {
+        var turn = ChatTurnReadScope.For(userId);
+        var user = turn?.User ?? await dbContext.Users.AsNoTracking().FirstOrDefaultAsync(item => item.Id == userId, cancellationToken);
         if (user is null)
             return [];
 
-        return Resolve(user, await GetSnapshotAsync(cancellationToken, forceRefresh))
-            .Where(flag => flag.Enabled)
+        if (!forceRefresh && turn?.EnabledFlags is { } enabled) return enabled;
+        var resolved = !forceRefresh && turn?.ResolvedFlags is { } cached ? cached
+            : Resolve(user, await GetSnapshotAsync(cancellationToken, forceRefresh));
+        if (turn is not null) turn.ResolvedFlags = resolved;
+        var keys = resolved.Where(flag => flag.Enabled)
             .Select(flag => flag.Key)
             .ToList();
+        if (turn is not null) turn.EnabledFlags = keys;
+        return keys;
     }
 
     private IQueryable<FlagSnapshot> SnapshotQuery() => dbContext.AppFeatureFlags

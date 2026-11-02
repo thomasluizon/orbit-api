@@ -91,7 +91,7 @@ public partial class ProcessUserChatCommandHandler
         var pendingPreviews = new List<object>();
         var previewer = execution.PendingOperationPreviewer ?? new PendingOperationChangePreviewer(
             data.HabitRepository, data.GoalRepository, data.TagRepository, execution.UserDateService, ai.ToolRegistry);
-        foreach (var pending in execution.PendingOperationStore.GetAwaiting(request.UserId))
+        foreach (var pending in (await execution.PendingOperationStore.GetAwaitingAsync(request.UserId, cancellationToken)).Take(ChatTurnLimits.MaxPendingPreviews))
         {
             var preview = await previewer.PreviewAsync(request.UserId, pending.OperationId, pending.Arguments, cancellationToken, request.ClientContext);
             if (preview.IsSuccess && preview.Value is { } value)

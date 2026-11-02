@@ -169,12 +169,28 @@ public class PendingAgentOperationStore(
             .Where(item => item.UserId == userId && item.ConsumedAtUtc == null && item.ConfirmedAtUtc == null
                 && item.ExpiresAtUtc > checkedAtUtc && item.ArgumentSchemaVersion == PendingAgentOperationState.CurrentArgumentSchemaVersion)
             .OrderByDescending(item => item.CreatedAtUtc).ToList();
-        var members = pending.Where(item => item.OperationId == Orbit.Application.Chat.AccountChangeSet.OperationName)
-            .SelectMany(item => Orbit.Application.Chat.AccountChangeSet.Reservations(ParseArguments(item.ArgumentsJson)))
+        return AwaitingExecutions(pending);
+    }
+
+    public async Task<IReadOnlyList<PendingAgentOperationExecution>> GetAwaitingAsync(Guid userId, CancellationToken cancellationToken = default)
+    {
+        var checkedAtUtc = TimeProvider.System.GetUtcNow().UtcDateTime;
+        var pending = await dbContext.PendingAgentOperations.AsNoTracking()
+            .Where(item => item.UserId == userId && item.ConsumedAtUtc == null && item.ConfirmedAtUtc == null
+                && item.ExpiresAtUtc > checkedAtUtc && item.ArgumentSchemaVersion == PendingAgentOperationState.CurrentArgumentSchemaVersion)
+            .OrderByDescending(item => item.CreatedAtUtc).ThenBy(item => item.Id).ToListAsync(cancellationToken);
+        return AwaitingExecutions(pending);
+    }
+
+    private static IReadOnlyList<PendingAgentOperationExecution> AwaitingExecutions(IReadOnlyList<PendingAgentOperationState> pending)
+    {
+        var members = pending.Where(item => item.OperationId == AccountChangeSet.OperationName)
+            .SelectMany(item => AccountChangeSet.Reservations(ParseArguments(item.ArgumentsJson)))
             .Select(member => member.PendingOperationId).ToHashSet();
         return pending.Where(item => !members.Contains(item.Id)).Select(item => new PendingAgentOperationExecution(
             item.Id, item.CapabilityId, item.OperationId, ParseArguments(item.ArgumentsJson), item.Surface,
-            item.ConfirmationRequirement, item.PreviewFingerprint, item.ArgumentSchemaVersion, item.ExpiresAtUtc, PendingOperationActionKeys.GetRequired(item.OperationId, item.ArgumentsJson))).ToArray();
+            item.ConfirmationRequirement, item.PreviewFingerprint, item.ArgumentSchemaVersion, item.ExpiresAtUtc,
+            PendingOperationActionKeys.GetRequired(item.OperationId, item.ArgumentsJson))).ToArray();
     }
 
     public IReadOnlyList<PendingHabitCreation> GetPendingHabitCreations(Guid userId)
@@ -387,6 +403,7 @@ public class PendingAgentOperationStore(
         }
         ConversationWriteFence.Execute(dbContext, groups.Select(group => group.Key.UserId).Distinct().ToArray(), () =>
         {
+            var patches = new List<ConversationOutcomeWriter.Patch>();
             foreach (var group in groups)
             {
                 var earliestAtUtc = group.Min(state => state.CreatedAtUtc);
@@ -394,16 +411,20 @@ public class PendingAgentOperationStore(
                     entry.State != EntityState.Added && entry.Entity.UserId == group.Key.UserId
                     && entry.Entity.ConversationId == group.Key.ConversationId && entry.Entity.Role == "assistant").ToArray())
                     entry.State = EntityState.Detached;
-                var turns = dbContext.ConversationTurns.Where(turn => turn.UserId == group.Key.UserId
+                var previews = group.Select(ConversationTurnRecorder.Preview).ToDictionary(preview => preview.PendingOperationId);
+                var rows = dbContext.ConversationTurns.AsNoTracking().Where(turn => turn.UserId == group.Key.UserId
                     && turn.ConversationId == group.Key.ConversationId && turn.Role == "assistant"
-                    && turn.CreatedAtUtc >= earliestAtUtc).ToArray();
-                foreach (var state in group)
+                    && turn.CreatedAtUtc >= earliestAtUtc)
+                    .Select(turn => new { turn.Id, turn.PreviewOutcomesJson }).ToArray();
+                foreach (var row in rows)
                 {
-                    var preview = ConversationTurnRecorder.Preview(state);
-                    foreach (var turn in turns)
-                        turn.UpdatePreviewOutcome(preview.PendingOperationId, preview.Outcome, preview.Arguments, preview.Revision);
+                    var values = JsonSerializer.Deserialize<List<ConversationPreviewOutcome>>(row.PreviewOutcomesJson) ?? [];
+                    if (!values.Any(value => previews.ContainsKey(value.PendingOperationId))) continue;
+                    var updated = values.Select(value => previews.GetValueOrDefault(value.PendingOperationId, value)).ToArray();
+                    patches.Add(new(row.Id, JsonSerializer.Serialize(updated)));
                 }
             }
+            ConversationOutcomeWriter.Apply(dbContext, patches);
             return dbContext.SaveChanges(acceptAllChangesOnSuccess: false);
         });
         dbContext.ChangeTracker.AcceptAllChanges();

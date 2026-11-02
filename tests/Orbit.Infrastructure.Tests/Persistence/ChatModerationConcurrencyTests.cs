@@ -116,7 +116,7 @@ public class ChatModerationConcurrencyTests
         public override async ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(DbCommand command,
             CommandEventData eventData, InterceptionResult<DbDataReader> result, CancellationToken cancellationToken = default)
         {
-            if (Enabled && FlagContext is null && command.CommandText.Contains("FROM \"Users\"", StringComparison.Ordinal))
+            if (Enabled && FlagContext is null && command.CommandText.Contains("FROM \"AppFeatureFlags\"", StringComparison.Ordinal))
             {
                 FlagContext = eventData.Context;
                 Started.TrySetResult();

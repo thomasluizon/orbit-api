@@ -1,4 +1,5 @@
 using Orbit.Domain.Entities;
+using Microsoft.EntityFrameworkCore;
 using Orbit.Domain.Models;
 using Orbit.Domain.ValueObjects;
 
@@ -12,8 +13,10 @@ public sealed record ChatHabitCandidate(
     IReadOnlyList<ChecklistItem>? ChecklistItems,
     bool CompletedToday)
 {
+    public const string QueryTag = "astra-habit-candidates";
+
     public static IQueryable<ChatHabitCandidate> Select(IQueryable<Habit> query, DateOnly today, bool includeChecklists) =>
-        query.Select(habit => new ChatHabitCandidate(
+        query.TagWith(QueryTag).Select(habit => new ChatHabitCandidate(
             new HabitScheduleSnapshot(habit.Id, habit.ParentHabitId, habit.FrequencyUnit, habit.FrequencyQuantity,
                 habit.IntervalWeeks, habit.NextDueDate, habit.ScheduledStartDate, habit.OriginalDayOfMonth,
                 habit.EndDate, habit.CreatedAtUtc, habit.DeletedAtUtc, habit.IsDeleted, habit.IsBadHabit,

@@ -43,6 +43,16 @@ public class ConversationTurnTests
         ConversationTurn.Create(Guid.NewGuid(), Guid.NewGuid(), role, DateTime.UtcNow, null, content, tools)
             .IsFailure.Should().BeTrue();
 
+    [Theory]
+    [InlineData("user", "{}")]
+    [InlineData("assistant", "[]")]
+    [InlineData("assistant", "invalid")]
+    public void ModelContext_RejectsUserRowsAndNonObjectPayloads(string role, string context)
+    {
+        ConversationTurn.Create(Guid.NewGuid(), Guid.NewGuid(), role, DateTime.UtcNow, null, "Text", "[]",
+            modelContextJson: context).IsFailure.Should().BeTrue();
+    }
+
     [Fact]
     public void Create_InvalidIdentifiersTimestampAndLengths_AreRejected()
     {

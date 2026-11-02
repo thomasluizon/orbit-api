@@ -885,8 +885,9 @@ public partial class AgentExecutionAndSanitizerTests
         await audit.Received(1).RecordAsync(Arg.Is<AgentAuditEntry>(entry =>
             entry.OutcomeStatus == AgentOperationStatus.Failed &&
             entry.Error == (policyThrows ? "policy_failed" : "tool_failed") &&
-            entry.ShadowPolicyDecision == (policyThrows ? null : AgentPolicyDecisionStatus.Denied) &&
-            entry.ShadowReason == (policyThrows ? null : "missing_scope:write_habits")), Arg.Any<CancellationToken>());
+            entry.PolicyDecision == (policyThrows ? AgentPolicyDecisionStatus.Denied : AgentPolicyDecisionStatus.Allowed) &&
+            entry.ShadowPolicyDecision == null &&
+            entry.ShadowReason == null), Arg.Any<CancellationToken>());
     }
 
     [Theory]
@@ -990,8 +991,9 @@ public partial class AgentExecutionAndSanitizerTests
         await audit.Received(1).RecordAsync(Arg.Is<AgentAuditEntry>(entry =>
             entry.OutcomeStatus == AgentOperationStatus.Failed &&
             entry.Error == (policyThrowsOnRetry ? "policy_failed_on_retry" : "tool_failed_on_retry") &&
-            entry.ShadowPolicyDecision == (policyThrowsOnRetry ? null : AgentPolicyDecisionStatus.Allowed) &&
-            entry.ShadowReason == (policyThrowsOnRetry ? null : "retry_evaluation")), Arg.Any<CancellationToken>());
+            entry.PolicyDecision == (policyThrowsOnRetry ? AgentPolicyDecisionStatus.Denied : AgentPolicyDecisionStatus.Allowed) &&
+            entry.ShadowPolicyDecision == null &&
+            entry.ShadowReason == null), Arg.Any<CancellationToken>());
     }
 
     private static AgentOperationExecutor CreateExecutor(

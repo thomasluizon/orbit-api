@@ -390,9 +390,7 @@ public static partial class WebApplicationExtensions
                     AgentPolicyDecisionStatus.ConfirmationRequired,
                     AgentOperationStatus.PendingConfirmation,
                     decision.Reason,
-                    body,
-                    decision.ShadowStatus,
-                    decision.ShadowReason),
+                    body),
                 toolCall.RequestId,
                 decision.Reason ?? "confirmation_required",
                 decision.PendingOperation?.Id);
@@ -410,9 +408,7 @@ public static partial class WebApplicationExtensions
                     AgentPolicyDecisionStatus.Denied,
                     AgentOperationStatus.Denied,
                     decision.Reason,
-                    body,
-                    decision.ShadowStatus,
-                    decision.ShadowReason),
+                    body),
                 toolCall.RequestId,
                 decision.Reason ?? "policy_denied",
                 null);
@@ -429,9 +425,7 @@ public static partial class WebApplicationExtensions
                 AgentPolicyDecisionStatus.Allowed,
                 AgentOperationStatus.Succeeded,
                 null,
-                body,
-                decision.ShadowStatus,
-                decision.ShadowReason));
+                body));
     }
 
     private static McpServices ResolveMcpServices(HttpContext context)

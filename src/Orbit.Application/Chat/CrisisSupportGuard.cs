@@ -99,8 +99,7 @@ public static class CrisisSupportGuard
         while ((start = text.IndexOf(phrase, start, StringComparison.Ordinal)) >= 0)
         {
             var end = start + phrase.Length;
-            if ((start == 0 || !char.IsLetterOrDigit(text[start - 1]))
-                && (end == text.Length || !char.IsLetterOrDigit(text[end])))
+            if (phrase != "suicida" || !text.AsSpan(start).StartsWith("suicidal", StringComparison.Ordinal))
                 return true;
             start = end;
         }

@@ -187,23 +187,22 @@ public partial class ProcessUserChatCommandHandler
     private sealed record OfferSelection(string? CandidateId, string? Interpretation, IReadOnlyList<string>? DismissedOfferKeys);
 
     private async Task<OfferSelection?> SelectOfferAsync(ProcessUserChatCommand request, AstraOfferFact[] candidates,
-        IReadOnlyList<AstraOfferFact> issued, ChatContext context, CancellationToken ct, IReadOnlyList<PendingAgentOperation>? previews = null)
+        CancellationToken ct)
     {
+        if (candidates.Length == 1)
+            return new OfferSelection(candidates[0].Id, candidates[0].Family == "calendar" ? "dated_event" : "aim", []);
+        if (candidates.Length == 0) return null;
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
         deadline.CancelAfter(TimeSpan.FromSeconds(3));
         try
         {
             var response = await ai.IntentService.SendWithToolsAsync(new AiToolRequest(request.Message,
-                ProactiveOfferPlanner.SelectionInstruction, [], request.UserId, History: request.History)
+                ProactiveOfferPlanner.SelectionInstruction, [], request.UserId)
             {
                 Purpose = "offer_selection",
                 DynamicContext = JsonSerializer.Serialize(new
                 {
-                    Candidates = candidates.Select(candidate => new { candidate.Id, candidate.Family, candidate.Evidence, candidate.Action }),
-                    PreviouslyIssued = issued.Select(offer => new { offer.Action.OfferKey, offer.Action.Label }),
-                    ActiveGoals = context.ActiveGoals.Select(goal => new { goal.Id, goal.Title, goal.Description }),
-                    Language = context.Language,
-                    PendingPreviews = previews
+                    Candidates = candidates.Select(candidate => new { candidate.Id, candidate.Family, candidate.Evidence, candidate.Action })
                 })
             }, cancellationToken: deadline.Token);
             if (response.IsFailure || response.Value.HasToolCalls || response.Value.IsTruncated

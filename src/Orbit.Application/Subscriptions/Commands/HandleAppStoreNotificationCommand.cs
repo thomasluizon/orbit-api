@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -9,7 +10,8 @@ namespace Orbit.Application.Subscriptions.Commands;
 public record HandleAppStoreNotificationCommand(string SignedPayload) : IRequest<Result>;
 
 public sealed class HandleAppStoreNotificationCommandHandler(IAppStoreService appStore, IGenericRepository<User> users,
-    IGenericRepository<ProcessedAppStoreNotification> notifications, IUnitOfWork unitOfWork)
+    IGenericRepository<ProcessedAppStoreNotification> notifications, IUnitOfWork unitOfWork,
+    ILogger<HandleAppStoreNotificationCommandHandler>? logger = null)
     : IRequestHandler<HandleAppStoreNotificationCommand, Result>
 {
     private static readonly HashSet<string> SupportedTypes = ["SUBSCRIBED", "DID_RENEW", "DID_CHANGE_RENEWAL_STATUS",
@@ -63,8 +65,12 @@ public sealed class HandleAppStoreNotificationCommandHandler(IAppStoreService ap
         if (state.Transaction.AppAccountToken != user.Id || state.Transaction.OriginalTransactionId != transaction.OriginalTransactionId
             || await users.AnyIgnoringFiltersAsync(u => u.AppStoreOriginalTransactionId == transaction.OriginalTransactionId && u.Id != user.Id, cancellationToken))
             return Result.Failure(ErrorMessages.AppStorePurchaseAccountMismatch);
-        if (user.AppStoreOriginalTransactionId == transaction.OriginalTransactionId)
-            AppStoreEntitlement.Apply(user, state);
+        if (user.AppStoreOriginalTransactionId != transaction.OriginalTransactionId)
+        {
+            logger?.LogWarning("Ignoring App Store notification without a matching verified binding for user {UserId}", user.Id);
+            return Result.Success();
+        }
+        AppStoreEntitlement.Apply(user, state);
         return Result.Success();
     }
 }

@@ -12,6 +12,8 @@ public class CrisisSupportGuardTests
     [InlineData("Tenho pensamentos de suicídio", CrisisLocales.Portuguese)]
     [InlineData("I want to die. Quero morrer.", CrisisLocales.English | CrisisLocales.Portuguese)]
     [InlineData("I don’t want to live", CrisisLocales.English)]
+    [InlineData("I've been self harming", CrisisLocales.English)]
+    [InlineData("Tenho pensamentos suicidas", CrisisLocales.Portuguese)]
     [InlineData("harm myself", CrisisLocales.English)]
     [InlineData("self harm", CrisisLocales.English)]
     [InlineData("self-harm", CrisisLocales.English)]

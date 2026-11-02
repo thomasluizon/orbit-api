@@ -204,6 +204,8 @@ public partial class ProcessUserChatCommandHandler(
         CancellationToken cancellationToken)
     {
         using var timer = ChatTurnTimer.Begin(timeProvider ?? TimeProvider.System);
+        using var reads = new ChatTurnReadScope(request.UserId,
+            await data.UserRepository.GetByIdAsync(request.UserId, cancellationToken));
         ChatEvalTraceCollector? evalTrace = null;
         var recording = new ChatTurnState();
         request = request with
@@ -216,7 +218,7 @@ public partial class ProcessUserChatCommandHandler(
         {
             if (request.EvalTraceRequested)
             {
-                var flags = await data.FeatureFlagService.GetEnabledKeysForUserAsync(request.UserId, cancellationToken);
+                var flags = await ResolveTurnFeatureFlagsAsync(request.UserId, cancellationToken);
                 if (flags.Contains(FeatureFlagKeys.AstraEvalTrace, StringComparer.Ordinal))
                     evalTrace = new ChatEvalTraceCollector(request.CorrelationId ?? Guid.NewGuid().ToString("N"), ai.ToolRegistry);
             }
@@ -247,12 +249,21 @@ public partial class ProcessUserChatCommandHandler(
                 response = Result.Success(await ConversationErasedReplyAsync(request, recording, cancellationToken));
             }
             var timing = timer.Complete();
-            logger.LogInformation("Astra turn timing {Phases} total {TotalMilliseconds} ms",
+            logger.LogDebug("Astra turn timing {Phases} total {TotalMilliseconds} ms",
                 JsonSerializer.Serialize(timing.Phases, ChatStreamEvent.SerializerOptions), timing.TotalMilliseconds);
         }
         return response.IsSuccess && evalTrace is not null
             ? Result.Success(response.Value with { EvalTrace = evalTrace.Build(timer.Complete()) })
             : response;
+    }
+
+    private async Task<IReadOnlyList<string>> ResolveTurnFeatureFlagsAsync(Guid userId, CancellationToken ct)
+    {
+        var scope = ChatTurnReadScope.For(userId);
+        if (scope?.EnabledFlags is { } cached) return cached;
+        var flags = await data.FeatureFlagService.GetEnabledKeysForUserAsync(userId, ct);
+        if (scope is not null) scope.EnabledFlags = flags;
+        return flags;
     }
 
     private async Task<Result<ChatResponse>> HandleCoreAsync(ProcessUserChatCommand request,
@@ -297,7 +308,7 @@ public partial class ProcessUserChatCommandHandler(
         var crisis = CrisisSupportGuard.Detect(request.Message);
         if (crisis != CrisisLocales.None)
         {
-            var enabledFlags = await data.FeatureFlagService.GetEnabledKeysForUserAsync(request.UserId, cancellationToken);
+            var enabledFlags = await ResolveTurnFeatureFlagsAsync(request.UserId, cancellationToken);
             if (CrisisSupportGuard.IsEnabled(crisis, enabledFlags))
             {
                 var preparedConversation = await PrepareConversationAsync(request, recording, cancellationToken, enabledFlags);
@@ -423,7 +434,7 @@ public partial class ProcessUserChatCommandHandler(
         using var turnCancellation = CreateBlockTurnCancellation(cancellationToken, answeredAtUtc);
         cancellationToken = turnCancellation.Token;
         var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
-        LogProcessingChatMessage(logger, request.Message);
+        LogProcessingChatMessage(logger);
 
         var contextResult = loadedContext is null
             ? await LoadChatContextAsync(request, cancellationToken)
@@ -731,7 +742,8 @@ public partial class ProcessUserChatCommandHandler(
         if (user is null)
             return;
 
-        foreach (var pending in pendingOperations.Where(item => item.Changes is not null))
+        var previews = pendingOperations.Where(item => item.Changes is not null).ToArray();
+        if (previews.Length > 0)
         {
             AnalyticsCapture.SafeCaptureUserEvent(
                 execution.ProductAnalytics,
@@ -742,7 +754,9 @@ public partial class ProcessUserChatCommandHandler(
                 new Dictionary<string, object>
                 {
                     ["platform"] = request.ClientContext?.Platform ?? "unknown",
-                    ["kind"] = pending.CapabilityId
+                    ["kind"] = previews[0].CapabilityId,
+                    ["kinds"] = previews.Select(preview => preview.CapabilityId).Distinct().ToArray(),
+                    ["preview_count"] = previews.Length
                 });
         }
     }
@@ -1182,8 +1196,8 @@ public partial class ProcessUserChatCommandHandler(
         && results.CalledToolNames.All(name => name == DescribeFeatureToolName)
         && results.OperationResults.All(operation => operation.Status == AgentOperationStatus.Succeeded);
 
-    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "Processing chat message: '{Message}'")]
-    private static partial void LogProcessingChatMessage(ILogger logger, string message);
+    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "Processing Astra turn")]
+    private static partial void LogProcessingChatMessage(ILogger logger);
 
     [LoggerMessage(EventId = 2, Level = LogLevel.Debug, Message = "Context loaded in {ElapsedMs}ms (Habits: {HabitCount})")]
     private static partial void LogContextLoaded(ILogger logger, long elapsedMs, int habitCount);
@@ -1199,15 +1213,6 @@ public partial class ProcessUserChatCommandHandler(
 
     [LoggerMessage(EventId = 6, Level = LogLevel.Warning, Message = "Unknown tool requested: {Name}")]
     private static partial void LogUnknownToolRequested(ILogger logger, string name);
-
-    [LoggerMessage(EventId = 7, Level = LogLevel.Debug, Message = "Tool {Name} succeeded: {EntityName}")]
-    private static partial void LogToolSucceeded(ILogger logger, string name, string? entityName);
-
-    [LoggerMessage(EventId = 8, Level = LogLevel.Warning, Message = "Tool {Name} failed: {Error}")]
-    private static partial void LogToolFailed(ILogger logger, string name, string? error);
-
-    [LoggerMessage(EventId = 9, Level = LogLevel.Error, Message = "Tool {Name} threw an exception")]
-    private static partial void LogToolThrewException(ILogger logger, Exception ex, string name);
 
     [LoggerMessage(EventId = 10, Level = LogLevel.Warning, Message = "ContinueWithToolResultsAsync failed: {Error}")]
     private static partial void LogContinueWithToolResultsFailed(ILogger logger, string? error);
