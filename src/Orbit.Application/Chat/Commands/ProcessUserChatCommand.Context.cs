@@ -22,14 +22,20 @@ public partial class ProcessUserChatCommandHandler
         var userToday = await execution.UserDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         var weekStartDay = await execution.UserDateService.GetUserWeekStartDayAsync(request.UserId, cancellationToken);
         var includeChecklists = request.ClientContext?.SupportsPendingOperationPlacement == true;
-        var candidates = await data.HabitRepository.ProjectAsync(
-            h => h.UserId == request.UserId,
-            q => ChatHabitCandidate.Select(q, userToday, includeChecklists),
-            cancellationToken);
-        var userHabits = candidates.OrderBy(candidate => candidate.Position).ThenBy(candidate => candidate.Schedule.Id)
-            .Select(candidate => candidate.ToHabit(request.UserId)).ToArray();
-        var doneTodayIds = candidates.Where(candidate => candidate.CompletedToday)
-            .Select(candidate => candidate.Schedule.Id).ToHashSet();
+        var sharedReads = ChatTurnReadScope.For(request.UserId);
+        IReadOnlySet<Guid> completedTodayIds = sharedReads?.CompletedTodayIds ?? new HashSet<Guid>();
+        async Task<IReadOnlyList<Habit>> LoadHabitsAsync()
+        {
+            var loaded = await data.HabitRepository.ProjectAsync(h => h.UserId == request.UserId,
+                q => ChatHabitCandidate.Select(q, userToday, includeChecklists), cancellationToken);
+            completedTodayIds = loaded.Where(candidate => candidate.CompletedToday).Select(candidate => candidate.Schedule.Id).ToHashSet();
+            if (sharedReads is not null) sharedReads.CompletedTodayIds = completedTodayIds;
+            return loaded.OrderBy(candidate => candidate.Position).ThenBy(candidate => candidate.Schedule.Id)
+                .Select(candidate => candidate.ToHabit(request.UserId)).ToArray();
+        }
+        var userHabits = sharedReads is null ? await LoadHabitsAsync()
+            : await sharedReads.ReadHabitsAsync(data.HabitRepository, userToday, includeChecklists, cancellationToken);
+        var doneTodayIds = sharedReads?.CompletedTodayIds ?? completedTodayIds;
         var (promptHabitIndex, todayFacts) = await SelectPromptHabitIndexAsync(
             userHabits, userToday, weekStartDay, doneTodayIds, execution.ScheduleLogReader, cancellationToken);
         var promptIds = promptHabitIndex.Habits.Select(habit => habit.Id).ToHashSet();
@@ -48,7 +54,7 @@ public partial class ProcessUserChatCommandHandler
                 promptHabitIndex.Habits.Count,
                 AppConstants.MaxPromptHabitEntries);
         }
-        var user = await data.UserRepository.GetByIdAsync(request.UserId, cancellationToken);
+        var user = sharedReads?.User ?? await data.UserRepository.GetByIdAsync(request.UserId, cancellationToken);
         var hasProAccess = user?.HasProAccess ?? false;
 
         var activeGoals = await data.GoalRepository.FindAsync(
@@ -65,9 +71,7 @@ public partial class ProcessUserChatCommandHandler
             query => query.Select(template => template.Name),
             cancellationToken);
 
-        var enabledFeatureFlags = await data.FeatureFlagService.GetEnabledKeysForUserAsync(
-            request.UserId,
-            cancellationToken);
+        var enabledFeatureFlags = await ResolveTurnFeatureFlagsAsync(request.UserId, cancellationToken);
 
         dbStopwatch.Stop();
         LogContextLoaded(logger, dbStopwatch.ElapsedMilliseconds, activeHabits.Count);

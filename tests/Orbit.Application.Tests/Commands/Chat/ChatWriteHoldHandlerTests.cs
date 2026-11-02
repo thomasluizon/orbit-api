@@ -94,6 +94,8 @@ public sealed partial class ChatWriteHoldHandlerTests : IDisposable
             new BulkCreateHabitsTool(_mediator),
             new CreateSubHabitTool(_mediator),
             new LogHabitTool(_mediator, _habitRepo, _userDateService),
+            new BulkLogHabitsTool(_mediator, _habitRepo, _userDateService,
+                new BulkHabitReplayPlanner(Substitute.For<IIdempotencyContext>(), Substitute.For<IIdempotencyStore>(), _unitOfWork)),
             new SkipHabitTool(_mediator, _habitRepo),
             new BulkSkipHabitsTool(_mediator, _habitRepo, _userDateService,
                 new BulkHabitReplayPlanner(Substitute.For<IIdempotencyContext>(), Substitute.For<IIdempotencyStore>(), _unitOfWork)),
@@ -119,7 +121,7 @@ public sealed partial class ChatWriteHoldHandlerTests : IDisposable
             Arg.Any<CancellationToken>()).Returns((string?)null);
         _executor = new AgentOperationExecutor(
             _catalogService,
-            new AgentPolicyEvaluator(_dbContext, _catalogService, _pendingOperationStore, stepUpBridge, settings,
+            new AgentPolicyEvaluator(_dbContext, _catalogService, _pendingOperationStore, stepUpBridge,
                 new FeatureFlagService(_dbContext, _flagCache, Substitute.For<IHostEnvironment>(), new ConfigurationBuilder().Build())),
             Substitute.For<IAgentAuditService>(),
             ownership,

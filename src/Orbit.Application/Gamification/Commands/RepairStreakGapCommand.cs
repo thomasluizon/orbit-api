@@ -37,7 +37,7 @@ public class RepairStreakGapCommandHandler(
                     return Result.Failure<int>(ErrorMessages.UserNotFound);
 
                 var flags = await featureFlagService.GetEnabledKeysForUserAsync(request.UserId, transactionToken);
-                if (!user.HasProAccess && !flags.Contains(FeatureFlagKeys.GamificationFreeTier))
+                if (!GamificationAccess.IsUnlocked(user, flags))
                     return Result.PayGateFailure<int>("Streak insights are a Pro feature. Upgrade to unlock!");
 
                 var today = await userDateService.GetUserTodayAsync(request.UserId, transactionToken);

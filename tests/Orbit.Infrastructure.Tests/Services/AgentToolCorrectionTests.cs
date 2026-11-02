@@ -63,11 +63,11 @@ public sealed partial class AgentToolCorrectionTests : IDisposable
         var tool = new CreateHabitTool(dates, Orbit.Tests.Shared.HabitToolCommandMediator.Create(habits, tags, goals, dates, gate, _unitOfWork));
         _registry = new AiToolRegistry([tool]);
         var catalog = new AgentCatalogService([tool]);
-        var settings = Options.Create(new AgentPlatformSettings { ShadowModeEnabled = false });
+        var settings = Options.Create(new AgentPlatformSettings());
         _store = new PendingAgentOperationStore(_db, settings);
         var bridge = Substitute.For<IAgentStepUpAuthorizationBridge>();
         bridge.GetRequiredConfirmationAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns((AgentConfirmationRequirement?)null);
-        var policy = new AgentPolicyEvaluator(_db, catalog, _store, bridge, settings, new FeatureFlagService(_db, _cache, Substitute.For<IHostEnvironment>(), new ConfigurationBuilder().Build()));
+        var policy = new AgentPolicyEvaluator(_db, catalog, _store, bridge, new FeatureFlagService(_db, _cache, Substitute.For<IHostEnvironment>(), new ConfigurationBuilder().Build()));
         _ownership.GetDenialReasonAsync(Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<JsonElement>(), Arg.Any<CancellationToken>())
             .Returns((string?)null);
         _previewer = new PendingOperationChangePreviewer(habits, goals, tags, dates, _registry);

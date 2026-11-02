@@ -1,9 +1,16 @@
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore.Storage;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Orbit.Application.Chat;
+using Orbit.Application.Common;
+using NSubstitute;
 using Orbit.Domain.Common;
 using Orbit.Domain.Models;
+using Microsoft.Extensions.Options;
+using Orbit.Domain.Entities;
+using Orbit.Infrastructure.Configuration;
+using Orbit.Infrastructure.Services;
 
 namespace Orbit.Infrastructure.Tests.Services;
 
@@ -19,6 +26,61 @@ public partial class PendingAgentOperationStoreTests
         if (bind)
             _store.Revise(userId ?? _userId, pending.Id, fingerprint, arguments, fingerprint, "preview").Should().BeTrue();
         return pending;
+    }
+
+    [Fact]
+    public void Consume_StaleRevisionInExistingTransaction_PreservesEditedHistory()
+    {
+        using var fixture = new ConversationTurnRecorderTests.Fixture();
+        var db = fixture.Db;
+        var settings = Options.Create(new AgentPlatformSettings());
+        var store = new PendingAgentOperationStore(db, settings, fixture.Flags);
+        var capability = _catalogService.GetCapabilityByChatTool("create_habit")! with
+        { ConfirmationRequirement = AgentConfirmationRequirement.FreshConfirmation };
+        const string original = "{\"title\":\"Read\"}";
+        var fingerprint = AgentOperationFingerprint.Compute("create_habit", original);
+        var pending = store.Create(fixture.User.Id, capability, "create_habit", original, "Create", fingerprint,
+            AgentExecutionSurface.Chat, new(fixture.ConversationId, DateTime.UtcNow));
+        var confirmation = store.Confirm(fixture.User.Id, pending.Id)!;
+        var state = db.PendingAgentOperations.Single();
+        var preview = new ConversationPreviewOutcome(pending.Id, "approved", JsonSerializer.SerializeToElement(new { title = "Read" }), state.RevisionNumber);
+        var turn = ConversationTurn.Create(fixture.User.Id, Guid.NewGuid(), "assistant", DateTime.UtcNow,
+            null, "Review", "[]", conversationId: fixture.ConversationId, turnOrder: 1,
+            previewOutcomesJson: JsonSerializer.Serialize(new[] { preview }), modelContextJson: "{}").Value;
+        db.ConversationTurns.Add(turn);
+        db.SaveChanges();
+        db.ChangeTracker.Clear();
+        db.PendingAgentOperations.Single();
+        using (var transaction = db.Database.BeginTransaction())
+        {
+            Action? revise = () =>
+            {
+                using var revisionDb = fixture.Database.CreateContext();
+                revisionDb.Database.UseTransaction(transaction.GetDbTransaction());
+                var revisionStore = new PendingAgentOperationStore(revisionDb, settings, fixture.Flags);
+                const string revised = "{\"title\":\"Walk\"}";
+                revisionStore.Revise(fixture.User.Id, pending.Id, fingerprint, revised,
+                    AgentOperationFingerprint.Compute("create_habit", revised), "edited-preview").Should().BeTrue();
+            };
+            fixture.Flags.ResolveForUser(fixture.User.Id).Returns(_ =>
+            {
+                var callback = revise;
+                revise = null;
+                callback?.Invoke();
+                return [new(FeatureFlagKeys.AstraConversationRecording, true, null)];
+            });
+            store.TryConsumeFreshConfirmation(fixture.User.Id, capability.Id, fingerprint,
+                confirmation.ConfirmationToken, false).Should().BeFalse();
+            transaction.Commit();
+        }
+        db.ChangeTracker.Clear();
+        var persisted = db.PendingAgentOperations.Single();
+        persisted.ConfirmedAtUtc.Should().BeNull();
+        persisted.ConsumedAtUtc.Should().BeNull();
+        var outcome = JsonSerializer.Deserialize<ConversationPreviewOutcome[]>(db.ConversationTurns.Single().PreviewOutcomesJson)!.Single();
+        outcome.Outcome.Should().Be("edited");
+        outcome.Arguments.GetProperty("title").GetString().Should().Be("Walk");
+        outcome.Revision.Should().Be(persisted.RevisionNumber);
     }
 
     [Theory]

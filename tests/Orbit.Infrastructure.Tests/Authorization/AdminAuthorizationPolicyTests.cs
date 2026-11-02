@@ -20,6 +20,19 @@ public class AdminAuthorizationPolicyTests
     }
 
     [Fact]
+    public async Task DeactivatedAdmin_DoesNotSucceed()
+    {
+        var user = User.Create("Admin", "admin@example.com").Value;
+        user.GrantAdmin();
+        user.Deactivate(DateTime.UtcNow.AddDays(7));
+        _userRepository.AnyIgnoringFiltersAsync(Arg.Any<Expression<Func<User, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.Arg<Expression<Func<User, bool>>>().Compile()(user));
+        var context = ContextFor(Principal(new Claim(ClaimTypes.NameIdentifier, user.Id.ToString())));
+        await _handler.HandleAsync(context);
+        context.HasSucceeded.Should().BeFalse();
+    }
+
+    [Fact]
     public async Task AdminUser_Succeeds()
     {
         _userRepository.AnyIgnoringFiltersAsync(Arg.Any<Expression<Func<User, bool>>>(), Arg.Any<CancellationToken>())

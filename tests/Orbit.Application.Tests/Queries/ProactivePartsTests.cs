@@ -243,6 +243,10 @@ public sealed class ProactivePartsTests
             var goals = Substitute.For<IGenericRepository<Goal>>();
             goals.FindAsync(Arg.Any<Expression<Func<Goal, bool>>>(),
                 Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(), Arg.Any<CancellationToken>()).Returns(new[] { _goal });
+            Habits.ProjectAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Any<Func<IQueryable<Habit>, IQueryable<ChatHabitCandidate>>>(), Arg.Any<CancellationToken>())
+                .Returns(call => call.ArgAt<Func<IQueryable<Habit>, IQueryable<ChatHabitCandidate>>>(1)(
+                    new[] { _habit }.Where(call.ArgAt<Expression<Func<Habit, bool>>>(0).Compile()).AsQueryable()).ToArray());
             var scheduleLogs = Substitute.For<IHabitScheduleLogReader>();
             scheduleLogs.ReadDaysAsync(Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<DateOnly>(), Arg.Any<DateOnly>(),
                 Arg.Any<CancellationToken>()).Returns(new[] { new HabitScheduleLogDay(_habit.Id, Day.AddDays(-2), 1, 0, true) });

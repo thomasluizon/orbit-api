@@ -7,7 +7,7 @@ namespace Orbit.Application.Chat.Commands;
 
 public partial class ProcessUserChatCommandHandler
 {
-    private sealed record GroundingTurn(bool Enforce, IReadOnlyList<string> KnownNames, string? Language);
+    private sealed record GroundingTurn(bool Enforce, GroundingNameIndex KnownNames, string? Language);
     private sealed record GroundedReply(string? Message, IReadOnlyList<string>? FollowUps, TurnFactSet Facts);
 
     private static ResponseCards ApplyGroundingToCards(ResponseCards cards, string? message) => cards with
@@ -20,10 +20,10 @@ public partial class ProcessUserChatCommandHandler
 
     private async Task<GroundingTurn> LoadGroundingTurnAsync(ChatContext context, CancellationToken cancellationToken) => new(
         await appConfig.GetAsync(AppConfigKeys.AstraGroundingEnforce, false, cancellationToken),
-        context.ActiveHabits.Select(habit => habit.Title)
+        new GroundingNameIndex(context.ActiveHabits.Select(habit => habit.Title)
             .Concat(context.ActiveGoals.Select(goal => goal.Title))
             .Concat(context.UserTags.Select(tag => tag.Name))
-            .Concat(context.ChecklistTemplateNames).ToArray(),
+            .Concat(context.ChecklistTemplateNames)),
         context.Language);
 
     private static async Task<string?> GetGroundedCachedFaqAnswerAsync(
@@ -32,7 +32,7 @@ public partial class ProcessUserChatCommandHandler
         if (request.BlockAnswer is not null)
             return null;
         var cached = TryGetCachedFaqAnswer(match);
-        if (cached is null || GroundednessChecker.Check(cached, TurnFactSet.Empty, turn.KnownNames, turn.Language).Count > 0)
+        if (cached is null || GroundednessChecker.Check(cached, TurnFactSet.Empty, language: turn.Language, nameIndex: turn.KnownNames).Count > 0)
             return null;
         if (turn.Enforce && request.StreamSink is not null && !suppressDeltas)
             await request.StreamSink(ChatStreamEvent.Delta(cached));
@@ -89,7 +89,7 @@ public partial class ProcessUserChatCommandHandler
 
     private bool CheckGrounding(string? text, string location, TurnFactSet facts, ProcessUserChatCommand request, GroundingTurn turn)
     {
-        var violations = GroundednessChecker.Check(text, facts, turn.KnownNames, turn.Language, request.Message);
+        var violations = GroundednessChecker.Check(text, facts, language: turn.Language, userMessage: request.Message, nameIndex: turn.KnownNames);
         foreach (var violation in violations)
         {
             logger.LogWarning("Grounding violation {ViolationKind} {Claim} at {Location} for {UserId} {CorrelationId}; enforced {Enforced}",

@@ -3,6 +3,9 @@ using System.Text.Json;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
@@ -87,6 +90,65 @@ public class ConversationTurnRecorderTests
     }
 
     [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public async Task Record_FlagRevokedDuringTurn_WritesNothing(bool captureSnapshot, bool invalidCapture)
+    {
+        using var fixture = new Fixture();
+        var flag = await fixture.Db.AppFeatureFlags.SingleAsync(item => item.Key == FeatureFlagKeys.AstraConversationRecording);
+        flag.SetEnabled(true);
+        await fixture.Db.SaveChangesAsync();
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        var flags = new FeatureFlagService(fixture.Db, cache, Substitute.For<IHostEnvironment>(), new ConfigurationBuilder().Build());
+        using var turn = new ChatTurnReadScope(fixture.User.Id, fixture.User);
+        var enabled = await flags.GetEnabledKeysForUserAsync(fixture.User.Id);
+        enabled.Should().Contain(FeatureFlagKeys.AstraConversationRecording);
+        var capture = fixture.Capture(image: true) with
+        {
+            EnabledFeatureFlags = captureSnapshot ? enabled : null,
+            ToolCallsJson = invalidCapture ? "invalid" : "[]"
+        };
+        using (var adminDb = fixture.Database.CreateContext())
+        {
+            var current = await adminDb.AppFeatureFlags.SingleAsync(item => item.Key == FeatureFlagKeys.AstraConversationRecording);
+            current.SetEnabled(false);
+            await adminDb.SaveChangesAsync();
+        }
+        var recorder = new ConversationTurnRecorder(fixture.Db, new UnitOfWork(fixture.Db, new DatabaseConnectionSettings()), flags,
+            fixture.Encryption, fixture.Storage, Options.Create(new AiSettings { Model = "recording-model" }));
+
+        (await recorder.RecordAsync(capture)).Should().BeFalse();
+
+        (await fixture.Db.ConversationTurns.CountAsync()).Should().Be(0);
+        await fixture.Storage.DidNotReceiveWithAnyArgs().PutPrivateAsync(default!, default!, default!);
+        (await flags.GetEnabledKeysForUserAsync(fixture.User.Id)).Should().Contain(FeatureFlagKeys.AstraConversationRecording,
+            "the privacy recheck must leave the other turn reads on their original snapshot");
+        flags.ResolveForUser(fixture.User.Id).Should().Contain(item => item.Key == FeatureFlagKeys.AstraConversationRecording && item.Enabled);
+    }
+
+    [Fact]
+    public async Task ForceRefresh_ReadsCurrentFlagsWithoutReplacingTurnSnapshot()
+    {
+        using var fixture = new Fixture();
+        var flag = await fixture.Db.AppFeatureFlags.SingleAsync(item => item.Key == FeatureFlagKeys.AstraConversationRecording);
+        flag.SetEnabled(true);
+        await fixture.Db.SaveChangesAsync();
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        var flags = new FeatureFlagService(fixture.Db, cache, Substitute.For<IHostEnvironment>(), new ConfigurationBuilder().Build());
+        using var turn = new ChatTurnReadScope(fixture.User.Id, fixture.User);
+        (await flags.GetEnabledKeysForUserAsync(fixture.User.Id)).Should().Contain(FeatureFlagKeys.AstraConversationRecording);
+        flag.SetEnabled(false);
+        await fixture.Db.SaveChangesAsync();
+
+        (await flags.GetEnabledKeysForUserAsync(fixture.User.Id, forceRefresh: true)).Should().NotContain(FeatureFlagKeys.AstraConversationRecording);
+
+        (await flags.GetEnabledKeysForUserAsync(fixture.User.Id)).Should().Contain(FeatureFlagKeys.AstraConversationRecording);
+        flags.ResolveForUser(fixture.User.Id).Should().Contain(item => item.Key == FeatureFlagKeys.AstraConversationRecording && item.Enabled);
+    }
+
+    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public async Task PreviewOutcomes_IndependentContextsWithStaleSnapshots_PreserveBothApprovals(bool insertAfterApprovals)
@@ -153,7 +215,7 @@ public class ConversationTurnRecorderTests
         var capture = fixture.Capture();
         await fixture.Store.RecordAsync(capture);
         fixture.Flags.ResolveForUser(fixture.User.Id).Returns([new(FeatureFlagKeys.AstraConversationRecording, false, null)]);
-        fixture.Flags.GetEnabledKeysForUserAsync(fixture.User.Id, Arg.Any<CancellationToken>()).Returns(Array.Empty<string>());
+        fixture.Flags.GetEnabledKeysForUserAsync(fixture.User.Id, Arg.Any<CancellationToken>(), Arg.Any<bool>()).Returns(Array.Empty<string>());
         commands.Reset();
         var pending = new PendingAgentOperationStore(fixture.Db, Options.Create(new AgentPlatformSettings()), fixture.Flags);
         const string arguments = "{\"title\":\"Reservation\"}";
@@ -318,15 +380,17 @@ public class ConversationTurnRecorderTests
         internal Guid ConversationId { get; } = Guid.NewGuid();
         internal IObjectStorageService Storage { get; } = Substitute.For<IObjectStorageService>();
         internal IFeatureFlagService Flags { get; } = Substitute.For<IFeatureFlagService>();
+        internal IEncryptionService Encryption { get; }
         internal ConversationTurnRecorder Store { get; }
         internal Fixture(bool enabled = true, IInterceptor? interceptor = null)
         {
             var encryption = new EncryptionService(Options.Create(new EncryptionSettings { Key = Convert.ToBase64String(new byte[32]) }), NullLogger<EncryptionService>.Instance);
+            Encryption = encryption;
             Database = new SqliteOrbitDbContextFactory(encryption, interceptor is null ? [] : [interceptor]);
             User = User.Create("Person", "recording@example.com").Value;
             Db.Users.Add(User);
             Db.SaveChanges();
-            Flags.GetEnabledKeysForUserAsync(User.Id, Arg.Any<CancellationToken>()).Returns(enabled ? new[] { FeatureFlagKeys.AstraConversationRecording } : []);
+            Flags.GetEnabledKeysForUserAsync(User.Id, Arg.Any<CancellationToken>(), Arg.Any<bool>()).Returns(enabled ? new[] { FeatureFlagKeys.AstraConversationRecording } : []);
             Flags.ResolveForUser(User.Id).Returns([new(FeatureFlagKeys.AstraConversationRecording, enabled, null)]);
             Storage.ReadPrivateAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(_ => new MemoryStream(Image));
             Store = new(Db, new UnitOfWork(Db, new DatabaseConnectionSettings()), Flags, encryption, Storage, Options.Create(new AiSettings { Model = "recording-model" }));

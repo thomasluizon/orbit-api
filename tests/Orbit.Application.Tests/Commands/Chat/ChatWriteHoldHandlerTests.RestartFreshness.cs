@@ -278,7 +278,7 @@ public sealed partial class ChatWriteHoldHandlerTests
                 _pendingOperationStore.GetAwaiting(_userId).Should().BeEmpty();
                 return FreshRestartResponse(calls[0] with { Id = "refreshed-set" });
             }
-            results.Should().ContainSingle().Which.Success.Should().BeTrue();
+            results.Should().ContainSingle().Which.Success.Should().BeTrue(results[0].Error);
             return FreshRestartResponse(calls[1] with { Id = "current-set", Args = JsonSerializer.SerializeToElement(corrected) });
         });
 

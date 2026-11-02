@@ -9,6 +9,7 @@ using Orbit.Application.Notifications;
 using Orbit.Application.Common;
 using Orbit.Application.Habits.Services;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.BackgroundJobs;
 using Orbit.Infrastructure.Persistence;
@@ -80,7 +81,7 @@ public partial class SlipAlertSchedulerService(
             var due = new List<SlipCandidate>();
             foreach (var habit in habits)
             {
-                if (!snapshot.Users.TryGetValue(habit.UserId, out var user)) continue;
+                if (!snapshot.Users.TryGetValue(habit.UserId, out var user) || !user.HasProAccess(nowAtUtc)) continue;
                 var candidate = FindDue(habit, user, snapshot.LogsByHabit.GetValueOrDefault(habit.Id) ?? [],
                     snapshot.SentWeeksByHabit.GetValueOrDefault(habit.Id) ?? [], nowAtUtc);
                 if (candidate is not null) due.Add(candidate);
@@ -126,7 +127,14 @@ public partial class SlipAlertSchedulerService(
         Dictionary<Guid, SlipUser> Users, Dictionary<Guid, List<HabitLog>> LogsByHabit,
         Dictionary<Guid, HashSet<DateOnly>> SentWeeksByHabit);
 
-    private sealed record SlipUser(Guid Id, string? TimeZone, int WeekStartDay, string? Language);
+    private sealed record SlipUser(Guid Id, string? TimeZone, int WeekStartDay, string? Language,
+        bool IsLifetimePro, UserPlan SubscriptionPlan, DateTime? SubscriptionExpiresAtUtc,
+        DateTime? BonusProExpiresAtUtc, DateTime? TrialEndsAt)
+    {
+        public bool HasProAccess(DateTime nowAtUtc) => IsLifetimePro
+            || SubscriptionPlan == UserPlan.Pro && SubscriptionExpiresAtUtc > nowAtUtc
+            || BonusProExpiresAtUtc > nowAtUtc || TrialEndsAt > nowAtUtc;
+    }
 
     private static async Task<string> ReadProbeAsync(OrbitDbContext db, DateOnly utcDate, CancellationToken ct)
     {
@@ -136,7 +144,16 @@ public partial class SlipAlertSchedulerService(
         {
             var habitVersions = await db.Habits.Where(h => h.IsBadHabit && h.SlipAlertEnabled && !h.IsCompleted)
                 .OrderBy(h => h.Id).Select(h => new { h.Id, h.ReminderProbeVersion }).ToListAsync(ct);
-            var userVersions = await db.Users.OrderBy(u => u.Id).Select(u => new { u.Id, u.ReminderPreferencesVersion }).ToListAsync(ct);
+            var userVersions = await db.Users.OrderBy(u => u.Id).Select(u => new
+            {
+                u.Id,
+                u.ReminderPreferencesVersion,
+                u.IsLifetimePro,
+                u.SubscriptionPlan,
+                u.SubscriptionExpiresAtUtc,
+                u.BonusProExpiresAtUtc,
+                u.TrialEndsAt
+            }).ToListAsync(ct);
             var logVersions = await db.HabitLogs.Where(l => l.Date >= cutoff).OrderBy(l => l.Id)
                 .Select(l => new { l.Id, l.UpdatedAtUtc }).ToListAsync(ct);
             return ReadRevision.Hash(new { habitVersions, userVersions, logVersions });
@@ -148,7 +165,11 @@ public partial class SlipAlertSchedulerService(
                     AND ("EndDate" IS NULL OR "EndDate" >= {floor})
             )
             SELECT md5(COALESCE((SELECT string_agg(CAST("Id" AS text) || ':' || CAST("ReminderProbeVersion" AS text), ',' ORDER BY "Id") FROM eligible), '')
-                || COALESCE((SELECT string_agg(CAST(u."Id" AS text) || ':' || CAST(u."ReminderPreferencesVersion" AS text), ',' ORDER BY u."Id")
+                || COALESCE((SELECT string_agg(CAST(u."Id" AS text) || ':' || CAST(u."ReminderPreferencesVersion" AS text)
+                    || ':' || CAST(u."IsLifetimePro" AS text) || ':' || CAST(u."Plan" AS text)
+                    || ':' || COALESCE(CAST(u."PlanExpiresAt" AS text), '')
+                    || ':' || COALESCE(CAST(u."BonusProExpiresAtUtc" AS text), '')
+                    || ':' || COALESCE(CAST(u."TrialEndsAt" AS text), ''), ',' ORDER BY u."Id")
                     FROM "Users" u WHERE NOT u."IsDeactivated" AND u."Id" IN (SELECT "UserId" FROM eligible)), '')
                 || COALESCE((SELECT string_agg(CAST(l."Id" AS text) || ':' || CAST(l."UpdatedAtUtc" AS text), ',' ORDER BY l."Id")
                     FROM "HabitLogs" l WHERE NOT l."IsDeleted" AND l."Date" >= {cutoff}
@@ -194,7 +215,9 @@ public partial class SlipAlertSchedulerService(
             }).ToArray();
             var userIds = habits.Select(h => h.UserId).Distinct().ToArray();
             var users = await db.Users.AsNoTracking().Where(u => userIds.Contains(u.Id))
-                .Select(u => new SlipUser(u.Id, u.TimeZone, u.WeekStartDay, u.Language)).ToDictionaryAsync(u => u.Id, ct);
+                .Select(u => new SlipUser(u.Id, u.TimeZone, u.WeekStartDay, u.Language,
+                    u.IsLifetimePro, u.SubscriptionPlan, u.SubscriptionExpiresAtUtc,
+                    u.BonusProExpiresAtUtc, u.TrialEndsAt)).ToDictionaryAsync(u => u.Id, ct);
             var habitIds = habits.Select(h => h.Id).ToArray();
             var sentFloor = utcDate.AddDays(-(7 + MaxTimeZoneSkewDays));
             var sent = await db.SentSlipAlerts.AsNoTracking().Where(a => habitIds.Contains(a.HabitId) && a.WeekStart >= sentFloor)

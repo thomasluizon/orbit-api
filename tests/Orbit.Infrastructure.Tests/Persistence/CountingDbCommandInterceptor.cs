@@ -66,14 +66,18 @@ internal sealed class CountingDbCommandInterceptor : DbCommandInterceptor
 
     public override DbDataReader ReaderExecuted(
         DbCommand command, CommandExecutedEventData eventData, DbDataReader result) =>
-        new RowCountingDbDataReader(result, _captured[command]);
+        TrackRows(command, result);
 
     public override ValueTask<DbDataReader> ReaderExecutedAsync(
         DbCommand command,
         CommandExecutedEventData eventData,
         DbDataReader result,
         CancellationToken cancellationToken = default) =>
-        ValueTask.FromResult<DbDataReader>(new RowCountingDbDataReader(result, _captured[command]));
+        ValueTask.FromResult(TrackRows(command, result));
+
+    private DbDataReader TrackRows(DbCommand command, DbDataReader result) =>
+        result is Npgsql.NpgsqlDataReader && !IsSelect(command.CommandText)
+            ? result : new RowCountingDbDataReader(result, _captured[command]);
 
     private void CountSelect(DbCommand command)
     {

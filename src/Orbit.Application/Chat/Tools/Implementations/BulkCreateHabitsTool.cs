@@ -77,6 +77,9 @@ public partial class BulkCreateHabitsTool(
         if (!args.TryGetProperty(ToolArgumentNames.Habits, out var habitsEl) || habitsEl.ValueKind != JsonValueKind.Array)
             return new ToolResult(false, Error: "habits is required and must be an array.");
 
+        if (ValidateLinkIds(args) is { } linkError)
+            return new ToolResult(false, Error: linkError);
+
         var semantics = new Validators.HabitProposalValidator().Validate(new Validators.HabitProposal(string.Empty, args));
         if (!semantics.IsValid)
             return new ToolResult(false, Error: semantics.Errors[0].ErrorMessage, ErrorCode: semantics.Errors[0].ErrorCode);
@@ -184,6 +187,9 @@ public partial class BulkCreateHabitsTool(
 
     private static string? ValidateLinkIds(JsonElement source)
     {
+        if (source.TryGetProperty(ParentHabitId, out var parent)
+            && (parent.ValueKind != JsonValueKind.String || !Guid.TryParse(parent.GetString(), out _)))
+            return "parent_habit_id must contain a valid GUID.";
         foreach (var field in new[] { TagIds, GoalIds })
             if (source.TryGetProperty(field, out var ids) && (ids.ValueKind != JsonValueKind.Array
                 || ids.EnumerateArray().Any(id => id.ValueKind != JsonValueKind.String || !Guid.TryParse(id.GetString(), out _))))

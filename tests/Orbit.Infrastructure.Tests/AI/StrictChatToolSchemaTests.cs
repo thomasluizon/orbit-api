@@ -38,11 +38,39 @@ public sealed class StrictChatToolSchemaTests(ITestOutputHelper output)
                     if (tool.Name == "create_tag" && offers) output.WriteLine("SDK wire evidence: " + wire.RootElement.GetRawText());
                     var parameters = wire.RootElement.GetProperty("parameters");
                     AssertStrict(parameters);
+                    AssertNoEnumWithPattern(parameters, tool.Name + "/" + variant);
                     var depth = ObjectDepth(parameters);
                     output.WriteLine($"{tool.Name} | {variant} | {(offers ? "offers" : "plain")} | {depth}");
                     if (depth > 10) violations.Add($"{tool.Name}/{variant}/{(offers ? "offers" : "plain")}: {depth}");
                 }
         violations.Should().BeEmpty("the provider permits at most 10 object levels; the production bulk_create_habits rejection reports 12");
+    }
+
+    [Fact]
+    public void EnumWithPatternGuard_RejectsAnInvalidDraftRevisionSchema()
+    {
+        var ask = (AskTool)AllTools().Single(tool => tool is AskTool);
+        var schema = System.Text.Json.Nodes.JsonNode.Parse(JsonSerializer.Serialize(ask.GetParameterSchema(false,
+            [new HabitSetupDraft("draft", "Activity", "frequency_unit", Guid.NewGuid())])))!;
+        var pending = new Stack<System.Text.Json.Nodes.JsonNode>();
+        pending.Push(schema);
+        while (pending.Count > 0)
+        {
+            var node = pending.Pop();
+            if (node is System.Text.Json.Nodes.JsonObject obj)
+            {
+                if (obj.ContainsKey("enum"))
+                {
+                    obj["pattern"] = "invalid";
+                    break;
+                }
+                foreach (var value in obj.Select(property => property.Value).OfType<System.Text.Json.Nodes.JsonNode>()) pending.Push(value);
+            }
+            else if (node is System.Text.Json.Nodes.JsonArray array)
+                foreach (var value in array.OfType<System.Text.Json.Nodes.JsonNode>()) pending.Push(value);
+        }
+        var check = () => AssertNoEnumWithPattern(JsonSerializer.SerializeToElement(schema), "ask/draft-revision");
+        check.Should().Throw<Exception>().WithMessage("*must not combine enum and pattern*");
     }
 
     private static IEnumerable<(string Variant, object Schema)> DeclarationVariants(IAiTool tool)
@@ -323,7 +351,7 @@ public sealed class StrictChatToolSchemaTests(ITestOutputHelper output)
             (BulkSkipHabitsTool)RuntimeHelpers.GetUninitializedObject(typeof(BulkSkipHabitsTool)), Substitute.For<IUserDateService>())
         : (IAiTool)RuntimeHelpers.GetUninitializedObject(type);
 
-    private static void AssertNoEnumWithPattern(JsonElement node, string path)
+    internal static void AssertNoEnumWithPattern(JsonElement node, string path)
     {
         if (node.ValueKind == JsonValueKind.Object)
         {

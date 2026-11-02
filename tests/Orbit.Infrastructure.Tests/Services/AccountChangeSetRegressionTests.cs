@@ -134,7 +134,7 @@ public class AccountChangeSetRegressionTests
         var failure = new ProbeTool("create_tag", false);
         var registry = new AiToolRegistry(new IAiTool[] { effect, failure });
         var catalog = new AgentCatalogService(registry.GetAll());
-        var settings = Options.Create(new AgentPlatformSettings { ShadowModeEnabled = false });
+        var settings = Options.Create(new AgentPlatformSettings());
         var store = new PendingAgentOperationStore(db, settings);
         var bridge = Substitute.For<IAgentStepUpAuthorizationBridge>();
         bridge.GetRequiredConfirmationAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
@@ -146,7 +146,7 @@ public class AccountChangeSetRegressionTests
         ownership.GetDenialReasonAsync(Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<JsonElement>(), Arg.Any<CancellationToken>())
             .Returns((string?)null);
         var executor = new AgentOperationExecutor(catalog,
-            new AgentPolicyEvaluator(db, catalog, store, bridge, settings, new FeatureFlagService(db, cache, Substitute.For<IHostEnvironment>(), new ConfigurationBuilder().Build())),
+            new AgentPolicyEvaluator(db, catalog, store, bridge, new FeatureFlagService(db, cache, Substitute.For<IHostEnvironment>(), new ConfigurationBuilder().Build())),
             Substitute.For<IAgentAuditService>(), ownership, bridge,
             registry, previewer, store, new UnitOfWork(db, new DatabaseConnectionSettings()),
             NullLogger<AgentOperationExecutor>.Instance);

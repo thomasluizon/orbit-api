@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Linq.Expressions;
 using System.Text.Json;
 using FluentAssertions;
 using NSubstitute;
@@ -24,7 +25,7 @@ public class QueryGoalsToolTests
     {
         _tool = new QueryGoalsTool(_goalRepository, _userDateService, _goalProgressReadSyncer);
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
-        _goalProgressReadSyncer.ComputeFreshValuesAsync(Arg.Any<Guid>(), Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
+        _goalProgressReadSyncer.ComputeFreshValuesForGoalsAsync(Arg.Any<Guid>(), Arg.Any<DateOnly>(), Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<CancellationToken>())
             .Returns(new Dictionary<Guid, int>());
     }
 
@@ -39,11 +40,7 @@ public class QueryGoalsToolTests
             "Train for race day",
             Type: GoalType.Standard)).Value;
 
-        _goalRepository.FindAsync(
-            Arg.Any<System.Linq.Expressions.Expression<Func<Goal, bool>>>(),
-            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>>(),
-            Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<IReadOnlyList<Goal>>([activeGoal]));
+        SetupGoals([activeGoal]);
 
         var result = await Execute("{}");
 
@@ -57,11 +54,7 @@ public class QueryGoalsToolTests
     {
         var goal = Goal.Create(UserId, "Run", 10.5m, "miles").Value;
         goal.UpdateProgress(3.5m);
-        _goalRepository.FindAsync(
-            Arg.Any<System.Linq.Expressions.Expression<Func<Goal, bool>>>(),
-            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>>(),
-            Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<IReadOnlyList<Goal>>([goal]));
+        SetupGoals([goal]);
         var previousCulture = CultureInfo.CurrentCulture;
 
         try
@@ -86,11 +79,7 @@ public class QueryGoalsToolTests
         var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Morning run", FrequencyUnit.Day, 1, DueDate: Today)).Value;
         goal.AddHabit(habit);
-        _goalRepository.FindAsync(
-            Arg.Any<System.Linq.Expressions.Expression<Func<Goal, bool>>>(),
-            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>>(),
-            Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<IReadOnlyList<Goal>>([goal]));
+        SetupGoals([goal]);
         var previousCulture = CultureInfo.CurrentCulture;
 
         try
@@ -117,11 +106,7 @@ public class QueryGoalsToolTests
             42,
             "km")).Value;
 
-        _goalRepository.FindAsync(
-            Arg.Any<System.Linq.Expressions.Expression<Func<Goal, bool>>>(),
-            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>>(),
-            Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<IReadOnlyList<Goal>>([activeGoal]));
+        SetupGoals([activeGoal]);
 
         var result = await Execute("""{"search":"books"}""");
 
@@ -136,20 +121,40 @@ public class QueryGoalsToolTests
             UserId, "Avoid doom scrolling", 7, "days", Type: GoalType.Streak)).Value;
 
         _goalProgressReadSyncer
-            .ComputeFreshValuesAsync(UserId, Today, Arg.Any<CancellationToken>())
+            .ComputeFreshValuesForGoalsAsync(UserId, Today, Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<CancellationToken>())
             .Returns(new Dictionary<Guid, int> { [streakGoal.Id] = 4 });
 
-        _goalRepository.FindAsync(
-            Arg.Any<System.Linq.Expressions.Expression<Func<Goal, bool>>>(),
-            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>>(),
-            Arg.Any<CancellationToken>())
-            .Returns(_ => Task.FromResult<IReadOnlyList<Goal>>([streakGoal]));
+        SetupGoals([streakGoal]);
 
         var result = await Execute("{}");
 
         result.Success.Should().BeTrue();
-        await _goalProgressReadSyncer.Received(1).ComputeFreshValuesAsync(UserId, Today, Arg.Any<CancellationToken>());
+        await _goalProgressReadSyncer.Received(1).ComputeFreshValuesForGoalsAsync(UserId, Today, Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<CancellationToken>());
         result.EntityName.Should().Contain("4/7 days");
+    }
+
+    private void SetupGoals(IReadOnlyList<Goal> goals)
+    {
+        _goalRepository.FindAsync(Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.ArgAt<Func<IQueryable<Goal>, IQueryable<Goal>>>(1)(
+                goals.Where(call.ArgAt<Expression<Func<Goal, bool>>>(0).Compile()).AsQueryable()).ToArray());
+        _goalRepository.CountAsync(Arg.Any<Expression<Func<Goal, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => goals.Count(call.ArgAt<Expression<Func<Goal, bool>>>(0).Compile()));
+    }
+
+    [Fact]
+    public async Task LimitTen_RecomputesOnlyTheReturnedPage()
+    {
+        var goals = Enumerable.Range(0, 100).Select(i => Goal.Create(new Goal.CreateGoalParams(UserId, "Goal " + i, 10, "times")).Value).ToArray();
+        SetupGoals(goals);
+        var result = await Execute("{\"offset\":10,\"limit\":10}");
+        var card = (Orbit.Application.Chat.GoalListCard)result.Payload!;
+        card.Items.Should().HaveCount(10);
+        card.TotalCount.Should().Be(100);
+        var ids = card.Items.Select(item => Guid.Parse(item.Id)).ToHashSet();
+        await _goalProgressReadSyncer.Received(1).ComputeFreshValuesForGoalsAsync(UserId, Today,
+            Arg.Is<IReadOnlyCollection<Guid>>(values => values.Count == 10 && values.All(ids.Contains)), Arg.Any<CancellationToken>());
     }
 
     private async Task<ToolResult> Execute(string json)

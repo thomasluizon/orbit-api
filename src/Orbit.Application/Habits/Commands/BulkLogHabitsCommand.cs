@@ -56,25 +56,18 @@ public partial class BulkLogHabitsCommandHandler(
     {
         var today = await services.UserDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         var weekStartDay = await services.UserDateService.GetUserWeekStartDayAsync(request.UserId, cancellationToken);
-        var results = new List<BulkLogItemResult>();
-        Exception? firstItemError = null;
-        var itemErrorCount = 0;
-        var previousStreak = 0;
-        var currentStreak = 0;
-
-        var habitMap = await BulkHabitLoader.LoadHabitsWithRecentLogsAsync(
-            habitRepository, request.Items.Select(i => i.HabitId), request.UserId, today, cancellationToken);
-        var dueDateResolution = await HabitDueDateResolutionLoader.LoadAsync(request.UserId,
-            habitLogRepository,
-            habitMap.Values,
-            today.AddDays(-AppConstants.MaxReadRangeDays),
-            cancellationToken);
-
         /** A completion log and its due-date advance are both inputs a streak repair reads. */
-        await HabitCeilingLock.ExecuteAsync(unitOfWork, request.UserId, async ct =>
+        var attempt = await HabitCeilingLock.ExecuteAsync(unitOfWork, request.UserId, async ct =>
         {
-            previousStreak = (await services.UserStreakService.CalculateAsync(request.UserId, ct))?.CurrentStreak ?? 0;
-            currentStreak = previousStreak;
+            var results = new List<BulkLogItemResult>();
+            Exception? firstItemError = null;
+            var itemErrorCount = 0;
+            var habitMap = await BulkHabitLoader.LoadHabitsWithRecentLogsAsync(
+                habitRepository, request.Items.Select(i => i.HabitId), request.UserId, today, ct);
+            var dueDateResolution = await HabitDueDateResolutionLoader.LoadAsync(request.UserId,
+                habitLogRepository, habitMap.Values, today.AddDays(-AppConstants.MaxReadRangeDays), ct);
+            var previousStreak = (await services.UserStreakService.CalculateAsync(request.UserId, ct))?.CurrentStreak ?? 0;
+            var currentStreak = previousStreak;
             var derivedParentIds = new HashSet<Guid>();
 
             for (int i = 0; i < request.Items.Count; i++)
@@ -152,14 +145,14 @@ public partial class BulkLogHabitsCommandHandler(
                     async c => currentStreak = (await services.UserStreakService.RecalculateAsync(
                         request.UserId, cancellationToken: c))?.CurrentStreak ?? 0,
                     ct);
-
             }
+            return (Result: new BulkLogResult(results, previousStreak, currentStreak), FirstItemError: firstItemError, ItemErrorCount: itemErrorCount);
         }, cancellationToken);
 
-        if (firstItemError is not null) LogBulkLogItemError(logger, firstItemError, itemErrorCount);
+        if (attempt.FirstItemError is { } error) LogBulkLogItemError(logger, error, attempt.ItemErrorCount);
         CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, today, preserveDailyNarrative: true);
 
-        return Result.Success(new BulkLogResult(results, previousStreak, currentStreak));
+        return Result.Success(attempt.Result);
     }
 
     private async Task<BulkLogItemResult> ProcessLogItem(

@@ -29,7 +29,7 @@ public sealed class ConversationTurnRecorder(
 
     public async Task<bool> RecordAsync(ConversationTurnCapture turn, CancellationToken cancellationToken = default)
     {
-        if (!(await flags.GetEnabledKeysForUserAsync(turn.UserId, cancellationToken)).Contains(FeatureFlagKeys.AstraConversationRecording))
+        if (!(await flags.GetEnabledKeysForUserAsync(turn.UserId, cancellationToken, forceRefresh: true)).Contains(FeatureFlagKeys.AstraConversationRecording))
             return false;
         await new ConversationTurnCaptureValidator().ValidateAndThrowAsync(turn, cancellationToken);
         var conversationId = turn.ConversationId ?? turn.TurnId;
@@ -62,7 +62,7 @@ public sealed class ConversationTurnRecorder(
         return work.ExecuteInTransactionAsync(async token =>
         {
             await work.AcquireUserRowLockAsync(turn.UserId, token);
-            if (!(await flags.GetEnabledKeysForUserAsync(turn.UserId, token)).Contains(FeatureFlagKeys.AstraConversationRecording))
+            if (!(await flags.GetEnabledKeysForUserAsync(turn.UserId, token, forceRefresh: true)).Contains(FeatureFlagKeys.AstraConversationRecording))
                 return false;
             await new ConversationTurnCaptureValidator().ValidateAndThrowAsync(turn, token);
             if (!encryption.IsConfigured || !db.HasEncryptionService)
@@ -78,8 +78,7 @@ public sealed class ConversationTurnRecorder(
             if (await query.AnyAsync(row => row.TurnId == turn.TurnId, token))
                 return true;
             var order = (await query.MaxAsync(row => row.TurnOrder, token) ?? 0) + 1;
-            var resultsJson = JsonSerializer.Serialize(turn.ToolResults ?? [], JsonOptions);
-            var summaries = resultsJson.Length <= 12_000 ? resultsJson : "[" + ModelToolPayload.Fit(resultsJson, 12_000).ToJsonString() + "]";
+            var summaries = SerializeToolResults(turn.ToolResults);
             var previews = await db.PendingAgentOperations.AsNoTracking().Where(item => item.UserId == turn.UserId
                 && item.ConversationId == conversationId && item.CreatedAtUtc == turn.CreatedAtUtc
                 && item.PreviewFingerprint != null).OrderBy(item => item.Id).ToListAsync(token);
@@ -89,13 +88,20 @@ public sealed class ConversationTurnRecorder(
                 imageObjectKey: imageKey, imageContentType: imageKey is null ? null : turn.ImageMimeType, imageSha256: imageSha256);
             var assistantRow = ConversationTurn.Create(turn.UserId, turn.TurnId, "assistant", turn.CreatedAtUtc,
                 turn.UsedModel ? aiSettings.Value.Model : null, turn.AssistantContent, turn.ToolCallsJson, turn.ResponseJson,
-                conversationId, order + 1, summaries, outcomes);
+                conversationId, order + 1, summaries, outcomes,
+                modelContextJson: BuildModelContext(turn.AssistantContent, turn.ResponseJson, summaries, outcomes));
             if (userRow.IsFailure || assistantRow.IsFailure)
                 throw new InvalidOperationException(userRow.IsFailure ? userRow.Error : assistantRow.Error);
             db.ConversationTurns.AddRange(userRow.Value, assistantRow.Value);
             await work.SaveChangesAsync(token);
             return true;
         }, cancellationToken);
+    }
+
+    private static string SerializeToolResults(IReadOnlyList<AiToolCallResult>? results)
+    {
+        var json = JsonSerializer.Serialize(results ?? [], JsonOptions);
+        return json.Length <= 12_000 ? json : "[" + ModelToolPayload.Fit(json, 12_000).ToJsonString() + "]";
     }
 
     private static bool CanRecord(User? user, DateTime startedAtUtc) =>
@@ -139,14 +145,7 @@ public sealed class ConversationTurnRecorder(
             var content = row.Content ?? string.Empty;
             if (row.Role == "assistant")
             {
-                var context = JsonSerializer.Serialize(new
-                {
-                    assistant_text = row.Content,
-                    assistant_parts = row.ResponseJson is null ? null : ModelToolPayload.Fit(row.ResponseJson, 4_000),
-                    tool_results = JsonSerializer.Deserialize<JsonElement>(row.ToolResultsJson),
-                    preview_outcomes = JsonSerializer.Deserialize<JsonElement>(row.PreviewOutcomesJson)
-                }, JsonOptions);
-                content = ModelToolPayload.Fit(context, 12_000).ToJsonString();
+                content = row.ModelContextJson ?? BuildModelContext(row.Content, row.ResponseJson, row.ToolResultsJson, row.PreviewOutcomesJson);
             }
             byte[]? bytes = null;
             if (ReferenceEquals(row, image))
@@ -160,6 +159,18 @@ public sealed class ConversationTurnRecorder(
             messages.Add(new(row.Role, content) { ServerOwned = true, ImageData = bytes, ImageMimeType = row.ImageContentType });
         }
         return Result.Success(new StoredConversationHistory(rows.Count > 0, messages));
+    }
+
+    private static string BuildModelContext(string? content, string? response, string results, string previews)
+    {
+        var context = JsonSerializer.Serialize(new
+        {
+            assistant_text = content,
+            assistant_parts = response is null ? null : ModelToolPayload.Fit(response, 4_000),
+            tool_results = JsonSerializer.Deserialize<JsonElement>(results),
+            preview_outcomes = JsonSerializer.Deserialize<JsonElement>(previews)
+        }, JsonOptions);
+        return ModelToolPayload.Fit(context, 12_000).ToJsonString();
     }
 
     public async Task<ConversationPage?> GetLatestAsync(Guid userId, Guid? conversationId, long? beforeOrder, int pageSize,

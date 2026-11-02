@@ -568,7 +568,7 @@ public partial class GamificationService(
     {
         if (user.HasProAccess) return true;
         var enabledFlags = await featureFlagService.GetEnabledKeysForUserAsync(user.Id, ct);
-        return enabledFlags.Contains(FeatureFlagKeys.GamificationFreeTier);
+        return GamificationAccess.IsUnlocked(user, enabledFlags);
     }
 
     private Task AwardXpAsync(

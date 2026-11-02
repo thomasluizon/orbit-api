@@ -1,5 +1,4 @@
 using System.Reflection;
-using System.Text.Json;
 using FluentAssertions;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Models;
@@ -31,6 +30,18 @@ public class AgentSessionAndSyncEntityTests
         state.VerifiedAtUtc.Should().NotBeNull();
         state.CanVerify(3, expiresAtUtc.AddMinutes(-1)).Should().BeFalse();
         state.IsExpired(expiresAtUtc.AddMinutes(1)).Should().BeTrue();
+    }
+
+    [Fact]
+    public void CanVerify_FalseAfterAttemptLimitOrAtExpiry()
+    {
+        var expiry = DateTime.UtcNow.AddMinutes(5);
+        var state = AgentStepUpChallengeState.Create(Guid.NewGuid(), Guid.NewGuid(), "hash", expiry);
+        state.CanVerify(3, expiry.AddTicks(-1)).Should().BeTrue();
+        state.CanVerify(3, expiry).Should().BeFalse();
+        state.CanVerify(3, expiry.AddTicks(1)).Should().BeFalse();
+        for (var i = 0; i < 3; i++) state.RecordFailedAttempt();
+        state.CanVerify(3, expiry.AddTicks(-1)).Should().BeFalse();
     }
 
     [Fact]
@@ -114,67 +125,8 @@ public class AgentSessionAndSyncEntityTests
     }
 
     [Fact]
-    public void AgentContracts_RecordsAndCatalogConstants_AreAccessible()
+    public void AgentScopeAndCapabilityConstants_AreUniqueAndNonBlank()
     {
-        var requestSchema = Parse("""{"type":"object"}""");
-        var responseSchema = Parse("""{"type":"object"}""");
-
-        var capability = new AgentCapability(
-            AgentCapabilityIds.HabitsWrite,
-            "Habits Write",
-            "Write habits",
-            "habits",
-            AgentScopes.WriteHabits,
-            AgentRiskClass.Low,
-            true,
-            false,
-            AgentConfirmationRequirement.FreshConfirmation,
-            ChatToolNames: ["create_habit"]);
-        var operation = new AgentOperation(
-            "create_habit",
-            "Create habit",
-            "Create a habit",
-            capability.Id,
-            AgentRiskClass.Low,
-            AgentConfirmationRequirement.FreshConfirmation,
-            true,
-            true,
-            requestSchema,
-            responseSchema);
-        var surface = new AppSurface("today", "Today", "Today surface", ["Open Today"], ["Pinned"], [capability.Id], ["HabitsController.Get"]);
-        var field = new UserDataFieldDescriptor("title", "Habit title", true, true);
-        var catalog = new UserDataCatalogEntry("habits", "Habits", "Habit catalog", "medium", "keep", true, true, [field]);
-        var pendingOperation = new PendingAgentOperation(Guid.NewGuid(), capability.Id, "Create habit", "Create a new habit", AgentRiskClass.High, AgentConfirmationRequirement.StepUp, DateTime.UtcNow.AddMinutes(10));
-        var confirmation = new PendingAgentOperationConfirmation(pendingOperation.Id, "agc_token", DateTime.UtcNow.AddMinutes(5));
-        var execution = new PendingAgentOperationExecution(pendingOperation.Id, capability.Id, operation.Id, requestSchema, AgentExecutionSurface.Chat, AgentConfirmationRequirement.StepUp);
-        var challenge = new AgentStepUpChallenge(Guid.NewGuid(), pendingOperation.Id, DateTime.UtcNow.AddMinutes(10));
-        var evaluationContext = new AgentPolicyEvaluationContext(capability.Id, Guid.NewGuid(), AgentExecutionSurface.Mcp, AgentAuthMethod.Jwt, [AgentScopes.WriteHabits], "execute_agent_operation_v2", "Create habit");
-        var policyDecision = new AgentPolicyDecision(AgentPolicyDecisionStatus.ConfirmationRequired, capability, PendingOperation: pendingOperation);
-        var executeRequest = new AgentExecuteOperationRequest(Guid.NewGuid(), operation.Id, requestSchema, AgentExecutionSurface.Mcp, AgentAuthMethod.Jwt, [AgentScopes.WriteHabits], ConfirmationToken: confirmation.ConfirmationToken);
-        var operationResult = new AgentOperationResult(operation.Id, "execute_agent_operation_v2", AgentRiskClass.High, AgentConfirmationRequirement.StepUp, AgentOperationStatus.PendingConfirmation, PendingOperationId: pendingOperation.Id, Payload: new { habitId = Guid.NewGuid() });
-        var denial = new AgentPolicyDenial(operation.Id, "execute_agent_operation_v2", AgentRiskClass.High, AgentConfirmationRequirement.StepUp, "denied");
-        var executeResponse = new AgentExecuteOperationResponse(operationResult, pendingOperation, denial);
-        var clientContext = new AgentClientContext("ios", "en-US", "24h", "today", true);
-        var snapshot = new AgentContextSnapshot("pro", "en-US", "UTC", true, 1, "dark", true, true, "Idle", ["beta"], ["Health"], ["Morning"], ["Run"], ["Lose weight"], clientContext);
-        var auditEntry = new AgentAuditEntry(Guid.NewGuid(), capability.Id, "execute_agent_operation_v2", AgentExecutionSurface.Mcp, AgentAuthMethod.Jwt, AgentRiskClass.High, AgentPolicyDecisionStatus.Allowed, AgentOperationStatus.Succeeded, Summary: "Created habit");
-
-        capability.ChatToolNames.Should().Contain("create_habit");
-        operation.RequestSchema.GetProperty("type").GetString().Should().Be("object");
-        surface.HowToSteps.Should().ContainSingle();
-        catalog.Fields.Should().ContainSingle().Which.Name.Should().Be("title");
-        pendingOperation.ConfirmationRequirement.Should().Be(AgentConfirmationRequirement.StepUp);
-        confirmation.ConfirmationToken.Should().Be("agc_token");
-        execution.Surface.Should().Be(AgentExecutionSurface.Chat);
-        challenge.PendingOperationId.Should().Be(pendingOperation.Id);
-        evaluationContext.GrantedScopes.Should().Contain(AgentScopes.WriteHabits);
-        policyDecision.PendingOperation.Should().Be(pendingOperation);
-        executeRequest.ConfirmationToken.Should().Be("agc_token");
-        operationResult.PendingOperationId.Should().Be(pendingOperation.Id);
-        executeResponse.PolicyDenial.Should().Be(denial);
-        clientContext.Platform.Should().Be("ios");
-        snapshot.ClientContext.Should().Be(clientContext);
-        auditEntry.Summary.Should().Be("Created habit");
-
         AgentScopes.ClaudeDefaultScopes.Should().Contain(AgentScopes.ChatInteract);
         AgentScopes.ClaudeDefaultScopes.Should().OnlyHaveUniqueItems();
 
@@ -197,8 +149,4 @@ public class AgentSessionAndSyncEntityTests
         AgentScopes.All.Should().BeEquivalentTo(scopes);
     }
 
-    private static JsonElement Parse(string json)
-    {
-        return JsonDocument.Parse(json).RootElement.Clone();
-    }
 }

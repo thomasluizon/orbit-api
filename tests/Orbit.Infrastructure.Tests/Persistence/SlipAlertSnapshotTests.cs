@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -9,6 +10,7 @@ using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 using Orbit.Infrastructure.Services;
+using Orbit.Infrastructure.Persistence;
 
 namespace Orbit.Infrastructure.Tests.Persistence;
 
@@ -63,5 +65,63 @@ public class SlipAlertSnapshotTests
     {
         public DateTimeOffset Now { get; set; } = initial;
         public override DateTimeOffset GetUtcNow() => Now;
+    }
+
+    [Fact]
+    public async Task CachedTick_RechecksTrialExpiryAndReloadsAfterProRenewal()
+    {
+        var counter = new CountingDbCommandInterceptor();
+        using var factory = new SqliteOrbitDbContextFactory(counter);
+        await AssertCachedAccessCheck(factory.Context, factory.CreateContext, counter);
+    }
+
+    [PostgresFact]
+    public Task CachedTick_PostgresRechecksTrialExpiryAndReloadsAfterProRenewal() =>
+        PostgresTestDatabase.WithDatabase(async db =>
+        {
+            var counter = new CountingDbCommandInterceptor();
+            await AssertCachedAccessCheck(db, () => new OrbitDbContext(new DbContextOptionsBuilder<OrbitDbContext>()
+                .UseNpgsql(db.Database.GetConnectionString()).AddInterceptors(counter).Options), counter);
+        });
+
+    private static async Task AssertCachedAccessCheck(OrbitDbContext db, Func<OrbitDbContext> createContext,
+        CountingDbCommandInterceptor counter)
+    {
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var user = User.Create("Slip", "slip-renewal@example.test").Value;
+        user.SetTimeZone("UTC");
+        user.StartTrial(today.ToDateTime(new TimeOnly(21, 0), DateTimeKind.Utc));
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, user.Id, "Slip", FrequencyUnit.Day, 1,
+            today.AddDays(-28), IsBadHabit: true, SlipAlertEnabled: true)).Value;
+        db.Users.Add(user);
+        db.Habits.Add(habit);
+        for (var weeks = 1; weeks <= 3; weeks++)
+            db.HabitLogs.Add(HabitLog.FromScheduleRead(Guid.NewGuid(), habit.Id, today.AddDays(-7 * weeks), 1, 0,
+                today.AddDays(-7 * weeks).ToDateTime(new TimeOnly(23, 0), DateTimeKind.Utc)));
+        await db.SaveChangesAsync();
+        var push = Substitute.For<IPushNotificationService>();
+        var messages = Substitute.For<ISlipAlertMessageService>();
+        messages.GenerateMessageAsync(Arg.Any<string>(), Arg.Any<DayOfWeek>(), Arg.Any<int?>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(("Alert", "Body")));
+        using var services = new ServiceCollection().AddScoped(_ => createContext())
+            .AddSingleton(push).AddSingleton(messages).BuildServiceProvider();
+        var clock = new MutableClock(today.ToDateTime(new TimeOnly(20, 59), DateTimeKind.Utc));
+        var service = new SlipAlertSchedulerService(services.GetRequiredService<IServiceScopeFactory>(),
+            NullLogger<SlipAlertSchedulerService>.Instance, new ConfigurationBuilder().Build(), clock);
+        await service.CheckAndSendAlerts(default);
+        counter.Reset();
+        clock.Now = clock.Now.AddMinutes(2);
+        await service.CheckAndSendAlerts(default);
+        counter.SelectCommandCount.Should().Be(1);
+        await messages.DidNotReceive().GenerateMessageAsync(Arg.Any<string>(), Arg.Any<DayOfWeek>(), Arg.Any<int?>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await push.DidNotReceive().SendManyAsync(Arg.Any<IReadOnlyList<PushDelivery>>(), Arg.Any<CancellationToken>());
+
+        user.GrantLifetimePro();
+        await db.SaveChangesAsync();
+        counter.Reset();
+        await service.CheckAndSendAlerts(default);
+        counter.SelectCommandCount.Should().Be(5);
+        await push.Received(1).SendManyAsync(Arg.Is<IReadOnlyList<PushDelivery>>(items =>
+            items.Count == 1 && items[0].UserId == user.Id), Arg.Any<CancellationToken>());
     }
 }

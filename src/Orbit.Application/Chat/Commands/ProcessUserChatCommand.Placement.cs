@@ -22,7 +22,7 @@ public partial class ProcessUserChatCommandHandler
         var previewer = execution.PendingOperationPreviewer ?? new PendingOperationChangePreviewer(
             data.HabitRepository, data.GoalRepository, data.TagRepository, execution.UserDateService, ai.ToolRegistry);
         var candidates = new List<(PendingAgentOperationExecution Stored, PendingOperationChangePreview Preview)>();
-        foreach (var pending in execution.PendingOperationStore.GetAwaiting(request.UserId)
+        foreach (var pending in (await execution.PendingOperationStore.GetAwaitingAsync(request.UserId, ct))
             .Where(pending => pending.Surface == AgentExecutionSurface.Chat && !pending.RequiresReproposal))
         {
             var preview = await previewer.PreviewAsync(request.UserId, pending.OperationId, pending.Arguments, ct, request.ClientContext);

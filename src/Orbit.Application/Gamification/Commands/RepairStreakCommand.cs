@@ -75,7 +75,7 @@ public class RepairStreakCommandHandler(
         var enabledFlags = await featureFlagService.GetEnabledKeysForUserAsync(
             request.UserId,
             cancellationToken);
-        var unlocked = user.HasProAccess || enabledFlags.Contains(FeatureFlagKeys.GamificationFreeTier);
+        var unlocked = GamificationAccess.IsUnlocked(user, enabledFlags);
         if (!unlocked)
             return Result.PayGateFailure(ErrorMessages.ProFeature.Message);
 

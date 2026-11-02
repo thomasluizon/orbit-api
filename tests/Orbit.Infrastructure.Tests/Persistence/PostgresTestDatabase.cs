@@ -58,3 +58,12 @@ internal sealed class PostgresFactAttribute : FactAttribute
             Skip = $"Set {PostgresTestDatabase.ConnectionVariable} to a disposable PostgreSQL server with database creation permission.";
     }
 }
+
+internal sealed class PostgresTheoryAttribute : TheoryAttribute
+{
+    public PostgresTheoryAttribute()
+    {
+        if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(PostgresTestDatabase.ConnectionVariable)))
+            Skip = $"Set {PostgresTestDatabase.ConnectionVariable} to a disposable PostgreSQL server with database creation permission.";
+    }
+}

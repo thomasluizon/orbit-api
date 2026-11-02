@@ -30,6 +30,8 @@ public class OrbitDbContext : DbContext
     /// </summary>
     public bool HasEncryptionService => _encryptionService is not null;
 
+    internal string EncryptConversationValue(string value) => _encryptionService?.Encrypt(value) ?? value;
+
     /// <summary>Keeps database batch cleanup on the server deadline when the caller disconnects.</summary>
     internal CancellationToken? TransactionCompletionToken { get; set; }
 
@@ -177,6 +179,7 @@ public class OrbitDbContext : DbContext
             entity.HasIndex(turn => new { turn.TurnId, turn.Role }).IsUnique();
             entity.HasIndex(turn => new { turn.UserId, turn.ConversationId, turn.TurnOrder }).IsUnique();
             entity.HasIndex(turn => turn.ConversationId);
+            entity.HasIndex(turn => new { turn.ConversationId, turn.UserId });
             entity.Property(turn => turn.ImageObjectKey).HasMaxLength(300);
             entity.Property(turn => turn.ImageContentType).HasMaxLength(100);
             entity.Property(turn => turn.ImageSha256).HasMaxLength(64);
@@ -185,6 +188,7 @@ public class OrbitDbContext : DbContext
             {
                 entity.Property(turn => turn.Content).HasConversion(nullableEncConverter);
                 entity.Property(turn => turn.ResponseJson).HasConversion(nullableEncConverter);
+                entity.Property(turn => turn.ModelContextJson).HasConversion(nullableEncConverter);
             }
             if (encConverter is not null)
             {
@@ -728,6 +732,7 @@ public class OrbitDbContext : DbContext
             entity.Property(f => f.PlanRequirement).HasMaxLength(50);
 
             entity.HasData(
+                new { Key = "gamification_free_tier", Enabled = false, PlanRequirement = (string?)null, Description = (string?)"Unlock gamification for free accounts", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
                 new { Key = "astra_block_first", Enabled = false, PlanRequirement = (string?)null, Description = (string?)"Compose negotiated Astra answers from successful typed results", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
                 new { Key = "astra_eval_trace", Enabled = false, PlanRequirement = (string?)null, Description = (string?)"Opt-in tool-call traces for Astra evaluation accounts", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
                 new { Key = "astra_eval_unmetered", Enabled = false, PlanRequirement = (string?)null, Description = (string?)"Staging-only allowance exemption for Astra evaluation accounts", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },

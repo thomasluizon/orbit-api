@@ -16,6 +16,7 @@ public sealed class ConversationTurn : Entity
     public Guid? ConversationId { get; private set; }
     public long? TurnOrder { get; private set; }
     public string ToolResultsJson { get; private set; } = "[]";
+    public string? ModelContextJson { get; private set; }
     public string PreviewOutcomesJson { get; private set; } = "[]";
     public string? ImageObjectKey { get; private set; }
     public string? ImageContentType { get; private set; }
@@ -27,7 +28,7 @@ public sealed class ConversationTurn : Entity
         DateTime createdAtUtc, string? model, string? content, string toolCallsJson, string? responseJson = null,
         Guid? conversationId = null, long? turnOrder = null, string toolResultsJson = "[]",
         string previewOutcomesJson = "[]", string? imageObjectKey = null, string? imageContentType = null,
-        string? imageSha256 = null)
+        string? imageSha256 = null, string? modelContextJson = null)
     {
         if (userId == Guid.Empty || turnId == Guid.Empty)
             return Result.Failure<ConversationTurn>("A user and turn identifier are required.");
@@ -53,6 +54,12 @@ public sealed class ConversationTurn : Entity
                 using var array = JsonDocument.Parse(json);
                 if (array.RootElement.ValueKind != JsonValueKind.Array)
                     return Result.Failure<ConversationTurn>("Conversation results must be JSON arrays.");
+            }
+            if (modelContextJson is not null)
+            {
+                using var modelContext = JsonDocument.Parse(modelContextJson);
+                if (role != "assistant" || modelContextJson.Length > 12_000 || modelContext.RootElement.ValueKind != JsonValueKind.Object)
+                    return Result.Failure<ConversationTurn>("Model context must be a bounded assistant object.");
             }
             if (responseJson is not null)
             {
@@ -81,7 +88,8 @@ public sealed class ConversationTurn : Entity
             PreviewOutcomesJson = previewOutcomesJson,
             ImageObjectKey = imageObjectKey,
             ImageContentType = imageContentType,
-            ImageSha256 = imageSha256
+            ImageSha256 = imageSha256,
+            ModelContextJson = modelContextJson
         });
     }
 
@@ -106,6 +114,7 @@ public sealed class ConversationTurn : Entity
         previews[index] = new(pendingOperationId, outcome, arguments, revision);
         var json = JsonSerializer.Serialize(previews);
         PreviewOutcomesJson = json;
+        ModelContextJson = null;
     }
 }
 

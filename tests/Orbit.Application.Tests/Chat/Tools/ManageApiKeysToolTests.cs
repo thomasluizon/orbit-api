@@ -21,18 +21,22 @@ public class ManageApiKeysToolTests
         _tool = new ManageApiKeysTool(_mediator);
     }
 
-    [Fact]
-    public async Task ExecuteAsync_CreateWithInvalidExpiry_ReturnsValidationError()
+    [Theory]
+    [InlineData("not-a-timestamp")]
+    [InlineData("2026-04-20")]
+    public async Task ExecuteAsync_CreateWithInvalidExpiry_ReturnsValidationError(string expiry)
     {
-        var result = await Execute("""{"action":"create","name":"Claude","expires_at_utc":"not-a-timestamp"}""");
+        var result = await Execute($$"""{"action":"create","name":"Claude","expires_at_utc":"{{expiry}}"}""");
 
         result.Success.Should().BeFalse();
         result.Error.Should().Be("expires_at_utc must be a valid ISO-8601 UTC timestamp.");
         await _mediator.DidNotReceiveWithAnyArgs().Send(default!, default);
     }
 
-    [Fact]
-    public async Task ExecuteAsync_CreateWithValidExpiry_PassesParsedUtcTimestampToCommand()
+    [Theory]
+    [InlineData("2026-04-20T18:00:00Z")]
+    [InlineData("2026-04-20T15:00:00-03:00")]
+    public async Task ExecuteAsync_CreateWithValidExpiry_PassesParsedUtcTimestampToCommand(string expiry)
     {
         var expectedExpiry = DateTime.Parse(
             "2026-04-20T18:00:00Z",
@@ -50,7 +54,7 @@ public class ManageApiKeysToolTests
                 expectedExpiry,
                 DateTime.UtcNow)));
 
-        var result = await Execute("""{"action":"create","name":"Claude","expires_at_utc":"2026-04-20T18:00:00Z"}""");
+        var result = await Execute($$"""{"action":"create","name":"Claude","expires_at_utc":"{{expiry}}"}""");
 
         result.Success.Should().BeTrue();
         await _mediator.Received(1).Send(
