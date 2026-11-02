@@ -2,6 +2,7 @@ using FluentAssertions;
 using NSubstitute;
 using Orbit.Application.Auth.Commands;
 using Orbit.Domain.Common;
+using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Tests.Commands.Auth;
@@ -13,7 +14,9 @@ public class LogoutAllSessionsCommandHandlerTests
 
     public LogoutAllSessionsCommandHandlerTests()
     {
-        _handler = new LogoutAllSessionsCommandHandler(_authSessionService);
+        var keys = Substitute.For<IGenericRepository<ApiKey>>();
+        keys.FindTrackedAsync(Arg.Any<System.Linq.Expressions.Expression<Func<ApiKey, bool>>>(), Arg.Any<CancellationToken>()).Returns(Array.Empty<ApiKey>());
+        _handler = new LogoutAllSessionsCommandHandler(_authSessionService, keys, Substitute.For<IUnitOfWork>());
     }
 
     [Fact]

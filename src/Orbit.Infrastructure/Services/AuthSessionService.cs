@@ -17,7 +17,7 @@ public class AuthSessionService(
     IGenericRepository<User> userRepository,
     ITokenService tokenService,
     IUnitOfWork unitOfWork,
-    IOptions<JwtSettings> jwtSettings) : IAuthSessionService
+    IOptions<JwtSettings> jwtSettings, AuthValidationCache? validationCache = null) : IAuthSessionService
 {
     private const int MaxRevokeAllAttempts = 3;
     private const int MaxRevokeSessionAttempts = 3;
@@ -62,11 +62,17 @@ public class AuthSessionService(
             s => s.TokenHash == tokenHash,
             cancellationToken: cancellationToken);
 
-        if (session is null || !session.CanUse(nowUtc))
+        if (session is null)
+        {
+            await RevokeSessionAsync(refreshToken, cancellationToken);
+            return Result.Failure<SessionTokens>(ErrorMessages.InvalidSession);
+        }
+
+        if (!session.CanUse(nowUtc))
             return Result.Failure<SessionTokens>(ErrorMessages.InvalidSession);
 
         var user = await userRepository.GetByIdAsync(session.UserId, cancellationToken);
-        if (user is null)
+        if (user is null || user.IsDeactivated)
             return Result.Failure<SessionTokens>(ErrorMessages.InvalidSession);
 
         var newRefreshToken = GenerateRefreshToken();
@@ -109,6 +115,7 @@ public class AuthSessionService(
                 s => s.TokenHash == tokenHash,
                 cancellationToken: cancellationToken);
 
+            var reused = session is null;
             if (session is null)
             {
                 var previousToken = await refreshTokenRepository.FindOneTrackedAsync(
@@ -125,7 +132,8 @@ public class AuthSessionService(
             try
             {
                 await unitOfWork.SaveChangesAsync(cancellationToken);
-                return Result.Success();
+                validationCache?.InvalidateUser(session.UserId);
+                return reused ? Result.Failure(ErrorMessages.InvalidSession) : Result.Success();
             }
             catch (DbUpdateConcurrencyException)
             {
@@ -158,6 +166,7 @@ public class AuthSessionService(
             try
             {
                 await unitOfWork.SaveChangesAsync(cancellationToken);
+                validationCache?.InvalidateUser(userId);
                 return Result.Success();
             }
             catch (DbUpdateConcurrencyException)
@@ -184,14 +193,24 @@ public class AuthSessionService(
 
     public async Task<bool> IsSessionActiveAsync(Guid sessionId, Guid userId, CancellationToken cancellationToken = default)
     {
+        var cacheKey = ("active-session", sessionId, userId);
+        if (validationCache?.TryGet<ActiveSession>(cacheKey, out _) == true)
+            return true;
+        var epoch = validationCache?.Epoch ?? 0;
         var nowAtUtc = DateTime.UtcNow;
-        return await userSessionRepository.AnyAsync(
+        var active = await userSessionRepository.ProjectAsync(
             session => session.Id == sessionId
                 && session.UserId == userId
+                && session.User != null && !session.User.IsDeactivated
                 && session.RevokedAtUtc == null
                 && (session.ExpiresAtUtc == null || session.ExpiresAtUtc > nowAtUtc),
-            cancellationToken);
+            query => query.Select(session => new ActiveSession(session.ExpiresAtUtc)), cancellationToken);
+        if (active.Count == 1)
+            validationCache?.Set(cacheKey, userId, active[0], epoch, session: true, active[0].ExpiresAtUtc);
+        return active.Count == 1;
     }
+
+    private sealed record ActiveSession(DateTime? ExpiresAtUtc);
 
     private static string GenerateRefreshToken()
     {

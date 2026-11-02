@@ -15,7 +15,9 @@ public class ConfirmAccountDeletionCommandHandler(
     EmailChallengeService challengeService,
     IGenericRepository<User> userRepository,
     IUnitOfWork unitOfWork,
-    IBackgroundJobClient backgroundJobClient) : IRequestHandler<ConfirmAccountDeletionCommand, Result<DateTime>>
+    IBackgroundJobClient backgroundJobClient,
+    IAuthSessionService authSessionService,
+    IGenericRepository<ApiKey> apiKeyRepository) : IRequestHandler<ConfirmAccountDeletionCommand, Result<DateTime>>
 {
     public async Task<Result<DateTime>> Handle(ConfirmAccountDeletionCommand request, CancellationToken cancellationToken)
     {
@@ -38,6 +40,11 @@ public class ConfirmAccountDeletionCommandHandler(
         scheduledDate = scheduledDate < maximumScheduledDate ? scheduledDate : maximumScheduledDate;
 
         user.Deactivate(scheduledDate);
+        foreach (var key in await apiKeyRepository.FindTrackedAsync(k => k.UserId == user.Id && !k.IsRevoked, cancellationToken))
+            key.Revoke();
+        var revocation = await authSessionService.RevokeAllSessionsAsync(user.Id, cancellationToken);
+        if (revocation.IsFailure)
+            return revocation.PropagateError<DateTime>();
         await unitOfWork.SaveChangesAsync(cancellationToken);
         CancelSubscriptionOnDeletionJob.EnqueueCancellation(backgroundJobClient, user);
         if (user.AppleRefreshToken is not null)

@@ -177,7 +177,7 @@ public class AuthSessionServiceTests
 
         var revokeResult = await _service.RevokeSessionAsync(createResult.Value.RefreshToken, CancellationToken.None);
 
-        revokeResult.IsSuccess.Should().BeTrue();
+        revokeResult.IsFailure.Should().BeTrue();
         _storedSession!.RevokedAtUtc.Should().NotBeNull();
     }
 

@@ -189,6 +189,28 @@ public class AuthSessionServiceTests
         result.ErrorCode.Should().Be("INVALID_SESSION");
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RotatedToken_RevokesTheCurrentSessionAndReturnsFailure(bool logout)
+    {
+        var session = UserSession.Create(Guid.NewGuid(), Hash("current-token"), DateTime.UtcNow.AddDays(7)).Value;
+        var previous = UserSessionRefreshToken.Create(session.Id, Hash("old-token")).Value;
+        _refreshTokenRepository.FindOneTrackedAsync(
+            Arg.Any<System.Linq.Expressions.Expression<Func<UserSessionRefreshToken, bool>>>(),
+            Arg.Any<Func<IQueryable<UserSessionRefreshToken>, IQueryable<UserSessionRefreshToken>>?>(),
+            Arg.Any<CancellationToken>()).Returns(previous);
+        _userSessionRepository.GetByIdAsync(session.Id, Arg.Any<CancellationToken>()).Returns(session);
+
+        var failed = logout
+            ? (await _sut.RevokeSessionAsync("old-token")).IsFailure
+            : (await _sut.RefreshSessionAsync("old-token")).IsFailure;
+
+        failed.Should().BeTrue();
+        session.RevokedAtUtc.Should().NotBeNull();
+        session.CanUse(DateTime.UtcNow).Should().BeFalse();
+    }
+
     private static string Hash(string token)
     {
         return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(token)));

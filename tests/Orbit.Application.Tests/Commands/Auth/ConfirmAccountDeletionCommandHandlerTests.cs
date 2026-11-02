@@ -24,6 +24,8 @@ public class ConfirmAccountDeletionCommandHandlerTests
     private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly IBackgroundJobClient _jobs = Substitute.For<IBackgroundJobClient>();
+    private readonly IAuthSessionService _sessions = Substitute.For<IAuthSessionService>();
+    private readonly IGenericRepository<ApiKey> _keys = Substitute.For<IGenericRepository<ApiKey>>();
     private readonly ConfirmAccountDeletionCommandHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
@@ -31,10 +33,12 @@ public class ConfirmAccountDeletionCommandHandlerTests
 
     public ConfirmAccountDeletionCommandHandlerTests()
     {
+        _sessions.RevokeAllSessionsAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Orbit.Domain.Common.Result.Success());
+        _keys.FindTrackedAsync(Arg.Any<System.Linq.Expressions.Expression<Func<ApiKey, bool>>>(), Arg.Any<CancellationToken>()).Returns(Array.Empty<ApiKey>());
         _handler = new ConfirmAccountDeletionCommandHandler(
             new EmailChallengeService(ChallengeTestDatabase.For(_cache).Store(TimeProvider.System)),
             _userRepo,
-            _unitOfWork, _jobs);
+            _unitOfWork, _jobs, _sessions, _keys);
     }
 
     [Fact]
