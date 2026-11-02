@@ -3,7 +3,7 @@ key: frequencies
 display_name: Habit Frequencies
 related_capabilities: [habits.read, habits.write]
 related_surfaces: [today]
-version: 2
+version: 3
 derived_from:
   - src/Orbit.Infrastructure/Services/AgentCatalogService.Surfaces.cs DailyUseSurfaces
   - src/Orbit.Application/Habits/Services/HabitScheduleService.cs IsHabitDueOnDate
@@ -19,6 +19,12 @@ derived_from:
 Open Today, open the habit's details and choose Edit habit. In Frequency, choose the repeat interval or flexible target, then set the number and unit. Adjust the habit's date, weekdays or end date in the same form, then save.
 
 A habit's frequency decides which days it is due. Every recurring habit has a unit (Day, Week, Month, or Year), an interval quantity (how many of those units between occurrences), and an anchor date — the habit's due date — that the schedule aligns to.
+
+## Where to set the time
+
+The create and edit forms on web and mobile use the same time controls. Open Time and reminder, set Exact time and optionally End Time, then choose Done and Save (or Create for a new habit). Tasks in General do not show the time fields.
+
+Os formulários de criação e edição na web e no aplicativo usam os mesmos campos de horário. Abra Horário e lembrete, defina Horário exato e, se quiser, Horário final; escolha Concluir e Salvar (ou Criar para um novo hábito). Tarefas em Geral não mostram os campos de horário.
 
 ## The frequency units
 

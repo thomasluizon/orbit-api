@@ -199,11 +199,13 @@ public partial class ProcessUserChatCommandHandler
     {
         LogToolCallingIteration(logger, iteration, aiResponse.ToolCalls!.Count);
 
-        var orderedCalls = OrderCallsForAsk(aiResponse.ToolCalls!, context.UserHabits);
+        var orderedCalls = OrderCallsForAsk(aiResponse.ToolCalls!.Select(call =>
+            ProactiveProposal.CompleteCreateReminder(call, request.ClientContext)).ToArray(), context.UserHabits);
         var outcomesByCallId = correction is null
             ? await ExecuteToolCallsAsync(orderedCalls, request, executionResults, language, cancellationToken)
             : await ExecuteCorrectionsAsync(orderedCalls, correction, request, executionResults, cancellationToken);
         var toolResults = RecordToolRound(aiResponse, orderedCalls, outcomesByCallId, executionResults, correction is not null);
+        RecordReadOfferIntents(aiResponse, request, executionResults);
         executionResults.CapturePreviewDiscussionText(aiResponse.TextMessage);
         var ownershipReadDenied = outcomesByCallId.Values.Any(IsOwnershipReadDenial);
         var hadToolFailure = ownershipReadDenied || outcomesByCallId.Values.Any(outcome => outcome.OperationResult is { Status: AgentOperationStatus.Failed } operation

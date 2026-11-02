@@ -38,7 +38,7 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<IGoalReviewService, AiGoalReviewService>();
         builder.Services.AddScoped<ITagSuggestionService, AiTagSuggestionService>();
         builder.Services.AddHttpClient<IContentModerationService, ContentModerationService>()
-            .ConfigureHttpClient(client => client.Timeout = GetDefaultHttpTimeout(builder));
+            .ConfigureHttpClient(client => client.Timeout = ContentModerationService.RequestDeadline);
         builder.Services.AddScoped<IAgentCatalogService, AgentCatalogService>();
         builder.Services.AddSingleton<IAppSurfaceCatalog, AppSurfaceCatalog>();
         builder.Services.AddScoped<IPendingAgentOperationStore, PendingAgentOperationStore>();

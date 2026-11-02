@@ -67,6 +67,7 @@ public partial class ProcessUserChatCommandHandler
         public List<ActionResult> ActionResults { get; } = [];
         public List<AgentOperationResult> OperationResults { get; } = [];
         public Dictionary<string, QueryReadBlock> QueryReads { get; } = new(StringComparer.Ordinal);
+        public Dictionary<Guid, string> ReadOfferIntents { get; } = [];
         public List<PendingAgentOperation> PendingOperations { get; } = [];
         public List<AgentPolicyDenial> PolicyDenials { get; } = [];
         public List<AiToolCallResult> ToolResults { get; } = [];

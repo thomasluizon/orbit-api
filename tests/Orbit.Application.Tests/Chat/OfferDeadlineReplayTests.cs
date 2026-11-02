@@ -35,7 +35,7 @@ public partial class ProcessUserChatCommandHandlerTests
     [InlineData("pt-BR", false, true)]
     [InlineData("en", true, true)]
     [InlineData("pt-BR", true, true)]
-    public async Task OfferDeadline_RealCompletionChainPreservesComposedRead(string locale, bool continuation, bool providerFailure)
+    public async Task ReadOffer_RealCompletionChainPreservesReadWithoutASelector(string locale, bool continuation, bool providerFailure)
     {
         using var transport = new OfferDeadlineHandler(continuation, providerFailure);
         using var http = new HttpClient(transport);
@@ -44,9 +44,9 @@ public partial class ProcessUserChatCommandHandlerTests
 
         var result = await handler.Handle(new(UserId, "Show my goals.", ClientContext: OfferClient(locale)), caller.Token);
 
-        transport.SelectionEntered.Task.IsCompletedSuccessfully.Should().BeTrue();
-        transport.Cancelled.Should().Be(!providerFailure);
-        transport.RequestCount.Should().Be(continuation ? 3 : 2);
+        transport.StalledRequestEntered.Task.IsCompletedSuccessfully.Should().BeFalse();
+        transport.Cancelled.Should().BeFalse();
+        transport.RequestCount.Should().Be(continuation ? 2 : 1);
         caller.IsCancellationRequested.Should().BeFalse();
         result.IsSuccess.Should().BeTrue(result.ErrorCode);
         var card = result.Value.Parts!.OfType<ChatBlockPart>().Should().ContainSingle().Subject.Block
@@ -62,19 +62,19 @@ public partial class ProcessUserChatCommandHandlerTests
     [InlineData("pt-BR")]
     public async Task OfferDeadline_CallerCancellationPropagatesThroughRealCompletionChain(string locale)
     {
-        using var transport = new OfferDeadlineHandler(false, false);
+        using var transport = new OfferDeadlineHandler(false, false, stallMain: true);
         using var http = new HttpClient(transport);
         var (handler, _) = CreateOfferDeadlineReplay(http);
         using var caller = new CancellationTokenSource();
         var pending = handler.Handle(new(UserId, "Show my goals.", ClientContext: OfferClient(locale)), caller.Token);
-        await transport.SelectionEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await transport.StalledRequestEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
         await caller.CancelAsync();
 
         Func<Task> completion = () => pending;
         await completion.Should().ThrowAsync<OperationCanceledException>();
         transport.Cancelled.Should().BeTrue();
-        transport.RequestCount.Should().Be(2);
+        transport.RequestCount.Should().Be(1);
         await _offers.DidNotReceiveWithAnyArgs().IssueAsync(default, default, default!, default);
     }
 
@@ -108,20 +108,20 @@ public partial class ProcessUserChatCommandHandlerTests
             _logger, _appConfig, _moderation, _conversationRecorder, offerStore: _offers), goal);
     }
 
-    private sealed class OfferDeadlineHandler(bool continuation, bool providerFailure) : HttpMessageHandler
+    private sealed class OfferDeadlineHandler(bool continuation, bool providerFailure, bool stallMain = false) : HttpMessageHandler
     {
         public int RequestCount { get; private set; }
         public bool Cancelled { get; private set; }
-        public TaskCompletionSource SelectionEntered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource StalledRequestEntered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             RequestCount++;
             var json = await request.Content!.ReadAsStringAsync(cancellationToken);
             using var body = JsonDocument.Parse(json);
-            if (!body.RootElement.TryGetProperty("tools", out var tools) || tools.GetArrayLength() == 0)
+            if (stallMain || !body.RootElement.TryGetProperty("tools", out var tools) || tools.GetArrayLength() == 0)
             {
-                SelectionEntered.TrySetResult();
+                StalledRequestEntered.TrySetResult();
                 if (providerFailure)
                     return new HttpResponseMessage(HttpStatusCode.Unauthorized)
                     {

@@ -6,12 +6,12 @@ using Orbit.Application.Chat.Tools;
 
 namespace Orbit.Application.Chat;
 
-public static class ProactiveProposal
+public static partial class ProactiveProposal
 {
     public const string Argument = "suggested_fields";
     internal const string Metadata = "orbit_offer_metadata";
     private const string Properties = "properties";
-    public const string Instruction = "For offer-enabled clients, put useful unrequested configuration in the ordinary operation fields and list their names in suggested_fields. List a name only after setting its non-null, non-empty value; never list unused options or null placeholders. Keep requested field names out of that list. Explicitly requested or prescribed clock times stay requested in scheduled_reminders, never in suggested_fields. Every unrequested emoji, schedule default or other added configuration belongs in suggested_fields; never present it as requested. Consider repeat reminders for activities repeated throughout the day, reminders, schedule and frequency, checklist steps, independently tracked children or a fitting owned parent, goal links, tags, emoji and a bounded end date. Only propose fields this operation supports and omit irrelevant options. Respect the account plan and capability availability; never propose locked features. Never replace requested or stored values, invent a daily target from an interval, or add end dates to OneTime or General items. Keep doctor-prescribed fixed times in scheduled_reminders; neither fixed medication times nor ordinary daily reading calls for a repeat reminder. Resolve existing parents, goals and tags from the supplied offer_account_facts first. To find a fitting parent, use its routine index as well as checking for duplicates of the new item; query only missing facts when that index is partial. When the message supplies a habit ID, pass it directly to the write tool; no query_habits lookup is needed. Put an unrequested parent on the item and list parent_habit_id in its suggested_fields; leave the bulk container parent unset. When a supplied active goal matches the requested activity, include its owned ID in goal_ids and list goal_ids in suggested_fields when unrequested; do not read those goals again. For a dated task with due_time, set reminder_enabled=true and non-empty reminder_times, listing both in suggested_fields when unrequested. Preserve requested or stored reminder configuration. Preserve stored checklist entries, tags and goal links when adding. A goal may need a target, unit, deadline or habit links; template reuse needs a grounded relationship and full contents before editing. Each suggestion stays editable and removable in the same approval preview. Nested drafts use their own suggested_fields; revise the exact slash-separated field path shown in the preview. Corrections preserve all other fields and never regenerate rejected suggestions. Do not add habit configuration to log, skip, delete, reorder, account reset, billing, API-key, support or administrator operations.";
+    public const string Instruction = "For offer-enabled clients, put useful unrequested configuration in the ordinary operation fields and list their names in suggested_fields. List a name only after setting its non-null, non-empty value; never list unused options or null placeholders. Keep requested field names out of that list. Explicitly requested or prescribed clock times stay requested in scheduled_reminders, never in suggested_fields. Every unrequested emoji, schedule default or other added configuration belongs in suggested_fields; never present it as requested. Consider repeat reminders for activities repeated throughout the day, reminders, schedule and frequency, checklist steps, independently tracked children or a fitting owned parent, goal links, tags, emoji and a bounded end date. Only propose fields this operation supports and omit irrelevant options. Respect the account plan and capability availability; never propose locked features. Never replace requested or stored values, invent a daily target from an interval, or add end dates to OneTime or General items. Keep doctor-prescribed fixed times in scheduled_reminders; neither fixed medication times nor ordinary daily reading calls for a repeat reminder. Resolve existing parents, goals and tags from the supplied offer_account_facts first. To find a fitting parent, use its routine index as well as checking for duplicates of the new item; query only missing facts when that index is partial. When the message supplies a habit ID, pass it directly to the write tool; no query_habits lookup is needed. Preserve requested or stored reminder configuration. Preserve stored checklist entries, tags and goal links when adding. A goal may need a target, unit, deadline or habit links; template reuse needs a grounded relationship and full contents before editing. Each suggestion stays editable and removable in the same approval preview. Nested drafts use their own suggested_fields; revise the exact slash-separated field path shown in the preview. Corrections preserve all other fields and never regenerate rejected suggestions. Do not add habit configuration to log, skip, delete, reorder, account reset, billing, API-key, support or administrator operations.";
 
     public static bool Enabled(AgentClientContext? client) => client is
     {
@@ -64,6 +64,10 @@ public static class ProactiveProposal
         if (properties.ContainsKey("habits") || properties.ContainsKey(ToolArgumentNames.Updates)) return;
         var eligible = properties.Where(property => Fields.Contains(property.Key)).ToArray();
         if (eligible.Length == 0) return;
+        if (!inlineValues && schema["required"] is JsonArray required && required.Any(field => field?.ToString() == "title"))
+            foreach (var property in eligible)
+                if (property.Value is JsonObject field && FieldInstruction(property.Key) is { } instruction)
+                    field["description"] = string.Join(" ", field["description"]?.ToString(), instruction).Trim();
         properties[Argument] = inlineValues ? new JsonObject
         {
             ["type"] = "object",
@@ -73,7 +77,7 @@ public static class ProactiveProposal
         } : new JsonObject
         {
             ["type"] = "array",
-            ["description"] = "Names of unrequested configured fields, following the offer instructions in the system prompt.",
+            ["description"] = "Set each value first; list unrequested nonempty field names in suggested_fields.",
             ["maxItems"] = eligible.Length,
             ["items"] = new JsonObject
             {
@@ -212,6 +216,7 @@ public static class ProactiveProposal
         if (node is JsonObject obj)
         {
             obj.Remove(ProactiveOfferDismissal.Argument);
+            obj.Remove(ProactiveReadOffer.Argument);
             obj.Remove(Metadata);
             obj.Remove(HabitPreviewDates.DefaultDate);
             if (suggestions) obj.Remove(Argument);

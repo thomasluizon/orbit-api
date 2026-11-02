@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using FluentAssertions;
 using NSubstitute;
 using Orbit.Application.Chat;
@@ -26,7 +27,7 @@ public partial class ProcessUserChatCommandHandlerTests
     [InlineData("pt-BR", "empty-en-r1", "smallStep")]
     [InlineData("en", "goal-gap-en-r2", "aim")]
     [InlineData("pt-BR", "goal-gap-en-r2", "aim")]
-    public async Task R9f_TypedFamilyActionOutranksInspect(string locale, string capture, string family)
+    public async Task R9f_TypedFamilyActionUsesDeclaredIntentWithoutASelector(string locale, string capture, string family)
     {
         SetupUserAndPayGate();
         EnableComposition();
@@ -40,28 +41,22 @@ public partial class ProcessUserChatCommandHandlerTests
             : new QueryHabitsTool(_habitRepo, _userRepo, _userDateService, _scheduleLogReader);
         var handler = CreateHandler(tool);
         UseProductionReadExecutor(tool);
-        SetupAiResponse(new AiResponse { ToolCalls = [R9fCall(capture, tool.Name)], ConversationContext = TestConversationContext });
-        _aiIntentService.SendWithToolsAsync(Arg.Is<AiToolRequest>(request => request.SystemPrompt == ProactiveOfferPlanner.SelectionInstruction),
-            Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>()).Returns(call =>
-            {
-                using var data = JsonDocument.Parse(call.Arg<AiToolRequest>().DynamicContext!);
-                var inspect = data.RootElement.GetProperty("Candidates").EnumerateArray().Single(candidate => candidate.GetProperty("Family").GetString() == "inspect");
-                return Result.Success(new AiResponse
-                {
-                    TextMessage = JsonSerializer.Serialize(new
-                    {
-                        candidateId = inspect.GetProperty("Id").GetString(),
-                        interpretation = family == "aim" ? "aim" : (string?)null,
-                        dismissedOfferKeys = Array.Empty<string>()
-                    })
-                });
-            });
+        var captured = R9fCall(capture, tool.Name);
+        if (family == "aim")
+        {
+            var arguments = JsonNode.Parse(captured.Args.GetRawText())!.AsObject();
+            arguments["orbit_offer_intent"] = "aim";
+            captured = captured with { Args = JsonSerializer.SerializeToElement(arguments) };
+        }
+        SetupAiResponse(new AiResponse { ToolCalls = [captured], ConversationContext = TestConversationContext });
         var result = await handler.Handle(new(UserId, "Show the requested records.", ClientContext: OfferClient(locale) with { SupportsDaySummaryCard = true, PartKinds = ["habitList", "goalList", "daySummary"] }), default);
         result.IsSuccess.Should().BeTrue(result.Error);
         var block = result.Value.Parts!.OfType<ChatBlockPart>().Single().Block;
         ReadBlockTelemetry.Describe(block).Read!.NextAction!.OfferKey.Should().StartWith(family + ":");
         result.Value.PendingOperations.Should().BeNullOrEmpty();
         result.Value.AiMessage.Should().BeNullOrEmpty();
+        await _aiIntentService.Received(1).SendWithToolsAsync(Arg.Any<AiToolRequest>(),
+            Arg.Any<Func<AiStreamEvent, Task>>(), Arg.Any<CancellationToken>());
     }
 
     [Theory]

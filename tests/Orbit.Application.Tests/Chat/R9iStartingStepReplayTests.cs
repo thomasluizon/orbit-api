@@ -41,6 +41,8 @@ public partial class ProcessUserChatCommandHandlerTests
         fields.TryGetProperty("orbit_read_complete", out _).Should().BeTrue();
         fields.TryGetProperty("orbit_write_complete", out _).Should().BeFalse();
         declaration.GetProperty("description").GetString().Should().Contain("Call once per request; never repeat identical arguments.");
+        declaration.GetProperty("description").GetString().Should().Contain(
+            "Use the offer's or account's concrete activity or habit.");
         result.Value.PendingOperations.Should().BeNullOrEmpty();
         if (legacyBreakdown)
             result.Value.Actions.Should().ContainSingle().Which.SuggestedSubHabits.Should().ContainSingle()

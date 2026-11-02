@@ -21,51 +21,63 @@ public partial class ContentModerationService(
     IHttpContextAccessor? http = null) : IContentModerationService
 {
     public static readonly HttpRequestOptionsKey<bool> HandlesFailedResponse = new("Orbit.ContentModeration.HandlesFailedResponse");
+    public static readonly TimeSpan RequestDeadline = TimeSpan.FromSeconds(2);
     private const string ModerationModel = "omni-moderation-latest";
     private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
 
     public async Task<ModerationResult> CheckTextAsync(string text, CancellationToken cancellationToken = default)
     {
         var settings = aiSettings.Value;
-
-        try
+        for (var attempt = 0; attempt < 2; attempt++)
         {
-            using var request = new HttpRequestMessage(HttpMethod.Post, $"{settings.BaseUrl.TrimEnd('/')}/moderations")
-            {
-                Content = JsonContent.Create(new ModerationRequest(ModerationModel, text), options: SerializerOptions)
-            };
-            var account = await ResolveAccountAsync(cancellationToken);
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", AiEvalCredentials.Resolve(settings, account));
-            request.Options.Set(HandlesFailedResponse, true);
+            using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            deadline.CancelAfter(RequestDeadline);
 
-            using var response = await httpClient.SendAsync(request, cancellationToken);
-            if (!response.IsSuccessStatusCode)
+            try
             {
-                LogModerationUnavailable(logger, (int)response.StatusCode);
+                using var request = new HttpRequestMessage(HttpMethod.Post, $"{settings.BaseUrl.TrimEnd('/')}/moderations")
+                {
+                    Content = JsonContent.Create(new ModerationRequest(ModerationModel, text), options: SerializerOptions)
+                };
+                var account = await ResolveAccountAsync(deadline.Token);
+                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", AiEvalCredentials.Resolve(settings, account));
+                request.Options.Set(HandlesFailedResponse, true);
+
+                using var response = await httpClient.SendAsync(request, deadline.Token);
+                if (!response.IsSuccessStatusCode)
+                {
+                    LogModerationUnavailable(logger, (int)response.StatusCode);
+                    return Unavailable;
+                }
+
+                var payload = await response.Content.ReadFromJsonAsync<ModerationResponse>(SerializerOptions, deadline.Token);
+                var result = payload?.Results is { Count: > 0 } results ? results[0] : null;
+                if (result is null)
+                    return Unavailable;
+
+                var flaggedCategories = result.Categories?
+                    .Where(category => category.Value)
+                    .Select(category => category.Key)
+                    .ToList() ?? [];
+
+                return new ModerationResult(result.Flagged, Unavailable: false, flaggedCategories);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception exception) when (attempt == 0 && exception is HttpRequestException or OperationCanceledException)
+            {
+                LogModerationRetry(logger, exception);
+            }
+            catch (Exception exception) when (exception is HttpRequestException or OperationCanceledException or JsonException)
+            {
+                LogModerationFailed(logger, exception);
                 return Unavailable;
             }
-
-            var payload = await response.Content.ReadFromJsonAsync<ModerationResponse>(SerializerOptions, cancellationToken);
-            var result = payload?.Results is { Count: > 0 } results ? results[0] : null;
-            if (result is null)
-                return Unavailable;
-
-            var flaggedCategories = result.Categories?
-                .Where(category => category.Value)
-                .Select(category => category.Key)
-                .ToList() ?? [];
-
-            return new ModerationResult(result.Flagged, Unavailable: false, flaggedCategories);
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (Exception exception) when (exception is HttpRequestException or OperationCanceledException or JsonException)
-        {
-            LogModerationFailed(logger, exception);
-            return Unavailable;
-        }
+
+        return Unavailable;
     }
 
     private async Task<AiEvalAccount> ResolveAccountAsync(CancellationToken cancellationToken)
@@ -93,4 +105,7 @@ public partial class ContentModerationService(
 
     [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Content moderation call failed; treating as unavailable")]
     private static partial void LogModerationFailed(ILogger logger, Exception exception);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Warning, Message = "Content moderation timed out or failed in transport; retrying once")]
+    private static partial void LogModerationRetry(ILogger logger, Exception exception);
 }

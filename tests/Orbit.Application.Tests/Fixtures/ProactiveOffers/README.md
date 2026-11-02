@@ -26,6 +26,17 @@ quantity before testing the sibling reminder defect; its single repair removes
 the conflicting fixed suggestion while keeping the repeat interval. No captured
 result is used as a test double for the gateway or previewer.
 
+The `r9i-dated-task-*` files contain only the relevant create arguments from the
+second production r9i window, without account or trace identifiers. The gateway
+replays prove that an omitted reminder becomes one removable suggested group.
+The goal argument fixture retains the second window's complete goal-list call.
+Read replay tests add the new `orbit_offer_intent` control explicitly to exercise
+its server contract; that value is a synthetic declaration, not captured model
+behavior. They prove typed composition and the absence of a selector round.
+They cannot measure whether the model follows the revised field descriptions,
+recognizes an equivalent goal, chooses a parent or emits a concrete starting step.
+The coordinator owns those real-model measurements.
+
 Legacy calendar and brain-dump replays supply `window: month` to keep exercising
 their existing calendar projection. The r9g day-call capture remains unchanged
 and must be rejected. Legacy placeholder replays with missing suggestion values

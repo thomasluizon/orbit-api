@@ -74,7 +74,7 @@ public partial class ProcessUserChatCommandHandler
             var issued = offerStore is null ? Array.Empty<AstraOfferFact>()
                 : await offerStore.IssuedAsync(request.UserId, request.ClientContext!.ConversationId!.Value, cancellationToken);
             systemPrompt = string.Join(Environment.NewLine, systemPrompt, ProactiveProposal.Instruction,
-                ProactiveOfferDismissal.Instruction, ProactiveOfferAccountFacts.Instruction);
+                ProactiveOfferDismissal.Instruction, ProactiveOfferAccountFacts.Instruction, ProactiveReadOffer.Instruction);
             accountContext = string.Join(Environment.NewLine, accountContext,
                 ProactiveOfferAccountFacts.Serialize(context.PromptHabits, context.ActiveGoals, context.UserTags,
                     !context.IsPromptHabitIndexPartial));
@@ -187,6 +187,8 @@ public partial class ProcessUserChatCommandHandler
         if (tool.Name == "revise_pending_changes")
             schema = ProactiveProposal.RevisionSchema(schema, ProactiveProposal.Enabled(client));
         if (ProactiveProposal.Enabled(client)) schema = ProactiveOfferDismissal.Schema(schema);
+        if (ProactiveProposal.Enabled(client) && tool.IsReadOnly && ReadBlockFactory.Supports(tool.Name))
+            schema = ProactiveReadOffer.Schema(schema);
         if (!tool.IsReadOnly) return TerminalWriteDirective.WithCompletionArgument(schema);
         if (!composition) return schema;
         return tool.Name == "revise_pending_changes"
