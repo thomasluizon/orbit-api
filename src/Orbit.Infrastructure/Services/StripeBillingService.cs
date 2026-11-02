@@ -292,7 +292,7 @@ public sealed partial class StripeBillingService(
             var price = await StripeRetryPolicy.ExecuteWithRetryAsync(
                 () => clients.Prices.GetAsync(priceId, cancellationToken: cancellationToken),
                 cancellationToken);
-            return price.UnitAmount ?? 0;
+            return price.UnitAmount ?? throw new BillingProviderException($"Price {priceId} has no unit amount");
         }
         catch (StripeException ex)
         {

@@ -358,6 +358,69 @@ public class StripeBillingServiceTests
         _portalRequests.Single().Options.ReturnUrl.Should().Be(returnUrl);
     }
 
+    [Fact]
+    public async Task GetPriceUnitAmount_NullUnitAmount_Throws()
+    {
+        var prices = Substitute.For<PriceService>();
+        prices.GetAsync("price_missing", Arg.Any<PriceGetOptions>(), Arg.Any<RequestOptions>(), Arg.Any<CancellationToken>())
+            .Returns(new Price { Id = "price_missing", UnitAmount = null });
+        var service = new StripeBillingService(new StripeServiceClients(new CustomerService(), new SessionService(),
+            new PortalSessionService(), _subscriptions, new InvoiceService(), prices, new CouponService()),
+            NullLogger<StripeBillingService>.Instance);
+        var run = () => service.GetPriceUnitAmountAsync("price_missing", CancellationToken.None);
+        await run.Should().ThrowAsync<BillingProviderException>().WithMessage("*price_missing*");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CreateCustomer_SendsUserScopedIdempotencyKeyAndMetadata(bool fails)
+    {
+        var customers = Substitute.For<CustomerService>();
+        CustomerCreateOptions? captured = null;
+        RequestOptions? request = null;
+        customers.CreateAsync(Arg.Do<CustomerCreateOptions>(x => captured = x), Arg.Do<RequestOptions>(x => request = x), Arg.Any<CancellationToken>())
+            .Returns(_ => fails ? Task.FromException<Customer>(new StripeException("failure")) : Task.FromResult(new Customer { Id = "cus_one" }));
+        var service = new StripeBillingService(new StripeServiceClients(customers, new SessionService(), new PortalSessionService(),
+            _subscriptions, new InvoiceService(), new PriceService(), new CouponService()), NullLogger<StripeBillingService>.Instance);
+        var run = () => service.CreateCustomerAsync("user@example.com", "User", UserId, default);
+        if (fails) await run.Should().ThrowAsync<BillingProviderException>();
+        else (await run()).Should().Be("cus_one");
+        request!.IdempotencyKey.Should().Be($"orbit-customer-create-{UserId}");
+        captured!.Metadata["userId"].Should().Be(UserId.ToString());
+    }
+
+    [Fact]
+    public async Task ListInvoices_MapsNullFieldsToDefaults()
+    {
+        var invoices = Substitute.For<InvoiceService>();
+        invoices.ListAsync(Arg.Is<InvoiceListOptions>(x => x.Customer == "cus_one" && x.Limit == 7), Arg.Any<RequestOptions>(), Arg.Any<CancellationToken>())
+            .Returns(new StripeList<Invoice> { Data = [new Invoice { Id = "in_one", AmountPaid = 42 }] });
+        var service = new StripeBillingService(new StripeServiceClients(new CustomerService(), new SessionService(), new PortalSessionService(),
+            _subscriptions, invoices, new PriceService(), new CouponService()), NullLogger<StripeBillingService>.Instance);
+        var invoice = (await service.ListInvoicesAsync("cus_one", 7, default)).Should().ContainSingle().Which;
+        invoice.Currency.Should().Be("usd");
+        invoice.Status.Should().Be("unknown");
+        invoice.BillingReason.Should().Be("unknown");
+        invoice.AmountPaid.Should().Be(42);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task TryGetCouponPercentOff_SuccessOrStripeException(bool fails)
+    {
+        var coupons = Substitute.For<CouponService>();
+        coupons.GetAsync("REF10", Arg.Any<CouponGetOptions>(), Arg.Any<RequestOptions>(), Arg.Any<CancellationToken>())
+            .Returns(_ => fails ? Task.FromException<Coupon>(new StripeException("failure")) : Task.FromResult(new Coupon { PercentOff = 10 }));
+        var logger = Substitute.For<Microsoft.Extensions.Logging.ILogger<StripeBillingService>>();
+        logger.IsEnabled(Microsoft.Extensions.Logging.LogLevel.Warning).Returns(true);
+        var service = new StripeBillingService(new StripeServiceClients(new CustomerService(), new SessionService(), new PortalSessionService(),
+            _subscriptions, new InvoiceService(), new PriceService(), coupons), logger);
+        (await service.TryGetCouponPercentOffAsync("REF10", default)).Should().Be(fails ? null : 10);
+        logger.ReceivedCalls().Count(c => c.GetMethodInfo().Name == "Log").Should().Be(fails ? 1 : 0);
+    }
+
     private async Task<string> CheckoutKeyAsync(string customer = "cus_test", string price = "price_test",
         string success = SuccessUrl, string cancel = CancelUrl, Guid? user = null, string? coupon = null)
     {
