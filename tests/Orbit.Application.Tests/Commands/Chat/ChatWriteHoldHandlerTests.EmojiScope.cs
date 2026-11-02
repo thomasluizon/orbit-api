@@ -2,6 +2,7 @@ using System.Linq.Expressions;
 using System.Text.Json;
 using FluentAssertions;
 using NSubstitute;
+using Orbit.Application.Chat;
 using Orbit.Application.Chat.Commands;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Habits.Commands;
@@ -33,6 +34,9 @@ public sealed partial class ChatWriteHoldHandlerTests
         _mediator.Send(Arg.Any<BulkLogHabitsCommand>(), Arg.Any<CancellationToken>())
             .Returns(call => Result.Success(new BulkLogResult(call.Arg<BulkLogHabitsCommand>().Items
                 .Select((item, index) => new BulkLogItemResult(index, BulkItemStatus.Success, item.HabitId, Guid.NewGuid())).ToArray())));
+        _habitRepo.ProjectAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Any<Func<IQueryable<Habit>, IQueryable<ChatHabitTags>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => (IReadOnlyList<ChatHabitTags>)call.Arg<Func<IQueryable<Habit>, IQueryable<ChatHabitTags>>>()(habits.AsQueryable()).ToArray());
         ScriptToolCall("{\"filter\":" + filter + "}", "bulk_log_habits");
 
         var held = await CreateHandler().Handle(new ProcessUserChatCommand(_userId, "Log the matching habits",
