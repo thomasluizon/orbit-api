@@ -143,12 +143,6 @@
         "reason": "CreateSessionAsync computes the refresh-token ExpiresAtUtc instant through GetRefreshExpiry; no calendar date is derived. RefreshSessionAsync uses nowUtc for CanUse validity, refresh expiry and Rotate audit stamps, all session instants. HasSessionForTokenAsync compares ExpiresAtUtc with nowUtc to reject expired refresh tokens."
       }
     },
-    "src/Orbit.Infrastructure/Services/BackgroundServiceHealthCheck.cs": {
-      "ORBIT0004": {
-        "count": 2,
-        "reason": "RecordTick stores a UTC liveness instant in LastSuccessfulTicks for background-service monitoring. CheckHealthAsync subtracts the last liveness instant to report elapsed minutes and detect a stale service."
-      }
-    },
     "src/Orbit.Infrastructure/Services/GoalDeadlineNotificationService.cs": {
       "ORBIT0004": {
         "count": 1,

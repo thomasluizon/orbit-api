@@ -26,7 +26,6 @@ public partial class StreakGoalSyncService(
     public async Task RunAsync(CancellationToken cancellationToken)
     {
         await SyncActiveGoals(cancellationToken);
-        BackgroundServiceHealthCheck.RecordTick("StreakGoalSync");
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -40,7 +39,6 @@ public partial class StreakGoalSyncService(
                 try
                 {
                     await SyncActiveGoals(stoppingToken);
-                    BackgroundServiceHealthCheck.RecordTick("StreakGoalSync");
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {

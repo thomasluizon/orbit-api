@@ -1,18 +1,23 @@
+using Microsoft.Extensions.Configuration;
+using Orbit.Infrastructure.Services;
+
 namespace Orbit.Infrastructure.BackgroundJobs;
 
-/// <summary>
-/// Single Hangfire entry point for every <see cref="IScheduledJob"/>. Hangfire persists only the
-/// job's <see cref="IScheduledJob.Name"/> in storage and resolves a fresh runner per execution, so
-/// adding or renaming a job never changes the serialized recurring-job payload. The runner looks up
-/// the matching job by name and executes one occurrence of its work.
-/// </summary>
-public sealed class ScheduledJobRunner(IEnumerable<IScheduledJob> jobs)
+public sealed class ScheduledJobRunner(
+    IEnumerable<IScheduledJob> jobs,
+    IScheduledJobLeaseProvider leases,
+    BackgroundServiceHealthCheck health,
+    IConfiguration configuration)
 {
-    public Task RunAsync(string jobName, CancellationToken cancellationToken)
+    public async Task RunAsync(string jobName, CancellationToken cancellationToken)
     {
         var job = jobs.FirstOrDefault(candidate => candidate.Name == jobName)
             ?? throw new InvalidOperationException($"No scheduled job registered with name '{jobName}'.");
-
-        return job.RunAsync(cancellationToken);
+        await using var lease = await leases.TryAcquireAsync(jobName, cancellationToken);
+        if (lease is null) return;
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        deadline.CancelAfter(TimeSpan.FromMinutes(configuration.GetValue($"BackgroundServices:TimeoutMinutes:{jobName}", 120)));
+        await job.RunAsync(deadline.Token);
+        await health.RecordTick(jobName, cancellationToken);
     }
 }

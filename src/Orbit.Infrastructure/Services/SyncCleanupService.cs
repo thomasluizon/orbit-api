@@ -30,7 +30,6 @@ public partial class SyncCleanupService(
     public async Task RunAsync(CancellationToken cancellationToken)
     {
         await PurgeSoftDeletedEntities(cancellationToken);
-        BackgroundServiceHealthCheck.RecordTick("SyncCleanup");
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -44,7 +43,6 @@ public partial class SyncCleanupService(
                 try
                 {
                     await PurgeSoftDeletedEntities(stoppingToken);
-                    BackgroundServiceHealthCheck.RecordTick("SyncCleanup");
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {

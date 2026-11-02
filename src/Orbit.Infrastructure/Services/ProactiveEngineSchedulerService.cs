@@ -19,7 +19,6 @@ public sealed partial class ProactiveEngineSchedulerService(
     {
         using var scope = scopeFactory.CreateScope();
         await scope.ServiceProvider.GetRequiredService<IProactiveEngine>().EvaluateAsync(stoppingToken);
-        BackgroundServiceHealthCheck.RecordTick("ProactiveCheckinScheduler");
     }
 
     protected override void LogStarted() => Started(logger);

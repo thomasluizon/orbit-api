@@ -13,10 +13,12 @@ namespace Orbit.Infrastructure.BackgroundJobs;
 public sealed partial class HangfireRecurringJobRegistrar(
     IRecurringJobManager recurringJobManager,
     IEnumerable<IScheduledJob> jobs,
-    ILogger<HangfireRecurringJobRegistrar> logger) : IHostedService
+    ILogger<HangfireRecurringJobRegistrar> logger,
+    Orbit.Infrastructure.Services.BackgroundServiceHealthCheck health) : IHostedService
 {
-    public Task StartAsync(CancellationToken cancellationToken)
+    public async Task StartAsync(CancellationToken cancellationToken)
     {
+        await health.RegisterAsync(cancellationToken);
         recurringJobManager.RemoveIfExists("conversation-retention");
         foreach (var job in jobs)
         {
@@ -28,7 +30,6 @@ public sealed partial class HangfireRecurringJobRegistrar(
             LogJobRegistered(logger, job.Name, job.CronExpression);
         }
 
-        return Task.CompletedTask;
     }
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;

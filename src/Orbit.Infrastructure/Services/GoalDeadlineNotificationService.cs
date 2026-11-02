@@ -36,7 +36,6 @@ public partial class GoalDeadlineNotificationService(
     protected override async Task ExecuteTickAsync(CancellationToken stoppingToken)
     {
         await CheckAndSendDeadlineNotifications(stoppingToken);
-        BackgroundServiceHealthCheck.RecordTick("GoalDeadlineNotification");
     }
 
     protected override void LogStarted() => LogServiceStarted(logger);

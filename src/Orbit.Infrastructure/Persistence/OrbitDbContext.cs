@@ -32,6 +32,7 @@ public class OrbitDbContext : DbContext
     /// <summary>Keeps database batch cleanup on the server deadline when the caller disconnects.</summary>
     internal CancellationToken? TransactionCompletionToken { get; set; }
 
+    public DbSet<BackgroundJobHeartbeat> BackgroundJobHeartbeats => Set<BackgroundJobHeartbeat>();
     public DbSet<OwedSubscriptionCancellation> OwedSubscriptionCancellations => Set<OwedSubscriptionCancellation>();
     public DbSet<User> Users => Set<User>();
     public DbSet<MarketingContact> MarketingContacts => Set<MarketingContact>();
@@ -84,6 +85,12 @@ public class OrbitDbContext : DbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<BackgroundJobHeartbeat>(entity =>
+        {
+            entity.ToTable("BackgroundJobHeartbeats");
+            entity.HasKey(row => row.JobName);
+            entity.Property(row => row.JobName).HasMaxLength(100);
+        });
         modelBuilder.Entity<TransactionCommit>(entity =>
         {
             entity.ToTable("TransactionCommits");

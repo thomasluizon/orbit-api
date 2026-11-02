@@ -1,62 +1,98 @@
-using System.Collections.Concurrent;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Logging;
+using Orbit.Infrastructure.BackgroundJobs;
+using Orbit.Infrastructure.Persistence;
 
 namespace Orbit.Infrastructure.Services;
 
-public class BackgroundServiceHealthCheck : IHealthCheck
+public sealed class BackgroundServiceHealthCheck(
+    IServiceScopeFactory scopeFactory,
+    IEnumerable<IScheduledJob> jobs,
+    TimeProvider clock,
+    ILogger<BackgroundServiceHealthCheck> logger) : IHealthCheck
 {
-    private static readonly ConcurrentDictionary<string, DateTime> LastSuccessfulTicks = new();
-
-    private static readonly Dictionary<string, TimeSpan> ExpectedIntervals = new()
+    internal static readonly IReadOnlyDictionary<string, TimeSpan> ExpectedIntervals = new Dictionary<string, TimeSpan>
     {
-        ["ReminderScheduler"] = TimeSpan.FromMinutes(3),
-        ["GoalDeadlineNotification"] = TimeSpan.FromMinutes(90),
-        ["SlipAlertScheduler"] = TimeSpan.FromMinutes(15),
-        ["ProactiveCheckinScheduler"] = TimeSpan.FromMinutes(180),
-        ["HabitDueDateAdvancement"] = TimeSpan.FromMinutes(90),
-        ["StreakGoalSync"] = TimeSpan.FromMinutes(90),
-        ["StreakFreezeAutoActivation"] = TimeSpan.FromMinutes(180),
-        ["AccountDeletion"] = TimeSpan.FromHours(72),
-        ["SyncCleanup"] = TimeSpan.FromHours(48),
-        ["PlayNotificationCleanup"] = TimeSpan.FromHours(48),
-        ["CalendarAutoSync"] = TimeSpan.FromMinutes(45),
-        ["NotionAutoSync"] = TimeSpan.FromMinutes(45),
-        ["AiUsageSummary"] = TimeSpan.FromMinutes(180)
+        ["reminder-scheduler"] = TimeSpan.FromMinutes(3),
+        ["goal-deadline-notification"] = TimeSpan.FromMinutes(90),
+        ["slip-alert-scheduler"] = TimeSpan.FromMinutes(15),
+        ["proactive-checkin-scheduler"] = TimeSpan.FromHours(3),
+        ["habit-due-date-advancement"] = TimeSpan.FromMinutes(90),
+        ["streak-goal-sync"] = TimeSpan.FromHours(2),
+        ["streak-freeze-auto-activation"] = TimeSpan.FromHours(3),
+        ["account-deletion"] = TimeSpan.FromHours(48),
+        ["sync-cleanup"] = TimeSpan.FromHours(48),
+        ["play-notification-cleanup"] = TimeSpan.FromHours(48),
+        ["calendar-auto-sync"] = TimeSpan.FromMinutes(45),
+        ["notion-auto-sync"] = TimeSpan.FromMinutes(45),
+        ["ai-usage-summary"] = TimeSpan.FromHours(48),
+        ["owed-subscription-cancellation"] = TimeSpan.FromMinutes(3),
+        ["founding-achievement-reconciliation"] = TimeSpan.FromHours(12),
+        ["period-close-notification"] = TimeSpan.FromMinutes(90),
+        ["chat-turn-retention"] = TimeSpan.FromHours(2)
     };
 
-    public static void RecordTick(string serviceName)
+    internal async Task RegisterAsync(CancellationToken cancellationToken)
     {
-#pragma warning disable ORBIT0004 // RecordTick stores a UTC liveness instant in LastSuccessfulTicks for background-service monitoring. https://github.com/thomasluizon/orbit-tickets/issues/230
-        LastSuccessfulTicks[serviceName] = DateTime.UtcNow;
-#pragma warning restore ORBIT0004
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
+        var registeredAtUtc = clock.GetUtcNow().UtcDateTime;
+        foreach (var job in jobs)
+        {
+            if (!ExpectedIntervals.ContainsKey(job.Name))
+                throw new InvalidOperationException($"No heartbeat interval configured for '{job.Name}'.");
+            await db.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO "BackgroundJobHeartbeats" ("JobName", "RegisteredAtUtc")
+                VALUES ({job.Name}, {registeredAtUtc}) ON CONFLICT ("JobName") DO NOTHING
+                """, cancellationToken);
+        }
     }
 
-    public Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default)
+    public async Task RecordTick(string jobName, CancellationToken cancellationToken = default)
     {
-        var unhealthy = new List<string>();
-        var serviceTickStatuses = new Dictionary<string, object>();
-
-        foreach (var (name, maxInterval) in ExpectedIntervals)
+        try
         {
-            if (LastSuccessfulTicks.TryGetValue(name, out var lastTick))
-            {
-#pragma warning disable ORBIT0004 // CheckHealthAsync subtracts the last liveness instant to report elapsed minutes and detect a stale service. https://github.com/thomasluizon/orbit-tickets/issues/230
-                var elapsed = DateTime.UtcNow - lastTick;
-#pragma warning restore ORBIT0004
-                serviceTickStatuses[name] = string.Create(System.Globalization.CultureInfo.InvariantCulture, $"Last tick: {elapsed.TotalMinutes:F0}m ago");
-                if (elapsed > maxInterval)
-                    unhealthy.Add(name);
-            }
-            else
-            {
-                serviceTickStatuses[name] = "No tick recorded yet";
-            }
+            await using var scope = scopeFactory.CreateAsyncScope();
+            var db = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
+            var tickAtUtc = clock.GetUtcNow().UtcDateTime;
+            await db.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO "BackgroundJobHeartbeats" ("JobName", "RegisteredAtUtc", "LastSuccessfulTickAtUtc")
+                VALUES ({jobName}, {tickAtUtc}, {tickAtUtc})
+                ON CONFLICT ("JobName") DO UPDATE SET "LastSuccessfulTickAtUtc" = EXCLUDED."LastSuccessfulTickAtUtc"
+                """, cancellationToken);
         }
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+        {
+            logger.LogWarning(ex, "Could not persist heartbeat for {JobName}", jobName);
+        }
+    }
 
-        if (unhealthy.Count > 0)
-            return Task.FromResult(HealthCheckResult.Degraded(
-                $"Stale services: {string.Join(", ", unhealthy)}", data: serviceTickStatuses));
-
-        return Task.FromResult(HealthCheckResult.Healthy("All background services running", serviceTickStatuses));
+    public async Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
+        var rows = await db.BackgroundJobHeartbeats.AsNoTracking().ToDictionaryAsync(row => row.JobName, cancellationToken);
+        var nowAtUtc = clock.GetUtcNow().UtcDateTime;
+        var stale = new List<string>();
+        var statuses = new Dictionary<string, object>();
+        foreach (var job in jobs)
+        {
+            if (!ExpectedIntervals.TryGetValue(job.Name, out var interval))
+                throw new InvalidOperationException($"No heartbeat interval configured for '{job.Name}'.");
+            if (!rows.TryGetValue(job.Name, out var row))
+            {
+                stale.Add(job.Name);
+                statuses[job.Name] = "Job registration missing";
+                continue;
+            }
+            var elapsed = nowAtUtc - (row.LastSuccessfulTickAtUtc ?? row.RegisteredAtUtc);
+            statuses[job.Name] = row.LastSuccessfulTickAtUtc is null ? "No tick recorded yet" : $"Last tick: {elapsed.TotalMinutes:F0}m ago";
+            if (elapsed > interval) stale.Add(job.Name);
+        }
+        return stale.Count > 0
+            ? HealthCheckResult.Unhealthy($"Stale services: {string.Join(", ", stale)}", data: statuses)
+            : HealthCheckResult.Healthy("All background services running", statuses);
     }
 }

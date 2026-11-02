@@ -30,7 +30,6 @@ public partial class AccountDeletionService(
     {
         await ProcessScheduledDeletions(cancellationToken);
         await CleanupStaleSentRecords(cancellationToken);
-        BackgroundServiceHealthCheck.RecordTick("AccountDeletion");
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -45,7 +44,6 @@ public partial class AccountDeletionService(
                 {
                     await ProcessScheduledDeletions(stoppingToken);
                     await CleanupStaleSentRecords(stoppingToken);
-                    BackgroundServiceHealthCheck.RecordTick("AccountDeletion");
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {

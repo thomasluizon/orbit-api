@@ -27,7 +27,6 @@ public partial class HabitDueDateAdvancementService(
     public async Task RunAsync(CancellationToken cancellationToken)
     {
         await AdvanceStaleDueDates(cancellationToken);
-        BackgroundServiceHealthCheck.RecordTick("HabitDueDateAdvancement");
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -41,7 +40,6 @@ public partial class HabitDueDateAdvancementService(
                 try
                 {
                     await AdvanceStaleDueDates(stoppingToken);
-                    BackgroundServiceHealthCheck.RecordTick("HabitDueDateAdvancement");
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {

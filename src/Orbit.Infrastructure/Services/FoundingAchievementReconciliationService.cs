@@ -30,8 +30,6 @@ public sealed partial class FoundingAchievementReconciliationService(
         var grantedCount = await ReconcileCandidatesAsync(stoppingToken);
         if (grantedCount > 0)
             LogReconciliationCompleted(logger, grantedCount);
-
-        BackgroundServiceHealthCheck.RecordTick("FoundingAchievementReconciliation");
     }
 
     internal async Task<int> ReconcileCandidatesAsync(CancellationToken cancellationToken)

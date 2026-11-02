@@ -25,9 +25,6 @@ public static partial class ServiceCollectionExtensions
 
         if (!BuildTimeDocumentGeneration.IsActive)
         {
-            var useDurableQueue = builder.Configuration.GetSection(BackgroundJobSettings.SectionName)
-                .Get<BackgroundJobSettings>()?.UseDurableQueue ?? false;
-
             builder.Services.AddHostedService<DataEncryptionMigrationService>();
             builder.Services.AddHostedService<XpAwardLogBackfillHostedService>();
 
@@ -36,42 +33,19 @@ public static partial class ServiceCollectionExtensions
             AddScheduledJob<ChatTurnRetentionJob>(builder);
             builder.Services.AddHostedService<HangfireRecurringJobRegistrar>();
 
-            if (useDurableQueue)
-                AddDurableRecurringJobs(builder);
-            else
-                AddInProcessSchedulers(builder);
+            AddDurableRecurringJobs(builder);
         }
 
+        builder.Services.TryAddSingleton<BackgroundServiceHealthCheck>();
+        builder.Services.TryAddSingleton<IScheduledJobLeaseProvider, PostgresScheduledJobLeaseProvider>();
         builder.Services.AddHealthChecks()
-            .AddCheck<BackgroundServiceHealthCheck>("background-services")
+            .AddCheck<BackgroundServiceHealthCheck>("background-services", tags: ["jobs"])
             .AddCheck<DatabaseHealthCheck>("database");
-    }
-
-    internal static void AddInProcessSchedulers(WebApplicationBuilder builder)
-    {
-        builder.Services.AddHostedService<ReminderSchedulerService>();
-        builder.Services.AddHostedService<GoalDeadlineNotificationService>();
-        if (IsPeriodCloseNotificationEnabled(builder.Configuration))
-            builder.Services.AddHostedService<PeriodCloseNotificationService>();
-        builder.Services.AddHostedService<SlipAlertSchedulerService>();
-        builder.Services.AddHostedService<ProactiveEngineSchedulerService>();
-        builder.Services.AddHostedService<AccountDeletionService>();
-        builder.Services.AddHostedService<OwedSubscriptionCancellationService>();
-        builder.Services.AddHostedService<HabitDueDateAdvancementService>();
-        if (IsStreakFreezeAutoActivationEnabled(builder.Configuration))
-            builder.Services.AddHostedService<StreakFreezeAutoActivationService>();
-        builder.Services.AddHostedService<StreakGoalSyncService>();
-        builder.Services.AddHostedService<SyncCleanupService>();
-        builder.Services.AddHostedService<PlayNotificationCleanupService>();
-        builder.Services.AddHostedService<CalendarAutoSyncService>();
-        builder.Services.AddHostedService<NotionAutoSyncService>();
-        builder.Services.AddHostedService<AiUsageSummaryService>();
-        builder.Services.AddHostedService<FoundingAchievementReconciliationService>();
     }
 
     private static void AddDurableJobQueue(WebApplicationBuilder builder)
     {
-        var connectionString = OrbitConnectionStringFactory.ForSession(builder.Configuration);
+        var connectionString = OrbitConnectionStringFactory.ForHangfire(builder.Configuration);
         if (string.IsNullOrWhiteSpace(connectionString))
             throw new InvalidOperationException(
                 "A database connection string is required for the durable background-job queue.");
@@ -80,10 +54,15 @@ public static partial class ServiceCollectionExtensions
             .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
             .UseSimpleAssemblyNameTypeSerializer()
             .UseRecommendedSerializerSettings()
-            .UsePostgreSqlStorage(postgres => postgres.UseNpgsqlConnection(connectionString)));
+            .UsePostgreSqlStorage(postgres => postgres.UseNpgsqlConnection(connectionString), new PostgreSqlStorageOptions
+            {
+                SchemaName = "hangfire",
+                JobExpirationCheckInterval = TimeSpan.FromHours(1)
+            })
+            .WithJobExpirationTimeout(TimeSpan.FromDays(7)));
         builder.Services.AddHangfireServer(options =>
         {
-            options.WorkerCount = 2;
+            options.WorkerCount = 6;
             options.SchedulePollingInterval = TimeSpan.FromMinutes(1);
         });
 

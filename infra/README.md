@@ -44,7 +44,7 @@ The daily `AI cost` line includes every purpose's calls, dollar cost per call, c
 input, uncached input, output and reasoning totals, plus per-call token averages.
 Uncached input includes cache writes; reasoning is a subset of output and is billed once.
 The cache hit fraction is `cached_input / (cached_input + uncached_input)`. Startup also
-emits the same current UTC day cost line marked `(partial)` in both scheduler modes;
+emits the same current UTC day cost line marked `(partial)` through the durable scheduler;
 the partial line is a snapshot, not an additional accounting charge.
 Historical rows default reasoning to zero because past reasoning usage cannot be recovered.
 
@@ -281,6 +281,29 @@ The coordinator performs the cutover after merge, with no service replacement:
    `environment=production`, `branch=main`, and the same full `sha`. Require the
    promoted digest, a `live` deploy with no Render build or pre-deploy task, and
    `https://api.useorbit.org/health` reporting that commit and `status: Healthy`.
+
+### Recurring jobs and health
+
+Recurring schedules run through Hangfire in the `hangfire` schema. The API runs six
+workers. `ConnectionStrings__HangfireConnection` can select a dedicated job-store
+connection; otherwise the session endpoint is reused with the `orbit-hangfire`
+application name and a separate pool capped at 12 connections. Job leases use the
+session endpoint with the `orbit-job-locks` application name and a separate pool
+capped at eight connections. These endpoints must support session advisory locks.
+
+`/health` checks database reachability and retains the `status` and `commit` release
+fields. `/health/jobs` checks the enabled recurring jobs against shared
+`BackgroundJobHeartbeats` rows and returns 503 with stale job names. A registration
+without a successful tick becomes stale after its expected interval. Registration
+on another instance preserves that first registration time. A successful occurrence
+records its heartbeat after its work completes. A concurrent occurrence skips when
+its job lease is held; separate job names can run concurrently.
+
+Apply the additive `DurableJobHeartbeats` migration before starting the recurring
+registrar. Startup migration failures or recurring registration failures stop startup.
+A heartbeat write failure logs a warning and leaves the successful job result intact.
+Job staleness does not fail Render's `/health` probe. The staging pinger targets only
+staging and does not deliver production owner alerts.
 
 ### Startup migrations and long migrations
 

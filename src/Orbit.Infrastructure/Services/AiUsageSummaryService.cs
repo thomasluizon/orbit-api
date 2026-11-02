@@ -46,7 +46,6 @@ public partial class AiUsageSummaryService(
             await SummarizeYesterdayAsync(stoppingToken);
         else
             await SummarizeStartupAsync(stoppingToken);
-        BackgroundServiceHealthCheck.RecordTick("AiUsageSummary");
     }
 
     protected override void LogStarted() => LogServiceStarted(logger);

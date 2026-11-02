@@ -32,7 +32,6 @@ public partial class PeriodCloseNotificationService(
     protected override async Task ExecuteTickAsync(CancellationToken stoppingToken)
     {
         await CheckAndSendNotificationsAsync(stoppingToken);
-        BackgroundServiceHealthCheck.RecordTick("PeriodCloseNotification");
     }
 
     protected override void LogStarted() => LogServiceStarted(logger);

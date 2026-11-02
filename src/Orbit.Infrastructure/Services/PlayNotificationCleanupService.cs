@@ -27,7 +27,6 @@ public partial class PlayNotificationCleanupService(
     public async Task RunAsync(CancellationToken cancellationToken)
     {
         await PurgeOldNotifications(cancellationToken);
-        BackgroundServiceHealthCheck.RecordTick("PlayNotificationCleanup");
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -41,7 +40,6 @@ public partial class PlayNotificationCleanupService(
                 try
                 {
                     await PurgeOldNotifications(stoppingToken);
-                    BackgroundServiceHealthCheck.RecordTick("PlayNotificationCleanup");
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {

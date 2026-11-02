@@ -15,10 +15,8 @@ namespace Orbit.Infrastructure.Tests.BackgroundJobs;
 
 public class HangfireRecurringJobRegistrarTests
 {
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task ChatTurnRetention_PurgesOnlyOldIdempotencyRowsInBothSchedulerModes(bool durable)
+    [Fact]
+    public async Task ChatTurnRetention_PurgesOnlyOldIdempotencyRows()
     {
         using var fixture = new ConversationTurnRecorderTests.Fixture(enabled: false);
         var nowAtUtc = DateTime.UtcNow;
@@ -33,7 +31,6 @@ public class HangfireRecurringJobRegistrarTests
         await fixture.Db.SaveChangesAsync();
         var builder = WebApplication.CreateBuilder();
         builder.Configuration["ConnectionStrings:DefaultConnection"] = "Host=localhost;Database=orbit;Username=orbit";
-        builder.Configuration["BackgroundServices:UseDurableQueue"] = durable.ToString();
         typeof(Orbit.Api.Extensions.ServiceCollectionExtensions)
             .GetMethod("AddBackgroundServices", BindingFlags.NonPublic | BindingFlags.Static)!.Invoke(null, [builder]);
         builder.Services.AddScoped(_ => fixture.Database.CreateContext());
@@ -52,14 +49,11 @@ public class HangfireRecurringJobRegistrarTests
         (await fixture.Db.ConversationTurns.AsNoTracking().SingleAsync()).Id.Should().Be(retained.Id);
     }
 
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void ConversationRetentionIsNotRegisteredInEitherSchedulerMode(bool durable)
+    [Fact]
+    public void ConversationRetentionIsNotRegistered()
     {
         var builder = WebApplication.CreateBuilder();
         builder.Configuration["ConnectionStrings:DefaultConnection"] = "Host=localhost;Database=orbit;Username=orbit";
-        builder.Configuration["BackgroundServices:UseDurableQueue"] = durable.ToString();
 
         typeof(Orbit.Api.Extensions.ServiceCollectionExtensions)
             .GetMethod("AddBackgroundServices", BindingFlags.NonPublic | BindingFlags.Static)!
@@ -76,10 +70,33 @@ public class HangfireRecurringJobRegistrarTests
     public async Task Startup_RemovesObsoleteConversationRetentionSchedule()
     {
         var manager = NSubstitute.Substitute.For<Hangfire.IRecurringJobManager>();
+        using var database = new Orbit.Infrastructure.Tests.Persistence.SqliteOrbitDbContextFactory();
+        using var provider = new ServiceCollection().AddScoped(_ => database.CreateContext()).BuildServiceProvider();
         var registrar = new HangfireRecurringJobRegistrar(manager, [],
-            Microsoft.Extensions.Logging.Abstractions.NullLogger<HangfireRecurringJobRegistrar>.Instance);
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<HangfireRecurringJobRegistrar>.Instance,
+            BackgroundServiceHealthCheckTests.Create(provider));
         await registrar.StartAsync(default);
         NSubstitute.SubstituteExtensions.Received(manager, 1).RemoveIfExists("conversation-retention");
+    }
+
+    [Fact]
+    public async Task Startup_AddOrUpdateThrows_StartFails()
+    {
+        using var database = new Orbit.Infrastructure.Tests.Persistence.SqliteOrbitDbContextFactory();
+        using var provider = new ServiceCollection().AddScoped(_ => database.CreateContext()).BuildServiceProvider();
+        var manager = NSubstitute.Substitute.For<Hangfire.IRecurringJobManager>();
+        var job = NSubstitute.Substitute.For<IScheduledJob>();
+        NSubstitute.SubstituteExtensions.Returns(job.Name, "reminder-scheduler");
+        NSubstitute.SubstituteExtensions.Returns(job.CronExpression, "* * * * *");
+        NSubstitute.SubstituteExtensions.When(manager, m => m.AddOrUpdate(
+            NSubstitute.Arg.Any<string>(), NSubstitute.Arg.Any<Hangfire.Common.Job>(),
+            NSubstitute.Arg.Any<string>(), NSubstitute.Arg.Any<Hangfire.RecurringJobOptions>()))
+            .Do(_ => throw new InvalidOperationException("registration failed"));
+        var registrar = new HangfireRecurringJobRegistrar(manager, [job],
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<HangfireRecurringJobRegistrar>.Instance,
+            BackgroundServiceHealthCheckTests.Create(provider, null, job));
+        var start = () => registrar.StartAsync(default);
+        await start.Should().ThrowAsync<InvalidOperationException>().WithMessage("registration failed");
     }
 
 }

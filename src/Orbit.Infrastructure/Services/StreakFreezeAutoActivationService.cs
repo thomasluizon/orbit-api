@@ -36,7 +36,6 @@ public partial class StreakFreezeAutoActivationService(
     protected override async Task ExecuteTickAsync(CancellationToken stoppingToken)
     {
         await ActivateMissedDayFreezes(stoppingToken);
-        BackgroundServiceHealthCheck.RecordTick("StreakFreezeAutoActivation");
     }
 
     protected override void LogStarted() => LogServiceStarted(logger);

@@ -35,7 +35,6 @@ public partial class SlipAlertSchedulerService(
     protected override async Task ExecuteTickAsync(CancellationToken stoppingToken)
     {
         await CheckAndSendAlerts(stoppingToken);
-        BackgroundServiceHealthCheck.RecordTick("SlipAlertScheduler");
     }
 
     protected override void LogStarted() => LogServiceStarted(logger);

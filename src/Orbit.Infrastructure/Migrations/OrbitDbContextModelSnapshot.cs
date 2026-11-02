@@ -2839,6 +2839,23 @@ namespace Orbit.Infrastructure.Migrations
                     b.ToTable("XpAwardLogs");
                 });
 
+            modelBuilder.Entity("Orbit.Infrastructure.Persistence.BackgroundJobHeartbeat", b =>
+                {
+                    b.Property<string>("JobName")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime?>("LastSuccessfulTickAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("RegisteredAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("JobName");
+
+                    b.ToTable("BackgroundJobHeartbeats", (string)null);
+                });
+
             modelBuilder.Entity("Orbit.Infrastructure.Persistence.TransactionCommit", b =>
                 {
                     b.Property<Guid>("Id")
