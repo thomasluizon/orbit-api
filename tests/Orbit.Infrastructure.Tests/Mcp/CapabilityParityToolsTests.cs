@@ -42,9 +42,9 @@ public class CapabilityParityToolsTests
         var bridge = new McpExecutorBridge(executor);
         var result = action switch
         {
-            "template" => await new ChecklistTemplateTools(mediator, bridge).UpdateChecklistTemplate(user, templateId, "Evening", ["Read"], "token"),
-            "name" => await new ProfileTools(mediator, bridge).SetName(user, "Alex", "token"),
-            _ => await new CalendarTools(mediator, bridge).SetSelectedCalendars(user, [], "token")
+            "template" => (await new ChecklistTemplateTools(mediator, bridge).UpdateChecklistTemplate(user, templateId, "Evening", ["Read"], "token")).AsText(),
+            "name" => (await new ProfileTools(mediator, bridge).SetName(user, "Alex", "token")).AsText(),
+            _ => (await new CalendarTools(mediator, bridge).SetSelectedCalendars(user, [], "token")).AsText()
         };
         var request = (AgentExecuteOperationRequest)executor.ReceivedCalls().Single().GetArguments()[0]!;
         request.UserId.Should().Be(userId);
@@ -89,7 +89,7 @@ public class CapabilityParityToolsTests
             new("work", "Work", "owner", false, null, false)
         }));
         var user = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, Guid.NewGuid().ToString())], "Test"));
-        var text = await new CalendarTools(mediator, new McpExecutorBridge(Substitute.For<IAgentOperationExecutor>())).GetCalendarOverview(user);
+        var text = (await new CalendarTools(mediator, new McpExecutorBridge(Substitute.For<IAgentOperationExecutor>())).GetCalendarOverview(user)).AsText();
         var calendars = JsonDocument.Parse(text).RootElement.GetProperty("Calendars");
         calendars[0].GetProperty("IsSynced").GetBoolean().Should().BeTrue();
         calendars[1].GetProperty("IsSynced").GetBoolean().Should().BeFalse();

@@ -36,8 +36,8 @@ public class RecordPageToolsTests
             .Returns(Result.Success(card));
 
         var result = kind == "tags"
-            ? await Tools.GetTagPage(User, cursor)
-            : await Tools.GetTemplatePage(User, cursor);
+            ? (await Tools.GetTagPage(User, cursor)).AsText()
+            : (await Tools.GetTemplatePage(User, cursor)).AsText();
 
         result.Should().Contain("Visible");
         captured.Should().Be(new GetRecordListPageQuery(_userId, kind, cursor));
@@ -49,7 +49,7 @@ public class RecordPageToolsTests
         _mediator.Send(Arg.Any<GetRecordListPageQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Failure<RecordListCard>("Record page not found."));
 
-        var result = await Tools.GetTagPage(User, RecordListCursor.Create(_userId, "tags", 10));
+        var result = (await Tools.GetTagPage(User, RecordListCursor.Create(_userId, "tags", 10))).AsText();
 
         result.Should().Be("Error: Record page not found.");
     }
@@ -58,7 +58,7 @@ public class RecordPageToolsTests
     public async Task ApiKeyPage_RequiresAccountBoundCursorAndExecutorSuccess()
     {
         var tools = Tools;
-        var foreign = await tools.GetApiKeyPage(User, RecordListCursor.Create(Guid.NewGuid(), "keys", 10));
+        var foreign = (await tools.GetApiKeyPage(User, RecordListCursor.Create(Guid.NewGuid(), "keys", 10))).AsText();
         foreign.Should().Be("Record page not found.");
         await _executor.DidNotReceiveWithAnyArgs().ExecuteAsync(default!, default);
 
@@ -67,7 +67,7 @@ public class RecordPageToolsTests
                 "get_api_keys", "get_api_keys", AgentRiskClass.Low, AgentConfirmationRequirement.None,
                 AgentOperationStatus.Failed, PolicyReason: "Pro required")));
         var cursor = RecordListCursor.Create(_userId, "keys", 10);
-        (await tools.GetApiKeyPage(User, cursor)).Should().Contain("Pro required");
+        ((await tools.GetApiKeyPage(User, cursor)).AsText()).Should().Contain("Pro required");
 
         var now = DateTime.UtcNow;
         IReadOnlyList<ApiKeyResponse> keys = Enumerable.Range(0, 11).Select(index =>
@@ -78,11 +78,19 @@ public class RecordPageToolsTests
                 "get_api_keys", "get_api_keys", AgentRiskClass.Low, AgentConfirmationRequirement.None,
                 AgentOperationStatus.Succeeded, Payload: keys)));
 
-        var result = await tools.GetApiKeyPage(User, cursor);
+        var result = (await tools.GetApiKeyPage(User, cursor)).AsText();
 
         result.Should().Contain("Key 10");
         result.Should().NotContain("Key 9");
-        (await tools.GetApiKeyPage(User, RecordListCursor.Create(_userId, "keys", 20)))
+        ((await tools.GetApiKeyPage(User, RecordListCursor.Create(_userId, "keys", 20))).AsText())
             .Should().Be("Record page not found.");
+    }
+    [Fact]
+    public async Task InvalidCursor_IsError()
+    {
+        var tools = new Orbit.Api.Mcp.Tools.RecordPageTools(NSubstitute.Substitute.For<MediatR.IMediator>(),
+            new Orbit.Api.Mcp.McpExecutorBridge(NSubstitute.Substitute.For<Orbit.Domain.Interfaces.IAgentOperationExecutor>()));
+        var result = await McpInputSafetyTests.Invoke(tools, nameof(Orbit.Api.Mcp.Tools.RecordPageTools.GetApiKeyPage), new { cursor = "invalid" });
+        result.IsError.Should().BeTrue();
     }
 }

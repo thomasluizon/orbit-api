@@ -61,6 +61,7 @@ public class OrbitDbContext : DbContext
     public DbSet<UserSession> UserSessions => Set<UserSession>();
     public DbSet<UserSessionRefreshToken> UserSessionRefreshTokens => Set<UserSessionRefreshToken>();
     public DbSet<AiBudgetCall> AiBudgetCalls => Set<AiBudgetCall>();
+    public DbSet<OAuthClient> OAuthClients => Set<OAuthClient>();
     public DbSet<OAuthState> OAuthStates => Set<OAuthState>();
     public DbSet<DesktopHandoff> DesktopHandoffs => Set<DesktopHandoff>();
     public DbSet<ApiKey> ApiKeys => Set<ApiKey>();
@@ -232,12 +233,19 @@ public class OrbitDbContext : DbContext
             entity.HasIndex(call => call.EvalDateUtc).HasFilter("\"EvalDateUtc\" IS NOT NULL");
             entity.HasOne<User>().WithMany().HasForeignKey(call => call.UserId).OnDelete(DeleteBehavior.Cascade);
         });
+        modelBuilder.Entity<OAuthClient>(entity =>
+        {
+            entity.Property(client => client.ClientName).HasMaxLength(OAuthClient.MaxNameLength).IsRequired();
+            entity.Property(client => client.RedirectUris).IsRequired();
+        });
         modelBuilder.Entity<OAuthState>(entity =>
         {
             entity.HasIndex(state => state.SecretHash).IsUnique();
             entity.HasIndex(state => new { state.Kind, state.ExpiresAtUtc });
             entity.Property(state => state.SecretHash).HasMaxLength(64);
             entity.Property(state => state.Kind).HasMaxLength(30);
+            entity.Property(state => state.PartitionKey).HasMaxLength(64);
+            entity.HasIndex(state => new { state.Kind, state.PartitionKey, state.ExpiresAtUtc }).IsCreatedConcurrently();
             entity.Property(state => state.Payload).HasConversion(encConverter).HasColumnType("text");
         });
         modelBuilder.Entity<DesktopHandoff>(entity =>

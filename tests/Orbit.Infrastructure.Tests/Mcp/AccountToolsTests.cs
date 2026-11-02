@@ -36,7 +36,7 @@ public class AccountToolsTests
     {
         StubExecutor(AgentOperationStatus.Succeeded, targetName: "Account reset completed");
 
-        var result = await _tools.ManageAccount(_user, "reset_account");
+        var result = (await _tools.ManageAccount(_user, "reset_account")).AsText();
 
         var request = (AgentExecuteOperationRequest)_executor.ReceivedCalls()
             .Single(call => call.GetMethodInfo().Name == nameof(IAgentOperationExecutor.ExecuteAsync))
@@ -50,7 +50,7 @@ public class AccountToolsTests
     {
         StubExecutor(AgentOperationStatus.PendingConfirmation, policyReason: "step_up_required", pendingOperationId: Guid.NewGuid());
 
-        var result = await _tools.ManageAccount(_user, "request_deletion");
+        var result = (await _tools.ManageAccount(_user, "request_deletion")).AsText();
 
         result.Should().Contain("Step-up verification required");
         result.Should().Contain("step_up_agent_operation_v2");

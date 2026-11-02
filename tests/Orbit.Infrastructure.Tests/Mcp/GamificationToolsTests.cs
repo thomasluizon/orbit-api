@@ -33,7 +33,7 @@ public class GamificationToolsTests
         _mediator.Send(Arg.Any<GetGamificationProfileQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(profile));
 
-        var result = await _tools.GetGamificationProfile(_user);
+        var result = (await _tools.GetGamificationProfile(_user)).AsText();
 
         result.Should().Contain("Level: 5 (Achiever)");
         result.Should().Contain("Total XP: 1500");
@@ -48,8 +48,8 @@ public class GamificationToolsTests
             .Returns(Result.Failure<GamificationProfileResponse>("Pro required"));
 
         var result = await _tools.GetGamificationProfile(_user);
-
-        result.Should().StartWith("Error: ");
+        result.IsError.Should().BeTrue();
+        result.AsText().Should().StartWith("Error: ");
     }
 
     [Fact]
@@ -65,7 +65,7 @@ public class GamificationToolsTests
         _mediator.Send(Arg.Any<GetAchievementsQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(response));
 
-        var result = await _tools.GetAchievements(_user);
+        var result = (await _tools.GetAchievements(_user)).AsText();
 
         result.Should().Contain("Earned (1)");
         result.Should().Contain("Locked (1)");
@@ -80,7 +80,7 @@ public class GamificationToolsTests
         _mediator.Send(Arg.Any<GetAchievementsQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(response));
 
-        var result = await _tools.GetAchievements(_user);
+        var result = (await _tools.GetAchievements(_user)).AsText();
 
         result.Should().Contain("No achievements available");
     }
@@ -91,7 +91,7 @@ public class GamificationToolsTests
         _mediator.Send(Arg.Any<GetAchievementsQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Failure<AchievementsResponse>("Pro required"));
 
-        var result = await _tools.GetAchievements(_user);
+        var result = (await _tools.GetAchievements(_user)).AsText();
 
         result.Should().StartWith("Error: ");
     }
@@ -109,7 +109,7 @@ public class GamificationToolsTests
         _mediator.Send(Arg.Any<GetStreakInfoQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(streak));
 
-        var result = await _tools.GetStreakInfo(_user);
+        var result = (await _tools.GetStreakInfo(_user)).AsText();
 
         result.Should().Contain("Current Streak: 15 days");
         result.Should().Contain("Longest Streak: 30 days");
@@ -122,7 +122,7 @@ public class GamificationToolsTests
         _mediator.Send(Arg.Any<GetStreakInfoQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Failure<StreakInfoResponse>("Not found"));
 
-        var result = await _tools.GetStreakInfo(_user);
+        var result = (await _tools.GetStreakInfo(_user)).AsText();
 
         result.Should().StartWith("Error: ");
     }

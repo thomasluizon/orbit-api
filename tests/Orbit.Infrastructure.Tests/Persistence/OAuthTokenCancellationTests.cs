@@ -1,3 +1,4 @@
+using Orbit.Infrastructure.Tests.Controllers;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -38,25 +39,25 @@ public class OAuthTokenCancellationTests
         var work = new UnitOfWork(db, new DatabaseConnectionSettings());
         var controller = new OAuthController(Substitute.For<IMediator>(), store, new GenericRepository<ApiKey>(db), work,
             Options.Create(new GoogleSettings()), new ConfigurationBuilder().Build(), NullLogger<OAuthController>.Instance,
-            Substitute.For<IOAuthClientMetadataService>())
+            OAuthTestClient.Metadata(), Substitute.For<IGenericRepository<OAuthClient>>())
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext { RequestAborted = caller.Token } }
         };
         const string verifier = "test-pkce-verifier";
         var challenge = Convert.ToBase64String(SHA256.HashData(Encoding.ASCII.GetBytes(verifier)))
             .Replace("+", "-").Replace("/", "_").TrimEnd('=');
-        var code = store.CreateCode(user.Id, challenge, "https://claude.ai/callback", "client");
+        var code = store.CreateCode(user.Id, challenge, "https://claude.ai/api/mcp/auth_callback", "https://claude.ai/oauth/mcp-oauth-client-metadata");
         string? refreshToken = null;
         if (refresh)
         {
             var initial = (OkObjectResult)await controller.Token("authorization_code", code, verifier,
-                "https://claude.ai/callback", default, client_id: "client");
+                "https://claude.ai/api/mcp/auth_callback", default, client_id: "https://claude.ai/oauth/mcp-oauth-client-metadata");
             refreshToken = JsonSerializer.SerializeToElement(initial.Value).GetProperty("refresh_token").GetString();
         }
         disconnect.Enabled = true;
 
         var response = await controller.Token(refresh ? "refresh_token" : "authorization_code", code, verifier,
-            "https://claude.ai/callback", controller.HttpContext.RequestAborted, refreshToken, "client");
+            "https://claude.ai/api/mcp/auth_callback", controller.HttpContext.RequestAborted, refreshToken, "https://claude.ai/oauth/mcp-oauth-client-metadata");
 
         caller.IsCancellationRequested.Should().BeTrue();
         var body = JsonSerializer.SerializeToElement(response.Should().BeOfType<OkObjectResult>().Subject.Value);

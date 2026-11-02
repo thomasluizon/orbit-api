@@ -53,7 +53,7 @@ public class ApiKeyToolsTests
             operationId: "get_api_keys",
             payload: (IReadOnlyList<ApiKeyResponse>)[]);
 
-        var result = await _tools.GetApiKeys(_user);
+        var result = (await _tools.GetApiKeys(_user)).AsText();
 
         result.Should().Contain("No API keys");
     }
@@ -70,7 +70,7 @@ public class ApiKeyToolsTests
             operationId: "get_api_keys",
             payload: (IReadOnlyList<ApiKeyResponse>)keys);
 
-        var result = await _tools.GetApiKeys(_user);
+        var result = (await _tools.GetApiKeys(_user)).AsText();
 
         SingleExecutorRequest().OperationId.Should().Be("get_api_keys");
         result.Should().Contain("CI key");
@@ -86,7 +86,7 @@ public class ApiKeyToolsTests
             operationId: "get_api_keys",
             policyReason: "Pro required");
 
-        var result = await _tools.GetApiKeys(_user);
+        var result = (await _tools.GetApiKeys(_user)).AsText();
 
         result.Should().StartWith("Error: ");
     }
@@ -100,7 +100,7 @@ public class ApiKeyToolsTests
             policyReason: "step_up_required",
             pendingOperationId: Guid.NewGuid());
 
-        var result = await _tools.GetApiKeys(_user);
+        var result = (await _tools.GetApiKeys(_user)).AsText();
 
         result.Should().Contain("Step-up verification required");
     }
@@ -113,7 +113,7 @@ public class ApiKeyToolsTests
             operationId: "get_api_keys",
             payload: (IReadOnlyList<ApiKeyResponse>)[]);
 
-        await _tools.GetApiKeys(_user, confirmationToken: "agc_token");
+        (await _tools.GetApiKeys(_user, confirmationToken: "agc_token")).AsText();
 
         SingleExecutorRequest().ConfirmationToken.Should().Be("agc_token");
     }
@@ -124,7 +124,7 @@ public class ApiKeyToolsTests
         var keyId = Guid.NewGuid();
         StubExecutor(AgentOperationStatus.Succeeded, targetId: keyId.ToString(), targetName: "CI key");
 
-        var result = await _tools.ManageApiKeys(_user, "create", name: "CI key", scopes: "read_habits,write_habits");
+        var result = (await _tools.ManageApiKeys(_user, "create", name: "CI key", scopes: "read_habits,write_habits")).AsText();
 
         SingleExecutorRequest().OperationId.Should().Be("manage_api_keys");
         result.Should().Contain("Created API key 'CI key'");
@@ -135,7 +135,7 @@ public class ApiKeyToolsTests
     {
         StubExecutor(AgentOperationStatus.PendingConfirmation, policyReason: "step_up_required", pendingOperationId: Guid.NewGuid());
 
-        var result = await _tools.ManageApiKeys(_user, "revoke", keyId: Guid.NewGuid().ToString());
+        var result = (await _tools.ManageApiKeys(_user, "revoke", keyId: Guid.NewGuid().ToString())).AsText();
 
         result.Should().Contain("Step-up verification required");
     }

@@ -63,7 +63,7 @@ public sealed class AppleAuthorizationFlow(IOAuthStateStore states, IAppleIdenti
             return result.PropagateError<string>();
         var handoff = IssueHandoff(result.Value);
         return handoff is null ? Result.Failure<string>(ErrorMessages.InvalidSession)
-            : Result.Success($"{_settings.WebOrigin.TrimEnd('/')}/auth-callback?provider=apple&handoff={Uri.EscapeDataString(handoff)}&state={Uri.EscapeDataString(result.Value.Request.ClientState)}");
+            : Result.Success($"{_settings.WebOrigin.TrimEnd('/')}/auth-callback#provider=apple&handoff={Uri.EscapeDataString(handoff)}&state={Uri.EscapeDataString(result.Value.Request.ClientState)}");
     }
 
     public string? IssueHandoff(AppleCallbackResult result)

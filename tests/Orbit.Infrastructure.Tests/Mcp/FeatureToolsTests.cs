@@ -22,7 +22,7 @@ public class FeatureToolsTests
         var args = JsonSerializer.SerializeToElement(new { feature_key = key });
 
         var chat = await new DescribeFeatureTool(features, new AppSurfaceCatalog()).ExecuteAsync(args, Guid.NewGuid(), CancellationToken.None);
-        var mcp = new FeatureTools(features).DescribeFeature(new ClaimsPrincipal(), key);
+        var mcp = new FeatureTools(features).DescribeFeature(new ClaimsPrincipal(), key).AsText();
 
         chat.Success.Should().BeTrue();
         var chatBody = JsonSerializer.SerializeToElement(chat.Payload).GetProperty("markdown").GetString();
@@ -31,4 +31,7 @@ public class FeatureToolsTests
         mcp.Should().Be($"# {explanation.DisplayName}\n\n{chatBody}");
         mcp.Should().Contain(expectedClaim);
     }
+    [Fact]
+    public void UnknownFeature_IsError() => new FeatureTools(new Orbit.Application.Chat.FeatureExplanations.FeatureExplanationService())
+        .DescribeFeature(new System.Security.Claims.ClaimsPrincipal(), "unknown").IsError.Should().BeTrue();
 }

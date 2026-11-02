@@ -11,6 +11,29 @@ namespace Orbit.Infrastructure.Tests.Persistence;
 
 public class BoundedReadIndexMigrationTests(Xunit.Abstractions.ITestOutputHelper output)
 {
+    [Fact]
+    public void LatestMigrationTarget_IncludesBothMergedModelsAndMatchesSnapshot()
+    {
+        using var db = new OrbitDbContext(new DbContextOptionsBuilder<OrbitDbContext>()
+            .UseNpgsql("Host=unused;Database=unused").Options);
+        var migrations = db.GetService<IMigrationsAssembly>();
+        migrations.Migrations.Keys.Where(id => id.EndsWith("_AddBoundedReadState", StringComparison.Ordinal)
+            || id.EndsWith("_PersistOAuthClients", StringComparison.Ordinal)
+            || id.EndsWith("_CompleteBoundedReadIndexes", StringComparison.Ordinal)).Should().Equal(
+            "20261102113348_AddBoundedReadState",
+            "20261102153013_PersistOAuthClients",
+            "20261102193912_CompleteBoundedReadIndexes");
+        var initializer = db.GetService<IModelRuntimeInitializer>();
+        var target = initializer.Initialize(new CompleteBoundedReadIndexes().TargetModel, designTime: true);
+        var snapshot = initializer.Initialize(new OrbitDbContextModelSnapshot().Model, designTime: true);
+
+        target.FindEntityType("Orbit.Domain.Entities.OAuthClient").Should().NotBeNull();
+        target.FindEntityType("Orbit.Domain.Entities.XpDailyTotal").Should().NotBeNull();
+        db.GetService<IMigrationsModelDiffer>().GetDifferences(target.GetRelationalModel(), snapshot.GetRelationalModel())
+            .Should().BeEmpty();
+        db.Database.HasPendingModelChanges().Should().BeFalse();
+    }
+
     [Theory]
     [InlineData(typeof(RestoreBoundedReadIndexes), "20261102072150_RestoreBoundedReadIndexes")]
     [InlineData(typeof(AddBoundedReadState), "20261102113348_AddBoundedReadState")]

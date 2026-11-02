@@ -26,9 +26,12 @@ public partial class OAuthController
         var client = await ValidateClientAsync(client_id, redirect_uri, HttpContext.RequestAborted);
         if (client.Error is not null)
             return BadRequest(new { error = client.Error });
+        var browserSecret = BrowserSecret(state);
+        if (browserSecret is null)
+            return BadRequest(new { error = MissingStateError });
         var language = ResolveLanguage();
         var context = new ConsentEntry(Guid.Empty, code_challenge, redirect_uri, client_id, state, nonce, language, scopes,
-            client.ClientName);
+            client.ClientName, StateHash(browserSecret));
         var url = flow.Start(state, language, null, JsonSerializer.Serialize(context));
         return url is null ? StatusCode(StatusCodes.Status503ServiceUnavailable) : Redirect(url);
     }
@@ -53,6 +56,8 @@ public partial class OAuthController
         var client = await ValidateClientAsync(context.ClientId, context.RedirectUri, cancellationToken);
         if (client.Error is not null)
             return BadRequest(new { error = client.Error });
+        if (IsBrowserBound(context.State, context.BrowserBindingHash))
+            RenewBrowser(context.State, Request.Cookies[CookieName(context.State)]!);
         var ticket = authStore.CreatePendingConsent(context with { UserId = result.Value.Login.UserId, ClientName = client.ClientName });
         Response.Headers.Location = $"/oauth/consent?ticket={Uri.EscapeDataString(ticket)}";
         return StatusCode(StatusCodes.Status303SeeOther);

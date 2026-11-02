@@ -11,6 +11,7 @@ using Orbit.Application.Habits.Commands;
 using Orbit.Application.Habits.Queries;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.ValueObjects;
+using ModelContextProtocol.Protocol;
 
 namespace Orbit.Api.Mcp.Tools;
 
@@ -23,7 +24,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
     private const string DateToDescription = "End date in YYYY-MM-DD format";
     [McpServerTool(Name = "list_habits"), Description("List habits for a date range with schedule info. Returns paginated results with scheduled dates and overdue status.")]
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Code Smell", "S107:Methods should not have too many parameters", Justification = "ListHabits preserves flat dateFrom, dateTo, includeOverdue, search, page and pageSize schema properties. MCP schema generation requires these separate parameters.")]
-    public async Task<string> ListHabits(
+    public async Task<CallToolResult> ListHabits(
         ClaimsPrincipal user,
         [Description(DateFromDescription)] string dateFrom,
         [Description(DateToDescription)] string dateTo,
@@ -33,116 +34,91 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
         [Description("Page size (default 50)")] int pageSize = 50,
         CancellationToken cancellationToken = default)
     {
-        var userId = McpToolHelpers.GetUserId(user);
-        var query = new GetHabitScheduleQuery(
-            userId,
-            McpInputParser.ParseDate(dateFrom, "dateFrom"),
-            McpInputParser.ParseDate(dateTo, "dateTo"),
-            includeOverdue,
-            search,
-            Page: page,
-            PageSize: pageSize);
-
-        var result = await mediator.Send(query, cancellationToken);
-        if (result.IsFailure)
-            return $"Error: {result.Error}";
-
-        var items = result.Value.Items;
-        if (items.Count == 0)
-            return "No habits found for the given date range.";
-
-        var lines = new List<string>();
-        foreach (var h in items)
+        try
         {
-            lines.Add(McpToolHelpers.FormatHabitLine(new McpToolHelpers.HabitLineData(h.Id, h.Title, h.FrequencyUnit, h.FrequencyQuantity,
-                h.DueTime, h.IsCompleted, h.IsOverdue, h.IsBadHabit, h.Schedule ?? HabitSchedule.OneTime,
-                h.ChecklistItems, h.Tags, h.Emoji,
-                new HabitFieldSummary
-                {
-                    Description = h.Description,
-                    DueTime = h.DueTime,
-                    StartDate = h.StartDate,
-                    ParentHabitId = h.ParentHabitId,
-                    ParentTitle = h.ParentTitle,
-                    Tags = h.Tags,
-                    DueEndTime = h.DueEndTime,
-                    IntervalWeeks = h.IntervalWeeks,
-                    Days = h.Days,
-                    EndDate = h.EndDate,
-                    ReminderEnabled = h.ReminderEnabled,
-                    ReminderTimes = h.ReminderTimes,
-                    ScheduledReminders = h.ScheduledReminders,
-                    RelativeReminders = h.RelativeReminders ?? [],
-                    SlipAlertEnabled = h.SlipAlertEnabled,
-                    Schedule = h.Schedule ?? HabitSchedule.OneTime,
-                    ChecklistItems = h.ChecklistItems
-                }.Format(h.DueDate)), indent: 0));
-            McpToolHelpers.AppendChildren(lines, h.Children, indent: 1);
-        }
+            var userId = McpToolHelpers.GetUserId(user);
+            var query = new GetHabitScheduleQuery(userId, McpInputParser.ParseDate(dateFrom, "dateFrom"), McpInputParser.ParseDate(dateTo, "dateTo"), includeOverdue, search, Page: page, PageSize: pageSize);
+            var result = await mediator.Send(query, cancellationToken);
+            if (result.IsFailure)
+                return McpToolHelpers.Error($"Error: {result.Error}");
+            var items = result.Value.Items;
+            if (items.Count == 0)
+                return McpToolHelpers.Text("No habits found for the given date range.");
+            var lines = new List<string>();
+            foreach (var h in items)
+            {
+                lines.Add(McpToolHelpers.FormatHabitLine(new McpToolHelpers.HabitLineData(h.Id, h.Title, h.FrequencyUnit, h.FrequencyQuantity, h.DueTime, h.IsCompleted, h.IsOverdue, h.IsBadHabit, h.Schedule ?? HabitSchedule.OneTime, h.ChecklistItems, h.Tags, h.Emoji, new HabitFieldSummary { Description = h.Description, DueTime = h.DueTime, StartDate = h.StartDate, ParentHabitId = h.ParentHabitId, ParentTitle = h.ParentTitle, Tags = h.Tags, DueEndTime = h.DueEndTime, IntervalWeeks = h.IntervalWeeks, Days = h.Days, EndDate = h.EndDate, ReminderEnabled = h.ReminderEnabled, ReminderTimes = h.ReminderTimes, ScheduledReminders = h.ScheduledReminders, RelativeReminders = h.RelativeReminders ?? [], SlipAlertEnabled = h.SlipAlertEnabled, Schedule = h.Schedule ?? HabitSchedule.OneTime, ChecklistItems = h.ChecklistItems }.Format(h.DueDate)), indent: 0));
+                McpToolHelpers.AppendChildren(lines, h.Children, indent: 1);
+            }
 
-        return string.Create(CultureInfo.InvariantCulture, $"Habits (page {result.Value.Page}/{result.Value.TotalPages}, total: {result.Value.TotalCount}):\n") +
-               string.Join("\n", lines);
+            return McpToolHelpers.Text(string.Create(CultureInfo.InvariantCulture, $"Habits (page {result.Value.Page}/{result.Value.TotalPages}, total: {result.Value.TotalCount}):\n") + string.Join("\n", lines));
+        }
+        catch (ArgumentException ex)
+        {
+            return McpToolHelpers.Error(ex.Message);
+        }
+        catch (JsonException ex)
+        {
+            return McpToolHelpers.Error("Invalid JSON input: " + ex.Message);
+        }
     }
 
     [McpServerTool(Name = "get_habit"), Description("Get detailed information about a specific habit by ID.")]
-    public async Task<string> GetHabit(
+    public async Task<CallToolResult> GetHabit(
         ClaimsPrincipal user,
         [Description(HabitIdDescription)] string habitId,
         CancellationToken cancellationToken = default)
     {
-        var userId = McpToolHelpers.GetUserId(user);
-        var query = new GetHabitByIdQuery(userId, McpInputParser.ParseGuid(habitId, "habitId"));
-        var result = await mediator.Send(query, cancellationToken);
-
-        if (result.IsFailure)
-            return $"Error: {result.Error}";
-
-        var h = result.Value;
-        var habitSummary = $"Title: {h.Title}\nID: {h.Id}\n" +
-                   $"Emoji: {h.Emoji ?? "None"}\n" +
-                   $"Status: {(h.IsCompleted ? "Completed" : "Active")}\n" +
-                   (h.Description is not null ? $"Description: {h.Description}\n" : "") +
-                   (h.FrequencyUnit is not null ? string.Create(CultureInfo.InvariantCulture, $"Frequency: {h.FrequencyQuantity}x per {h.FrequencyUnit}\n") : "Type: One-time task\n") +
-                   string.Create(CultureInfo.InvariantCulture, $"Due Date: {h.DueDate}\n") +
-                   (h.DueTime is not null ? string.Create(CultureInfo.InvariantCulture, $"Due Time: {h.DueTime:HH:mm}\n") : "") +
-                   (h.Days.Count > 0 ? $"Days: {string.Join(", ", h.Days)}\n" : "") +
-                   (h.IsBadHabit ? "Bad Habit: Yes\n" : "") +
-                   (h.Schedule == HabitSchedule.General ? "General: Yes\n" : "") +
-                   (h.Schedule == HabitSchedule.Flexible ? "Flexible: Yes\n" : "") +
-                   (h.ChecklistItems.Count > 0 ? string.Create(CultureInfo.InvariantCulture, $"Checklist: {h.ChecklistItems.Count(i => i.IsChecked)}/{h.ChecklistItems.Count} items\n") : "") +
-                   string.Create(CultureInfo.InvariantCulture, $"Created: {h.CreatedAtUtc:yyyy-MM-dd}\n") +
-                   (h.Children.Count > 0 ? $"Sub-habits: {string.Join(", ", h.Children.Select(c => c.Title))}\n" : "");
-        var details = new HabitFieldSummary
+        try
         {
-            Description = null,
-            DueTime = null,
-            StartDate = h.StartDate,
-            ParentHabitId = h.ParentHabitId,
-            ParentTitle = h.ParentTitle,
-            Tags = h.Tags ?? [],
-            DueEndTime = h.DueEndTime,
-            IntervalWeeks = h.IntervalWeeks,
-            Days = [],
-            EndDate = h.EndDate,
-            ReminderEnabled = h.ReminderEnabled,
-            ReminderTimes = h.ReminderTimes,
-            ScheduledReminders = h.ScheduledReminders,
-            RelativeReminders = h.RelativeReminders ?? [],
-            SlipAlertEnabled = h.SlipAlertEnabled == true,
-            Schedule = HabitSchedule.OneTime,
-            ChecklistItems = h.ChecklistItems
-        }.Format();
-        if (details.Length > 0) habitSummary += details + "\n";
-
-        if (h.LinkedGoals is { Count: > 0 }) habitSummary += $"Goals: {string.Join(", ", h.LinkedGoals.Select(g => $"{g.Title} ({g.Id})"))}\n";
-        var children = new List<string>();
-        McpToolHelpers.AppendDetailChildren(children, h.Children, 1);
-        return habitSummary + string.Join("\n", children);
+            var userId = McpToolHelpers.GetUserId(user);
+            var query = new GetHabitByIdQuery(userId, McpInputParser.ParseGuid(habitId, "habitId"));
+            var result = await mediator.Send(query, cancellationToken);
+            if (result.IsFailure)
+                return McpToolHelpers.Error($"Error: {result.Error}");
+            var h = result.Value;
+            var habitSummary = $"Title: {h.Title}\nID: {h.Id}\n" + $"Emoji: {h.Emoji ?? "None"}\n" + $"Status: {(h.IsCompleted ? "Completed" : "Active")}\n" + (h.Description is not null ? $"Description: {h.Description}\n" : "") + (h.FrequencyUnit is not null ? string.Create(CultureInfo.InvariantCulture, $"Frequency: {h.FrequencyQuantity}x per {h.FrequencyUnit}\n") : "Type: One-time task\n") + string.Create(CultureInfo.InvariantCulture, $"Due Date: {h.DueDate}\n") + (h.DueTime is not null ? string.Create(CultureInfo.InvariantCulture, $"Due Time: {h.DueTime:HH:mm}\n") : "") + (h.Days.Count > 0 ? $"Days: {string.Join(", ", h.Days)}\n" : "") + (h.IsBadHabit ? "Bad Habit: Yes\n" : "") + (h.Schedule == HabitSchedule.General ? "General: Yes\n" : "") + (h.Schedule == HabitSchedule.Flexible ? "Flexible: Yes\n" : "") + (h.ChecklistItems.Count > 0 ? string.Create(CultureInfo.InvariantCulture, $"Checklist: {h.ChecklistItems.Count(i => i.IsChecked)}/{h.ChecklistItems.Count} items\n") : "") + string.Create(CultureInfo.InvariantCulture, $"Created: {h.CreatedAtUtc:yyyy-MM-dd}\n") + (h.Children.Count > 0 ? $"Sub-habits: {string.Join(", ", h.Children.Select(c => c.Title))}\n" : "");
+            var details = new HabitFieldSummary
+            {
+                Description = null,
+                DueTime = null,
+                StartDate = h.StartDate,
+                ParentHabitId = h.ParentHabitId,
+                ParentTitle = h.ParentTitle,
+                Tags = h.Tags ?? [],
+                DueEndTime = h.DueEndTime,
+                IntervalWeeks = h.IntervalWeeks,
+                Days = [],
+                EndDate = h.EndDate,
+                ReminderEnabled = h.ReminderEnabled,
+                ReminderTimes = h.ReminderTimes,
+                ScheduledReminders = h.ScheduledReminders,
+                RelativeReminders = h.RelativeReminders ?? [],
+                SlipAlertEnabled = h.SlipAlertEnabled == true,
+                Schedule = HabitSchedule.OneTime,
+                ChecklistItems = h.ChecklistItems
+            }.Format();
+            if (details.Length > 0)
+                habitSummary += details + "\n";
+            if (h.LinkedGoals is { Count: > 0 })
+                habitSummary += $"Goals: {string.Join(", ", h.LinkedGoals.Select(g => $"{g.Title} ({g.Id})"))}\n";
+            var children = new List<string>();
+            McpToolHelpers.AppendDetailChildren(children, h.Children, 1);
+            return McpToolHelpers.Text(habitSummary + string.Join("\n", children));
+        }
+        catch (ArgumentException ex)
+        {
+            return McpToolHelpers.Error(ex.Message);
+        }
+        catch (JsonException ex)
+        {
+            return McpToolHelpers.Error("Invalid JSON input: " + ex.Message);
+        }
     }
 
     [McpServerTool(Name = "create_habit"), Description("Create a new habit or one-time task.")]
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Code Smell", "S107:Methods should not have too many parameters", Justification = "CreateHabit preserves flat habit creation schema properties, including repeat reminders, intervalWeeks and emoji. MCP schema generation requires these separate parameters.")]
-    public async Task<string> CreateHabit(
+    public async Task<CallToolResult> CreateHabit(
         ClaimsPrincipal user,
         [Description("Name of the habit")] string title,
         [Description("Due date in YYYY-MM-DD format")] string dueDate,
@@ -158,37 +134,41 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
         [Description("Repeat reminder JSON for any schedule: interval_minutes, optional active_start and active_end (HH:mm), and start_at_utc (UTC). Omit to keep current settings; use null JSON to clear on update.")] string? repeatReminder = null,
         CancellationToken cancellationToken = default)
     {
-        var arguments = new Dictionary<string, object?>
+        try
         {
-            ["title"] = title,
-            ["due_date"] = dueDate,
-            ["description"] = description,
-            ["frequency_unit"] = frequencyUnit,
-            ["frequency_quantity"] = frequencyQuantity,
-            ["is_bad_habit"] = isBadHabit,
-            ["is_general"] = isGeneral,
-            ["is_flexible"] = isFlexible,
-            ["due_time"] = dueTime,
-            ["interval_weeks"] = intervalWeeks,
-            ["emoji"] = emoji
-        };
-        var jsonError = McpToolHelpers.AddJsonArguments(arguments, ("repeat_reminder", repeatReminder));
-        if (jsonError is not null)
-            return jsonError;
-        var result = await executorBridge.ExecuteAsync(user, "create_habit", arguments,
-            confirmationToken: null, cancellationToken);
-
-        if (!result.Succeeded)
-            return result.Message;
-
-        return result.TargetId is not null
-            ? $"Created habit '{title}' (id: {result.TargetId})"
-            : $"More detail needed before creating '{title}': specify a frequency (e.g. Day, Week) or mark it as a one-time task.";
+            var arguments = new Dictionary<string, object?>
+            {
+                ["title"] = title,
+                ["due_date"] = dueDate,
+                ["description"] = description,
+                ["frequency_unit"] = frequencyUnit,
+                ["frequency_quantity"] = frequencyQuantity,
+                ["is_bad_habit"] = isBadHabit,
+                ["is_general"] = isGeneral,
+                ["is_flexible"] = isFlexible,
+                ["due_time"] = dueTime,
+                ["interval_weeks"] = intervalWeeks,
+                ["emoji"] = emoji
+            };
+            McpToolHelpers.AddJsonArguments(arguments, ("repeat_reminder", repeatReminder));
+            var result = await executorBridge.ExecuteAsync(user, "create_habit", arguments, confirmationToken: null, cancellationToken);
+            if (!result.Succeeded)
+                return McpToolHelpers.Error(result.Message);
+            return result.TargetId is not null ? McpToolHelpers.Text($"Created habit '{title}' (id: {result.TargetId})") : McpToolHelpers.Error($"More detail needed before creating '{title}': specify a frequency (e.g. Day, Week) or mark it as a one-time task.", "more_detail_needed");
+        }
+        catch (ArgumentException ex)
+        {
+            return McpToolHelpers.Error(ex.Message);
+        }
+        catch (JsonException ex)
+        {
+            return McpToolHelpers.Error("Invalid JSON input: " + ex.Message);
+        }
     }
 
     [McpServerTool(Name = "update_habit"), Description("Update an existing habit's properties. Omitted fields keep their current values.")]
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Code Smell", "S107:Methods should not have too many parameters", Justification = "UpdateHabit preserves flat habit update schema properties, including intervalWeeks, reminders and emoji. MCP schema generation requires these separate parameters.")]
-    public async Task<string> UpdateHabit(
+    public async Task<CallToolResult> UpdateHabit(
         ClaimsPrincipal user,
         [Description(HabitIdDescription)] string habitId,
         [Description("New habit title. Omit to keep the current title.")] string? title = null,
@@ -206,204 +186,288 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
         [Description("Repeat reminder JSON for any schedule: interval_minutes, optional active_start and active_end (HH:mm), and start_at_utc (UTC). Omit to keep current settings; use null JSON to clear on update.")] string? repeatReminder = null,
         CancellationToken cancellationToken = default)
     {
-        var arguments = new Dictionary<string, object?> { ["habit_id"] = habitId };
-        if (title is not null) arguments["title"] = title;
-        if (description is not null) arguments["description"] = description;
-        if (frequencyUnit is not null) arguments["frequency_unit"] = frequencyUnit;
-        if (frequencyQuantity is not null) arguments["frequency_quantity"] = frequencyQuantity;
-        if (dueDate is not null) arguments["due_date"] = dueDate;
-        if (dueTime is not null) arguments["due_time"] = dueTime.Length == 0 ? null : dueTime;
-        if (intervalWeeks is not null) arguments["interval_weeks"] = intervalWeeks;
-        if (emoji != string.Empty) arguments["emoji"] = emoji;
-        if (dueEndTime != string.Empty) arguments["due_end_time"] = dueEndTime;
-        if (isGeneral is not null) arguments["is_general"] = isGeneral;
-        if (slipAlertEnabled is not null) arguments["slip_alert_enabled"] = slipAlertEnabled;
-        var jsonError = McpToolHelpers.AddJsonArguments(arguments, ("relative_reminders", relativeReminders), ("repeat_reminder", repeatReminder));
-        if (jsonError is not null)
-            return jsonError;
+        try
+        {
+            _ = McpInputParser.ParseGuid(habitId, "habitId");
+            var arguments = new Dictionary<string, object?>
+            {
+                ["habit_id"] = habitId
+            };
+            AddProvidedArguments(arguments, new Dictionary<string, object?>
+            {
+                ["title"] = title,
+                ["description"] = description,
+                ["frequency_unit"] = frequencyUnit,
+                ["frequency_quantity"] = frequencyQuantity,
+                ["due_date"] = dueDate,
+                ["interval_weeks"] = intervalWeeks,
+                ["is_general"] = isGeneral,
+                ["slip_alert_enabled"] = slipAlertEnabled
+            });
+            if (dueTime is not null)
+                arguments["due_time"] = dueTime.Length == 0 ? null : dueTime;
+            if (emoji != string.Empty)
+                arguments["emoji"] = emoji;
+            if (dueEndTime != string.Empty)
+                arguments["due_end_time"] = dueEndTime;
+            McpToolHelpers.AddJsonArguments(arguments, ("relative_reminders", relativeReminders), ("repeat_reminder", repeatReminder));
+            var result = await executorBridge.ExecuteAsync(user, "update_habit", arguments, confirmationToken: null, cancellationToken);
+            return result.Succeeded ? McpToolHelpers.Text($"Updated habit {habitId}") : McpToolHelpers.Error(result.Message);
+        }
+        catch (ArgumentException ex)
+        {
+            return McpToolHelpers.Error(ex.Message);
+        }
+        catch (JsonException ex)
+        {
+            return McpToolHelpers.Error("Invalid JSON input: " + ex.Message);
+        }
+    }
 
-        var result = await executorBridge.ExecuteAsync(user, "update_habit", arguments, confirmationToken: null, cancellationToken);
-
-        return result.Succeeded ? $"Updated habit {habitId}" : result.Message;
+    private static void AddProvidedArguments(Dictionary<string, object?> arguments,
+        Dictionary<string, object?> fields)
+    {
+        foreach (var field in fields.Where(field => field.Value is not null))
+            arguments[field.Key] = field.Value;
     }
 
     [McpServerTool(Name = "delete_habit"), Description("Delete a habit by ID.")]
-    public async Task<string> DeleteHabit(
+    public async Task<CallToolResult> DeleteHabit(
         ClaimsPrincipal user,
         [Description(HabitIdDescription)] string habitId,
         [Description("Confirmation token returned by confirm_agent_operation_v2 through the Claude connector; manual API keys must use the Claude connector or make this change in the Orbit app. (required: deleting a habit is destructive)")] string? confirmationToken = null,
         CancellationToken cancellationToken = default)
     {
-        var result = await executorBridge.ExecuteAsync(user, "delete_habit", new
+        try
         {
-            habit_id = habitId
-        }, confirmationToken, cancellationToken);
-
-        return result.Succeeded ? $"Deleted habit {habitId}" : result.Message;
+            _ = McpInputParser.ParseGuid(habitId, "habitId");
+            var result = await executorBridge.ExecuteAsync(user, "delete_habit", new { habit_id = habitId }, confirmationToken, cancellationToken);
+            return result.Succeeded ? McpToolHelpers.Text($"Deleted habit {habitId}") : McpToolHelpers.Error(result.Message);
+        }
+        catch (ArgumentException ex)
+        {
+            return McpToolHelpers.Error(ex.Message);
+        }
+        catch (JsonException ex)
+        {
+            return McpToolHelpers.Error("Invalid JSON input: " + ex.Message);
+        }
     }
 
     [McpServerTool(Name = "log_habit"), Description("Log a habit as completed. Already logged dates fail; use unlog_habit to undo.")]
-    public async Task<string> LogHabit(
+    public async Task<CallToolResult> LogHabit(
         ClaimsPrincipal user,
         [Description(HabitIdDescription)] string habitId,
         [Description("Date to log for in YYYY-MM-DD format (defaults to today)")] string? date = null,
         CancellationToken cancellationToken = default)
     {
-        var result = await executorBridge.ExecuteAsync(user, "log_habit", new
+        try
         {
-            habit_id = habitId,
-            date
-        }, confirmationToken: null, cancellationToken);
-
-        return result.Succeeded ? $"Logged habit {habitId}" : result.Message;
+            _ = McpInputParser.ParseGuid(habitId, "habitId");
+            var result = await executorBridge.ExecuteAsync(user, "log_habit", new { habit_id = habitId, date }, confirmationToken: null, cancellationToken);
+            return result.Succeeded ? McpToolHelpers.Text($"Logged habit {habitId}") : McpToolHelpers.Error(result.Message);
+        }
+        catch (ArgumentException ex)
+        {
+            return McpToolHelpers.Error(ex.Message);
+        }
+        catch (JsonException ex)
+        {
+            return McpToolHelpers.Error("Invalid JSON input: " + ex.Message);
+        }
     }
 
     [McpServerTool(Name = "unlog_habit"), Description("Undo one habit completion. Completed General tasks use their latest completion; other schedules use the specified date or today. Fails if no completion exists. Use log_habit to mark it again.")]
-    public async Task<string> UnlogHabit(
+    public async Task<CallToolResult> UnlogHabit(
         ClaimsPrincipal user,
         [Description(HabitIdDescription)] string habitId,
         [Description("ISO date (YYYY-MM-DD). Defaults to today for dated schedules; ignored for completed General tasks.")] string? date = null,
         CancellationToken cancellationToken = default)
     {
-        var result = await executorBridge.ExecuteAsync(user, "unlog_habit", new
+        try
         {
-            habit_id = habitId,
-            date
-        }, confirmationToken: null, cancellationToken);
-        return result.Succeeded ? $"Unlogged habit {habitId}" : result.Message;
+            _ = McpInputParser.ParseGuid(habitId, "habitId");
+            var result = await executorBridge.ExecuteAsync(user, "unlog_habit", new { habit_id = habitId, date }, confirmationToken: null, cancellationToken);
+            return result.Succeeded ? McpToolHelpers.Text($"Unlogged habit {habitId}") : McpToolHelpers.Error(result.Message);
+        }
+        catch (ArgumentException ex)
+        {
+            return McpToolHelpers.Error(ex.Message);
+        }
+        catch (JsonException ex)
+        {
+            return McpToolHelpers.Error("Invalid JSON input: " + ex.Message);
+        }
     }
 
     [McpServerTool(Name = "get_habit_metrics"), Description("Get streak, completion rate, and other metrics for a habit.")]
-    public async Task<string> GetHabitMetrics(
+    public async Task<CallToolResult> GetHabitMetrics(
         ClaimsPrincipal user,
         [Description(HabitIdDescription)] string habitId,
         CancellationToken cancellationToken = default)
     {
-        var userId = McpToolHelpers.GetUserId(user);
-        var query = new GetHabitMetricsQuery(userId, McpInputParser.ParseGuid(habitId, "habitId"));
-        var result = await mediator.Send(query, cancellationToken);
-
-        if (result.IsFailure)
-            return $"Error: {result.Error}";
-
-        var m = result.Value;
-        return $"Metrics for habit {habitId}:\n" +
-               string.Create(CultureInfo.InvariantCulture, $"Current Streak: {m.CurrentStreak} days\n") +
-               string.Create(CultureInfo.InvariantCulture, $"Longest Streak: {m.LongestStreak} days\n") +
-               string.Create(CultureInfo.InvariantCulture, $"Total Completions: {m.TotalCompletions}\n") +
-               string.Create(CultureInfo.InvariantCulture, $"Weekly Completion Rate: {m.WeeklyCompletionRate:P0}\n") +
-               string.Create(CultureInfo.InvariantCulture, $"Monthly Completion Rate: {m.MonthlyCompletionRate:P0}\n") +
-               (m.LastCompletedDate is not null ? string.Create(CultureInfo.InvariantCulture, $"Last Completed: {m.LastCompletedDate}") : "Never completed");
+        try
+        {
+            var userId = McpToolHelpers.GetUserId(user);
+            var query = new GetHabitMetricsQuery(userId, McpInputParser.ParseGuid(habitId, "habitId"));
+            var result = await mediator.Send(query, cancellationToken);
+            if (result.IsFailure)
+                return McpToolHelpers.Error($"Error: {result.Error}");
+            var m = result.Value;
+            return McpToolHelpers.Text($"Metrics for habit {habitId}:\n" + string.Create(CultureInfo.InvariantCulture, $"Current Streak: {m.CurrentStreak} days\n") + string.Create(CultureInfo.InvariantCulture, $"Longest Streak: {m.LongestStreak} days\n") + string.Create(CultureInfo.InvariantCulture, $"Total Completions: {m.TotalCompletions}\n") + string.Create(CultureInfo.InvariantCulture, $"Weekly Completion Rate: {m.WeeklyCompletionRate:P0}\n") + string.Create(CultureInfo.InvariantCulture, $"Monthly Completion Rate: {m.MonthlyCompletionRate:P0}\n") + (m.LastCompletedDate is not null ? string.Create(CultureInfo.InvariantCulture, $"Last Completed: {m.LastCompletedDate}") : "Never completed"));
+        }
+        catch (ArgumentException ex)
+        {
+            return McpToolHelpers.Error(ex.Message);
+        }
+        catch (JsonException ex)
+        {
+            return McpToolHelpers.Error("Invalid JSON input: " + ex.Message);
+        }
     }
 
     [McpServerTool(Name = "skip_habit"), Description("Skip a habit for today (or a specific date). Advances recurring habits or postpones one-time tasks. Returns skip_id for undo_skip_habit.")]
-    public async Task<string> SkipHabit(
+    public async Task<CallToolResult> SkipHabit(
         ClaimsPrincipal user,
         [Description(HabitIdDescription)] string habitId,
         [Description("Date to skip in YYYY-MM-DD format (defaults to today)")] string? date = null,
         CancellationToken cancellationToken = default)
     {
-        var result = await executorBridge.ExecuteAsync(user, "skip_habit", new
+        try
         {
-            habit_id = habitId,
-            date
-        }, confirmationToken: null, cancellationToken);
-
-        return result.Succeeded ? $"Skipped habit {habitId}: {JsonSerializer.Serialize(result.Payload)}" : result.Message;
+            _ = McpInputParser.ParseGuid(habitId, "habitId");
+            var result = await executorBridge.ExecuteAsync(user, "skip_habit", new { habit_id = habitId, date }, confirmationToken: null, cancellationToken);
+            return result.Succeeded ? McpToolHelpers.Text($"Skipped habit {habitId}: {JsonSerializer.Serialize(result.Payload)}") : McpToolHelpers.Error(result.Message);
+        }
+        catch (ArgumentException ex)
+        {
+            return McpToolHelpers.Error(ex.Message);
+        }
+        catch (JsonException ex)
+        {
+            return McpToolHelpers.Error("Invalid JSON input: " + ex.Message);
+        }
     }
 
     [McpServerTool(Name = "undo_skip_habit"), Description("Undo a single skip using the skip_id returned by skip_habit. Refuses if the habit changed afterward.")]
-    public async Task<string> UndoSkipHabit(
+    public async Task<CallToolResult> UndoSkipHabit(
         ClaimsPrincipal user,
         [Description(HabitIdDescription)] string habitId,
         [Description("Skip ID returned by skip_habit")] string skipId,
         CancellationToken cancellationToken = default)
     {
-        var result = await executorBridge.ExecuteAsync(user, "undo_skip_habit", new
+        try
         {
-            habit_id = habitId,
-            skip_id = skipId
-        }, confirmationToken: null, cancellationToken);
-        return result.Succeeded ? $"Undid skip for habit {habitId}" : result.Message;
+            _ = McpInputParser.ParseGuid(habitId, "habitId");
+            _ = McpInputParser.ParseGuid(skipId, "skipId");
+            var result = await executorBridge.ExecuteAsync(user, "undo_skip_habit", new { habit_id = habitId, skip_id = skipId }, confirmationToken: null, cancellationToken);
+            return result.Succeeded ? McpToolHelpers.Text($"Undid skip for habit {habitId}") : McpToolHelpers.Error(result.Message);
+        }
+        catch (ArgumentException ex)
+        {
+            return McpToolHelpers.Error(ex.Message);
+        }
+        catch (JsonException ex)
+        {
+            return McpToolHelpers.Error("Invalid JSON input: " + ex.Message);
+        }
     }
 
     [McpServerTool(Name = "update_checklist"), Description("Update the checklist items for a habit. Pass the full list of items with their checked state.")]
-    public async Task<string> UpdateChecklist(
+    public async Task<CallToolResult> UpdateChecklist(
         ClaimsPrincipal user,
         [Description(HabitIdDescription)] string habitId,
         [Description("JSON array of checklist items, each with 'text' (string) and 'isChecked' (boolean)")] string checklistItemsJson,
         CancellationToken cancellationToken = default)
     {
-        var items = McpToolHelpers.DeserializeJson<List<ChecklistItem>>(checklistItemsJson) ?? [];
-
-        var result = await executorBridge.ExecuteAsync(user, "update_checklist", new
+        try
         {
-            habit_id = habitId,
-            checklist_items = items.Select(item => new { text = item.Text, is_checked = item.IsChecked })
-        }, confirmationToken: null, cancellationToken);
-
-        return result.Succeeded ? $"Updated checklist for habit {habitId} ({items.Count} items)" : result.Message;
+            _ = McpInputParser.ParseGuid(habitId, "habitId");
+            var items = McpToolHelpers.DeserializeJson<List<ChecklistItem>>(checklistItemsJson);
+            var result = await executorBridge.ExecuteAsync(user, "update_checklist", new { habit_id = habitId, checklist_items = items.Select(item => new { text = item.Text, is_checked = item.IsChecked }) }, confirmationToken: null, cancellationToken);
+            return result.Succeeded ? McpToolHelpers.Text($"Updated checklist for habit {habitId} ({items.Count} items)") : McpToolHelpers.Error(result.Message);
+        }
+        catch (ArgumentException ex)
+        {
+            return McpToolHelpers.Error(ex.Message);
+        }
+        catch (JsonException ex)
+        {
+            return McpToolHelpers.Error("Invalid JSON input: " + ex.Message);
+        }
     }
 
     [McpServerTool(Name = "get_habit_logs"), Description("Get completion logs for a specific habit (last 365 days).")]
-    public async Task<string> GetHabitLogs(
+    public async Task<CallToolResult> GetHabitLogs(
         ClaimsPrincipal user,
         [Description(HabitIdDescription)] string habitId,
         CancellationToken cancellationToken = default)
     {
-        var userId = McpToolHelpers.GetUserId(user);
-        var query = new GetHabitLogsQuery(userId, McpInputParser.ParseGuid(habitId, "habitId"));
-        var result = await mediator.Send(query, cancellationToken);
-
-        if (result.IsFailure)
-            return $"Error: {result.Error}";
-
-        var logs = result.Value;
-        if (logs.Count == 0)
-            return "No logs found for this habit.";
-
-        var returnedLogs = logs.Take(50).ToList();
-        var partial = returnedLogs.Count < logs.Count;
-        var lines = returnedLogs.Select(l =>
-            string.Create(CultureInfo.InvariantCulture, $"- {l.Date:yyyy-MM-dd}") +
-            $" (id: {l.Id})");
-
-        return $"Logs (total: {logs.Count}, returned: {returnedLogs.Count}, partial: {partial.ToString().ToLowerInvariant()}):\n{string.Join("\n", lines)}";
+        try
+        {
+            var userId = McpToolHelpers.GetUserId(user);
+            var query = new GetHabitLogsQuery(userId, McpInputParser.ParseGuid(habitId, "habitId"));
+            var result = await mediator.Send(query, cancellationToken);
+            if (result.IsFailure)
+                return McpToolHelpers.Error($"Error: {result.Error}");
+            var logs = result.Value;
+            if (logs.Count == 0)
+                return McpToolHelpers.Text("No logs found for this habit.");
+            var returnedLogs = logs.Take(50).ToList();
+            var partial = returnedLogs.Count < logs.Count;
+            var lines = returnedLogs.Select(l => string.Create(CultureInfo.InvariantCulture, $"- {l.Date:yyyy-MM-dd}") + $" (id: {l.Id})");
+            return McpToolHelpers.Text($"Logs (total: {logs.Count}, returned: {returnedLogs.Count}, partial: {partial.ToString().ToLowerInvariant()}):\n{string.Join("\n", lines)}");
+        }
+        catch (ArgumentException ex)
+        {
+            return McpToolHelpers.Error(ex.Message);
+        }
+        catch (JsonException ex)
+        {
+            return McpToolHelpers.Error("Invalid JSON input: " + ex.Message);
+        }
     }
 
     [McpServerTool(Name = "get_all_habit_logs"), Description("Get completion logs for all habits within a date range, grouped by habit ID.")]
-    public async Task<string> GetAllHabitLogs(
+    public async Task<CallToolResult> GetAllHabitLogs(
         ClaimsPrincipal user,
         [Description(DateFromDescription)] string dateFrom,
         [Description(DateToDescription)] string dateTo,
         CancellationToken cancellationToken = default)
     {
-        var userId = McpToolHelpers.GetUserId(user);
-        var query = new GetAllHabitLogsQuery(userId, McpInputParser.ParseDate(dateFrom, "dateFrom"), McpInputParser.ParseDate(dateTo, "dateTo"));
-        var result = await mediator.Send(query, cancellationToken);
-
-        if (result.IsFailure)
-            return $"Error: {result.Error}";
-
-        var grouped = result.Value;
-        if (grouped.Count == 0)
-            return "No logs found for the given date range.";
-
-        var totalLogs = grouped.Sum(group => group.Value.Count);
-        var returnedLogCount = grouped.Sum(group => Math.Min(group.Value.Count, 10));
-        var partial = returnedLogCount < totalLogs;
-        var lines = grouped.Select(group =>
+        try
         {
-            var returned = group.Value.Take(10).ToList();
-            return string.Create(CultureInfo.InvariantCulture, $"Habit {group.Key}: total {group.Value.Count}, returned {returned.Count} ({string.Join(", ", returned.Select(log => log.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)))})");
-        });
-
-        return $"Logs for {grouped.Count} habits (total_logs: {totalLogs}, returned_logs: {returnedLogCount}, partial: {partial.ToString().ToLowerInvariant()}):\n{string.Join("\n", lines)}";
+            var userId = McpToolHelpers.GetUserId(user);
+            var query = new GetAllHabitLogsQuery(userId, McpInputParser.ParseDate(dateFrom, "dateFrom"), McpInputParser.ParseDate(dateTo, "dateTo"));
+            var result = await mediator.Send(query, cancellationToken);
+            if (result.IsFailure)
+                return McpToolHelpers.Error($"Error: {result.Error}");
+            var grouped = result.Value;
+            if (grouped.Count == 0)
+                return McpToolHelpers.Text("No logs found for the given date range.");
+            var totalLogs = grouped.Sum(group => group.Value.Count);
+            var returnedLogCount = grouped.Sum(group => Math.Min(group.Value.Count, 10));
+            var partial = returnedLogCount < totalLogs;
+            var lines = grouped.Select(group =>
+            {
+                var returned = group.Value.Take(10).ToList();
+                return string.Create(CultureInfo.InvariantCulture, $"Habit {group.Key}: total {group.Value.Count}, returned {returned.Count} ({string.Join(", ", returned.Select(log => log.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)))})");
+            });
+            return McpToolHelpers.Text($"Logs for {grouped.Count} habits (total_logs: {totalLogs}, returned_logs: {returnedLogCount}, partial: {partial.ToString().ToLowerInvariant()}):\n{string.Join("\n", lines)}");
+        }
+        catch (ArgumentException ex)
+        {
+            return McpToolHelpers.Error(ex.Message);
+        }
+        catch (JsonException ex)
+        {
+            return McpToolHelpers.Error("Invalid JSON input: " + ex.Message);
+        }
     }
 
     [McpServerTool(Name = "create_sub_habit"), Description("Create a sub-habit under an existing parent habit.")]
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Code Smell", "S107:Methods should not have too many parameters", Justification = "CreateSubHabit preserves flat child-habit schema properties, including parentHabitId, reminders and checklist items. MCP schema generation requires these separate parameters.")]
-    public async Task<string> CreateSubHabit(
+    public async Task<CallToolResult> CreateSubHabit(
         ClaimsPrincipal user,
         [Description("The parent habit ID (GUID)")] string parentHabitId,
         [Description("Name of the sub-habit")] string title,
@@ -429,141 +493,159 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
         [Description("Repeat reminder JSON for any schedule: interval_minutes, optional active_start and active_end (HH:mm), and start_at_utc (UTC).")] string? repeatReminder = null,
         CancellationToken cancellationToken = default)
     {
-        var arguments = new Dictionary<string, object?>
+        try
         {
-            ["parent_habit_id"] = parentHabitId,
-            ["title"] = title,
-            ["description"] = description,
-            ["frequency_quantity"] = frequencyQuantity,
-            ["due_time"] = dueTime,
-            ["is_bad_habit"] = isBadHabit,
-            ["is_flexible"] = isFlexible,
-            ["due_date"] = dueDate,
-            ["due_end_time"] = dueEndTime,
-            ["end_date"] = endDate,
-            ["interval_weeks"] = intervalWeeks,
-            ["emoji"] = emoji,
-            ["days"] = days,
-            ["reminder_enabled"] = reminderEnabled,
-            ["reminder_times"] = reminderTimes,
-            ["slip_alert_enabled"] = slipAlertEnabled,
-            ["tag_ids"] = tagIds
-        }.Where(pair => pair.Value is not null).ToDictionary(pair => pair.Key, pair => pair.Value);
-        if (frequencyUnit is not null)
-            arguments["frequency_unit"] = frequencyUnit;
-        var jsonError = McpToolHelpers.AddJsonArguments(arguments,
-            ("scheduled_reminders", scheduledReminders), ("relative_reminders", relativeReminders),
-            ("checklist_items", checklistItems), ("repeat_reminder", repeatReminder));
-        if (jsonError is not null)
-            return jsonError;
-        if (arguments.GetValueOrDefault("repeat_reminder") is System.Text.Json.JsonElement { ValueKind: System.Text.Json.JsonValueKind.Object })
-            arguments["reminder_enabled"] = true;
-        var result = await executorBridge.ExecuteAsync(user, "create_sub_habit", arguments,
-            confirmationToken: null, cancellationToken);
-
-        return result.Succeeded
-            ? $"Created sub-habit '{title}' (id: {result.TargetId}) under parent {parentHabitId}"
-            : result.Message;
+            _ = McpInputParser.ParseGuid(parentHabitId, "parentHabitId");
+            var arguments = new Dictionary<string, object?>
+            {
+                ["parent_habit_id"] = parentHabitId,
+                ["title"] = title,
+                ["description"] = description,
+                ["frequency_quantity"] = frequencyQuantity,
+                ["due_time"] = dueTime,
+                ["is_bad_habit"] = isBadHabit,
+                ["is_flexible"] = isFlexible,
+                ["due_date"] = dueDate,
+                ["due_end_time"] = dueEndTime,
+                ["end_date"] = endDate,
+                ["interval_weeks"] = intervalWeeks,
+                ["emoji"] = emoji,
+                ["days"] = days,
+                ["reminder_enabled"] = reminderEnabled,
+                ["reminder_times"] = reminderTimes,
+                ["slip_alert_enabled"] = slipAlertEnabled,
+                ["tag_ids"] = tagIds
+            }.Where(pair => pair.Value is not null).ToDictionary(pair => pair.Key, pair => pair.Value);
+            if (frequencyUnit is not null)
+                arguments["frequency_unit"] = frequencyUnit;
+            McpToolHelpers.AddJsonArguments(arguments, ("scheduled_reminders", scheduledReminders), ("relative_reminders", relativeReminders), ("checklist_items", checklistItems), ("repeat_reminder", repeatReminder));
+            if (arguments.GetValueOrDefault("repeat_reminder") is System.Text.Json.JsonElement { ValueKind: System.Text.Json.JsonValueKind.Object })
+                arguments["reminder_enabled"] = true;
+            var result = await executorBridge.ExecuteAsync(user, "create_sub_habit", arguments, confirmationToken: null, cancellationToken);
+            return result.Succeeded ? McpToolHelpers.Text($"Created sub-habit '{title}' (id: {result.TargetId}) under parent {parentHabitId}") : McpToolHelpers.Error(result.Message);
+        }
+        catch (ArgumentException ex)
+        {
+            return McpToolHelpers.Error(ex.Message);
+        }
+        catch (JsonException ex)
+        {
+            return McpToolHelpers.Error("Invalid JSON input: " + ex.Message);
+        }
     }
 
     [McpServerTool(Name = "duplicate_habit"), Description("Duplicate a habit (including its sub-habits and tags).")]
-    public async Task<string> DuplicateHabit(
+    public async Task<CallToolResult> DuplicateHabit(
         ClaimsPrincipal user,
         [Description("The habit ID to duplicate (GUID)")] string habitId,
         CancellationToken cancellationToken = default)
     {
-        var result = await executorBridge.ExecuteAsync(user, "duplicate_habit", new
+        try
         {
-            habit_id = habitId
-        }, confirmationToken: null, cancellationToken);
-
-        return result.Succeeded ? $"Duplicated habit {habitId} (new id: {result.TargetId})" : result.Message;
+            _ = McpInputParser.ParseGuid(habitId, "habitId");
+            var result = await executorBridge.ExecuteAsync(user, "duplicate_habit", new { habit_id = habitId }, confirmationToken: null, cancellationToken);
+            return result.Succeeded ? McpToolHelpers.Text($"Duplicated habit {habitId} (new id: {result.TargetId})") : McpToolHelpers.Error(result.Message);
+        }
+        catch (ArgumentException ex)
+        {
+            return McpToolHelpers.Error(ex.Message);
+        }
+        catch (JsonException ex)
+        {
+            return McpToolHelpers.Error("Invalid JSON input: " + ex.Message);
+        }
     }
 
     [McpServerTool(Name = "bulk_create_habits"), Description("Create multiple habits at once. Each habit can have sub-habits.")]
-    public async Task<string> BulkCreateHabits(
+    public async Task<CallToolResult> BulkCreateHabits(
         ClaimsPrincipal user,
         [Description("JSON array of habit objects. Each with: title (required), description, emoji, frequencyUnit (Day/Week/Month/Year), frequencyQuantity, isBadHabit, dueDate (YYYY-MM-DD), dueTime (HH:mm), isGeneral, isFlexible, repeatReminder (object with interval_minutes and optional active_start, active_end, start_at_utc)")] string habitsJson,
-        [Description("Confirmation token returned by confirm_agent_operation_v2 through the Claude connector; manual API keys must use the Claude connector or make this change in the Orbit app. (required: bulk create is a destructive batch operation)")] string? confirmationToken = null,
+        [Description("Confirmation token returned by confirm_agent_operation_v2, needed only when the server returns a pending confirmation.")] string? confirmationToken = null,
         CancellationToken cancellationToken = default)
     {
-        var parsedHabits = McpToolHelpers.DeserializeJson<List<McpToolHelpers.BulkHabitItemDto>>(habitsJson) ?? [];
-
-        var result = await executorBridge.ExecuteAsync(user, "bulk_create_habits", new
+        try
         {
-            habits = parsedHabits.Select(McpToolHelpers.ToBulkHabitArgs)
-        }, confirmationToken, cancellationToken);
-
-        if (!result.Succeeded)
-            return result.Message;
-
-        var bulk = result.Payload switch
+            var parsedHabits = McpToolHelpers.DeserializeJson<List<McpToolHelpers.BulkHabitItemDto>>(habitsJson);
+            var result = await executorBridge.ExecuteAsync(user, "bulk_create_habits", new { habits = parsedHabits.Select(McpToolHelpers.ToBulkHabitArgs) }, confirmationToken, cancellationToken);
+            if (!result.Succeeded)
+                return McpToolHelpers.Error(result.Message);
+            var bulk = result.Payload switch
+            {
+                BulkCreateResult typed => typed,
+                JsonElement json => json.Deserialize<BulkCreateResult>(PayloadOptions),
+                _ => null
+            };
+            if (bulk is null)
+                return FormatBulkMutationResult(result);
+            var successCount = bulk.Results.Count(x => x.Status == BulkItemStatus.Success);
+            var failCount = bulk.Results.Count(x => x.Status == BulkItemStatus.Failed);
+            var lines = bulk.Results.Select(x => x.Status == BulkItemStatus.Success ? $"- OK: {x.Title} (id: {x.HabitId})" : $"- FAILED: {x.Title} - {x.Error}");
+            var coverage = JsonSerializer.Serialize(new { applied_count = bulk.AppliedCount, total_matched = bulk.TotalMatched, skipped_count = bulk.SkippedCount, partial = bulk.Partial });
+            var text = $"Bulk create: {successCount} succeeded, {failCount} failed\n{string.Join("\n", lines)}\n{coverage}";
+            return failCount > 0 ? McpToolHelpers.Error(text) : McpToolHelpers.Text(text);
+        }
+        catch (ArgumentException ex)
         {
-            BulkCreateResult typed => typed,
-            JsonElement json => json.Deserialize<BulkCreateResult>(PayloadOptions),
-            _ => null
-        };
-        if (bulk is null)
-            return FormatBulkMutationResult(result);
-
-        var successCount = bulk.Results.Count(x => x.Status == BulkItemStatus.Success);
-        var failCount = bulk.Results.Count(x => x.Status == BulkItemStatus.Failed);
-        var lines = bulk.Results.Select(x =>
-            x.Status == BulkItemStatus.Success
-                ? $"- OK: {x.Title} (id: {x.HabitId})"
-                : $"- FAILED: {x.Title} - {x.Error}");
-
-        var coverage = JsonSerializer.Serialize(new
+            return McpToolHelpers.Error(ex.Message);
+        }
+        catch (JsonException ex)
         {
-            applied_count = bulk.AppliedCount,
-            total_matched = bulk.TotalMatched,
-            skipped_count = bulk.SkippedCount,
-            partial = bulk.Partial
-        });
-        return $"Bulk create: {successCount} succeeded, {failCount} failed\n{string.Join("\n", lines)}\n{coverage}";
+            return McpToolHelpers.Error("Invalid JSON input: " + ex.Message);
+        }
     }
 
     [McpServerTool(Name = "bulk_delete_habits"), Description("Delete multiple habits at once.")]
-    public async Task<string> BulkDeleteHabits(
+    public async Task<CallToolResult> BulkDeleteHabits(
         ClaimsPrincipal user,
         [Description("Comma-separated habit IDs (GUIDs). Omit when filterJson is provided.")] string? habitIds = null,
         [Description("Confirmation token returned by confirm_agent_operation_v2 through the Claude connector; manual API keys must use the Claude connector or make this change in the Orbit app. (required: bulk delete is destructive)")] string? confirmationToken = null,
         [Description("Optional JSON server-side filter used instead of habitIds")] string? filterJson = null,
         CancellationToken cancellationToken = default)
     {
-        var ids = string.IsNullOrWhiteSpace(habitIds) ? [] : McpToolHelpers.ParseGuidCsv(habitIds);
-        var filter = string.IsNullOrWhiteSpace(filterJson) ? (JsonElement?)null : JsonSerializer.Deserialize<JsonElement>(filterJson);
-
-        var result = await executorBridge.ExecuteAsync(user, "bulk_delete_habits", new
+        try
         {
-            habit_ids = ids.Count > 0 ? ids.Select(id => id.ToString()) : null,
-            filter
-        }, confirmationToken, cancellationToken);
-
-        return FormatBulkMutationResult(result);
+            var ids = string.IsNullOrWhiteSpace(habitIds) ? [] : McpToolHelpers.ParseGuidCsv(habitIds, "habitIds");
+            var filter = string.IsNullOrWhiteSpace(filterJson) ? (JsonElement?)null : McpToolHelpers.ParseJson(filterJson, JsonValueKind.Object, "filterJson");
+            var result = await executorBridge.ExecuteAsync(user, "bulk_delete_habits", new { habit_ids = ids.Count > 0 ? ids.Select(id => id.ToString()) : null, filter }, confirmationToken, cancellationToken);
+            return FormatBulkMutationResult(result);
+        }
+        catch (ArgumentException ex)
+        {
+            return McpToolHelpers.Error(ex.Message);
+        }
+        catch (JsonException ex)
+        {
+            return McpToolHelpers.Error("Invalid JSON input: " + ex.Message);
+        }
     }
 
     [McpServerTool(Name = "bulk_update_habits"), Description("Update the full server-side set of habits matching a JSON filter in one operation.")]
-    public async Task<string> BulkUpdateHabits(
+    public async Task<CallToolResult> BulkUpdateHabits(
         ClaimsPrincipal user,
         [Description("JSON filter with all, habit_ids, tag, search, is_completed, has_emoji, is_general, is_bad_habit, or frequency. Use has_emoji=false for habits without an icon.")] string filterJson,
         [Description("JSON object containing the habit fields to update")] string updatesJson,
         [Description("Confirmation token returned by confirm_agent_operation_v2 through the Claude connector; manual API keys must use the Claude connector or make this change in the Orbit app.")] string? confirmationToken = null,
         CancellationToken cancellationToken = default)
     {
-        var filter = JsonSerializer.Deserialize<JsonElement>(filterJson);
-        var updates = JsonSerializer.Deserialize<JsonElement>(updatesJson);
-        var result = await executorBridge.ExecuteAsync(user, "bulk_update_habits", new
+        try
         {
-            filter,
-            updates
-        }, confirmationToken, cancellationToken);
-
-        return FormatBulkMutationResult(result);
+            var filter = McpToolHelpers.ParseJson(filterJson, JsonValueKind.Object, "filterJson");
+            var updates = McpToolHelpers.ParseJson(updatesJson, JsonValueKind.Object, "updatesJson");
+            var result = await executorBridge.ExecuteAsync(user, "bulk_update_habits", new { filter, updates }, confirmationToken, cancellationToken);
+            return FormatBulkMutationResult(result);
+        }
+        catch (ArgumentException ex)
+        {
+            return McpToolHelpers.Error(ex.Message);
+        }
+        catch (JsonException ex)
+        {
+            return McpToolHelpers.Error("Invalid JSON input: " + ex.Message);
+        }
     }
 
     [McpServerTool(Name = "bulk_update_habit_emojis"), Description("Update emojis for the full server-side set matching a filter. Use has_emoji=false for without an icon / sem ícone. Inference preserves existing icons unless replaceExisting=true was explicitly requested. Infer from each title in bounded AI batches, apply an explicit emoji, or pass null to clear. Returns applied_count, total_matched and partial.")]
-    public async Task<string> BulkUpdateHabitEmojis(
+    public async Task<CallToolResult> BulkUpdateHabitEmojis(
         ClaimsPrincipal user,
         [Description("JSON filter with all, habit_ids, tag, search, is_completed, has_emoji, is_general, is_bad_habit, or frequency. Use has_emoji=false for habits without an icon.")] string filterJson,
         [Description("Emoji to apply, null to clear, or omit to infer from titles")] string? emoji = "",
@@ -572,59 +654,70 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
         CancellationToken cancellationToken = default,
         [Description("Set true only when the user asks to replace existing icons during inference.")] bool replaceExisting = false)
     {
-        var arguments = new Dictionary<string, object?>
+        try
         {
-            ["replace_existing"] = replaceExisting,
-            ["filter"] = JsonSerializer.Deserialize<JsonElement>(filterJson),
-            ["infer_from_title"] = inferFromTitle ?? emoji == string.Empty
-        };
-        if (emoji != string.Empty)
-            arguments["emoji"] = emoji;
-
-        var result = await executorBridge.ExecuteAsync(user, "bulk_update_habit_emojis", arguments,
-            confirmationToken, cancellationToken);
-        return FormatBulkMutationResult(result);
+            var arguments = new Dictionary<string, object?>
+            {
+                ["replace_existing"] = replaceExisting,
+                ["filter"] = McpToolHelpers.ParseJson(filterJson, JsonValueKind.Object, "filterJson"),
+                ["infer_from_title"] = inferFromTitle ?? emoji == string.Empty
+            };
+            if (emoji != string.Empty)
+                arguments["emoji"] = emoji;
+            var result = await executorBridge.ExecuteAsync(user, "bulk_update_habit_emojis", arguments, confirmationToken, cancellationToken);
+            return FormatBulkMutationResult(result);
+        }
+        catch (ArgumentException ex)
+        {
+            return McpToolHelpers.Error(ex.Message);
+        }
+        catch (JsonException ex)
+        {
+            return McpToolHelpers.Error("Invalid JSON input: " + ex.Message);
+        }
     }
 
     [McpServerTool(Name = "bulk_reschedule_habits"), Description("Reschedule the full server-side set of habits matching a JSON filter in one operation.")]
-    public async Task<string> BulkRescheduleHabits(
+    public async Task<CallToolResult> BulkRescheduleHabits(
         ClaimsPrincipal user,
         [Description("JSON filter with all, habit_ids, tag, search, is_completed, has_emoji, is_general, is_bad_habit, or frequency. Use has_emoji=false for habits without an icon.")] string filterJson,
         [Description("New due date in YYYY-MM-DD format")] string dueDate,
         [Description("Confirmation token returned by confirm_agent_operation_v2 through the Claude connector; manual API keys must use the Claude connector or make this change in the Orbit app.")] string? confirmationToken = null,
         CancellationToken cancellationToken = default)
     {
-        var filter = JsonSerializer.Deserialize<JsonElement>(filterJson);
-        var result = await executorBridge.ExecuteAsync(user, "bulk_reschedule_habits", new
+        try
         {
-            filter,
-            due_date = dueDate
-        }, confirmationToken, cancellationToken);
-
-        return FormatBulkMutationResult(result);
+            var filter = McpToolHelpers.ParseJson(filterJson, JsonValueKind.Object, "filterJson");
+            var result = await executorBridge.ExecuteAsync(user, "bulk_reschedule_habits", new { filter, due_date = dueDate }, confirmationToken, cancellationToken);
+            return FormatBulkMutationResult(result);
+        }
+        catch (ArgumentException ex)
+        {
+            return McpToolHelpers.Error(ex.Message);
+        }
+        catch (JsonException ex)
+        {
+            return McpToolHelpers.Error("Invalid JSON input: " + ex.Message);
+        }
     }
 
     [McpServerTool(Name = "bulk_log_habits"), Description("Log multiple habits as completed at once.")]
-    public Task<string> BulkLogHabits(
+    public Task<CallToolResult> BulkLogHabits(
         ClaimsPrincipal user,
         [Description("Comma-separated habit IDs (GUIDs). Omit when filterJson is provided.")] string? habitIds = null,
         [Description("Date to log for in YYYY-MM-DD format (defaults to today)")] string? date = null,
         [Description("Optional JSON server-side filter used instead of habitIds")] string? filterJson = null,
-        [Description("Confirmation token returned by confirm_agent_operation_v2 through the Claude connector; manual API keys must use the Claude connector or make this change in the Orbit app. (required: bulk log is a destructive batch operation)")] string? confirmationToken = null,
-        CancellationToken cancellationToken = default) =>
-        ExecuteBulkHabitOperationAsync(user, "bulk_log_habits", habitIds, date, filterJson, confirmationToken, cancellationToken);
-
+        [Description("Confirmation token returned by confirm_agent_operation_v2, needed only when the server returns a pending confirmation.")] string? confirmationToken = null,
+        CancellationToken cancellationToken = default) => ExecuteBulkHabitOperationAsync(user, "bulk_log_habits", habitIds, date, filterJson, confirmationToken, cancellationToken);
     [McpServerTool(Name = "bulk_skip_habits"), Description("Skip multiple habits at once.")]
-    public Task<string> BulkSkipHabits(
+    public Task<CallToolResult> BulkSkipHabits(
         ClaimsPrincipal user,
         [Description("Comma-separated habit IDs (GUIDs). Omit when filterJson is provided.")] string? habitIds = null,
         [Description("Date to skip in YYYY-MM-DD format (defaults to today)")] string? date = null,
         [Description("Optional JSON server-side filter used instead of habitIds")] string? filterJson = null,
-        [Description("Confirmation token returned by confirm_agent_operation_v2 through the Claude connector; manual API keys must use the Claude connector or make this change in the Orbit app. (required: bulk skip is a destructive batch operation)")] string? confirmationToken = null,
-        CancellationToken cancellationToken = default) =>
-        ExecuteBulkHabitOperationAsync(user, "bulk_skip_habits", habitIds, date, filterJson, confirmationToken, cancellationToken);
-
-    private async Task<string> ExecuteBulkHabitOperationAsync(
+        [Description("Confirmation token returned by confirm_agent_operation_v2, needed only when the server returns a pending confirmation.")] string? confirmationToken = null,
+        CancellationToken cancellationToken = default) => ExecuteBulkHabitOperationAsync(user, "bulk_skip_habits", habitIds, date, filterJson, confirmationToken, cancellationToken);
+    private async Task<CallToolResult> ExecuteBulkHabitOperationAsync(
         ClaimsPrincipal user,
         string operation,
         string? habitIds,
@@ -633,153 +726,208 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
         string? confirmationToken,
         CancellationToken cancellationToken)
     {
-        var ids = string.IsNullOrWhiteSpace(habitIds) ? [] : McpToolHelpers.ParseGuidCsv(habitIds);
-        var filter = string.IsNullOrWhiteSpace(filterJson) ? (JsonElement?)null : JsonSerializer.Deserialize<JsonElement>(filterJson);
-
-        var result = await executorBridge.ExecuteAsync(user, operation, new
+        try
         {
-            habit_ids = ids.Count > 0 ? ids.Select(id => id.ToString()) : null,
-            filter,
-            date
-        }, confirmationToken, cancellationToken);
-
-        return FormatBulkMutationResult(result);
+            var ids = string.IsNullOrWhiteSpace(habitIds) ? [] : McpToolHelpers.ParseGuidCsv(habitIds, "habitIds");
+            var filter = string.IsNullOrWhiteSpace(filterJson) ? (JsonElement?)null : McpToolHelpers.ParseJson(filterJson, JsonValueKind.Object, "filterJson");
+            var result = await executorBridge.ExecuteAsync(user, operation, new { habit_ids = ids.Count > 0 ? ids.Select(id => id.ToString()) : null, filter, date }, confirmationToken, cancellationToken);
+            return FormatBulkMutationResult(result);
+        }
+        catch (ArgumentException ex)
+        {
+            return McpToolHelpers.Error(ex.Message);
+        }
+        catch (JsonException ex)
+        {
+            return McpToolHelpers.Error("Invalid JSON input: " + ex.Message);
+        }
     }
 
-    private static string FormatBulkMutationResult(McpExecutorResult result)
+    private static CallToolResult FormatBulkMutationResult(McpExecutorResult result)
     {
         if (!result.Succeeded)
-            return result.Message;
+            return McpToolHelpers.Error(result.Message);
         if (result.Payload is null)
-            return result.TargetName ?? "Bulk habit coverage is unavailable.";
-        return $"{result.TargetName ?? "Bulk habit result"}\n{JsonSerializer.Serialize(result.Payload)}";
+            return McpToolHelpers.Error(result.TargetName ?? "Bulk habit coverage is unavailable.");
+        var text = $"{result.TargetName ?? "Bulk habit result"}\n{JsonSerializer.Serialize(result.Payload)}";
+        var payload = JsonSerializer.SerializeToElement(result.Payload, PayloadOptions);
+        return payload.ValueKind == JsonValueKind.Object && payload.TryGetProperty("partial", out var partial) && partial.ValueKind == JsonValueKind.True
+            ? McpToolHelpers.Error(text) : McpToolHelpers.Text(text);
     }
 
     [McpServerTool(Name = "reorder_habits"), Description("Reorder habits by setting new positions.")]
-    public async Task<string> ReorderHabits(
+    public async Task<CallToolResult> ReorderHabits(
         ClaimsPrincipal user,
         [Description("JSON array of objects with 'habitId' (GUID) and 'position' (int)")] string positionsJson,
         CancellationToken cancellationToken = default)
     {
-        var positions = McpToolHelpers.DeserializeJson<List<McpToolHelpers.HabitPositionDto>>(positionsJson) ?? [];
-
-        var result = await executorBridge.ExecuteAsync(user, "reorder_habits", new
+        try
         {
-            positions = positions.Select(p => new { habit_id = p.HabitId, position = p.Position })
-        }, confirmationToken: null, cancellationToken);
-
-        return result.Succeeded ? $"Reordered {positions.Count} habits" : result.Message;
+            var positions = McpToolHelpers.DeserializeJson<List<McpToolHelpers.HabitPositionDto>>(positionsJson);
+            foreach (var position in positions)
+                _ = McpInputParser.ParseGuid(position.HabitId, "habitId");
+            var result = await executorBridge.ExecuteAsync(user, "reorder_habits", new { positions = positions.Select(p => new { habit_id = p.HabitId, position = p.Position }) }, confirmationToken: null, cancellationToken);
+            return result.Succeeded ? McpToolHelpers.Text($"Reordered {positions.Count} habits") : McpToolHelpers.Error(result.Message);
+        }
+        catch (ArgumentException ex)
+        {
+            return McpToolHelpers.Error(ex.Message);
+        }
+        catch (JsonException ex)
+        {
+            return McpToolHelpers.Error("Invalid JSON input: " + ex.Message);
+        }
     }
 
     [McpServerTool(Name = "move_habit_parent"), Description("Move a habit under a different parent, or promote it to top-level by passing null parentId.")]
-    public async Task<string> MoveHabitParent(
+    public async Task<CallToolResult> MoveHabitParent(
         ClaimsPrincipal user,
         [Description("The habit ID to move (GUID)")] string habitId,
         [Description("New parent habit ID (GUID), or omit/null to make top-level")] string? parentId = null,
         CancellationToken cancellationToken = default)
     {
-        var result = await executorBridge.ExecuteAsync(user, "move_habit_parent", new
+        try
         {
-            habit_id = habitId,
-            parent_id = parentId
-        }, confirmationToken: null, cancellationToken);
-
-        if (!result.Succeeded)
-            return result.Message;
-
-        return parentId is not null
-            ? $"Moved habit {habitId} under parent {parentId}"
-            : $"Promoted habit {habitId} to top-level";
+            _ = McpInputParser.ParseGuid(habitId, "habitId");
+            _ = McpInputParser.ParseOptionalGuid(parentId, "parentId");
+            var result = await executorBridge.ExecuteAsync(user, "move_habit_parent", new { habit_id = habitId, parent_id = parentId }, confirmationToken: null, cancellationToken);
+            if (!result.Succeeded)
+                return McpToolHelpers.Error(result.Message);
+            return parentId is not null ? McpToolHelpers.Text($"Moved habit {habitId} under parent {parentId}") : McpToolHelpers.Text($"Promoted habit {habitId} to top-level");
+        }
+        catch (ArgumentException ex)
+        {
+            return McpToolHelpers.Error(ex.Message);
+        }
+        catch (JsonException ex)
+        {
+            return McpToolHelpers.Error("Invalid JSON input: " + ex.Message);
+        }
     }
 
     [McpServerTool(Name = "link_goals_to_habit"), Description("Link goals to a habit. Pass the full list of goal IDs (replaces existing links).")]
-    public async Task<string> LinkGoalsToHabit(
+    public async Task<CallToolResult> LinkGoalsToHabit(
         ClaimsPrincipal user,
         [Description(HabitIdDescription)] string habitId,
         [Description("Comma-separated goal IDs (GUIDs)")] string goalIds,
         CancellationToken cancellationToken = default)
     {
-        var ids = McpToolHelpers.ParseGuidCsv(goalIds);
-
-        var result = await executorBridge.ExecuteAsync(user, "link_goals_to_habit", new
+        try
         {
-            habit_id = habitId,
-            goal_ids = ids.Select(id => id.ToString())
-        }, confirmationToken: null, cancellationToken);
-
-        return result.Succeeded ? $"Linked {ids.Count} goals to habit {habitId}" : result.Message;
+            _ = McpInputParser.ParseGuid(habitId, "habitId");
+            var ids = McpToolHelpers.ParseGuidCsv(goalIds, "goalIds");
+            var result = await executorBridge.ExecuteAsync(user, "link_goals_to_habit", new { habit_id = habitId, goal_ids = ids.Select(id => id.ToString()) }, confirmationToken: null, cancellationToken);
+            return result.Succeeded ? McpToolHelpers.Text($"Linked {ids.Count} goals to habit {habitId}") : McpToolHelpers.Error(result.Message);
+        }
+        catch (ArgumentException ex)
+        {
+            return McpToolHelpers.Error(ex.Message);
+        }
+        catch (JsonException ex)
+        {
+            return McpToolHelpers.Error("Invalid JSON input: " + ex.Message);
+        }
     }
 
     [McpServerTool(Name = "get_daily_summary"), Description("Get an AI-generated daily summary of habits. Requires Pro subscription and AI summary enabled.")]
-    public async Task<string> GetDailySummary(
+    public async Task<CallToolResult> GetDailySummary(
         ClaimsPrincipal user,
         [Description(DateFromDescription)] string dateFrom,
         [Description(DateToDescription)] string dateTo,
         [Description("Language code (en, pt-BR)")] string language = "en",
         CancellationToken cancellationToken = default)
     {
-        var userId = McpToolHelpers.GetUserId(user);
-        var query = new GetDailySummaryQuery(
-            userId,
-            McpInputParser.ParseDate(dateFrom, "dateFrom"),
-            McpInputParser.ParseDate(dateTo, "dateTo"),
-            language);
-
-        var result = await mediator.Send(query, cancellationToken);
-        if (result.IsFailure)
-            return $"Error: {result.Error}";
-
-        var s = result.Value;
-        return $"Summary{(s.FromCache ? " (cached)" : "")}:\n{s.Summary}";
+        try
+        {
+            var userId = McpToolHelpers.GetUserId(user);
+            var query = new GetDailySummaryQuery(userId, McpInputParser.ParseDate(dateFrom, "dateFrom"), McpInputParser.ParseDate(dateTo, "dateTo"), language);
+            var result = await mediator.Send(query, cancellationToken);
+            if (result.IsFailure)
+                return McpToolHelpers.Error($"Error: {result.Error}");
+            var s = result.Value;
+            return McpToolHelpers.Text($"Summary{(s.FromCache ? " (cached)" : "")}:\n{s.Summary}");
+        }
+        catch (ArgumentException ex)
+        {
+            return McpToolHelpers.Error(ex.Message);
+        }
+        catch (JsonException ex)
+        {
+            return McpToolHelpers.Error("Invalid JSON input: " + ex.Message);
+        }
     }
 
     [McpServerTool(Name = "get_retrospective"), Description("Get an AI-generated retrospective analysis of habit performance. Requires Pro subscription.")]
-    public async Task<string> GetRetrospective(
+    public async Task<CallToolResult> GetRetrospective(
         ClaimsPrincipal user,
         [Description("Period: week, month, quarter, semester, or year")] string period = "week",
         [Description("Language code (en, pt-BR)")] string language = "en",
         CancellationToken cancellationToken = default)
     {
-        var userId = McpToolHelpers.GetUserId(user);
-        var today = await userDateService.GetUserTodayAsync(userId, cancellationToken);
-        var weekStartDay = await userDateService.GetUserWeekStartDayAsync(userId, cancellationToken);
-        var (dateFrom, dateTo) = RetrospectivePeriodRange.Resolve(period, today, weekStartDay);
-
-        var query = new GetRetrospectiveQuery(userId, dateFrom, dateTo, period, language);
-        var result = await mediator.Send(query, cancellationToken);
-
-        if (result.IsFailure)
-            return $"Error: {result.Error}";
-
-        var r = result.Value;
-        var n = r.Narrative;
-        var narrativeText = string.Join(
-            "\n\n",
-            new[] { n.Highlights, n.Missed, n.Trends, n.Suggestion }.Where(s => !string.IsNullOrWhiteSpace(s)));
-        return $"Retrospective ({period}){(r.FromCache ? " (cached)" : "")}:\n{narrativeText}";
+        try
+        {
+            var userId = McpToolHelpers.GetUserId(user);
+            var today = await userDateService.GetUserTodayAsync(userId, cancellationToken);
+            var weekStartDay = await userDateService.GetUserWeekStartDayAsync(userId, cancellationToken);
+            var (dateFrom, dateTo) = RetrospectivePeriodRange.Resolve(period, today, weekStartDay);
+            var query = new GetRetrospectiveQuery(userId, dateFrom, dateTo, period, language);
+            var result = await mediator.Send(query, cancellationToken);
+            if (result.IsFailure)
+                return McpToolHelpers.Error($"Error: {result.Error}");
+            var r = result.Value;
+            var n = r.Narrative;
+            var narrativeText = string.Join("\n\n", new[] { n.Highlights, n.Missed, n.Trends, n.Suggestion }.Where(s => !string.IsNullOrWhiteSpace(s)));
+            return McpToolHelpers.Text($"Retrospective ({period}){(r.FromCache ? " (cached)" : "")}:\n{narrativeText}");
+        }
+        catch (ArgumentException ex)
+        {
+            return McpToolHelpers.Error(ex.Message);
+        }
+        catch (JsonException ex)
+        {
+            return McpToolHelpers.Error("Invalid JSON input: " + ex.Message);
+        }
     }
 
     [McpServerTool(Name = "get_period_analytics"), Description("Read totals or comparisons over inclusive local dates. Use completedHabits for how many habits or quantos hábitos; it counts distinct positive recurring habits including independent children and excludes tasks and slips. Use positiveLogRecords for how many times or quantas vezes. Other metrics: distinctLoggedDates, metScheduledDates, scheduledDates.")]
-    public async Task<string> GetPeriodAnalytics(ClaimsPrincipal user,
+    public async Task<CallToolResult> GetPeriodAnalytics(ClaimsPrincipal user,
         [Description("Exact dateFrom/dateTo, named metric, optional habitId/search/tag/isBadHabit and baselineFrom/baselineTo.")]
         PeriodAnalyticsReadRequest query,
         CancellationToken cancellationToken = default)
     {
-        var result = await mediator.Send(new GetPeriodAnalyticsQuery(McpToolHelpers.GetUserId(user), query.DateFrom,
-            query.DateTo, query.Metric, query.HabitId, query.BaselineFrom, query.BaselineTo,
-            query.Search, query.Tag, query.IsBadHabit), cancellationToken);
-        return result.IsSuccess ? JsonSerializer.Serialize(result.Value, PayloadOptions) : $"Error [{result.ErrorCode}]: {result.Error}";
+        try
+        {
+            var result = await mediator.Send(new GetPeriodAnalyticsQuery(McpToolHelpers.GetUserId(user), query.DateFrom, query.DateTo, query.Metric, query.HabitId, query.BaselineFrom, query.BaselineTo, query.Search, query.Tag, query.IsBadHabit), cancellationToken);
+            return result.IsSuccess ? McpToolHelpers.Text(JsonSerializer.Serialize(result.Value, PayloadOptions)) : McpToolHelpers.Error($"Error [{result.ErrorCode}]: {result.Error}");
+        }
+        catch (ArgumentException ex)
+        {
+            return McpToolHelpers.Error(ex.Message);
+        }
+        catch (JsonException ex)
+        {
+            return McpToolHelpers.Error("Invalid JSON input: " + ex.Message);
+        }
     }
 
     [McpServerTool(Name = "get_habit_ranking"), Description("Rank positive recurring habits by completion log count. Uses resolved local dates, includes independent children and supports bound paging and refresh without narrative generation.")]
-    public async Task<string> GetHabitRanking(ClaimsPrincipal user,
+    public async Task<CallToolResult> GetHabitRanking(ClaimsPrincipal user,
         [Description("Absolute dateFrom/dateToExclusive or window/months, optional metric/habitIds/pageSize; later requests use queryToken and cursor or refresh only.")]
         HabitRankingReadRequest query,
         CancellationToken cancellationToken = default)
     {
-        var result = await mediator.Send(new GetHabitRankingQuery(McpToolHelpers.GetUserId(user), query.DateFrom,
-            query.DateToExclusive, query.Window, query.Months, query.Metric, query.HabitIds, query.PageSize,
-            query.QueryToken, query.Cursor, query.Refresh), cancellationToken);
-        return result.IsSuccess ? JsonSerializer.Serialize(result.Value, PayloadOptions) : $"Error [{result.ErrorCode}]: {result.Error}";
+        try
+        {
+            var result = await mediator.Send(new GetHabitRankingQuery(McpToolHelpers.GetUserId(user), query.DateFrom, query.DateToExclusive, query.Window, query.Months, query.Metric, query.HabitIds, query.PageSize, query.QueryToken, query.Cursor, query.Refresh), cancellationToken);
+            return result.IsSuccess ? McpToolHelpers.Text(JsonSerializer.Serialize(result.Value, PayloadOptions)) : McpToolHelpers.Error($"Error [{result.ErrorCode}]: {result.Error}");
+        }
+        catch (ArgumentException ex)
+        {
+            return McpToolHelpers.Error(ex.Message);
+        }
+        catch (JsonException ex)
+        {
+            return McpToolHelpers.Error("Invalid JSON input: " + ex.Message);
+        }
     }
 }

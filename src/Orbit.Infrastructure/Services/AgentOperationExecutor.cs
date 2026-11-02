@@ -152,7 +152,7 @@ public partial class AgentOperationExecutor(
                 AgentOperationStatus.UnsupportedByPolicy,
                 $"Unknown operation '{request.OperationId}' requested via {request.Surface}",
                 RedactArguments(arguments),
-                Error: "unsupported_by_policy"));
+                Error: Orbit.Application.Common.AgentPolicyReasons.UnsupportedByPolicy));
 
         var tool = toolRegistry.GetTool(request.OperationId);
         var capability = catalogService.GetCapabilityByChatTool(request.OperationId);

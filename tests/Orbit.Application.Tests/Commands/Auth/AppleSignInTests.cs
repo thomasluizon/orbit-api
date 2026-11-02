@@ -105,7 +105,7 @@ public partial class AppleSignInTests
         var query = start.Query.TrimStart('?').Split('&').Select(part => part.Split('=', 2)).ToDictionary(part => part[0], part => Uri.UnescapeDataString(part[1]));
         var result = await flow.CompleteWebCallbackAsync(query["state"], "code", null, default);
         result.IsSuccess.Should().BeTrue();
-        result.Value.Should().StartWith("https://app.example.com/auth-callback?provider=apple&handoff=").And.EndWith("&state=client-state");
+        result.Value.Should().StartWith("https://app.example.com/auth-callback#provider=apple&handoff=").And.EndWith("&state=client-state");
         result.Value.Should().NotContain("access").And.NotContain("refresh");
         (await flow.CompleteWebCallbackAsync(query["state"], "code", null, default)).IsFailure.Should().BeTrue();
     }

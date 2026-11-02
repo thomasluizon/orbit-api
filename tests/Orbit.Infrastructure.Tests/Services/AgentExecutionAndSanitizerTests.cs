@@ -4,6 +4,8 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using System.Text.Json;
 using FluentAssertions;
+using ModelContextProtocol;
+using Orbit.Infrastructure.Tests.Mcp;
 using MediatR;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -324,7 +326,9 @@ public partial class AgentExecutionAndSanitizerTests
         var gateway = new AgentTools(catalog, executor, Substitute.For<IPendingAgentOperationStore>(), Substitute.For<IAgentStepUpService>());
         var caller = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, UserId.ToString())], "Bearer"));
 
-        var result = await gateway.ExecuteAgentOperation(caller, operationId, JsonSerializer.SerializeToElement(args));
+        var toolResult = await gateway.ExecuteAgentOperation(caller, operationId, JsonSerializer.SerializeToElement(args));
+        var result = JsonSerializer.Deserialize<AgentExecuteOperationResponse>(toolResult.AsText(), McpJsonUtilities.DefaultOptions)!;
+        toolResult.IsError.Should().Be(!allowed);
 
         invoked.Should().Be(allowed);
         result.Operation.Status.Should().Be(allowed ? AgentOperationStatus.Succeeded : AgentOperationStatus.Denied);

@@ -1,3 +1,4 @@
+using Orbit.Infrastructure.Tests.Mcp;
 using System.Security.Claims;
 using System.Text.Json;
 using FluentAssertions;
@@ -155,8 +156,8 @@ public class HabitSearchSectionsTests
         var mcp = new HabitTools(mediator, dates, new McpExecutorBridge(Substitute.For<IAgentOperationExecutor>()));
         var principal = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, user.Id.ToString())], "Test"));
         counter.Reset();
-        var mcpText = await mcp.ListHabits(principal, Today.AddDays(-1).ToString("yyyy-MM-dd"),
-            Today.ToString("yyyy-MM-dd"), search: "Search", page: 2, pageSize: 1);
+        var mcpText = (await mcp.ListHabits(principal, Today.AddDays(-1).ToString("yyyy-MM-dd"),
+            Today.ToString("yyyy-MM-dd"), search: "Search", page: 2, pageSize: 1)).AsText();
         mcpText.Should().Contain(newer.Title).And.NotContain(older.Title).And.NotContain(open.Title);
         var mcpSql = counter.Commands.Single(command => command.Sql.Contains("LIMIT") && command.Sql.Contains("MAX(")).Sql;
         var astra = new QueryHabitsTool(new GenericRepository<Habit>(db), new GenericRepository<User>(db),
