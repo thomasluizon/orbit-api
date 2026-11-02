@@ -3,7 +3,16 @@ import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { checkPlan as checkWebPlan } from './check-web-plan.mjs'
 
-const guarded = ['render_web_service.production_api', 'render_web_service.production_web', 'render_env_group.production_api']
+const guarded = new Set(['render_web_service.production_api', 'render_web_service.production_web', 'render_env_group.production_api'])
+function checkValues(address, change) {
+  if (address.startsWith('render_web_service.')) {
+    return change?.before?.max_shutdown_delay_seconds === 300 && change?.after?.max_shutdown_delay_seconds === 300
+      ? [] : [`Shutdown delay must remain 300 seconds on ${address}`]
+  }
+  return ['before', 'after']
+    .filter(side => change?.[side]?.env_vars?.Ses__FromEmail?.value !== 'Orbit <contact@useorbit.org>')
+    .map(side => `Production Ses__FromEmail differs from the reviewed sender (${side})`)
+}
 export function checkProductionPlan(plan) {
   const issues = checkWebPlan(plan)
   for (const address of guarded) {
@@ -11,18 +20,10 @@ export function checkProductionPlan(plan) {
     if (!resource) { issues.push(`Missing guarded resource ${address}`); continue }
     const change = resource.change
     if (JSON.stringify(change?.actions) !== '["no-op"]') issues.push(`Unexpected production change to ${address}`)
-    if (address.startsWith('render_web_service.')) {
-      if (change?.before?.max_shutdown_delay_seconds !== 300 || change?.after?.max_shutdown_delay_seconds !== 300)
-        issues.push(`Shutdown delay must remain 300 seconds on ${address}`)
-    } else {
-      for (const side of ['before', 'after']) {
-        if (change?.[side]?.env_vars?.Ses__FromEmail?.value !== 'Orbit <contact@useorbit.org>')
-          issues.push(`Production Ses__FromEmail differs from the reviewed sender (${side})`)
-      }
-    }
+    issues.push(...checkValues(address, change))
   }
   for (const resource of plan.resource_drift ?? []) {
-    if (guarded.includes(resource.address) && JSON.stringify(resource.change?.actions) !== '["no-op"]')
+    if (guarded.has(resource.address) && JSON.stringify(resource.change?.actions) !== '["no-op"]')
       issues.push(`Production drift detected on ${resource.address}`)
   }
   return issues

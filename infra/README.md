@@ -684,8 +684,8 @@ and reason in the same policy file. Raising the applied baseline is not an excep
 
 ### Production plan monitor
 
-The production infrastructure plan workflow runs on main changes, daily and on
-manual dispatch from main. Its `render-operations` environment assumes
+The production infrastructure plan workflow runs daily and on manual dispatch
+from main. Its `render-operations` environment assumes
 `orbit-production-plan`, refreshes only the guarded services and API env group with
 their dependency graph, and never applies. Terraform binary plans, refresh logs and
 input files stay in a private temporary directory that is deleted on exit. JSON is
@@ -702,6 +702,8 @@ configuration sets, SNS topic and KMS key. Both environment API paths are needed
 because Terraform evaluates shared for-each maps. SSM `DescribeParameters` has no
 resource-level authorization; its metadata read is restricted to `us-east-2`.
 Decryption is restricted to SSM and those API parameter encryption contexts.
+`GetParametersByPath` authorizes the exact hierarchy roots configured by
+`onboarding_platform`; individual parameter reads retain their child-path scope.
 
 In GitHub Settings > Environments > `render-operations`, add secret
 `CLOUDFLARE_READ_ONLY_API_TOKEN` from Cloudflare My Profile > API Tokens with Account
@@ -712,6 +714,13 @@ image digest variables, the non-empty `production_postgres_ip_allow_list`,
 Retain the environment's `RENDER_API_KEY`. A dispatch from main must pass with the
 read-only role and both checkers before considering the monitor operational. A pull
 request runs mock-provider Terraform tests and never receives these credentials.
+After provisioning these prerequisites and observing a successful dispatch, add
+the `push` trigger for `main` in a follow-up commit of this ticket and update its
+workflow regression test. Keep the scheduled and manual triggers.
+
+Both production image services ignore service-level `env_vars` changes. Linking
+the managed groups preserves Render service overrides instead of replacing them
+with only the Terraform group marker.
 
 ### Landing content security policy
 

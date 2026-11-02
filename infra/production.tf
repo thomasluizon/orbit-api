@@ -56,7 +56,7 @@ resource "render_web_service" "production_web" {
   custom_domains             = length(var.web_custom_domains) > 0 ? [for domain in var.web_custom_domains : { name = domain }] : null
 
   lifecycle {
-    ignore_changes = [runtime_source.image.digest]
+    ignore_changes = [env_vars, runtime_source.image.digest]
   }
 
   runtime_source = {

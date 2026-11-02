@@ -1,6 +1,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
 import { checkProductionPlan } from './check-production-plan.mjs'
 const generated = JSON.parse(readFileSync(new URL('./fixtures/production-plan.json', import.meta.url), 'utf8'))
 const clean = () => {
@@ -38,4 +40,17 @@ test('rejects missing resources and changed shutdown or sender even on a no-op p
   assert.ok(issues.some(issue => issue.includes('Shutdown')))
   assert.ok(issues.some(issue => issue.includes('Ses__FromEmail')))
   assert.throws(() => checkProductionPlan({}), /resource_changes/)
+})
+test('CLI accepts clean plans, rejects guarded changes and fails closed on malformed input', () => {
+  const script = fileURLToPath(new URL('./check-production-plan.mjs', import.meta.url))
+  for (const [input, status, message] of [
+    [JSON.stringify(clean()), 0, 'Production plan guard passed'],
+    [JSON.stringify(generated), 1, 'Unexpected production change'],
+    ['not JSON', 2, 'could not inspect plan JSON'],
+  ]) {
+    const result = spawnSync(process.execPath, [script], { input, encoding: 'utf8', timeout: 10_000 })
+    assert.equal(result.status, status, result.stderr)
+    assert.ok((result.stdout + result.stderr).includes(message))
+    assert.ok(!(result.stdout + result.stderr).includes('contact@useorbit.org'), 'Diagnostics must not disclose plan values')
+  }
 })

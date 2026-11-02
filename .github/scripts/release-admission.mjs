@@ -61,7 +61,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   try {
     const { GITHUB_REPOSITORY: repo, COMMIT_SHA: sha, FORCE_UNSTAGED: force, OVERRIDE_REASON: reason } = process.env
     if (!/^[a-f0-9]{40}$/.test(sha ?? '')) throw new Error('Release admission requires COMMIT_SHA')
-    const api = path => JSON.parse(execFileSync('gh', ['api', path], { encoding: 'utf8' }))
+    const api = path => JSON.parse(execFileSync('/usr/bin/gh', ['api', path], { encoding: 'utf8' }))
     const summary = text => { if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${text}\n`) }
     switch (process.argv[2]) {
       case 'ci': requireReason(force === 'true', reason); await requireCI(api, repo, sha); break
@@ -71,7 +71,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
         break
       case 'export': {
         const baseline = await productionCommit(api, repo)
-        const files = migrationFiles(execFileSync('git', ['diff', '--name-only', baseline, sha, '--', 'src/Orbit.Infrastructure/Migrations/'], { encoding: 'utf8' }))
+        const files = migrationFiles(execFileSync('/usr/bin/git', ['diff', '--name-only', baseline, sha, '--', 'src/Orbit.Infrastructure/Migrations/'], { encoding: 'utf8' }))
         const request = async (url, method = 'GET') => {
           const response = await fetch(url, { method, headers: { Authorization: `Bearer ${process.env.RENDER_API_KEY}` }, signal: AbortSignal.timeout(30_000), redirect: 'error' })
           if (!response.ok) throw new Error(`Render export ${method} returned HTTP ${response.status}`)

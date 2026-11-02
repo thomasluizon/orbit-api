@@ -1,8 +1,6 @@
 name: Production infrastructure plan
 
 on:
-  push:
-    branches: [main]
   schedule:
     - cron: '23 9 * * *'
   workflow_dispatch:

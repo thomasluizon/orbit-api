@@ -5,7 +5,10 @@ import { resolve } from 'node:path'
 const text = name => readFileSync(process.env.INFRA_TEST_ROOT ? resolve(process.env.INFRA_TEST_ROOT, name) : new URL(name, import.meta.url), 'utf8')
 const configuration = text('configuration.tf')
 const production = text('production.tf')
-const value = (source, key, expected) => assert.match(source, new RegExp(`\\b${key}\\s*=\\s*"${expected.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"`))
+const value = (source, key, expected) => {
+  const assignments = [...source.matchAll(/^\s*(\w+)\s*=\s*"([^"\n]*)"\s*$/gm)]
+  assert.equal(assignments.find(([, name]) => name === key)?.[2], expected, `${key} must match its reviewed value`)
+}
 
 test('production API values are pinned', () => {
   const api = configuration.split('  production_api_values = {')[1].split('  staging_api_values =')[0]
@@ -37,6 +40,7 @@ test('production web values point at production hosts', () => {
 test('each production service links its env group', () => {
   for (const [service, group] of [['production_api', 'production-api'], ['production_web', 'production-web']]) {
     const resource = production.split(`resource "render_web_service" "${service}" {`)[1].split('\nresource ')[0]
+    assert.match(resource, /ignore_changes\s*=\s*\[[^\]]*\benv_vars\b/, `${service} must preserve service-level environment variables`)
     assert.match(resource, new RegExp(`ORBIT_TERRAFORM_ENV_GROUP = \\{ value = "${group}" \\}`))
     assert.match(production, new RegExp(`resource "render_env_group_link" "${service}" \\{\\s*env_group_id = render_env_group\\.${service}\\.id\\s*service_ids  = \\[render_web_service\\.${service}\\.id\\]`))
   }

@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { dirname, join, resolve } from "node:path"
 import { test } from "node:test"
-import { fileURLToPath } from "node:url"
+import { fileURLToPath, pathToFileURL } from "node:url"
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..")
 const workflow = readFileSync(join(root, ".github/workflows/release.yml"), "utf8")
@@ -135,11 +135,17 @@ function stagingGate(body, { force = "false", reason = "", smoke = "success", tr
   const directory = mkdtempSync(join(tmpdir(), "orbit-release-staging-"))
   const calls = join(directory, "calls")
   writeFileSync(calls, "")
-  writeFileSync(join(directory, "gh"), `#!${process.execPath}
-const args = process.argv.slice(2)
-if (args[0] !== "api" || !args[1].endsWith("/statuses?per_page=100&page=1")) process.exit(99)
-process.stdout.write(JSON.stringify([{context: "api-staging-smoke", state: ${JSON.stringify(smoke)}, creator: {login: "github-actions[bot]"}}]))
-`, { mode: 0o755 })
+  const preload = join(directory, "github-cli.mjs")
+  writeFileSync(preload, `import childProcess from "node:child_process"
+import { syncBuiltinESMExports } from "node:module"
+childProcess.execFileSync = (executable, args) => {
+  if (executable !== "/usr/bin/gh" || args[0] !== "api" || !args[1].endsWith("/statuses?per_page=100&page=1")) {
+    throw new Error("Unexpected release admission subprocess")
+  }
+  return JSON.stringify([{context: "api-staging-smoke", state: ${JSON.stringify(smoke)}, creator: {login: "github-actions[bot]"}}])
+}
+syncBuiltinESMExports()
+`)
   writeFileSync(join(directory, "curl"), `#!${process.execPath}
 const fs = require("node:fs")
 fs.appendFileSync(${JSON.stringify(calls)}, JSON.stringify(process.argv.slice(2)) + "\\n")
@@ -150,6 +156,7 @@ process.exitCode = ${transport ? 22 : 0}
     const result = replay(script(gate), {
       PATH: `${directory}:${process.env.PATH}`, COMMIT_SHA: healthy.commit, FORCE_UNSTAGED: force,
       OVERRIDE_REASON: reason, GITHUB_REPOSITORY: "thomasluizon/orbit-api",
+      NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ""} --import=${pathToFileURL(preload).href}`,
     })
     return { ...result, calls: readFileSync(calls, "utf8") }
   } finally {

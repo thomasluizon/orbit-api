@@ -81,7 +81,11 @@ data "aws_iam_policy_document" "production_plan" {
     resources = ["arn:aws:s3:::orbit-terraform-state-713285551626/render/terraform.tfstate"]
   }
   statement {
-    actions   = ["ssm:GetParameter", "ssm:GetParameters", "ssm:GetParametersByPath", "ssm:ListTagsForResource"]
+    actions   = ["ssm:GetParametersByPath"]
+    resources = [for environment in ["production", "staging"] : "arn:aws:ssm:us-east-2:713285551626:parameter/orbit/${environment}/api"]
+  }
+  statement {
+    actions   = ["ssm:GetParameter", "ssm:GetParameters", "ssm:ListTagsForResource"]
     resources = [for environment in ["production", "staging"] : "arn:aws:ssm:us-east-2:713285551626:parameter/orbit/${environment}/api/*"]
   }
   statement {
