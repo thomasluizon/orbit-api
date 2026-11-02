@@ -56,6 +56,11 @@ public sealed class RestoreProactivePreferenceMigrationTests
     {
         using var factory = new SqliteOrbitDbContextFactory();
         var context = factory.Context;
+        await context.Database.ExecuteSqlRawAsync("""
+            DROP TRIGGER IF EXISTS "TR_ReminderProbe_INSERT";
+            DROP TRIGGER IF EXISTS "TR_ReminderProbe_UPDATE";
+            DROP TRIGGER IF EXISTS "TR_ReminderProbe_DELETE";
+            """);
         await using (var command = context.Database.GetDbConnection().CreateCommand())
         {
             command.CommandText = "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'Users'";

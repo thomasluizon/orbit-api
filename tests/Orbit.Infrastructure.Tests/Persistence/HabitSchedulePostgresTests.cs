@@ -204,6 +204,7 @@ public class HabitSchedulePostgresTests
     private const string TriggerDefinitionsSql = """
         SELECT string_agg(pg_get_triggerdef(oid), E'\n' ORDER BY tgname)
         FROM pg_trigger WHERE tgrelid = '"Habits"'::regclass AND NOT tgisinternal
+          AND tgname IN ('sync_habit_schedule_expand_on_write', 'sync_habit_next_due_date_expand_on_write')
         """;
 
     private const string IndexDefinitionsSql = """
@@ -218,7 +219,10 @@ public class HabitSchedulePostgresTests
                 AND table_name = 'Habits' AND column_name IN ('IsGeneral', 'IsFlexible', 'DueDate')
             """)).Should().Be(0);
         (await ScalarAsync(context, TriggerDefinitionsSql)).Should().Be(DBNull.Value);
-        (await ScalarAsync(context, IndexDefinitionsSql)).Should().Be(DBNull.Value);
+        Convert.ToInt64(await ScalarAsync(context, """
+            SELECT count(*) FROM pg_indexes WHERE tablename = 'Habits'
+                AND (indexdef LIKE '%"DueDate"%' OR indexdef LIKE '%"IsGeneral"%' OR indexdef LIKE '%"IsFlexible"%')
+            """)).Should().Be(0);
         Convert.ToBoolean(await ScalarAsync(context, """
             SELECT to_regprocedure('sync_habit_schedule_expand()') IS NULL
                 AND to_regprocedure('sync_habit_next_due_date_expand()') IS NULL

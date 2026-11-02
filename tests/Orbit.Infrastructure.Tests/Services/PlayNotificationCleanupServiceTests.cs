@@ -47,6 +47,29 @@ public sealed class PlayNotificationCleanupServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task RunAsync_UnfinishedClaim_SurvivesRetentionForRedeliveryRecovery()
+    {
+        var pending = ProcessedPlayNotification.Claim("unfinished", DaysAgo(31), TimeSpan.FromMinutes(2));
+        SetProcessedAt(pending, DaysAgo(31));
+        _dbContext.ProcessedPlayNotifications.Add(pending);
+        await _dbContext.SaveChangesAsync();
+        await new PlayNotificationCleanupService(_scopeFactory, NullLogger<PlayNotificationCleanupService>.Instance).RunAsync(default);
+        (await _dbContext.ProcessedPlayNotifications.AsNoTracking().SingleAsync()).ProcessingLeaseId.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task RunAsync_UnqueuedCouponIntent_SurvivesRetention()
+    {
+        var pending = ProcessedPlayNotification.Create("pending-coupon");
+        pending.RecordConsumedCoupon(Guid.NewGuid(), "coupon");
+        SetProcessedAt(pending, DaysAgo(31));
+        _dbContext.ProcessedPlayNotifications.Add(pending);
+        await _dbContext.SaveChangesAsync();
+        await new PlayNotificationCleanupService(_scopeFactory, NullLogger<PlayNotificationCleanupService>.Instance).RunAsync(default);
+        (await _dbContext.ProcessedPlayNotifications.AsNoTracking().SingleAsync()).ConsumedCouponId.Should().Be("coupon");
+    }
+
+    [Fact]
     public async Task RunAsync_PurgesRecordsOlderThanRetentionAndKeepsRecentOnes()
     {
         AddPlayNotification("play-recent", DaysAgo(29));

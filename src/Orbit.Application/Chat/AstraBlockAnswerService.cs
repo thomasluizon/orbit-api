@@ -170,71 +170,95 @@ public sealed class AstraBlockAnswerService(
             return Failure(ErrorCodes.AstraBlockNotFound);
         try
         {
-            return await unitOfWork.ExecuteInTransactionAsync(async token =>
+            var block = await store.GetAsync(answer.BlockId, request.UserId, ct);
+            if (await ReadReplayAsync(block, answer, request, ct) is { } replay)
+                return Result.Success(new PreparedAstraBlockAnswer(string.Empty, replay, IsReplay: true));
+            var stateError = CheckState(block);
+            var recoverableClaim = block is { AnsweredAtUtc: { } claim, ResponseJson: null }
+                && claimLifetime is { } lifetime && claim + lifetime < TimeProvider.System.GetUtcNow().UtcDateTime;
+            if (stateError is not null && !recoverableClaim)
+                return stateError;
+            var definition = block!.ReadDefinition();
+            var answerError = CheckAnswer(definition, answer);
+            if (answerError is not null)
+                return answerError;
+            var draftContext = await ReadDraftAsync(request.UserId, definition, answer, ct);
+            if (draftContext.IsFailure)
+                return draftContext.PropagateError<PreparedAstraBlockAnswer>();
+            var isChoice = definition.Form != AstraBlockKinds.PickList;
+            var message = BuildMessage(definition, answer);
+            var safetyText = SafetyText(definition, answer, message);
+            var crisis = await DetectCrisisTurnAsync(request.UserId, safetyText, ct);
+            var moderationCheck = isChoice ? checkChoiceInput ?? checkInput : checkInput;
+            if (crisis == CrisisLocales.None && moderationCheck is not null)
             {
-                await unitOfWork.AcquireAdvisoryLockAsync($"astra-blocks:{request.UserId}", token);
-                var block = await ReadCurrentBlockAsync(answer.BlockId, request.UserId, token);
-                if (await ReadReplayAsync(block, answer, request, token) is { } replay)
-                    return Result.Success(new PreparedAstraBlockAnswer(string.Empty, replay, IsReplay: true));
-                var stateError = CheckState(block);
-                if (stateError is not null)
-                    return stateError;
-                var definition = block!.ReadDefinition();
-                var answerError = CheckAnswer(definition, answer);
-                if (answerError is not null)
-                    return answerError;
-                var draftContext = await ReadDraftAsync(request.UserId, definition, answer, token);
-                if (draftContext.IsFailure)
-                    return draftContext.PropagateError<PreparedAstraBlockAnswer>();
-                var isChoice = definition.Form != AstraBlockKinds.PickList;
-                var message = BuildMessage(definition, answer);
-                var safetyText = SafetyText(definition, answer, message);
-                var crisis = await DetectCrisisTurnAsync(request.UserId, safetyText, token);
-                var moderationCheck = isChoice ? checkChoiceInput ?? checkInput : checkInput;
-                if (crisis == CrisisLocales.None && moderationCheck is not null)
-                {
-                    var inputCheck = await moderationCheck(safetyText, token);
-                    if (inputCheck.IsFailure)
-                        return inputCheck.PropagateError<PreparedAstraBlockAnswer>();
-                    if (inputCheck.Value.Flagged)
-                        return Result.Success(new PreparedAstraBlockAnswer(message, ModeratedInput: inputCheck.Value, SafetyText: safetyText));
-                }
-                var now = TimeProvider.System.GetUtcNow().UtcDateTime;
-                var answeredAtUtc = now.AddTicks(-(now.Ticks % TimeSpan.TicksPerMicrosecond));
-                if (!await store.MarkAnsweredAsync(block.Id, request.UserId, answeredAtUtc, token))
-                    return CheckState(await store.GetAsync(block.Id, request.UserId, token))
-                        ?? Failure(ErrorCodes.AstraBlockAnswered);
-
-                var user = await users.GetByIdAsync(request.UserId, token);
-                ChatResponse? response = null;
-                DateOnly? reservedAllowanceDate = null;
-                var messageAllowanceConsumed = false;
-                if (definition.Form == AstraBlockKinds.PickList && crisis == CrisisLocales.None)
-                {
-                    response = await BuildPickListResponseAsync(request, definition, answer, user, token);
-                }
-                else if (crisis == CrisisLocales.None)
-                {
-                    var reservation = await payGate.TryConsumeAiMessage(request.UserId, unitOfWork, token);
-                    if (reservation.IsFailure)
-                        throw new AnswerRejectedException(reservation.PropagateError<PreparedAstraBlockAnswer>());
-                    messageAllowanceConsumed = true;
-                    reservedAllowanceDate = (await users.GetByIdAsync(request.UserId, token))?.AiMessagesLocalDate;
-                }
-                using (ChatTurnTimer.Measure(ChatPhase.Save))
-                    await store.RecordAnswerAsync(block.Id, request.UserId, answeredAtUtc,
-                        IssuedAstraBlock.SerializeAnswer(answer), reservedAllowanceDate,
-                        response is null ? null : JsonSerializer.Serialize(response, ChatStreamEvent.SerializerOptions), token);
-                return Result.Success(new PreparedAstraBlockAnswer(message, response, crisis,
-                    answeredAtUtc, reservedAllowanceDate, MessageAllowanceConsumed: messageAllowanceConsumed, SafetyText: safetyText,
-                    ChoiceSelection: definition.DraftClarification is null
-                        ? AstraChoiceSelection.FromValidatedAnswer(definition, answer) : null, HabitDraft: draftContext.Value));
-            }, ct);
+                var inputCheck = await moderationCheck(safetyText, ct);
+                if (inputCheck.IsFailure)
+                    return inputCheck.PropagateError<PreparedAstraBlockAnswer>();
+                if (inputCheck.Value.Flagged)
+                    return Result.Success(new PreparedAstraBlockAnswer(message, ModeratedInput: inputCheck.Value, SafetyText: safetyText));
+            }
+            var observedDefinition = block.DefinitionJson;
+            return await ReserveAsync(request, new(definition, draftContext.Value, message, safetyText, crisis, observedDefinition), ct);
         }
         catch (AnswerRejectedException exception)
         {
             return exception.Result;
         }
+    }
+
+    private sealed record AnswerInput(AstraBlockDefinition Definition, HabitSetupAnswerContext? DraftContext,
+        string Message, string SafetyText, CrisisLocales Crisis, string DefinitionJson);
+
+    private Task<Result<PreparedAstraBlockAnswer>> ReserveAsync(ProcessUserChatCommand request, AnswerInput input, CancellationToken ct)
+    {
+        var answer = request.BlockAnswer!;
+        var definition = input.Definition;
+        var message = input.Message;
+        var safetyText = input.SafetyText;
+        var crisis = input.Crisis;
+        return unitOfWork.ExecuteInTransactionAsync(async token =>
+        {
+            await unitOfWork.AcquireAdvisoryLockAsync($"astra-blocks:{request.UserId}", token);
+            var block = await ReadCurrentBlockAsync(answer.BlockId, request.UserId, token);
+            if (await ReadReplayAsync(block, answer, request, token) is { } replay)
+                return Result.Success(new PreparedAstraBlockAnswer(string.Empty, replay, IsReplay: true));
+            var stateError = CheckState(block);
+            if (stateError is not null)
+                return stateError;
+            if (block!.DefinitionJson != input.DefinitionJson)
+                return Failure(ErrorCodes.AstraBlockInvalidSelection);
+            var now = TimeProvider.System.GetUtcNow().UtcDateTime;
+            var answeredAtUtc = now.AddTicks(-(now.Ticks % TimeSpan.TicksPerMicrosecond));
+            if (!await store.MarkAnsweredAsync(block.Id, request.UserId, answeredAtUtc, token))
+                return CheckState(await store.GetAsync(block.Id, request.UserId, token))
+                    ?? Failure(ErrorCodes.AstraBlockAnswered);
+
+            var user = await users.GetByIdAsync(request.UserId, token);
+            ChatResponse? response = null;
+            DateOnly? reservedAllowanceDate = null;
+            var messageAllowanceConsumed = false;
+            if (definition.Form == AstraBlockKinds.PickList && crisis == CrisisLocales.None)
+            {
+                response = await BuildPickListResponseAsync(request, definition, answer, user, token);
+            }
+            else if (crisis == CrisisLocales.None)
+            {
+                var reservation = await payGate.TryConsumeAiMessage(request.UserId, unitOfWork, token);
+                if (reservation.IsFailure)
+                    throw new AnswerRejectedException(reservation.PropagateError<PreparedAstraBlockAnswer>());
+                messageAllowanceConsumed = true;
+                reservedAllowanceDate = (await users.GetByIdAsync(request.UserId, token))?.AiMessagesLocalDate;
+            }
+            using (ChatTurnTimer.Measure(ChatPhase.Save))
+                await store.RecordAnswerAsync(block.Id, request.UserId, answeredAtUtc,
+                    IssuedAstraBlock.SerializeAnswer(answer), reservedAllowanceDate,
+                    response is null ? null : JsonSerializer.Serialize(response, ChatStreamEvent.SerializerOptions), token);
+            return Result.Success(new PreparedAstraBlockAnswer(message, response, crisis,
+                answeredAtUtc, reservedAllowanceDate, MessageAllowanceConsumed: messageAllowanceConsumed, SafetyText: safetyText,
+                ChoiceSelection: definition.DraftClarification is null
+                    ? AstraChoiceSelection.FromValidatedAnswer(definition, answer) : null, HabitDraft: input.DraftContext));
+        }, ct);
     }
 
     private async Task<IssuedAstraBlock?> ReadCurrentBlockAsync(Guid blockId, Guid userId, CancellationToken ct)

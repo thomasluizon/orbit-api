@@ -97,6 +97,43 @@ public class GoogleTokenServiceTests
         _handler.WasCalled.Should().BeFalse();
     }
 
+    [Fact]
+    public async Task GetValidAccessToken_NoAccessToken_ReturnsNullWithoutHttp()
+    {
+        (await _sut.GetValidAccessTokenAsync(User.Create("Test", "test@example.com").Value)).Should().BeNull();
+        _handler.WasCalled.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task GetValidAccessToken_NoRefreshToken_ReturnsStoredTokenWithoutHttp()
+    {
+        var user = User.Create("Test", "test@example.com").Value;
+        user.SetGoogleTokens("stored", null);
+        (await _sut.GetValidAccessTokenAsync(user)).Should().Be("stored");
+        _handler.WasCalled.Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task GetValidAccessToken_Refresh_ReturnsNewTokenOrKeepsStoredToken(bool success)
+    {
+        _handler.Response = JsonResponse(success ? HttpStatusCode.OK : HttpStatusCode.BadRequest,
+            success ? """{"access_token":"new"}""" : """{"error":"invalid_grant"}""");
+        (await _sut.GetValidAccessTokenAsync(UserWithRefreshToken())).Should().Be(success ? "new" : "access-old");
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.OK, "{}")]
+    [InlineData(HttpStatusCode.BadRequest, "bad gateway")]
+    public async Task TryRefresh_MissingTokenOrNonJsonError_IsTransient(HttpStatusCode status, string body)
+    {
+        _handler.Response = JsonResponse(status, body);
+        var outcome = await _sut.TryRefreshAsync(UserWithRefreshToken());
+        outcome.Result.Should().Be(GoogleTokenRefreshResult.TransientFailure);
+        outcome.AccessToken.Should().BeNull();
+    }
+
     private static User UserWithRefreshToken()
     {
         var user = User.Create("Test", "test@example.com").Value;

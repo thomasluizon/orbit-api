@@ -47,6 +47,8 @@ public class CreatePortalSessionCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Url.Should().Be("https://billing.stripe.com/portal/session_123");
+        await _userRepo.Received(1).GetByIdAsync(UserId, Arg.Any<CancellationToken>());
+        await _billingService.Received(1).CreatePortalSessionAsync("cus_123", "https://app.example.com", Arg.Any<CancellationToken>());
     }
 
     [Fact]

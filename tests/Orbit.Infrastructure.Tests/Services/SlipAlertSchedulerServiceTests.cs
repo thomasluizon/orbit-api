@@ -30,6 +30,31 @@ public class SlipAlertSchedulerServiceTests
 
     private static readonly DateOnly UtcToday = DateOnly.FromDateTime(DateTime.UtcNow);
 
+    [Fact]
+    public async Task CheckAndSendAlerts_TwentySlowMessages_CompleteWithinOneTick()
+    {
+        await using var db = CreateInMemoryDbContext();
+        var push = Substitute.For<IPushNotificationService>();
+        var messages = Substitute.For<ISlipAlertMessageService>();
+        for (var i = 0; i < 20; i++)
+            SeedInWindowSlipHabit(db, $"Person {i}", $"person{i}@example.com", $"Habit {i}");
+        await db.SaveChangesAsync();
+        messages.GenerateMessageAsync(Arg.Any<string>(), Arg.Any<DayOfWeek>(), Arg.Any<int?>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(async call =>
+            {
+                await Task.Delay(1000, call.Arg<CancellationToken>());
+                return Result.Success((Title: "Title", Body: "Body"));
+            });
+        var service = CreateService(db, push, messages, intervalMinutes: 1440);
+        var timer = System.Diagnostics.Stopwatch.StartNew();
+        await service.CheckAndSendAlerts(CancellationToken.None);
+        timer.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(15));
+        (await db.SentSlipAlerts.CountAsync()).Should().Be(20);
+        await service.CheckAndSendAlerts(CancellationToken.None);
+        (await db.SentSlipAlerts.CountAsync()).Should().Be(20);
+        await messages.Received(20).GenerateMessageAsync(Arg.Any<string>(), Arg.Any<DayOfWeek>(), Arg.Any<int?>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
     [Theory]
     [InlineData(10, 8)]
     [InlineData(12, 10)]
@@ -381,7 +406,8 @@ public class SlipAlertSchedulerServiceTests
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["BackgroundServices:SlipAlertIntervalMinutes"] = intervalMinutes.ToString()
+                ["BackgroundServices:SlipAlertIntervalMinutes"] = intervalMinutes.ToString(),
+                ["BackgroundServices:SlipAlertWindowMarginMinutes"] = "0"
             })
             .Build();
         return new SlipAlertSchedulerService(
@@ -401,6 +427,7 @@ public class SlipAlertSchedulerServiceTests
         ISlipAlertMessageService messageService,
         int intervalMinutes = 5)
     {
+        PushBatchTestAdapter.ForwardToSingleSends(pushService);
         var serviceProvider = new ServiceCollection()
             .AddSingleton(dbContext)
             .AddSingleton(pushService)
@@ -410,7 +437,8 @@ public class SlipAlertSchedulerServiceTests
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["BackgroundServices:SlipAlertIntervalMinutes"] = intervalMinutes.ToString()
+                ["BackgroundServices:SlipAlertIntervalMinutes"] = intervalMinutes.ToString(),
+                ["BackgroundServices:SlipAlertWindowMarginMinutes"] = "0"
             })
             .Build();
         return new SlipAlertSchedulerService(
