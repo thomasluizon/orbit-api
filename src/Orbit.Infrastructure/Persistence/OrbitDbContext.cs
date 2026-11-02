@@ -167,6 +167,11 @@ public class OrbitDbContext : DbContext
             entity.HasIndex(turn => new { turn.UserId, turn.CreatedAtUtc });
             entity.HasIndex(turn => turn.CreatedAtUtc);
             entity.HasIndex(turn => new { turn.TurnId, turn.Role }).IsUnique();
+            entity.HasIndex(turn => new { turn.UserId, turn.ConversationId, turn.TurnOrder }).IsUnique();
+            entity.HasIndex(turn => turn.ConversationId);
+            entity.Property(turn => turn.ImageObjectKey).HasMaxLength(300);
+            entity.Property(turn => turn.ImageContentType).HasMaxLength(100);
+            entity.Property(turn => turn.ImageSha256).HasMaxLength(64);
             entity.HasOne<User>().WithMany().HasForeignKey(turn => turn.UserId).OnDelete(DeleteBehavior.Cascade);
             if (nullableEncConverter is not null)
             {
@@ -174,7 +179,11 @@ public class OrbitDbContext : DbContext
                 entity.Property(turn => turn.ResponseJson).HasConversion(nullableEncConverter);
             }
             if (encConverter is not null)
+            {
                 entity.Property(turn => turn.ToolCallsJson).HasConversion(encConverter);
+                entity.Property(turn => turn.ToolResultsJson).HasConversion(encConverter);
+                entity.Property(turn => turn.PreviewOutcomesJson).HasConversion(encConverter);
+            }
         });
         ConfigureNotificationEntity(modelBuilder);
         ConfigureGoalEntity(modelBuilder, encConverter, nullableEncConverter);
@@ -688,7 +697,7 @@ public class OrbitDbContext : DbContext
                 new { Key = "astra_eval_trace", Enabled = false, PlanRequirement = (string?)null, Description = (string?)"Opt-in tool-call traces for Astra evaluation accounts", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
                 new { Key = "astra_eval_unmetered", Enabled = false, PlanRequirement = (string?)null, Description = (string?)"Staging-only allowance exemption for Astra evaluation accounts", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
                 new { Key = "offline_mode", Enabled = true, PlanRequirement = (string?)null, Description = (string?)"Enable offline mode with background sync", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
-                new { Key = "astra_conversation_recording", Enabled = false, PlanRequirement = (string?)null, Description = (string?)"Record encrypted Astra conversations for failure diagnosis for 30 days after privacy disclosure is published", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
+                new { Key = "astra_conversation_recording", Enabled = false, PlanRequirement = (string?)null, Description = (string?)"Store encrypted Astra conversations and private images for server history after privacy disclosure is published", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
                 new { Key = "ai_chat", Enabled = true, PlanRequirement = (string?)"Free", Description = (string?)"AI chat assistant", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
                 new { Key = "ai_summary", Enabled = true, PlanRequirement = (string?)"Pro", Description = (string?)"AI daily summary", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
                 new { Key = "ai_retrospective", Enabled = true, PlanRequirement = (string?)"Pro", Description = (string?)"AI retrospective analysis", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },

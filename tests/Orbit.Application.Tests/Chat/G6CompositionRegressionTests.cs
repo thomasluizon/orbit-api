@@ -37,7 +37,7 @@ public partial class ProcessUserChatCommandHandlerTests
         result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>();
         result.Value.AiMessage.Should().BeNullOrEmpty();
         events.Should().NotContain(item => item.Type == "delta");
-        _conversationRecorder.Received(1).TryRecord(Arg.Is<ConversationTurnCapture>(turn =>
+        _ = _conversationRecorder.Received(1).RecordAsync(Arg.Is<ConversationTurnCapture>(turn =>
             turn.ResponseJson == JsonSerializer.Serialize(result.Value, ChatStreamEvent.SerializerOptions)));
     }
 

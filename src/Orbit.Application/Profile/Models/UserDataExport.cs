@@ -36,7 +36,8 @@ public sealed record ExportedConversationOffer(Guid ConversationId, string Offer
 
 public sealed record ExportedConversationTurn(Guid TurnId, string Role, DateTime CreatedAtUtc,
     string? Model, string? Content, IReadOnlyList<Orbit.Application.Chat.ConversationToolCall> ToolCalls,
-    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? ResponseJson = null);
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? ResponseJson = null, Guid? ConversationId = null, long? TurnOrder = null,
+    string? ToolResultsJson = null, string? PreviewOutcomesJson = null, string? ImageFileName = null);
 
 public sealed record ExportedNotionConnection(string? WorkspaceName, string Status, DateTime CreatedAtUtc, DateTime? LastPollAtUtc);
 

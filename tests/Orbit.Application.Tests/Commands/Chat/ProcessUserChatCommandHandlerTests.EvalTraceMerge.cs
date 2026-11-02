@@ -43,7 +43,7 @@ public partial class ProcessUserChatCommandHandlerTests
                 Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new AiResponse { TextMessage = "Done" }));
         ConversationTurnCapture? capture = null;
-        _conversationRecorder.TryRecord(Arg.Do<ConversationTurnCapture>(turn => capture = turn)).Returns(true);
+        _conversationRecorder.RecordAsync(Arg.Do<ConversationTurnCapture>(turn => capture = turn)).Returns(true);
 
         var result = await CreateHandler(first, second).Handle(new ProcessUserChatCommand(UserId, "Find my habits and goals",
             EvalTraceRequested: requested), default);
@@ -55,14 +55,14 @@ public partial class ProcessUserChatCommandHandlerTests
             result.Value.EvalTrace.Should().BeNull();
         if (recordingFlag)
         {
-            _conversationRecorder.Received(1).TryRecord(Arg.Any<ConversationTurnCapture>());
+            _ = _conversationRecorder.Received(1).RecordAsync(Arg.Any<ConversationTurnCapture>());
             var calls = JsonSerializer.Deserialize<ConversationToolCall[]>(capture!.ToolCallsJson)!;
             calls.Select(call => call.CallId).Should().Equal("one", "two");
             calls.Select(call => call.Arguments.GetProperty("limit").GetInt32()).Should().Equal(1, 2);
             capture.ToolCallsJson.Should().NotContain("EvalTrace").And.NotContain("evalTrace");
         }
         else
-            _conversationRecorder.DidNotReceiveWithAnyArgs().TryRecord(default!);
+            _ = _conversationRecorder.DidNotReceiveWithAnyArgs().RecordAsync(default!);
     }
 
     [Theory]

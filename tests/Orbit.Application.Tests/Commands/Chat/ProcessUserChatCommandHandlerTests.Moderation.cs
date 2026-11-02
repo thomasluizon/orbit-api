@@ -115,7 +115,7 @@ public partial class ProcessUserChatCommandHandlerTests
         result.IsFailure.Should().BeTrue();
         result.ErrorCode.Should().Be(ErrorCodes.AiUnavailable);
         streamed.Should().BeEmpty();
-        _conversationRecorder.DidNotReceiveWithAnyArgs().TryRecord(default!);
+        _ = _conversationRecorder.DidNotReceiveWithAnyArgs().RecordAsync(default!);
         _payGate.ReceivedCalls().Should().BeEmpty();
         _aiIntentService.ReceivedCalls().Should().BeEmpty();
         await _operationExecutor.DidNotReceiveWithAnyArgs().ExecuteAsync(default!, default);
@@ -147,7 +147,7 @@ public partial class ProcessUserChatCommandHandlerTests
             ? "Não posso ajudar com isso, mas posso ajudar com seus hábitos e metas."
             : "I can't help with that, but I can help with your habits and goals.");
         streamed.Should().BeEmpty();
-        _conversationRecorder.DidNotReceiveWithAnyArgs().TryRecord(default!);
+        _ = _conversationRecorder.DidNotReceiveWithAnyArgs().RecordAsync(default!);
         _payGate.ReceivedCalls().Should().BeEmpty();
         _aiIntentService.ReceivedCalls().Should().BeEmpty();
         await _operationExecutor.DidNotReceiveWithAnyArgs().ExecuteAsync(default!, default);
@@ -209,7 +209,7 @@ public partial class ProcessUserChatCommandHandlerTests
         else
             streamed.Should().BeEmpty();
         await _moderation.Received(1).CheckTextAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
-        _conversationRecorder.DidNotReceiveWithAnyArgs().TryRecord(default!);
+        _ = _conversationRecorder.DidNotReceiveWithAnyArgs().RecordAsync(default!);
         _payGate.ReceivedCalls().Should().BeEmpty();
         _scopeFactory.ReceivedCalls().Should().BeEmpty();
         _aiIntentService.ReceivedCalls().Should().BeEmpty();
@@ -281,7 +281,7 @@ public partial class ProcessUserChatCommandHandlerTests
         else
             streamed.Should().BeEmpty();
         await _moderation.Received(1).CheckTextAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
-        _conversationRecorder.DidNotReceiveWithAnyArgs().TryRecord(default!);
+        _ = _conversationRecorder.DidNotReceiveWithAnyArgs().RecordAsync(default!);
         _payGate.ReceivedCalls().Should().BeEmpty();
         _scopeFactory.ReceivedCalls().Should().BeEmpty();
         _aiIntentService.ReceivedCalls().Should().BeEmpty();
@@ -413,6 +413,6 @@ public partial class ProcessUserChatCommandHandlerTests
         await _moderation.Received(1).CheckTextAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
         await _payGate.Received(1).TryConsumeAiMessage(UserId, _unitOfWork, Arg.Any<CancellationToken>());
         await _aiIntentService.Received(1).SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
-        _conversationRecorder.Received(1).TryRecord(Arg.Any<ConversationTurnCapture>());
+        _ = _conversationRecorder.Received(1).RecordAsync(Arg.Any<ConversationTurnCapture>());
     }
 }

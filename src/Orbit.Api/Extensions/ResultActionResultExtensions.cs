@@ -10,6 +10,7 @@ public static class ResultActionResultExtensions
 {
     private static readonly Dictionary<string, int> StatusByErrorCode = new()
     {
+        [Orbit.Application.Chat.ConversationErrors.NotFoundCode] = StatusCodes.Status404NotFound,
         ["READ_QUERY_EXPIRED"] = StatusCodes.Status410Gone,
         ["READ_QUERY_STALE"] = StatusCodes.Status409Conflict,
         ["READ_QUERY_REFRESH_FAILED"] = StatusCodes.Status503ServiceUnavailable,

@@ -495,7 +495,7 @@ namespace Orbit.Infrastructure.Migrations
                         new
                         {
                             Key = "astra_conversation_recording",
-                            Description = "Record encrypted Astra conversations for failure diagnosis for 30 days after privacy disclosure is published",
+                            Description = "Store encrypted Astra conversations and private images for server history after privacy disclosure is published",
                             Enabled = false,
                             UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, 0, DateTimeKind.Utc)
                         },
@@ -808,12 +808,31 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<string>("Content")
                         .HasColumnType("text");
 
+                    b.Property<Guid?>("ConversationId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ImageContentType")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("ImageObjectKey")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("ImageSha256")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
 
                     b.Property<string>("Model")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
+
+                    b.Property<string>("PreviewOutcomesJson")
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.Property<string>("ResponseJson")
                         .HasColumnType("text");
@@ -827,13 +846,22 @@ namespace Orbit.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("ToolResultsJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<Guid>("TurnId")
                         .HasColumnType("uuid");
+
+                    b.Property<long?>("TurnOrder")
+                        .HasColumnType("bigint");
 
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ConversationId");
 
                     b.HasIndex("CreatedAtUtc");
 
@@ -841,6 +869,9 @@ namespace Orbit.Infrastructure.Migrations
                         .IsUnique();
 
                     b.HasIndex("UserId", "CreatedAtUtc");
+
+                    b.HasIndex("UserId", "ConversationId", "TurnOrder")
+                        .IsUnique();
 
                     b.ToTable("ConversationTurns");
                 });

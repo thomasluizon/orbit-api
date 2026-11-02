@@ -367,7 +367,7 @@ public partial class AgentOperationExecutor(
             await AuditFailureAsync(execution, "caller_canceled", policyState.Decision);
             throw;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not ConversationErasedException)
         {
             return await FailOperationAsync(execution, ex, policyState.Decision);
         }

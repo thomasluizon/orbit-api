@@ -24,7 +24,7 @@ namespace Orbit.Infrastructure.Tests.Controllers;
 public class ConversationRecordingStreamTests
 {
     [Fact]
-    public async Task Stream_RecorderThrows_StillEmitsReplyAndFinalEvent()
+    public async Task Stream_RecorderThrows_DoesNotEmitSuccessfulFinalEvent()
     {
         var user = User.Create("Person", "stream@example.com").Value;
         var users = Substitute.For<IGenericRepository<User>>();
@@ -56,7 +56,7 @@ public class ConversationRecordingStreamTests
                 return Result.Success(new AiResponse { TextMessage = "Your reply" });
             });
         var recorder = Substitute.For<IConversationTurnRecorder>();
-        recorder.TryRecord(Arg.Any<ConversationTurnCapture>()).Returns(_ => throw new InvalidOperationException("Forced failure"));
+        recorder.RecordAsync(Arg.Any<ConversationTurnCapture>()).Returns(Task.FromException<bool>(new InvalidOperationException("Forced failure")));
         var mediator = Substitute.For<IMediator>();
         var handler = new ProcessUserChatCommandHandler(
             new ChatDataDependencies(habits, goals, users, Substitute.For<IGenericRepository<Tag>>(),
@@ -84,8 +84,7 @@ public class ConversationRecordingStreamTests
         var stream = await new StreamReader(body).ReadToEndAsync();
         var events = stream.Split('\n').Where(line => line.StartsWith("data: ", StringComparison.Ordinal))
             .Select(line => JsonSerializer.Deserialize<JsonElement>(line[6..])).ToArray();
-        events.Select(item => item.GetProperty("type").GetString()).Should().Equal("started", "delta", "final");
-        events[^1].GetProperty("response").GetProperty("aiMessage").GetString().Should().Be("Your reply");
-        recorder.Received(1).TryRecord(Arg.Any<ConversationTurnCapture>());
+        events.Select(item => item.GetProperty("type").GetString()).Should().NotContain("final");
+        _ = recorder.Received(1).RecordAsync(Arg.Any<ConversationTurnCapture>());
     }
 }

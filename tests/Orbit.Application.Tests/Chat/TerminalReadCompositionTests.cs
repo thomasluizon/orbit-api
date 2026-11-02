@@ -65,7 +65,7 @@ public partial class ProcessUserChatCommandHandlerTests
         events.Should().NotContain(item => item.Type == "delta");
         events.Should().Contain(item => item.Type == "round");
         var recordedJson = System.Text.Json.JsonSerializer.Serialize(result.Value with { EvalTrace = null }, ChatStreamEvent.SerializerOptions);
-        _conversationRecorder.Received(1).TryRecord(Arg.Is<ConversationTurnCapture>(turn => turn.ResponseJson == recordedJson));
+        _ = _conversationRecorder.Received(1).RecordAsync(Arg.Is<ConversationTurnCapture>(turn => turn.ResponseJson == recordedJson));
         await _aiIntentService.DidNotReceive().ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
             Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
     }

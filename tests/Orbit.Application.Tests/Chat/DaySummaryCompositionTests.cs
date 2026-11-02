@@ -64,7 +64,7 @@ public partial class ProcessUserChatCommandHandlerTests
         if (mode == "legacy-card")
             result.Value.DaySummary!.Rows.Should().ContainSingle().Which.Title.Should().Be("Reading");
         events.Last(item => item.Type == "delta").Text.Should().Be(result.Value.AiMessage);
-        _conversationRecorder.Received(1).TryRecord(Arg.Is<ConversationTurnCapture>(turn =>
+        _ = _conversationRecorder.Received(1).RecordAsync(Arg.Is<ConversationTurnCapture>(turn =>
             turn.ResponseJson == JsonSerializer.Serialize(result.Value, ChatStreamEvent.SerializerOptions)));
         var stored = JsonSerializer.Deserialize<ChatResponse>(JsonSerializer.Serialize(result.Value,
             ChatStreamEvent.SerializerOptions), ChatStreamEvent.SerializerOptions)!;

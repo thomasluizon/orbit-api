@@ -13,6 +13,31 @@ public sealed class S3ObjectStorageService(IAmazonS3 client, IOptions<S3StorageS
     private static readonly TimeSpan ReadLifetime = TimeSpan.FromMinutes(10);
     private readonly S3StorageSettings _settings = options.Value;
 
+    public async Task PutPrivateAsync(string objectKey, string contentType, byte[] data, CancellationToken cancellationToken = default)
+    {
+        using var stream = new MemoryStream(data, writable: false);
+        await client.PutObjectAsync(new PutObjectRequest
+        {
+            BucketName = _settings.Bucket,
+            Key = objectKey,
+            ContentType = contentType,
+            InputStream = stream
+        }, cancellationToken);
+    }
+
+    public async Task<byte[]> ReadPrivateAsync(string objectKey, CancellationToken cancellationToken = default)
+    {
+        using var response = await client.GetObjectAsync(_settings.Bucket, objectKey, cancellationToken);
+        using var stream = new MemoryStream();
+        await response.ResponseStream.CopyToAsync(stream, cancellationToken);
+        return stream.ToArray();
+    }
+
+    public async Task DeletePrivateAsync(string objectKey, CancellationToken cancellationToken = default)
+    {
+        await client.DeleteObjectAsync(_settings.Bucket, objectKey, cancellationToken);
+    }
+
     public async Task<SignedUpload> CreateSignedUploadAsync(
         string objectKey, string contentType, long sizeBytes, CancellationToken cancellationToken = default)
     {
@@ -35,13 +60,23 @@ public sealed class S3ObjectStorageService(IAmazonS3 client, IOptions<S3StorageS
             $"{_settings.PublicBaseUrl.TrimEnd('/')}/api/uploads/object/{objectKey}");
     }
 
-    public async Task DeleteUserObjectsAsync(Guid userId, CancellationToken cancellationToken = default)
+    public Task DeleteConversationObjectsAsync(Guid userId, Guid? conversationId = null, CancellationToken cancellationToken = default)
+    {
+        if (userId == Guid.Empty || conversationId == Guid.Empty)
+            throw new ArgumentException("An account and optional conversation identifier are required.");
+        return DeletePrefixAsync($"{userId}/conversations/" + (conversationId is null ? string.Empty : $"{conversationId}/"), cancellationToken);
+    }
+
+    public Task DeleteUserObjectsAsync(Guid userId, CancellationToken cancellationToken = default)
     {
         if (userId == Guid.Empty)
             throw new ArgumentException("A user id is required.", nameof(userId));
-        ArgumentException.ThrowIfNullOrWhiteSpace(_settings.Bucket);
+        return DeletePrefixAsync($"{userId}/", cancellationToken);
+    }
 
-        var prefix = $"{userId}/";
+    private async Task DeletePrefixAsync(string prefix, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(_settings.Bucket);
         HashSet<string>? previousKeys = null;
         while (true)
         {

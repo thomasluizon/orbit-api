@@ -98,8 +98,8 @@ public partial class AiInputBudgetTests(ITestOutputHelper output)
             input.GetArrayLength().Should().Be(5);
             input[0].GetProperty("role").GetString().Should().Be("system");
             input[1].GetRawText().Should().Contain($"private-habit-{index}").And.Contain($"Language: {user.Language}");
-            input[2].GetRawText().Should().Contain(date.ToString("yyyy-MM-dd"));
-            input[3].GetRawText().Should().Contain($"private-history-{index}");
+            input[2].GetRawText().Should().Contain($"private-history-{index}");
+            input[3].GetRawText().Should().Contain(date.ToString("yyyy-MM-dd"));
             input[4].GetProperty("role").GetString().Should().Be("user");
             currentPrefix.Should().NotContain("private-").And.NotContain(user.Id.ToString())
                 .And.NotContain(date.ToString("yyyy-MM-dd")).And.NotContain($"Language: {user.Language}");
@@ -124,6 +124,7 @@ public partial class AiInputBudgetTests(ITestOutputHelper output)
         var transport = new SequenceHandler(ResponsesTestData.Text("Your reply"));
         var user = User.Create("Person", "recording@example.com").Value;
         var recorder = Substitute.For<IConversationTurnRecorder>();
+        recorder.RecordAsync(Arg.Any<ConversationTurnCapture>(), Arg.Any<CancellationToken>()).Returns(true);
         var handler = BuildHandler(BuildService(transport, usage), RegisteredTools(), user, [],
             new DateOnly(2026, 1, 1), recordingEnabled, recorder, analytics);
 
@@ -139,11 +140,11 @@ public partial class AiInputBudgetTests(ITestOutputHelper output)
         analytics.Received(1).CaptureUserEvent(user.Id, "astra_message_sent", user.Plan.ToString(),
             Arg.Is<IReadOnlyDictionary<string, object>>(properties => (int)properties["round_count"] == 1));
         if (recordingEnabled)
-            recorder.Received(1).TryRecord(Arg.Is<ConversationTurnCapture>(turn => turn.UserId == user.Id
+            _ = recorder.Received(1).RecordAsync(Arg.Is<ConversationTurnCapture>(turn => turn.UserId == user.Id
                 && turn.UserContent == "Hello AI" && turn.AssistantContent == "Your reply"
                 && turn.UsedModel && turn.ToolCallsJson == "[]"));
         else
-            recorder.DidNotReceiveWithAnyArgs().TryRecord(default!);
+            _ = recorder.DidNotReceiveWithAnyArgs().RecordAsync(default!);
     }
 
     [Fact]

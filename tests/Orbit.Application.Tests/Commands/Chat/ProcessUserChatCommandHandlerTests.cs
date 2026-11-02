@@ -98,7 +98,7 @@ public partial class ProcessUserChatCommandHandlerTests
         var result = await CreateHandler().Handle(new ProcessUserChatCommand(UserId, "screen this input"), CancellationToken.None);
         result.IsFailure.Should().BeTrue();
         result.ErrorCode.Should().Be(ErrorCodes.AiUnavailable);
-        _conversationRecorder.DidNotReceiveWithAnyArgs().TryRecord(default!);
+        _ = _conversationRecorder.DidNotReceiveWithAnyArgs().RecordAsync(default!);
         await _blockStore.DidNotReceiveWithAnyArgs().InvalidateOpenAsync(default, default);
         await _unitOfWork.DidNotReceiveWithAnyArgs().AcquireAdvisoryLockAsync(default!, default);
         await _aiIntentService.DidNotReceive().SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
@@ -120,7 +120,7 @@ public partial class ProcessUserChatCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.AiMessage.Should().Contain(resource);
-        _conversationRecorder.Received(1).TryRecord(Arg.Is<ConversationTurnCapture>(turn =>
+        _ = _conversationRecorder.Received(1).RecordAsync(Arg.Is<ConversationTurnCapture>(turn =>
             turn.UserId == UserId && turn.UserContent == message && turn.AssistantContent == result.Value.AiMessage
             && !turn.UsedModel && turn.ToolCallsJson == "[]"));
         await _moderation.DidNotReceiveWithAnyArgs().CheckTextAsync(default!, default);
@@ -207,6 +207,7 @@ public partial class ProcessUserChatCommandHandlerTests
 
     public ProcessUserChatCommandHandlerTests()
     {
+        _conversationRecorder.RecordAsync(Arg.Any<ConversationTurnCapture>(), Arg.Any<CancellationToken>()).Returns(true);
         _moderation.CheckTextAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(new ModerationResult(false, false, []));
         _scheduleLogReader.ReadDaysAsync(
             Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<DateOnly>(), Arg.Any<DateOnly>(),
@@ -3479,7 +3480,7 @@ public partial class ProcessUserChatCommandHandlerTests
         result.Value.Actions.Should().ContainSingle();
         result.Value.Actions[0].Error.Should().Be(PortugueseToolFailureMessage);
         result.Value.Actions[0].Error.Should().NotContain("Days can only be set when frequency quantity is 1");
-        _conversationRecorder.Received(1).TryRecord(Arg.Is<ConversationTurnCapture>(turn =>
+        _ = _conversationRecorder.Received(1).RecordAsync(Arg.Is<ConversationTurnCapture>(turn =>
             turn.UserId == UserId && turn.ToolCallsJson.Contains("create_habit")
             && turn.ToolCallsJson.Contains("Days can only be set when frequency quantity is 1")
             && turn.ToolCallsJson.Contains("frequency_unit")));

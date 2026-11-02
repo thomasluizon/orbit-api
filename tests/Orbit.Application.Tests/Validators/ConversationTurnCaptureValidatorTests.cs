@@ -1,7 +1,6 @@
 using FluentAssertions;
 using Orbit.Application.Chat;
 using Orbit.Application.Chat.Validators;
-using Orbit.Domain.Entities;
 
 namespace Orbit.Application.Tests.Validators;
 
@@ -34,8 +33,15 @@ public class ConversationTurnCaptureValidatorTests
         var turn = Valid();
         ConversationTurnCapture[] invalid = [turn with { UserId = Guid.Empty }, turn with { TurnId = Guid.Empty },
             turn with { CreatedAtUtc = default }, turn with { UserContent = "" }, turn with { ToolCallsJson = "{}" },
-            turn with { ToolCallsJson = "not json" }, turn with { AssistantContent = new string('a', ConversationTurn.MaxTextLength) }];
+            turn with { ToolCallsJson = "not json" }];
         foreach (var item in invalid)
             _validator.Validate(item).IsValid.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Validate_LargeValidResponse_IsAcceptedWithoutADiagnosticBudget()
+    {
+        var turn = Valid() with { ResponseJson = System.Text.Json.JsonSerializer.Serialize(new { text = new string('a', 100_000) }) };
+        _validator.Validate(turn).IsValid.Should().BeTrue();
     }
 }

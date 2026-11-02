@@ -1766,3 +1766,14 @@ copy review; tool descriptions continue to use English for every account languag
 | Location | en | pt-BR |
 | --- | --- | --- |
 | `sub_habits.description`, appended once per exported tool schema | Maximum 5 habit levels including the root; the server validates nesting depth. | No máximo 5 níveis de hábitos, incluindo a raiz; o servidor valida a profundidade. |
+
+## Server-owned conversation continuity
+
+The optional `ChatResponse.conversationId` identifies the stored thread when
+`astra_conversation_recording` is enabled. Both negotiated response parts and
+compact tool-result summaries are written synchronously to the existing
+encrypted turn table. Future requests with that conversation id rebuild history
+on the server and ignore client history when rows exist. Preview outcomes retain
+the pending operation id and current arguments after approval, edits or rejection.
+See [ServerConversations.md](ServerConversations.md) for pagination, private
+images, deletion, retention, export and rollout requirements.

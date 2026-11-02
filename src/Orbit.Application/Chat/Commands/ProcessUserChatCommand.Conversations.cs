@@ -1,5 +1,5 @@
 using System.Text.Json;
-using Microsoft.Extensions.Logging;
+using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Models;
@@ -37,23 +37,61 @@ public partial class ProcessUserChatCommandHandler
         public bool UsedModel { get; set; }
         public bool MessageAllowanceConsumed { get; set; }
         public List<ConversationToolCall> ToolCalls { get; } = [];
+        public List<AiToolCallResult> ToolResults { get; } = [];
+        public bool ExistingConversation { get; set; }
+        public bool ServerEnabled { get; set; }
+        public bool ConversationPrepared { get; set; }
+        public Guid? ConversationId { get; set; }
     }
 
-    private void RecordConversationSafely(ProcessUserChatCommand request,
-        ChatTurnState recording, Result<ChatResponse>? response)
+    private async Task<Result<ProcessUserChatCommand>> PrepareConversationAsync(ProcessUserChatCommand request,
+        ChatTurnState recording, CancellationToken ct, IReadOnlyList<string>? enabledFlags = null)
     {
-        if (!recording.Enabled || conversationRecorder is null)
-            return;
-        try
+        if (recording.ConversationPrepared) return Result.Success(request);
+        var enabled = enabledFlags ?? await data.FeatureFlagService.GetEnabledKeysForUserAsync(request.UserId, ct);
+        recording.ConversationPrepared = true;
+        if (!enabled.Contains(FeatureFlagKeys.AstraConversationRecording))
+            return Result.Success(request);
+        if (conversationRecorder is null)
+            throw new InvalidOperationException("Conversation storage is unavailable.");
+        var id = request.ClientContext?.ConversationId ?? Guid.NewGuid();
+        var history = await conversationRecorder.LoadHistoryAsync(request.UserId, id, ct);
+        if (history is { IsFailure: true }) return history.PropagateError<ProcessUserChatCommand>();
+        recording.ServerEnabled = true;
+        recording.ConversationId = id;
+        recording.ExistingConversation = history is { IsSuccess: true, Value.Exists: true };
+        return Result.Success(request with
         {
-            conversationRecorder.TryRecord(new ConversationTurnCapture(request.UserId, request.TurnId ?? Guid.NewGuid(),
-                recording.CreatedAtUtc, recording.UserContent ?? request.Message, response is { IsSuccess: true } ? response.Value.AiMessage : null,
-                JsonSerializer.Serialize(recording.ToolCalls), recording.UsedModel,
-                response is { IsSuccess: true } ? JsonSerializer.Serialize(response.Value, ChatStreamEvent.SerializerOptions) : null));
-        }
-        catch (Exception)
-        {
-            logger.LogWarning("Conversation recording failed; the chat response is unaffected");
-        }
+            ClientContext = (request.ClientContext ?? new AgentClientContext()) with { ConversationId = id },
+            History = recording.ExistingConversation ? history.Value.Messages.ToList() : request.History,
+            PendingOperationConversation = new(id, recording.CreatedAtUtc, usesServerHistory: true,
+                existingConversation: recording.ExistingConversation)
+        });
+    }
+
+    private async Task<ChatResponse> ConversationErasedReplyAsync(ProcessUserChatCommand request,
+        ChatTurnState recording, CancellationToken ct)
+    {
+        recording.Enabled = false;
+        var user = await data.UserRepository.GetByIdAsync(request.UserId, ct);
+        var isPortuguese = LocaleHelper.IsPortuguese(ChatLocale.Resolve(request.ClientContext, user?.Language));
+        return ChatResponseNegotiation.ForAllowance(new ChatResponse(
+            ErrorCopy.Resolve(ConversationErrors.NotFoundCode, isPortuguese), [], CorrelationId: request.CorrelationId),
+            request.ClientContext, recording.MessageAllowanceConsumed);
+    }
+
+    private async Task<bool> RecordConversationAsync(ProcessUserChatCommand request,
+        ChatTurnState recording, Result<ChatResponse>? response, CancellationToken ct)
+    {
+        if (!recording.ServerEnabled || !recording.Enabled || conversationRecorder is null) return true;
+        var enabled = await data.FeatureFlagService.GetEnabledKeysForUserAsync(request.UserId, ct);
+        if (!enabled.Contains(FeatureFlagKeys.AstraConversationRecording)) return true;
+        var recorded = await conversationRecorder.RecordAsync(new ConversationTurnCapture(request.UserId, request.TurnId ?? Guid.NewGuid(),
+            recording.CreatedAtUtc, recording.UserContent ?? request.Message, response is { IsSuccess: true } ? response.Value.AiMessage : null,
+            JsonSerializer.Serialize(recording.ToolCalls), recording.UsedModel,
+            response is { IsSuccess: true } ? JsonSerializer.Serialize(response.Value, ChatStreamEvent.SerializerOptions) : null,
+            recording.ConversationId, recording.ExistingConversation, recording.ToolResults, request.ImageData, request.ImageMimeType), ct);
+        return recorded || !(await data.FeatureFlagService.GetEnabledKeysForUserAsync(request.UserId, ct))
+            .Contains(FeatureFlagKeys.AstraConversationRecording);
     }
 }

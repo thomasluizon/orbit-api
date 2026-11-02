@@ -8,6 +8,11 @@ namespace Orbit.Domain.Tests.Entities;
 public sealed class PendingOperationConversationTests
 {
     [Fact]
+    public void ExistingStoredConversation_RequiresServerHistory() =>
+        FluentActions.Invoking(() => new PendingOperationConversation(Guid.NewGuid(), DateTime.UtcNow, existingConversation: true))
+            .Should().Throw<ArgumentException>();
+
+    [Fact]
     public void EmptyIdentity_IsRejected() =>
         FluentActions.Invoking(() => new PendingOperationConversation(Guid.Empty, DateTime.UtcNow))
             .Should().Throw<ArgumentOutOfRangeException>();

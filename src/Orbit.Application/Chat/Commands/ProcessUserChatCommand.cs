@@ -77,7 +77,8 @@ public record ChatResponse(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<ChatResponsePart>? Parts = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ChatEvalTrace? EvalTrace = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<ChatFollowUp>? FollowUpContext = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? MessageAllowanceConsumed = null)
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? MessageAllowanceConsumed = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Guid? ConversationId = null)
 {
     [JsonIgnore]
     public TurnFactSet GroundingFacts { get; init; } = TurnFactSet.Empty;
@@ -227,12 +228,24 @@ public partial class ProcessUserChatCommandHandler(
             {
                 var negotiated = ChatResponseNegotiation.ForAllowance(response.Value, request.ClientContext,
                     recording.MessageAllowanceConsumed);
-                response = Result.Success(negotiated);
+                response = Result.Success(negotiated with
+                {
+                    ConversationId = recording.ServerEnabled && recording.Enabled ? recording.ConversationId : null
+                });
             }
+        }
+        catch (ConversationErasedException)
+        {
+            evalTrace = null;
+            response = Result.Success(await ConversationErasedReplyAsync(request, recording, cancellationToken));
         }
         finally
         {
-            RecordConversationSafely(request, recording, response);
+            if (!await RecordConversationAsync(request, recording, response, cancellationToken))
+            {
+                evalTrace = null;
+                response = Result.Success(await ConversationErasedReplyAsync(request, recording, cancellationToken));
+            }
             var timing = timer.Complete();
             logger.LogInformation("Astra turn timing {Phases} total {TotalMilliseconds} ms",
                 JsonSerializer.Serialize(timing.Phases, ChatStreamEvent.SerializerOptions), timing.TotalMilliseconds);
@@ -247,6 +260,9 @@ public partial class ProcessUserChatCommandHandler(
     {
         if (request.BlockAnswer is not null)
         {
+            var preparedConversation = await PrepareConversationAsync(request, recording, cancellationToken);
+            if (preparedConversation.IsFailure) return preparedConversation.PropagateError<ChatResponse>();
+            request = preparedConversation.Value;
             recording.Enabled = true;
             ChatContext? choiceContext = null;
             var answerService = new AstraBlockAnswerService(execution.BlockStore, execution.UnitOfWork,
@@ -284,6 +300,9 @@ public partial class ProcessUserChatCommandHandler(
             var enabledFlags = await data.FeatureFlagService.GetEnabledKeysForUserAsync(request.UserId, cancellationToken);
             if (CrisisSupportGuard.IsEnabled(crisis, enabledFlags))
             {
+                var preparedConversation = await PrepareConversationAsync(request, recording, cancellationToken, enabledFlags);
+                if (preparedConversation.IsFailure) return preparedConversation.PropagateError<ChatResponse>();
+                request = preparedConversation.Value;
                 recording.Enabled = enabledFlags.Contains(FeatureFlagKeys.AstraConversationRecording);
                 return await HandleCrisisTurnAsync(request, crisis, captureMessage: true);
             }
@@ -414,6 +433,9 @@ public partial class ProcessUserChatCommandHandler(
 
         var context = contextResult.Value;
         recording.Enabled = context.EnabledFeatureFlags.Contains(FeatureFlagKeys.AstraConversationRecording);
+        var preparedConversation = await PrepareConversationAsync(request, recording, cancellationToken, context.EnabledFeatureFlags);
+        if (preparedConversation.IsFailure) return preparedConversation.PropagateError<ChatResponse>();
+        request = preparedConversation.Value;
         var plan = GetAnalyticsPlan(context.User);
         var telemetry = new AiTurnTelemetry(request.CorrelationId, plan);
         try

@@ -117,17 +117,24 @@ public class ExportUserDataQueryHandlerTests
     }
 
     [Fact]
-    public async Task Handle_Conversations_AreLimitedToRequestingUserAndRetentionWindow()
+    public async Task Handle_Conversations_IncludeAllRetainedOwnerTextAndImageFileNames()
     {
         ArrangeUser(CreateTestUser());
         var now = DateTime.UtcNow;
         var own = ConversationTurn.Create(UserId, Guid.NewGuid(), "assistant", now, "model", "Reply", "[]").Value;
         var foreign = ConversationTurn.Create(Guid.NewGuid(), Guid.NewGuid(), "user", now, null, "Private", "[]").Value;
-        var expired = ConversationTurn.Create(UserId, Guid.NewGuid(), "user", now.AddDays(-31), null, "Expired", "[]").Value;
+        var conversation = Guid.NewGuid();
+        var imageTurn = Guid.NewGuid();
+        var retained = ConversationTurn.Create(UserId, imageTurn, "user", now.AddDays(-90), null, "Retained", "[]",
+            conversationId: conversation, turnOrder: 1, imageObjectKey: $"{UserId}/conversations/{conversation}/{imageTurn}.png",
+            imageContentType: "image/png", imageSha256: new string('a', 64)).Value;
         _conversations.FindAsync(Arg.Any<Expression<Func<ConversationTurn, bool>>>(), Arg.Any<CancellationToken>())
-            .Returns(call => new[] { foreign, expired, own }.Where(call.Arg<Expression<Func<ConversationTurn, bool>>>().Compile()).ToArray());
+            .Returns(call => new[] { foreign, retained, own }.Where(call.Arg<Expression<Func<ConversationTurn, bool>>>().Compile()).ToArray());
         var result = await _handler.Handle(new ExportUserDataQuery(UserId), CancellationToken.None);
-        result.Value.Conversations.Should().ContainSingle().Which.Content.Should().Be("Reply");
+        result.Value.Conversations!.Select(turn => turn.Content).Should().Equal("Retained", "Reply");
+        result.Value.Conversations![0].ImageFileName.Should().Be($"{imageTurn}.png");
+        result.Value.Conversations[0].ConversationId.Should().Be(conversation);
+        JsonSerializer.Serialize(result.Value).Should().NotContain("/conversations/").And.NotContain("ImageData");
     }
 
     private static void ReturnsEmpty<T>(IGenericRepository<T> repository) where T : Orbit.Domain.Common.Entity

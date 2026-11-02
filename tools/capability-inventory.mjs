@@ -109,6 +109,15 @@ function evidence(file, offset, expression, member) {
   return { source: `${file.path}#${member ?? sourceMember(file, offset)}`, expression }
 }
 
+function bodyStart(text, start) {
+  for (let index = start; index < text.length; index++) {
+    if (text[index] === '"' || text[index] === "'") index = endQuote(text, index)
+    else if (text[index] === "(") index = balanced(text, index, "(", ")")
+    else if (text[index] === "{" || text[index] === ";") return index
+  }
+  throw new Error(`Class declaration without a body or terminator near ${text.slice(start, start + 60)}`)
+}
+
 function classes(file) {
   return [...file.text.matchAll(/(?:public|internal|private)\s+(?:(?:abstract|sealed|partial|static)\s+)*class\s+(\w+)/g)].map(match => {
     let start = match.index + match[0].length
@@ -116,9 +125,11 @@ function classes(file) {
       start = file.text.indexOf("(", start)
       start = balanced(file.text, start, "(", ")") + 1
     }
-    const open = file.text.indexOf("{", start)
+    const open = bodyStart(file.text, start)
+    const header = file.text.slice(match.index, open)
+    if (file.text[open] === ";") return { name: match[1], header, file, start: open, end: open, text: "" }
     const end = balanced(file.text, open)
-    return { name: match[1], header: file.text.slice(match.index, open), file, start: open, end, text: file.text.slice(open, end + 1) }
+    return { name: match[1], header, file, start: open, end, text: file.text.slice(open, end + 1) }
   })
 }
 
