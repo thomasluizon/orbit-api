@@ -81,7 +81,7 @@ public class FeatureFlagService(OrbitDbContext dbContext, IMemoryCache cache, IH
 
     private async Task<IReadOnlyList<string>> GetEnabledKeysCoreAsync(Guid userId, CancellationToken cancellationToken, bool forceRefresh)
     {
-        var turn = ChatTurnReadScope.For(userId);
+        var turn = forceRefresh ? null : ChatTurnReadScope.For(userId);
         var user = turn?.User ?? await dbContext.Users.AsNoTracking().FirstOrDefaultAsync(item => item.Id == userId, cancellationToken);
         if (user is null)
             return [];

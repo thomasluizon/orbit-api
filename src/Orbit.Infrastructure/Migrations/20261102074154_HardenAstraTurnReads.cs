@@ -10,11 +10,9 @@ namespace Orbit.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<string>(
-                name: "ModelContextJson",
-                table: "ConversationTurns",
-                type: "text",
-                nullable: true);
+            migrationBuilder.Sql("""
+                ALTER TABLE "ConversationTurns" ADD COLUMN IF NOT EXISTS "ModelContextJson" text;
+                """);
 
             migrationBuilder.Sql("""
                 CREATE INDEX CONCURRENTLY IF NOT EXISTS "IX_ConversationTurns_ConversationId_UserId"
@@ -29,9 +27,9 @@ namespace Orbit.Infrastructure.Migrations
                 DROP INDEX CONCURRENTLY IF EXISTS "IX_ConversationTurns_ConversationId_UserId";
                 """, suppressTransaction: true);
 
-            migrationBuilder.DropColumn(
-                name: "ModelContextJson",
-                table: "ConversationTurns");
+            migrationBuilder.Sql("""
+                ALTER TABLE "ConversationTurns" DROP COLUMN IF EXISTS "ModelContextJson";
+                """);
         }
     }
 }

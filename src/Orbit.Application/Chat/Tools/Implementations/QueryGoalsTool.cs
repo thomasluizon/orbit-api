@@ -57,16 +57,27 @@ public class QueryGoalsTool(
         var limit = Math.Clamp(JsonArgumentParser.GetOptionalInt(args, "limit") ?? 50, 1, 200);
 
         var userToday = JsonArgumentParser.ParseDateOnly(args, "as_of") ?? await userDateService.GetUserTodayAsync(userId, ct);
-        var normalizedSearch = string.IsNullOrWhiteSpace(search) ? null : search.ToLowerInvariant();
         Expression<Func<Goal, bool>> predicate = g => g.UserId == userId && !g.IsDeleted
-            && (status.HasValue ? g.Status == status.Value : includeCompleted || g.Status == GoalStatus.Active)
-            && (normalizedSearch == null || g.Title.ToLower().Contains(normalizedSearch)
-                || g.Description != null && g.Description.ToLower().Contains(normalizedSearch));
+            && (status.HasValue ? g.Status == status.Value : includeCompleted || g.Status == GoalStatus.Active);
         var offset = Math.Max(0, JsonArgumentParser.GetOptionalInt(args, "offset") ?? 0);
-        var total = await goalRepository.CountAsync(predicate, ct);
-        var filtered = (await goalRepository.FindAsync(predicate,
-            q => q.OrderBy(g => g.Position).ThenBy(g => g.CreatedAtUtc).ThenBy(g => g.Id)
-                .Skip(offset).Take(limit).Include(g => g.Habits), ct)).ToList();
+        int total;
+        List<Goal> filtered;
+        if (string.IsNullOrWhiteSpace(search))
+        {
+            total = await goalRepository.CountAsync(predicate, ct);
+            filtered = (await goalRepository.FindAsync(predicate,
+                q => OrderGoals(q).Skip(offset).Take(limit).Include(g => g.Habits), ct)).ToList();
+        }
+        else
+        {
+            var candidates = await goalRepository.FindAsync(predicate, q => OrderGoals(q), ct);
+            var matchingIds = candidates.Where(g => g.Title.Contains(search, StringComparison.OrdinalIgnoreCase)
+                || g.Description?.Contains(search, StringComparison.OrdinalIgnoreCase) == true).Select(g => g.Id).ToArray();
+            total = matchingIds.Length;
+            var pageIds = matchingIds.Skip(offset).Take(limit).ToArray();
+            filtered = pageIds.Length == 0 ? [] : (await goalRepository.FindAsync(predicate,
+                q => OrderGoals(q.Where(g => pageIds.Contains(g.Id))).Include(g => g.Habits), ct)).ToList();
+        }
         var freshProgressValues = await goalProgressReadSyncer.ComputeFreshValuesForGoalsAsync(
             userId, userToday, filtered.Select(goal => goal.Id).ToArray(), ct);
         foreach (var goal in filtered)
@@ -81,6 +92,9 @@ public class QueryGoalsTool(
 
         return new ToolResult(true, EntityName: BuildOutput(filtered, freshProgressValues, includeDescriptions, includeLinkedHabits), Payload: card);
     }
+
+    private static IOrderedQueryable<Goal> OrderGoals(IQueryable<Goal> query) =>
+        query.OrderBy(g => g.Position).ThenBy(g => g.CreatedAtUtc).ThenBy(g => g.Id);
 
     private static GoalStatus? ParseStatus(JsonElement args)
     {

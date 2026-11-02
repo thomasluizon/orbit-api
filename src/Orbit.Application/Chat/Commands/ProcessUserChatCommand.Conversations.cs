@@ -84,14 +84,12 @@ public partial class ProcessUserChatCommandHandler
         ChatTurnState recording, Result<ChatResponse>? response, CancellationToken ct)
     {
         if (!recording.ServerEnabled || !recording.Enabled || conversationRecorder is null) return true;
-        var enabled = await ResolveTurnFeatureFlagsAsync(request.UserId, ct);
-        if (!enabled.Contains(FeatureFlagKeys.AstraConversationRecording)) return true;
         var recorded = await conversationRecorder.RecordAsync(new ConversationTurnCapture(request.UserId, request.TurnId ?? Guid.NewGuid(),
             recording.CreatedAtUtc, recording.UserContent ?? request.Message, response is { IsSuccess: true } ? response.Value.AiMessage : null,
             JsonSerializer.Serialize(recording.ToolCalls), recording.UsedModel,
             response is { IsSuccess: true } ? JsonSerializer.Serialize(response.Value, ChatStreamEvent.SerializerOptions) : null,
-            recording.ConversationId, recording.ExistingConversation, recording.ToolResults, request.ImageData, request.ImageMimeType, enabled), ct);
-        return recorded || !(await ResolveTurnFeatureFlagsAsync(request.UserId, ct))
+            recording.ConversationId, recording.ExistingConversation, recording.ToolResults, request.ImageData, request.ImageMimeType), ct);
+        return recorded || !(await data.FeatureFlagService.GetEnabledKeysForUserAsync(request.UserId, ct, forceRefresh: true))
             .Contains(FeatureFlagKeys.AstraConversationRecording);
     }
 }

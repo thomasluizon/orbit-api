@@ -32,7 +32,7 @@ public sealed class ConversationTurnRecorder(
         return await work.ExecuteInTransactionAsync(async token =>
         {
             await work.AcquireUserRowLockAsync(turn.UserId, token);
-            if (!(turn.EnabledFeatureFlags ?? await flags.GetEnabledKeysForUserAsync(turn.UserId, token)).Contains(FeatureFlagKeys.AstraConversationRecording))
+            if (!(await flags.GetEnabledKeysForUserAsync(turn.UserId, token, forceRefresh: true)).Contains(FeatureFlagKeys.AstraConversationRecording))
                 return false;
             await new ConversationTurnCaptureValidator().ValidateAndThrowAsync(turn, token);
             if (!encryption.IsConfigured || !db.HasEncryptionService)

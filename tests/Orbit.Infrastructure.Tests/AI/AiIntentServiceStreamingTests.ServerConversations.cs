@@ -230,7 +230,7 @@ public partial class AiIntentServiceStreamingTests
         user.SetTimeZone("America/Sao_Paulo");
         db.SaveChanges();
         var flags = Substitute.For<IFeatureFlagService>();
-        flags.GetEnabledKeysForUserAsync(user.Id, Arg.Any<CancellationToken>()).Returns(enabled ? new[] { FeatureFlagKeys.AstraConversationRecording } : []);
+        flags.GetEnabledKeysForUserAsync(user.Id, Arg.Any<CancellationToken>(), Arg.Any<bool>()).Returns(enabled ? new[] { FeatureFlagKeys.AstraConversationRecording } : []);
         flags.ResolveForUser(user.Id).Returns(db.AppFeatureFlags.Select(flag => new ResolvedFeatureFlag(flag.Key, true, flag.PlanRequirement)).ToArray());
         var dates = Substitute.For<IUserDateService>();
         dates.GetUserTodayAsync(user.Id, Arg.Any<CancellationToken>()).Returns(new DateOnly(2026, 11, 1));
