@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.EntityFrameworkCore;
@@ -459,24 +460,23 @@ public partial class ProcessUserChatCommandHandler
             ? writeCalls.Where(call => call.Name == "bulk_create_habits").ToArray() : [];
         executionResults.RequiresCreationProposal |= deferredCreations.Length > 0;
         writeCalls.RemoveAll(call => deferredCreations.Contains(call));
-        if (writeCalls.Count > 0 && !executionResults.HasMutationContext)
-        {
-            var habits = await data.HabitRepository.FindAsync(habit => habit.UserId == request.UserId,
-                query => query.Include(habit => habit.Tags), cancellationToken);
-            executionResults.AllHabits = habits;
-            executionResults.Habits = habits.Where(habit => !habit.IsCompleted).ToList();
-            executionResults.HasMutationContext = true;
-        }
+        await LoadMutationContextAsync(request, executionResults, writeCalls.Count > 0, cancellationToken);
         var bulkRedirects = BulkToolRepeatGuard.FindRedirects(writeCalls, executionResults.PreviousWriteCalls);
         var resolvedWrites = writeCalls.ToDictionary(call => call.Id,
             call => ResolveSuggestedHabitCall(call, executionResults));
 
+        var excessReads = readOnlyCalls.Skip(ChatTurnLimits.MaxReadCallsPerRound).ToArray();
+        readOnlyCalls = readOnlyCalls.Take(ChatTurnLimits.MaxReadCallsPerRound).ToList();
         var readOnlyTasks = readOnlyCalls
             .Select(call => ExecuteReadOnlyToolCallOnIsolatedScopeAsync(call, request, executionResults, cancellationToken))
             .ToList();
         var readOnlyOutcomes = await Task.WhenAll(readOnlyTasks);
 
         var outcomesByCallId = new Dictionary<string, ToolCallOutcome>(orderedCalls.Count, StringComparer.Ordinal);
+        foreach (var call in excessReads)
+            outcomesByCallId[call.Id] = new ToolCallOutcome(
+                new AiToolCallResult(call.Name, call.Id, false, null, null, "Read call limit reached; narrow the request or read the next page in another round."),
+                new ActionResult(ToolNameToPascalCase(call.Name), ActionStatus.Failed, Error: "read_call_limit"), null, null, null);
         foreach (var call in deferredCreations)
             outcomesByCallId[call.Id] = AwaitCreationReads(call);
         for (var index = 0; index < readOnlyCalls.Count; index++)
@@ -543,6 +543,7 @@ public partial class ProcessUserChatCommandHandler
 
         if (orderedCalls.FirstOrDefault(call => call.Name == "ask") is { } askCall)
             outcomesByCallId[askCall.Id] = await ExecuteAskCallAsync(askCall, request, executionResults, cancellationToken);
+        LogRoundOutcomes(outcomesByCallId.Values, readOnlyCalls.Count, writeCalls.Count, excessReads.Length);
         return outcomesByCallId;
     }
 
@@ -599,6 +600,43 @@ public partial class ProcessUserChatCommandHandler
         public ToolCallOutcome Outcome { get; } = outcome;
     }
 
+    private async Task LoadMutationContextAsync(ProcessUserChatCommand request, ToolExecutionAccumulator executionResults,
+        bool hasWrites, CancellationToken cancellationToken)
+    {
+        if (hasWrites && !executionResults.HasMutationContext)
+        {
+            var habits = ChatTurnReadScope.For(request.UserId)?.Habits;
+            if (habits is null)
+                habits = await data.HabitRepository.FindAsync(habit => habit.UserId == request.UserId,
+                    query => query.Include(habit => habit.Tags), cancellationToken);
+            else
+            {
+                var tagged = await data.HabitRepository.ProjectAsync(habit => habit.UserId == request.UserId,
+                    ChatHabitTags.Select, cancellationToken);
+                var tagsByHabit = tagged.ToDictionary(item => item.HabitId, item => item.Tags);
+                foreach (var habit in habits)
+                    habit.LoadScheduleRelationsForRead(tagsByHabit.GetValueOrDefault(habit.Id) ?? [], habit.Goals);
+            }
+            executionResults.AllHabits = habits;
+            executionResults.Habits = habits.Where(habit => !habit.IsCompleted).ToList();
+            executionResults.HasMutationContext = true;
+        }
+    }
+
+    private void LogRoundOutcomes(IEnumerable<ToolCallOutcome> outcomes, int reads, int writes, int deferred)
+    {
+        var failed = outcomes.Count(outcome => !outcome.ToolResult.Success);
+        logger.Log(failed > 0 ? LogLevel.Warning : LogLevel.Debug,
+            "Astra round ran {ReadCount} reads and {WriteCount} writes; failed calls {FailedCount}; deferred reads {DeferredCount}",
+            reads, writes, failed, deferred);
+    }
+
+    private static void InvalidateTurnSnapshotIfMutated(Guid userId, IAiTool tool, AgentOperationResult result)
+    {
+        if (result.Status == AgentOperationStatus.Succeeded && !tool.IsReadOnly)
+            ChatTurnReadScope.For(userId)?.InvalidateHabits();
+    }
+
     private static ToolCallOutcome RepeatedSingleEntityToolOutcome(AiToolCall call, string bulkTool)
     {
         var error = $"Repeated {call.Name} calls were blocked. Use one {bulkTool} call for the full matching set.";
@@ -645,10 +683,7 @@ public partial class ProcessUserChatCommandHandler
         using var phase = ChatTurnTimer.Measure(ChatPhase.ToolCall);
         var tool = ai.ToolRegistry.GetTool(call.Name);
         if (tool is null)
-        {
-            LogUnknownToolRequested(logger, call.Name);
             return UnknownToolOutcome(call);
-        }
 
         var capability = ai.CatalogService.GetCapabilityByChatTool(call.Name);
         if (capability is null)
@@ -668,7 +703,7 @@ public partial class ProcessUserChatCommandHandler
         RegisterPreviewDiscussion(call, executionResponse, executionResults);
         var operationResult = StatusCardBuilder.ForClient(executionResponse.Operation with { Access = access }, request.ClientContext);
         var toolResult = BuildToolCallResult(call, operationResult);
-        LogToolCallOutcome(call, operationResult);
+        InvalidateTurnSnapshotIfMutated(request.UserId, tool, operationResult);
 
         RegisterPendingWrite(request.UserId, tool, executionResponse, executionResults);
 
@@ -860,21 +895,6 @@ public partial class ProcessUserChatCommandHandler
         }, cancellationToken);
     }
 
-    private void LogToolCallOutcome(AiToolCall call, AgentOperationResult operationResult)
-    {
-        var isClarification = operationResult.Payload is NeedsClarificationPayload;
-
-        if (operationResult.Status == AgentOperationStatus.Succeeded && !isClarification)
-        {
-            LogToolSucceeded(logger, call.Name, operationResult.TargetName);
-        }
-        else if (operationResult.Status is AgentOperationStatus.Failed or AgentOperationStatus.Denied)
-        {
-            LogToolFailed(logger, call.Name, operationResult.ErrorCode ?? operationResult.Status.ToString());
-            if (isClarification)
-                LogClarificationDroppedOnFailedTool(logger, call.Name, operationResult.PolicyReason);
-        }
-    }
 
     private sealed record ClarificationToolResult(
         AiToolCallResult ToolResult,

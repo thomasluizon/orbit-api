@@ -77,7 +77,7 @@ public partial class ProcessUserChatCommandHandler
 
 public partial class ProcessUserChatCommandHandler
 {
-    private void CaptureReadMetadata(Guid userId, ResponseCards cards)
+    private void CaptureResponseCardEvents(ProcessUserChatCommand request, ChatContext context, ResponseCards cards)
     {
         IEnumerable<object> blocks = cards.Parts is { } parts
             ? parts.OfType<ChatBlockPart>().Select(part => part.Block)
@@ -87,8 +87,13 @@ public partial class ProcessUserChatCommandHandler
         foreach (var block in blocks)
         {
             var (read, kind, metric) = ReadBlockTelemetry.Describe(block);
-            if (read is not null)
-                ReadBlockTelemetry.Capture(execution.ProductAnalytics, logger, userId, "chat_read_block_emitted", read, kind, metric);
+            if (kind == "unknown") continue;
+            var properties = ReadBlockTelemetry.Properties(read, kind, metric);
+            properties["platform"] = request.ClientContext?.Platform ?? "unknown";
+            properties["part_count"] = cards.Parts?.Count ?? 0;
+            properties["block_kinds"] = cards.Parts?.OfType<ChatBlockPart>().Select(part => part.Kind).ToArray() ?? [];
+            Orbit.Application.Common.AnalyticsCapture.SafeCaptureUserEvent(execution.ProductAnalytics, logger,
+                request.UserId, context.User?.Plan.ToString(), "chat_read_block_emitted", properties);
         }
     }
 
@@ -275,7 +280,7 @@ public partial class ProcessUserChatCommandHandler
         ToolExecutionAccumulator results)
     {
         var cards = ComposeHabitMonth(EnsureFocusedReadResults(new ResponseCards(null), request, context, results), request, context, results);
-        CaptureReadMetadata(request.UserId, cards);
+        CaptureResponseCardEvents(request, context, cards);
         return new ChatResponse(cards.AiMessage, [], results.OperationResults, CorrelationId: request.CorrelationId,
             Parts: cards.Parts);
     }

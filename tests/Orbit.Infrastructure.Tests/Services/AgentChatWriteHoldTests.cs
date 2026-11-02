@@ -87,7 +87,7 @@ public partial class AgentChatWriteHoldTests : IDisposable
         stepUpBridge.GetRequiredConfirmationAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns((AgentConfirmationRequirement?)null);
         _policyEvaluator = new AgentPolicyEvaluator(
-            _dbContext, _catalogService, _pendingOperationStore, stepUpBridge, settings,
+            _dbContext, _catalogService, _pendingOperationStore, stepUpBridge,
             new FeatureFlagService(_dbContext, _flagCache, Substitute.For<IHostEnvironment>(), new ConfigurationBuilder().Build()));
     }
 

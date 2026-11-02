@@ -203,6 +203,8 @@ public partial class ProcessUserChatCommandHandler(
         CancellationToken cancellationToken)
     {
         using var timer = ChatTurnTimer.Begin(timeProvider ?? TimeProvider.System);
+        using var reads = new ChatTurnReadScope(request.UserId,
+            await data.UserRepository.GetByIdAsync(request.UserId, cancellationToken));
         ChatEvalTraceCollector? evalTrace = null;
         var recording = new ChatTurnState();
         request = request with
@@ -215,7 +217,7 @@ public partial class ProcessUserChatCommandHandler(
         {
             if (request.EvalTraceRequested)
             {
-                var flags = await data.FeatureFlagService.GetEnabledKeysForUserAsync(request.UserId, cancellationToken);
+                var flags = await ResolveTurnFeatureFlagsAsync(request.UserId, cancellationToken);
                 if (flags.Contains(FeatureFlagKeys.AstraEvalTrace, StringComparer.Ordinal))
                     evalTrace = new ChatEvalTraceCollector(request.CorrelationId ?? Guid.NewGuid().ToString("N"), ai.ToolRegistry);
             }
@@ -246,12 +248,21 @@ public partial class ProcessUserChatCommandHandler(
                 response = Result.Success(await ConversationErasedReplyAsync(request, recording, cancellationToken));
             }
             var timing = timer.Complete();
-            logger.LogInformation("Astra turn timing {Phases} total {TotalMilliseconds} ms",
+            logger.LogDebug("Astra turn timing {Phases} total {TotalMilliseconds} ms",
                 JsonSerializer.Serialize(timing.Phases, ChatStreamEvent.SerializerOptions), timing.TotalMilliseconds);
         }
         return response.IsSuccess && evalTrace is not null
             ? Result.Success(response.Value with { EvalTrace = evalTrace.Build(timer.Complete()) })
             : response;
+    }
+
+    private async Task<IReadOnlyList<string>> ResolveTurnFeatureFlagsAsync(Guid userId, CancellationToken ct)
+    {
+        var scope = ChatTurnReadScope.For(userId);
+        if (scope?.EnabledFlags is { } cached) return cached;
+        var flags = await data.FeatureFlagService.GetEnabledKeysForUserAsync(userId, ct);
+        if (scope is not null) scope.EnabledFlags = flags;
+        return flags;
     }
 
     private async Task<Result<ChatResponse>> HandleCoreAsync(ProcessUserChatCommand request,
@@ -297,7 +308,7 @@ public partial class ProcessUserChatCommandHandler(
         var crisis = CrisisSupportGuard.Detect(request.Message);
         if (crisis != CrisisLocales.None)
         {
-            var enabledFlags = await data.FeatureFlagService.GetEnabledKeysForUserAsync(request.UserId, cancellationToken);
+            var enabledFlags = await ResolveTurnFeatureFlagsAsync(request.UserId, cancellationToken);
             if (CrisisSupportGuard.IsEnabled(crisis, enabledFlags))
             {
                 var preparedConversation = await PrepareConversationAsync(request, recording, cancellationToken, enabledFlags);
@@ -424,7 +435,7 @@ public partial class ProcessUserChatCommandHandler(
         using var turnCancellation = CreateBlockTurnCancellation(cancellationToken, answeredAtUtc);
         cancellationToken = turnCancellation.Token;
         var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
-        LogProcessingChatMessage(logger, request.Message);
+        LogProcessingChatMessage(logger);
 
         var contextResult = loadedContext is null
             ? await LoadChatContextAsync(request, cancellationToken)
@@ -732,7 +743,8 @@ public partial class ProcessUserChatCommandHandler(
         if (user is null)
             return;
 
-        foreach (var pending in pendingOperations.Where(item => item.Changes is not null))
+        var previews = pendingOperations.Where(item => item.Changes is not null).ToArray();
+        if (previews.Length > 0)
         {
             AnalyticsCapture.SafeCaptureUserEvent(
                 execution.ProductAnalytics,
@@ -743,7 +755,9 @@ public partial class ProcessUserChatCommandHandler(
                 new Dictionary<string, object>
                 {
                     ["platform"] = request.ClientContext?.Platform ?? "unknown",
-                    ["kind"] = pending.CapabilityId
+                    ["kind"] = previews[0].CapabilityId,
+                    ["kinds"] = previews.Select(preview => preview.CapabilityId).Distinct().ToArray(),
+                    ["preview_count"] = previews.Length
                 });
         }
     }
@@ -767,68 +781,6 @@ public partial class ProcessUserChatCommandHandler(
             return null;
 
         return (match.Value.Key, match.Value.Locale, aiMessage);
-    }
-
-    private void CaptureCardEvent(
-        ProcessUserChatCommand request, ChatContext context, string eventName, string kind,
-        IReadOnlyList<ChatResponsePart>? parts)
-    {
-        if (context.User is null)
-            return;
-
-        AnalyticsCapture.SafeCaptureUserEvent(
-            execution.ProductAnalytics, logger, request.UserId, context.User.Plan.ToString(),
-            eventName, new Dictionary<string, object>
-            {
-                ["platform"] = request.ClientContext?.Platform ?? "unknown",
-                ["kind"] = kind,
-                ["part_count"] = parts?.Count ?? 0,
-                ["block_kinds"] = parts?.OfType<ChatBlockPart>().Select(part => part.Kind).ToArray() ?? []
-            });
-    }
-
-    private void CaptureResponseCardEvents(
-        ProcessUserChatCommand request, ChatContext context, ResponseCards cards)
-    {
-        CaptureReadMetadata(request.UserId, cards);
-        void Capture(string eventName, string kind) =>
-            CaptureCardEvent(request, context, eventName, kind, cards.Parts);
-
-        if (cards.Parts is not null)
-        {
-            var events = cards.Parts.OfType<ChatBlockPart>().Select(part => part.Block switch
-            {
-                MetricsCard => ("chat_metrics_card_emitted", PartKinds.Metrics),
-                PeriodInsightCard => ("chat_period_insight_card_emitted", "period"),
-                DaySummaryCard => ("chat_day_summary_card_emitted", "day"),
-                StreakCard => ("chat_streak_card_emitted", PartKinds.Streak),
-                CalendarCard => ("chat_calendar_card_emitted", PartKinds.Calendar),
-                RecordListCard recordList => ("chat_record_list_card_emitted", recordList.Kind),
-                AccountRowsCard accountRows => ("chat_account_rows_card_emitted", accountRows.Kind),
-                _ => (string.Empty, string.Empty)
-            }).Distinct();
-            foreach (var (eventName, kind) in events)
-            {
-                if (eventName.Length > 0)
-                    Capture(eventName, kind);
-            }
-            return;
-        }
-
-        if (cards.MetricsCard is not null)
-            Capture("chat_metrics_card_emitted", PartKinds.Metrics);
-        if (cards.PeriodInsight is not null)
-            Capture("chat_period_insight_card_emitted", "period");
-        if (cards.DaySummary is not null)
-            Capture("chat_day_summary_card_emitted", "day");
-        if (cards.Streak is not null)
-            Capture("chat_streak_card_emitted", PartKinds.Streak);
-        if (cards.Calendar is not null)
-            Capture("chat_calendar_card_emitted", PartKinds.Calendar);
-        foreach (var recordList in cards.RecordLists ?? [])
-            Capture("chat_record_list_card_emitted", recordList.Kind);
-        if (cards.AccountRows is not null)
-            Capture("chat_account_rows_card_emitted", cards.AccountRows.Kind);
     }
 
     private async Task<Result<ChatResponse>> HandleCrisisTurnAsync(
@@ -1183,8 +1135,8 @@ public partial class ProcessUserChatCommandHandler(
         && results.CalledToolNames.All(name => name == DescribeFeatureToolName)
         && results.OperationResults.All(operation => operation.Status == AgentOperationStatus.Succeeded);
 
-    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "Processing chat message: '{Message}'")]
-    private static partial void LogProcessingChatMessage(ILogger logger, string message);
+    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "Processing Astra turn")]
+    private static partial void LogProcessingChatMessage(ILogger logger);
 
     [LoggerMessage(EventId = 2, Level = LogLevel.Debug, Message = "Context loaded in {ElapsedMs}ms (Habits: {HabitCount})")]
     private static partial void LogContextLoaded(ILogger logger, long elapsedMs, int habitCount);
@@ -1197,18 +1149,6 @@ public partial class ProcessUserChatCommandHandler(
 
     [LoggerMessage(EventId = 5, Level = LogLevel.Debug, Message = "Tool-calling iteration {Iteration}, {CallCount} calls")]
     private static partial void LogToolCallingIteration(ILogger logger, int iteration, int callCount);
-
-    [LoggerMessage(EventId = 6, Level = LogLevel.Warning, Message = "Unknown tool requested: {Name}")]
-    private static partial void LogUnknownToolRequested(ILogger logger, string name);
-
-    [LoggerMessage(EventId = 7, Level = LogLevel.Debug, Message = "Tool {Name} succeeded: {EntityName}")]
-    private static partial void LogToolSucceeded(ILogger logger, string name, string? entityName);
-
-    [LoggerMessage(EventId = 8, Level = LogLevel.Warning, Message = "Tool {Name} failed: {Error}")]
-    private static partial void LogToolFailed(ILogger logger, string name, string? error);
-
-    [LoggerMessage(EventId = 9, Level = LogLevel.Error, Message = "Tool {Name} threw an exception")]
-    private static partial void LogToolThrewException(ILogger logger, Exception ex, string name);
 
     [LoggerMessage(EventId = 10, Level = LogLevel.Warning, Message = "ContinueWithToolResultsAsync failed: {Error}")]
     private static partial void LogContinueWithToolResultsFailed(ILogger logger, string? error);

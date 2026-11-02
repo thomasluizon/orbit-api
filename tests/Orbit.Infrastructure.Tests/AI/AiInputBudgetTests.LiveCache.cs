@@ -206,7 +206,7 @@ public partial class AiInputBudgetTests
             });
             var execution = new PendingAgentOperationExecution(CacheId("pending"), AgentCapabilityIds.HabitsWrite, "create_habit", CreationArguments,
                 AgentExecutionSurface.Chat, AgentConfirmationRequirement.FreshConfirmation);
-            pending.GetAwaiting(_user.Id).Returns(_ => Turn >= 2 ? new[] { execution } : []);
+            pending.GetAwaitingAsync(_user.Id, Arg.Any<CancellationToken>()).Returns(_ => Turn >= 2 ? new[] { execution } : []);
             pending.GetExecution(_user.Id, execution.PendingOperationId).Returns(execution);
             pending.IsAwaitingConfirmation(_user.Id, execution.PendingOperationId).Returns(true);
             var blocks = new ReadBlockFactory(dates, Substitute.For<IReadQueryTokenService>(), users);

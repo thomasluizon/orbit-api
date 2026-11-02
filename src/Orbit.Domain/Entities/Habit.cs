@@ -186,10 +186,11 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
     };
 
     public void LoadScheduleCandidateFieldsForRead(
-        string title, string? description, int? position, IEnumerable<Tag> tags)
+        string title, string? description, int? position, IEnumerable<Tag> tags, string? emoji = null)
     {
         Title = title;
         Description = description;
+        Emoji = emoji;
         Position = position;
         _tags.Clear();
         _tags.AddRange(tags);

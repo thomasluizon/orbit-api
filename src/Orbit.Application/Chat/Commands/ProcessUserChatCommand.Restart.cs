@@ -34,6 +34,11 @@ public partial class ProcessUserChatCommandHandler
         var proposal = new RestartPlanProposal(call.Args, current.Value.Today, current.Value.Habits,
             results.AllHabits, reads);
         var validation = await new RestartPlanValidator().ValidateAsync(proposal, ct);
+        if (validation.Errors.Any(error => error.ErrorMessage == RestartPlanValidator.FreshReadRequired))
+        {
+            ChatTurnReadScope.For(userId)?.InvalidateHabits();
+            results.HasMutationContext = false;
+        }
         return validation.IsValid ? null : string.Join(" ", validation.Errors.Select(error => error.ErrorMessage));
     }
 }

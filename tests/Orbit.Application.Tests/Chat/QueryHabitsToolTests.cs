@@ -37,6 +37,26 @@ public class QueryHabitsToolTests
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
     }
 
+    [Fact]
+    public async Task ThreeReadCalls_ReuseTheTurnsHabitSet()
+    {
+        var habits = Enumerable.Range(0, 500).Select(i => CreateHabit("Habit " + i, FrequencyUnit.Day, 1)).ToArray();
+        SetupHabits(habits);
+        using var turn = new ChatTurnReadScope(UserId, null);
+        var loads = 0;
+        await turn.ReadHabitsAsync(() => { loads++; return Task.FromResult<IReadOnlyList<Habit>>(habits); }, default);
+        for (var i = 0; i < 3; i++)
+        {
+            var result = await Execute("{\"limit\":10}");
+            result.Success.Should().BeTrue();
+            ((HabitListCard)result.Payload!).Items.Should().HaveCount(10);
+        }
+        _habitRepo.ReceivedCalls().Count(call => call.GetMethodInfo().Name == "FindAsync"
+            && ((Expression<Func<Habit, bool>>)call.GetArguments()[0]!).Compile()(CreateHabit("unrelated", FrequencyUnit.Day, 1)))
+            .Should().Be(0, "the full set is already loaded; only page-specific hydration may hit the repository");
+        loads.Should().Be(1);
+    }
+
     [Theory]
     [MemberData(nameof(OptionalParameterCases.Fields), typeof(QueryHabitsTool), "", MemberType = typeof(OptionalParameterCases))]
     public async Task OptionalNull_ReturnsSameHabitFactsAsAbsent(string field)
@@ -784,6 +804,14 @@ public class QueryHabitsToolTests
 
     private void SetupHabits(params Habit[] habits)
     {
+        _habitRepo.ProjectAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<ChatHabitCandidate>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.ArgAt<Func<IQueryable<Habit>, IQueryable<ChatHabitCandidate>>>(1)(
+                habits.Where(call.ArgAt<Expression<Func<Habit, bool>>>(0).Compile()).AsQueryable()).ToArray());
+        _habitRepo.ProjectAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<QueryHabitsTool.HabitTagNames>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.ArgAt<Func<IQueryable<Habit>, IQueryable<QueryHabitsTool.HabitTagNames>>>(1)(
+                habits.Where(call.ArgAt<Expression<Func<Habit, bool>>>(0).Compile()).AsQueryable()).ToArray());
         _scheduleLogReader.ReadDaysAsync(
             Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<DateOnly>(), Arg.Any<DateOnly>(),
             Arg.Any<CancellationToken>()).Returns(callInfo =>
@@ -815,7 +843,8 @@ public class QueryHabitsToolTests
         ).Returns(callInfo =>
         {
             var predicate = callInfo.ArgAt<Expression<Func<Habit, bool>>>(0).Compile();
-            return habits.Where(predicate).ToList().AsReadOnly();
+            var shape = callInfo.ArgAt<Func<IQueryable<Habit>, IQueryable<Habit>>>(1);
+            return shape(habits.Where(predicate).AsQueryable()).ToArray();
         });
 
         _habitRepo.FindAsync(
@@ -828,27 +857,7 @@ public class QueryHabitsToolTests
         });
     }
 
-    private void SetupHabitsWithLogs(params Habit[] habits)
-    {
-        _habitRepo.FindAsync(
-            Arg.Any<Expression<Func<Habit, bool>>>(),
-            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>>(),
-            Arg.Any<CancellationToken>()
-        ).Returns(callInfo =>
-        {
-            var predicate = callInfo.ArgAt<Expression<Func<Habit, bool>>>(0).Compile();
-            return habits.Where(predicate).ToList().AsReadOnly();
-        });
-
-        _habitRepo.FindAsync(
-            Arg.Any<Expression<Func<Habit, bool>>>(),
-            Arg.Any<CancellationToken>()
-        ).Returns(callInfo =>
-        {
-            var predicate = callInfo.ArgAt<Expression<Func<Habit, bool>>>(0).Compile();
-            return habits.Where(predicate).ToList().AsReadOnly();
-        });
-    }
+    private void SetupHabitsWithLogs(params Habit[] habits) => SetupHabits(habits);
 
     private async Task<Orbit.Application.Chat.Tools.ToolResult> Execute(string json)
     {

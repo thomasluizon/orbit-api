@@ -61,7 +61,6 @@ public class AgentPolicyEvaluatorTests : IDisposable
             _catalogService,
             _pendingOperationStore,
             _stepUpAuthorizationBridge,
-            _settings,
             new FeatureFlagService(_dbContext, new MemoryCache(new MemoryCacheOptions()), Substitute.For<IHostEnvironment>(), new ConfigurationBuilder().Build()));
     }
 
@@ -69,6 +68,24 @@ public class AgentPolicyEvaluatorTests : IDisposable
     {
         _dbContext.Dispose();
         GC.SuppressFinalize(this);
+    }
+
+    [Theory]
+    [InlineData(AgentCapabilityIds.GamificationRead, false)]
+    [InlineData(AgentCapabilityIds.GamificationRead, true)]
+    [InlineData(AgentCapabilityIds.GamificationRepair, false)]
+    [InlineData(AgentCapabilityIds.GamificationRepair, true)]
+    [InlineData(AgentCapabilityIds.GamificationRepairGap, false)]
+    [InlineData(AgentCapabilityIds.GamificationRepairGap, true)]
+    public void Evaluate_FreeGamification_UsesTheFreeTierFlag(string capability, bool enabled)
+    {
+        var user = _dbContext.Users.Single(item => item.Id == _userId);
+        user.StartTrial(DateTime.UtcNow.AddDays(-30));
+        _dbContext.AppFeatureFlags.Add(AppFeatureFlag.Create("gamification_free_tier", enabled));
+        _dbContext.SaveChanges();
+        var decision = _policyEvaluator.Evaluate(new(capability, _userId, AgentExecutionSurface.Mcp,
+            AgentAuthMethod.Jwt, [], "gamification", "Gamification", OperationFingerprint: "gamification:{}"));
+        decision.Status.Should().Be(enabled ? AgentPolicyDecisionStatus.Allowed : AgentPolicyDecisionStatus.Denied);
     }
 
     [Fact]
@@ -380,36 +397,47 @@ public class AgentPolicyEvaluatorTests : IDisposable
         _stepUpAuthorizationBridge.DidNotReceive().OnStepUpVerified(Arg.Any<string>(), Arg.Any<Guid>());
     }
 
-    [Fact]
-    public void Evaluate_InShadowMode_ReturnsAllowedWithShadowDecision()
+    [Theory]
+    [InlineData("Development")]
+    [InlineData("Staging")]
+    [InlineData("Production")]
+    public void Evaluate_LegacyShadowConfiguration_StillRequiresConfirmation(string environment)
+
     {
-        var shadowEvaluator = new AgentPolicyEvaluator(
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["AgentPlatform:ShadowModeEnabled"] = "true",
+            ["Environment"] = environment
+        }).Build();
+        var bound = configuration.GetSection("AgentPlatform").Get<AgentPlatformSettings>();
+        bound.Should().NotBeNull();
+        typeof(AgentPlatformSettings).GetProperty("ShadowModeEnabled").Should().BeNull();
+        var evaluator = new AgentPolicyEvaluator(
             _dbContext,
             _catalogService,
             _pendingOperationStore,
             _stepUpAuthorizationBridge,
-            Options.Create(new AgentPlatformSettings { ShadowModeEnabled = true }),
             new FeatureFlagService(_dbContext, new MemoryCache(new MemoryCacheOptions()), Substitute.For<IHostEnvironment>(), new ConfigurationBuilder().Build()));
 
-        var decision = shadowEvaluator.Evaluate(new AgentPolicyEvaluationContext(
+        var decision = evaluator.Evaluate(new AgentPolicyEvaluationContext(
             AgentCapabilityIds.ApiKeysManage,
             _userId,
             AgentExecutionSurface.Chat,
             AgentAuthMethod.Jwt,
             [],
-            "manage_api_key",
+            "manage_api_keys",
             "Create API key",
-            OperationFingerprint: "create_api_key:{\"name\":\"Claude\"}"));
+            OperationFingerprint: "manage_api_keys:{\"action\":\"create\",\"name\":\"Claude\"}",
+            OperationArgumentsJson: "{\"action\":\"create\",\"name\":\"Claude\"}"));
 
-        decision.Status.Should().Be(AgentPolicyDecisionStatus.Allowed);
-        decision.ShadowStatus.Should().Be(AgentPolicyDecisionStatus.ConfirmationRequired);
-        decision.ShadowReason.Should().Be("step_up_required");
-        decision.PendingOperation.Should().BeNull();
+        decision.Status.Should().Be(AgentPolicyDecisionStatus.ConfirmationRequired);
+        decision.Reason.Should().Be("step_up_required");
+        decision.PendingOperation.Should().NotBeNull();
         decision.ConsumedConfirmation.Should().BeFalse();
     }
 
     [Fact]
-    public void Evaluate_InShadowMode_PreservesConsumedConfirmation()
+    public void Evaluate_AlwaysEnforcedPolicy_PreservesConsumedConfirmation()
     {
         const string fingerprint = "delete_habit:{\"habitId\":\"123\"}";
         var pending = _policyEvaluator.Evaluate(new AgentPolicyEvaluationContext(
@@ -424,14 +452,13 @@ public class AgentPolicyEvaluatorTests : IDisposable
         var confirmation = _pendingOperationStore.Confirm(_userId, pending.PendingOperation!.Id);
         confirmation.Should().NotBeNull();
 
-        var shadowEvaluator = new AgentPolicyEvaluator(
+        var evaluator = new AgentPolicyEvaluator(
             _dbContext,
             _catalogService,
             _pendingOperationStore,
             _stepUpAuthorizationBridge,
-            Options.Create(new AgentPlatformSettings { ShadowModeEnabled = true }),
             new FeatureFlagService(_dbContext, new MemoryCache(new MemoryCacheOptions()), Substitute.For<IHostEnvironment>(), new ConfigurationBuilder().Build()));
-        var decision = shadowEvaluator.Evaluate(new AgentPolicyEvaluationContext(
+        var decision = evaluator.Evaluate(new AgentPolicyEvaluationContext(
             AgentCapabilityIds.HabitsDelete,
             _userId,
             AgentExecutionSurface.Chat,
@@ -443,10 +470,9 @@ public class AgentPolicyEvaluatorTests : IDisposable
             ConfirmationToken: confirmation!.ConfirmationToken));
 
         decision.Status.Should().Be(AgentPolicyDecisionStatus.Allowed);
-        decision.ShadowStatus.Should().Be(AgentPolicyDecisionStatus.Allowed);
         decision.ConsumedConfirmation.Should().BeTrue();
 
-        var replay = shadowEvaluator.Evaluate(new AgentPolicyEvaluationContext(
+        var replay = evaluator.Evaluate(new AgentPolicyEvaluationContext(
             AgentCapabilityIds.HabitsDelete,
             _userId,
             AgentExecutionSurface.Chat,
@@ -458,7 +484,7 @@ public class AgentPolicyEvaluatorTests : IDisposable
             ConfirmationToken: confirmation.ConfirmationToken));
 
         replay.ConsumedConfirmation.Should().BeFalse();
-        replay.ShadowStatus.Should().Be(AgentPolicyDecisionStatus.ConfirmationRequired);
+        replay.Status.Should().Be(AgentPolicyDecisionStatus.ConfirmationRequired);
     }
 
     [Theory]

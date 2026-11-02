@@ -112,7 +112,7 @@ public class AiUsageRecorderTests
             var properties = (IReadOnlyDictionary<string, object>)captured.GetArguments()[3]!;
             properties.Keys.Should().BeEquivalentTo(new[] { "$ai_trace_id", "$ai_span_id", "$ai_model", "$ai_provider",
                 "$ai_input_tokens", "$ai_output_tokens", "$ai_cache_read_input_tokens", "$ai_latency", "$ai_is_error",
-                "$ai_input_cost_usd", "$ai_output_cost_usd", "$ai_total_cost_usd", "purpose", "tool_names" });
+                "$ai_total_cost_usd", "purpose" });
             properties["$ai_trace_id"].Should().Be("chat-correlation-id");
             spans.Add((string)properties["$ai_span_id"]);
             properties["$ai_model"].Should().Be("priced");
@@ -122,10 +122,7 @@ public class AiUsageRecorderTests
             properties["$ai_cache_read_input_tokens"].Should().BeOfType<long>().Which.Should().Be(200_000);
             properties["$ai_latency"].Should().BeOfType<double>().Which.Should().Be(1.25);
             properties["$ai_is_error"].Should().BeOfType<bool>();
-            properties["$ai_input_cost_usd"].Should().Be(unpriced ? 0m : 0.34m);
-            properties["$ai_output_cost_usd"].Should().Be(unpriced ? 0m : 0.8m);
             properties["$ai_total_cost_usd"].Should().Be(commandCapture.Costs[0]);
-            properties["tool_names"].Should().BeEquivalentTo(new[] { "log_habit" });
             properties["purpose"].Should().Be("chat");
         }
         spans.Should().HaveCount(2);

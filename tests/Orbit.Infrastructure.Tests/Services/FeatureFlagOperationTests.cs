@@ -77,7 +77,7 @@ public class FeatureFlagOperationTests
         var pending = new PendingAgentOperationStore(context, settings);
         var stepUp = Substitute.For<IAgentStepUpAuthorizationBridge>();
         stepUp.GetRequiredConfirmationAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns((AgentConfirmationRequirement?)null);
-        var evaluator = new AgentPolicyEvaluator(context, catalog, pending, stepUp, settings, resolver);
+        var evaluator = new AgentPolicyEvaluator(context, catalog, pending, stepUp, resolver);
         var executor = new AgentOperationExecutor(catalog, evaluator, provider.GetRequiredService<IAgentAuditService>(),
             new AgentTargetOwnershipService(context), stepUp, new AiToolRegistry([adapter]),
             Substitute.For<IPendingOperationChangePreviewer>(), pending,
@@ -98,7 +98,7 @@ public class FeatureFlagOperationTests
         (await resolver.GetEnabledKeysForUserAsync(account.Id)).Should().Contain("astra_eval_trace");
         (await resolver.GetEnabledKeysForUserAsync(admin.Id)).Should().NotContain("astra_eval_trace");
         (await ListAsync(tool, principal)).Single(flag => flag.Key == "astra_eval_trace").Accounts.Should().Equal(account.Email);
-        (await context.AgentAuditLogs.SingleAsync(log => log.OutcomeStatus == AgentOperationStatus.Succeeded))
+        (await context.AgentAuditLogs.SingleAsync(log => log.OutcomeStatus == AgentOperationStatus.Succeeded && log.RedactedArguments != "{\"action\":\"list\"}"))
             .UserId.Should().Be(admin.Id);
         (await tool.ManageFeatureFlags(principal, FeatureFlagActions.DisableForAccounts, "astra_eval_trace", ["account@example.com"])).AsText();
         (await resolver.GetEnabledKeysForUserAsync(account.Id)).Should().NotContain("astra_eval_trace");

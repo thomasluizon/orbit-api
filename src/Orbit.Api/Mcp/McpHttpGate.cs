@@ -284,8 +284,7 @@ internal static partial class McpHttpGate
             _ => null
         };
         var audit = new LegacyMcpAuditContext(sourceName, capability, decision.Status, operationStatus,
-            decision.Status == AgentPolicyDecisionStatus.Allowed ? null : decision.Reason, body,
-            decision.ShadowStatus, decision.ShadowReason);
+            decision.Status == AgentPolicyDecisionStatus.Allowed ? null : decision.Reason, body);
         return new(audit, reason, decision.Status == AgentPolicyDecisionStatus.ConfirmationRequired
             ? decision.PendingOperation?.Id : null);
     }
@@ -523,9 +522,7 @@ internal static partial class McpHttpGate
                 context.TraceIdentifier,
                 $"{auditContext.SourceName} requested via MCP",
                 RedactedArguments: redactedArguments,
-                Error: auditContext.Error,
-                ShadowPolicyDecision: auditContext.ShadowPolicyDecision,
-                ShadowReason: auditContext.ShadowReason), cancellationToken);
+                Error: auditContext.Error), cancellationToken);
         }
         catch (Exception ex)
         {
@@ -569,7 +566,5 @@ internal static partial class McpHttpGate
         AgentPolicyDecisionStatus PolicyDecision,
         AgentOperationStatus OutcomeStatus,
         string? Error,
-        string RawBody,
-        AgentPolicyDecisionStatus? ShadowPolicyDecision = null,
-        string? ShadowReason = null);
+        string RawBody);
 }

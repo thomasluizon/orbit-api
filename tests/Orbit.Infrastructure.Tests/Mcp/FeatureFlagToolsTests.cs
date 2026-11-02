@@ -28,6 +28,7 @@ public class FeatureFlagToolsTests
     private readonly Guid _userId = Guid.NewGuid();
     private readonly IMediator _mediator = Substitute.For<IMediator>();
     private readonly IAgentOperationExecutor _executor = Substitute.For<IAgentOperationExecutor>();
+    private readonly IAgentAuditService _audit = Substitute.For<IAgentAuditService>();
     private readonly IAuthorizationService _authorization = Substitute.For<IAuthorizationService>();
 
     private ClaimsPrincipal User => new(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, _userId.ToString())], "Test"));
@@ -90,6 +91,9 @@ public class FeatureFlagToolsTests
         var result = (await new FeatureFlagTools(_mediator, new McpExecutorBridge(_executor), services).ManageFeatureFlags(User, "list")).AsText();
 
         result.Should().Contain("account@example.com").And.Contain("Description");
+        await _audit.Received(1).RecordAsync(Arg.Is<AgentAuditEntry>(entry => entry.UserId == _userId
+            && entry.SourceName == FeatureFlagActions.ToolName && entry.RedactedArguments == "{\"action\":\"list\"}"
+            && entry.OutcomeStatus == AgentOperationStatus.Succeeded), Arg.Any<CancellationToken>());
         _executor.ReceivedCalls().Should().BeEmpty();
     }
 
@@ -145,7 +149,7 @@ public class FeatureFlagToolsTests
     {
         _authorization.AuthorizeAsync(Arg.Any<ClaimsPrincipal>(), Arg.Any<object?>(), AdminPolicy.Name)
             .Returns(isAdmin ? AuthorizationResult.Success() : AuthorizationResult.Failed());
-        var services = new ServiceCollection().AddLogging().AddSingleton(_authorization);
+        var services = new ServiceCollection().AddLogging().AddSingleton(_authorization).AddSingleton(_audit);
         services.AddMcpServer().WithTools<FeatureFlagTools>().WithFeatureFlagAccess();
         return services.BuildServiceProvider();
     }

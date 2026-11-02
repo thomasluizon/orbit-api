@@ -21,7 +21,7 @@ public partial class ProcessUserChatCommandHandler
         var candidates = PreviewOffers(preview, context).Where(fact => !dismissed.Contains(fact.Action.OfferKey)).ToArray();
         if (candidates.Length == 0) return (cards, false);
         var issued = await offerStore.IssuedAsync(request.UserId, conversation, ct);
-        var selected = await SelectOfferAsync(request, candidates, issued, context, ct, results.PendingOperations);
+        var selected = await SelectOfferAsync(request, candidates, ct);
         var rejected = selected?.DismissedOfferKeys?.Where(key => issued.Any(offer => offer.Action.OfferKey == key))
             .Distinct(StringComparer.Ordinal).ToArray() ?? [];
         if (rejected.Length > 0) await offerStore.DismissAsync(request.UserId, conversation, rejected, ct);

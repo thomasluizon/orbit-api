@@ -496,6 +496,13 @@ namespace Orbit.Infrastructure.Migrations
                     b.HasData(
                         new
                         {
+                            Key = "gamification_free_tier",
+                            Description = "Unlock gamification for free accounts",
+                            Enabled = false,
+                            UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, 0, DateTimeKind.Utc)
+                        },
+                        new
+                        {
                             Key = "astra_block_first",
                             Description = "Compose negotiated Astra answers from successful typed results",
                             Enabled = false,
@@ -880,6 +887,9 @@ namespace Orbit.Infrastructure.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<string>("ModelContextJson")
+                        .HasColumnType("text");
+
                     b.Property<string>("PreviewOutcomesJson")
                         .IsRequired()
                         .HasColumnType("text");
@@ -914,6 +924,8 @@ namespace Orbit.Infrastructure.Migrations
                     b.HasIndex("ConversationId");
 
                     b.HasIndex("CreatedAtUtc");
+
+                    b.HasIndex("ConversationId", "UserId");
 
                     b.HasIndex("TurnId", "Role")
                         .IsUnique();

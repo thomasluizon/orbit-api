@@ -7,6 +7,8 @@ using Orbit.Api.Extensions;
 using Orbit.Application.FeatureFlags;
 using Orbit.Application.FeatureFlags.Queries;
 using ModelContextProtocol.Protocol;
+using Orbit.Domain.Interfaces;
+using Orbit.Domain.Models;
 
 namespace Orbit.Api.Mcp.Tools;
 
@@ -30,6 +32,12 @@ public class FeatureFlagTools(IMediator mediator, McpExecutorBridge executorBrid
             if (action == FeatureFlagActions.List)
             {
                 var result = await mediator.Send(new ListFeatureFlagsQuery(user.GetUserId()), cancellationToken);
+                await services.GetRequiredService<IAgentAuditService>().RecordAsync(new AgentAuditEntry(
+                    user.GetUserId(), FeatureFlagActions.CapabilityId, FeatureFlagActions.ToolName,
+                    AgentExecutionSurface.Mcp, user.GetAgentAuthMethod(), AgentRiskClass.Low,
+                    result.IsSuccess ? AgentPolicyDecisionStatus.Allowed : AgentPolicyDecisionStatus.Denied,
+                    result.IsSuccess ? AgentOperationStatus.Succeeded : AgentOperationStatus.Denied,
+                    RedactedArguments: "{\"action\":\"list\"}", Error: result.IsFailure ? result.Error : null), cancellationToken);
                 return result.IsSuccess ? McpToolHelpers.Text(JsonSerializer.Serialize(result.Value)) : McpToolHelpers.Error($"Error: {result.Error}");
             }
 

@@ -1268,10 +1268,11 @@ public partial class ProcessUserChatCommandHandlerTests
         string.Concat(events.Where(item => item.Type == "delta").Select(item => item.Text))
             .Should().Be("A\n\nB\n");
         ChatStreamEvent.Final(result.Value).ToJson().Should().Contain("\"parts\":[{\"type\":\"text\",\"text\":\"A\"}");
-        _productAnalytics.Received(1).CaptureUserEvent(UserId, "chat_metrics_card_emitted", "Free",
+        _productAnalytics.Received(1).CaptureUserEvent(UserId, "chat_read_block_emitted", "Free",
             Arg.Is<IReadOnlyDictionary<string, object>>(properties =>
-                properties["part_count"].Equals(4)
+                properties["kind"].Equals("metrics") && properties["part_count"].Equals(4)
                 && ((string[])properties["block_kinds"]).SequenceEqual(OrderedPartsBlockKinds)));
+        AssertReadEmissionCount(2);
     }
 
     [Theory]
@@ -1340,8 +1341,9 @@ public partial class ProcessUserChatCommandHandlerTests
         parts[1].Should().BeOfType<ChatBlockPart>().Which.Kind.Should().Be("metrics");
         result.Value.AiMessage.Should().Be("A\n\nB\n\nC\n\nD\n\nE\n\nF");
         await _mediator.Received(1).Send(Arg.Any<GetPeriodAnalyticsQuery>(), Arg.Any<CancellationToken>());
-        _productAnalytics.Received(1).CaptureUserEvent(UserId, "chat_metrics_card_emitted", "Free",
-            Arg.Any<IReadOnlyDictionary<string, object>>());
+        _productAnalytics.Received(1).CaptureUserEvent(UserId, "chat_read_block_emitted", "Free",
+            Arg.Is<IReadOnlyDictionary<string, object>>(properties => properties["kind"].Equals("metrics")));
+        AssertReadEmissionCount(3);
     }
 
     [Fact]
@@ -1491,9 +1493,8 @@ public partial class ProcessUserChatCommandHandlerTests
         if (disabled)
         {
             blocks.Should().BeEmpty();
-            foreach (var eventName in new[] { "chat_day_summary_card_emitted", "chat_streak_card_emitted", "chat_calendar_card_emitted" })
-                _productAnalytics.DidNotReceive().CaptureUserEvent(UserId, eventName, "Free",
-                    Arg.Any<IReadOnlyDictionary<string, object>>());
+            _productAnalytics.DidNotReceive().CaptureUserEvent(UserId, "chat_read_block_emitted", "Free",
+                Arg.Any<IReadOnlyDictionary<string, object>>());
             return;
         }
 
@@ -1505,14 +1506,10 @@ public partial class ProcessUserChatCommandHandlerTests
         streakCard.TotalXp.Should().Be(120);
         blocks[2].Block.Should().BeOfType<CalendarCard>().Which.Events.Should().ContainSingle()
             .Which.Title.Should().Be("Appointment");
-        foreach (var (eventName, kind) in new[]
+        AssertReadEmissionCount(3);
+        foreach (var kind in new[] { "daySummary", "streak", "calendar" })
         {
-            ("chat_day_summary_card_emitted", "day"),
-            ("chat_streak_card_emitted", "streak"),
-            ("chat_calendar_card_emitted", "calendar")
-        })
-        {
-            _productAnalytics.Received(1).CaptureUserEvent(UserId, eventName, "Free",
+            _productAnalytics.Received(1).CaptureUserEvent(UserId, "chat_read_block_emitted", "Free",
                 Arg.Is<IReadOnlyDictionary<string, object>>(properties =>
                     properties["kind"].Equals(kind)
                     && properties["part_count"].Equals(6)
@@ -1568,10 +1565,11 @@ public partial class ProcessUserChatCommandHandlerTests
         result.Value.AiMessage.Should().Be("Month\n\nReferral\n\nEnd");
         result.Value.PeriodInsight.Should().BeNull();
         result.Value.AccountRows.Should().BeNull();
-        _productAnalytics.Received(1).CaptureUserEvent(UserId, "chat_period_insight_card_emitted", "Free",
-            Arg.Is<IReadOnlyDictionary<string, object>>(properties => properties["kind"].Equals("period")));
-        _productAnalytics.Received(1).CaptureUserEvent(UserId, "chat_account_rows_card_emitted", "Free",
-            Arg.Is<IReadOnlyDictionary<string, object>>(properties => properties["kind"].Equals("referral")));
+        _productAnalytics.Received(1).CaptureUserEvent(UserId, "chat_read_block_emitted", "Free",
+            Arg.Is<IReadOnlyDictionary<string, object>>(properties => properties["kind"].Equals("periodInsight")));
+        _productAnalytics.Received(1).CaptureUserEvent(UserId, "chat_read_block_emitted", "Free",
+            Arg.Is<IReadOnlyDictionary<string, object>>(properties => properties["kind"].Equals("accountRows")));
+        AssertReadEmissionCount(2);
     }
 
     [Fact]
@@ -1617,7 +1615,7 @@ public partial class ProcessUserChatCommandHandlerTests
             Arg.Any<CancellationToken>());
         _productAnalytics.Received(1).CaptureUserEvent(
             UserId,
-            "chat_metrics_card_emitted",
+            "chat_read_block_emitted",
             "Free",
             Arg.Is<IReadOnlyDictionary<string, object>>(properties =>
                 properties["platform"].Equals("ios")
@@ -3993,6 +3991,31 @@ public partial class ProcessUserChatCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_ThreeUnknownTools_LogsOneRoundFailureSummary()
+    {
+        SetupUserAndPayGate();
+        _logger.IsEnabled(LogLevel.Warning).Returns(true);
+        SetupAiResponse(new AiResponse
+        {
+            ToolCalls = Enumerable.Range(0, 3).Select(index => new AiToolCall("unknown_" + index,
+                "call_" + index, ParseArguments("{}"))).ToList(),
+            ConversationContext = TestConversationContext
+        });
+        _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
+                Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AiResponse { TextMessage = "Try again." }));
+
+        var result = await CreateHandler().Handle(new ProcessUserChatCommand(UserId, "Do something"), default);
+
+        result.Value.Actions.Should().HaveCount(3).And.OnlyContain(action => action.Status == ActionStatus.Failed);
+        var warnings = _logger.ReceivedCalls().Where(call => call.GetMethodInfo().Name == "Log"
+            && (LogLevel)call.GetArguments()[0]! == LogLevel.Warning).ToArray();
+        warnings.Should().ContainSingle();
+        warnings[0].GetArguments()[2].Should().BeAssignableTo<IEnumerable<KeyValuePair<string, object>>>()
+            .Which.Should().Contain(pair => pair.Key == "FailedCount" && pair.Value.Equals(3));
+    }
+
+    [Fact]
     public async Task Handle_UnknownToolCall_ReturnsFailedAction()
     {
         SetupUserAndPayGate();
@@ -4752,27 +4775,22 @@ public partial class ProcessUserChatCommandHandlerTests
             User? trackedUser = null;
             var trackedVersion = -1;
 
-            repository.GetByIdAsync(userId, Arg.Any<CancellationToken>())
-                .Returns(_ => CreateFreeUserSnapshot(PersistedCount));
-            repository.FindOneTrackedAsync(
-                    Arg.Any<Expression<Func<User, bool>>>(),
-                    Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(),
-                    Arg.Any<CancellationToken>())
-                .Returns(async _ =>
+            async Task<User?> LoadInitialAsync()
+            {
+                lock (_gate)
                 {
-                    lock (_gate)
-                    {
-                        trackedUser = CreateFreeUserSnapshot(_persistedCount);
-                        trackedVersion = _version;
-                        _initialSnapshots.Add(trackedUser);
-                        _initialSnapshotCount++;
-                        if (_initialSnapshotCount == expectedInitialLoads)
-                            _initialLoadsReady.TrySetResult();
-                    }
-
-                    await _initialLoadsReady.Task;
-                    return (User?)trackedUser;
-                });
+                    trackedUser = CreateFreeUserSnapshot(_persistedCount);
+                    trackedVersion = _version;
+                    _initialSnapshots.Add(trackedUser);
+                    _initialSnapshotCount++;
+                    if (_initialSnapshotCount == expectedInitialLoads) _initialLoadsReady.TrySetResult();
+                }
+                await _initialLoadsReady.Task;
+                return trackedUser;
+            }
+            repository.GetByIdAsync(userId, Arg.Any<CancellationToken>()).Returns(_ => LoadInitialAsync());
+            repository.FindOneTrackedAsync(Arg.Any<Expression<Func<User, bool>>>(),
+                Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(), Arg.Any<CancellationToken>()).Returns(_ => LoadInitialAsync());
             repository.ReloadAsync(Arg.Any<User>(), Arg.Any<CancellationToken>())
                 .Returns(callInfo =>
                 {
@@ -4823,4 +4841,14 @@ public partial class ProcessUserChatCommandHandlerTests
             return user;
         }
     }
+    private void AssertReadEmissionCount(int expected)
+    {
+        var names = _productAnalytics.ReceivedCalls()
+            .Where(call => call.GetMethodInfo().Name == nameof(IProductAnalytics.CaptureUserEvent))
+            .Select(call => (string)call.GetArguments()[1]!)
+            .Where(name => name == "chat_read_block_emitted"
+                || name.StartsWith("chat_", StringComparison.Ordinal) && name.EndsWith("_card_emitted", StringComparison.Ordinal));
+        names.Should().Equal(Enumerable.Repeat("chat_read_block_emitted", expected));
+    }
+
 }
