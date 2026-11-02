@@ -58,7 +58,11 @@ public sealed class PostgresEmailChallengeStore(
                 return Result.Failure<EmailChallengeConfirmation>(ErrorMessages.TooManyCodeAttempts);
             if (row is null || row.Consumed || row.ExpiresAtUtc <= nowAtUtc)
                 return Result.Failure<EmailChallengeConfirmation>(ExpiredError(operation));
-            row.ResetExpiredAttempts(nowAtUtc);
+            if (row.AttemptWindowEndsAtUtc <= nowAtUtc)
+            {
+                row.ResetExpiredAttempts(nowAtUtc);
+                await db.SaveChangesAsync(cancellationToken);
+            }
             if (!row.Matches(Hash(operation.ToString(), subject, code)))
             {
                 if (db.Database.IsRelational())
@@ -68,14 +72,16 @@ public sealed class PostgresEmailChallengeStore(
                             && candidate.Attempts < AppConstants.MaxVerificationAttempts
                             && candidate.ExpiresAtUtc > nowAtUtc)
                         .ExecuteUpdateAsync(setters => setters.SetProperty(candidate => candidate.Attempts,
-                            candidate => candidate.Attempts + 1), cancellationToken);
+                            candidate => candidate.Attempts + 1)
+                            .SetProperty(candidate => candidate.AttemptWindowEndsAtUtc,
+                                nowAtUtc.AddMinutes(AppConstants.VerificationAttemptWindowMinutes)), cancellationToken);
                     if (changed == 0)
                         return Result.Failure<EmailChallengeConfirmation>(ErrorMessages.TooManyCodeAttempts);
                     await db.Entry(row).ReloadAsync(cancellationToken);
                 }
                 else
                 {
-                    row.RecordFailedAttempt();
+                    row.RecordFailedAttempt(nowAtUtc);
                     await db.SaveChangesAsync(cancellationToken);
                 }
                 return Result.Failure<EmailChallengeConfirmation>(operation switch

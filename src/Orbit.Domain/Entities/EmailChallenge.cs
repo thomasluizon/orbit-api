@@ -51,6 +51,12 @@ public sealed class EmailChallenge : Entity
     }
 
     public bool Matches(byte[] hash) => CryptographicOperations.FixedTimeEquals(CodeHash, hash);
-    public void RecordFailedAttempt() => Attempts = Math.Min(3, Attempts + 1);
+    public void RecordFailedAttempt(DateTime nowAtUtc)
+    {
+        if (nowAtUtc.Kind != DateTimeKind.Utc)
+            throw new ArgumentException("Challenge instants must use UTC.", nameof(nowAtUtc));
+        Attempts = Math.Min(3, Attempts + 1);
+        AttemptWindowEndsAtUtc = nowAtUtc.AddMinutes(15);
+    }
     public void Consume() => Consumed = true;
 }

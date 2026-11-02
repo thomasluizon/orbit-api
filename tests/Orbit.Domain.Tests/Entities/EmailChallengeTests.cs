@@ -28,7 +28,7 @@ public class EmailChallengeTests
         var nowAtUtc = DateTime.UtcNow;
         var challenge = EmailChallenge.Create("SignIn", "user@example.com", new byte[32], nowAtUtc, TimeSpan.FromMinutes(5));
         for (var i = 0; i < 10; i++)
-            challenge.RecordFailedAttempt();
+            challenge.RecordFailedAttempt(nowAtUtc);
         challenge.Consume();
         challenge.Issue(new byte[32], nowAtUtc.AddMinutes(1), TimeSpan.FromMinutes(5));
 

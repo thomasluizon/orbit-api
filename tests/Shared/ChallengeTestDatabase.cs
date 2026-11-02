@@ -69,7 +69,7 @@ internal sealed class ChallengeTestDatabase
         using var context = new OrbitDbContext(_options);
         var (operation, subject) = Parse(key);
         var row = context.EmailChallenges.Single(row => row.Operation == operation && row.Subject == subject);
-        for (var i = 0; i < attempts; i++) row.RecordFailedAttempt();
+        for (var i = 0; i < attempts; i++) row.RecordFailedAttempt(row.IssuedAtUtc);
         context.SaveChanges();
     }
     internal void Clear()

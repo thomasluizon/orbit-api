@@ -42,21 +42,42 @@ public class PostgresEmailChallengeStoreTests
     public async Task AttemptCap_AppliesAcrossFreshContexts()
     {
         using var database = new SqliteOrbitDbContextFactory();
+        var clock = new TestClock();
         using (var issuer = database.CreateContext())
-            await Store(issuer).IssueAsync(EmailChallengeOperation.SignIn, "user@example.com", "123456");
+            await Store(issuer, clock).IssueAsync(EmailChallengeOperation.SignIn, "user@example.com", "123456");
+
+        clock.Advance(TimeSpan.FromMinutes(14));
+        using (var issuer = database.CreateContext())
+            await Store(issuer, clock).IssueAsync(EmailChallengeOperation.SignIn, "user@example.com", "123456");
 
         for (var attempt = 0; attempt < 6; attempt++)
         {
             using var verifier = database.CreateContext();
-            var result = await Store(verifier).ConfirmAsync(EmailChallengeOperation.SignIn, "user@example.com", "000000");
+            var result = await Store(verifier, clock).ConfirmAsync(EmailChallengeOperation.SignIn, "user@example.com", "000000");
             result.IsFailure.Should().BeTrue();
             if (attempt >= 3)
                 result.ErrorCode.Should().Be("TOO_MANY_ATTEMPTS");
         }
         using var final = database.CreateContext();
         (await final.EmailChallenges.SingleAsync()).Attempts.Should().Be(3);
-        (await Store(final).ConfirmAsync(EmailChallengeOperation.SignIn, "user@example.com", "123456"))
+        (await Store(final, clock).ConfirmAsync(EmailChallengeOperation.SignIn, "user@example.com", "123456"))
             .IsFailure.Should().BeTrue();
+
+        clock.Advance(TimeSpan.FromMinutes(2));
+        using (var issuer = database.CreateContext())
+            (await Store(issuer, clock).IssueAsync(EmailChallengeOperation.SignIn, "user@example.com", "654321"))
+                .IsSuccess.Should().BeTrue();
+        using var afterResend = database.CreateContext();
+        (await Store(afterResend, clock).ConfirmAsync(EmailChallengeOperation.SignIn, "user@example.com", "654321"))
+            .ErrorCode.Should().Be("TOO_MANY_ATTEMPTS", "a resend must preserve recent failed attempts across the issuance window boundary");
+
+        clock.Advance(TimeSpan.FromMinutes(15));
+        using (var issuer = database.CreateContext())
+            (await Store(issuer, clock).IssueAsync(EmailChallengeOperation.SignIn, "user@example.com", "654321"))
+                .IsSuccess.Should().BeTrue();
+        using var released = database.CreateContext();
+        (await Store(released, clock).ConfirmAsync(EmailChallengeOperation.SignIn, "user@example.com", "654321"))
+            .IsSuccess.Should().BeTrue("the budget must reopen after the last failure window expires");
     }
 
     [Fact]
@@ -76,7 +97,13 @@ public class PostgresEmailChallengeStoreTests
         (await Store(next).TryConsumeAuthorizationAsync(EmailChallengeOperation.ApiKeyManagement, userId)).Should().BeFalse();
     }
 
-    private static Orbit.Infrastructure.Services.PostgresEmailChallengeStore Store(OrbitDbContext db) => new(
+    private static Orbit.Infrastructure.Services.PostgresEmailChallengeStore Store(OrbitDbContext db, TimeProvider? clock = null) => new(
         db, new UnitOfWork(db, new DatabaseConnectionSettings()),
-        Options.Create(new JwtSettings { SecretKey = "unit-test-challenge-secret-at-least-32-bytes", Issuer = "test", Audience = "test" }), TimeProvider.System);
+        Options.Create(new JwtSettings { SecretKey = "unit-test-challenge-secret-at-least-32-bytes", Issuer = "test", Audience = "test" }), clock ?? TimeProvider.System);
+    private sealed class TestClock : TimeProvider
+    {
+        private DateTimeOffset _nowAtUtc = DateTimeOffset.UtcNow;
+        public override DateTimeOffset GetUtcNow() => _nowAtUtc;
+        public void Advance(TimeSpan duration) => _nowAtUtc = _nowAtUtc.Add(duration);
+    }
 }
