@@ -21,12 +21,15 @@ public partial class ContentModerationService(
     IHttpContextAccessor? http = null) : IContentModerationService
 {
     public static readonly HttpRequestOptionsKey<bool> HandlesFailedResponse = new("Orbit.ContentModeration.HandlesFailedResponse");
+    public static readonly TimeSpan RequestDeadline = TimeSpan.FromSeconds(2);
     private const string ModerationModel = "omni-moderation-latest";
     private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
 
     public async Task<ModerationResult> CheckTextAsync(string text, CancellationToken cancellationToken = default)
     {
         var settings = aiSettings.Value;
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        deadline.CancelAfter(RequestDeadline);
 
         try
         {
@@ -34,18 +37,18 @@ public partial class ContentModerationService(
             {
                 Content = JsonContent.Create(new ModerationRequest(ModerationModel, text), options: SerializerOptions)
             };
-            var account = await ResolveAccountAsync(cancellationToken);
+            var account = await ResolveAccountAsync(deadline.Token);
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", AiEvalCredentials.Resolve(settings, account));
             request.Options.Set(HandlesFailedResponse, true);
 
-            using var response = await httpClient.SendAsync(request, cancellationToken);
+            using var response = await httpClient.SendAsync(request, deadline.Token);
             if (!response.IsSuccessStatusCode)
             {
                 LogModerationUnavailable(logger, (int)response.StatusCode);
                 return Unavailable;
             }
 
-            var payload = await response.Content.ReadFromJsonAsync<ModerationResponse>(SerializerOptions, cancellationToken);
+            var payload = await response.Content.ReadFromJsonAsync<ModerationResponse>(SerializerOptions, deadline.Token);
             var result = payload?.Results is { Count: > 0 } results ? results[0] : null;
             if (result is null)
                 return Unavailable;

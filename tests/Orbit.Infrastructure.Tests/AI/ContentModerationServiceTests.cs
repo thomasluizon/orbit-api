@@ -120,6 +120,19 @@ public class ContentModerationServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task CheckTextAsync_StalledProviderStopsWithinTheTurnBudget()
+    {
+        _handler.Stall = true;
+
+        var result = await _sut.CheckTextAsync("any text").WaitAsync(TimeSpan.FromSeconds(3));
+
+        result.Unavailable.Should().BeTrue();
+        result.Flagged.Should().BeFalse();
+        _handler.Calls.Should().Be(1);
+        _handler.Cancelled.Should().BeTrue();
+    }
+
+    [Fact]
     public async Task CheckTextAsync_CallerCancelsToken_RethrowsOperationCanceled()
     {
         using var cancellation = new CancellationTokenSource();
@@ -138,17 +151,27 @@ public class ContentModerationServiceTests : IDisposable
         public string? Credential { get; private set; }
         public HttpResponseMessage? Response { get; set; }
         public Exception? ExceptionToThrow { get; set; }
+        public bool Stall { get; set; }
+        public bool Cancelled { get; private set; }
+        public int Calls { get; private set; }
 
-        protected override Task<HttpResponseMessage> SendAsync(
+        protected override async Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)
         {
+            Calls++;
             cancellationToken.ThrowIfCancellationRequested();
             Credential = request.Headers.Authorization?.Parameter;
+
+            if (Stall)
+            {
+                try { await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken); }
+                finally { Cancelled = cancellationToken.IsCancellationRequested; }
+            }
 
             if (ExceptionToThrow is not null)
                 throw ExceptionToThrow;
 
-            return Task.FromResult(Response ?? new HttpResponseMessage(HttpStatusCode.OK));
+            return Response ?? new HttpResponseMessage(HttpStatusCode.OK);
         }
     }
 }
