@@ -61,8 +61,11 @@ public class ConversationEndpointTests
         var latest = (await controller.GetLatestConversation(default)).Should().BeOfType<OkObjectResult>().Which.Value
             .Should().BeOfType<ConversationPage>().Subject;
         latest.Turns.Select(row => row.Role).Should().Equal("user", "assistant");
-        var image = (await controller.GetConversationImage(fixture.ConversationId, turn.TurnId, default)).Should().BeOfType<FileContentResult>().Subject;
-        image.FileContents.Should().Equal(ConversationTurnRecorderTests.Fixture.Image);
+        var image = (await controller.GetConversationImage(fixture.ConversationId, turn.TurnId, default)).Should().BeOfType<FileStreamResult>().Subject;
+        await using var imageStream = image.FileStream;
+        using var bytes = new MemoryStream();
+        await imageStream.CopyToAsync(bytes);
+        bytes.ToArray().Should().Equal(ConversationTurnRecorderTests.Fixture.Image);
         controller.Response.Headers.CacheControl.ToString().Should().Be("private, no-store");
         var foreign = Controller(mediator, Guid.NewGuid());
         (await foreign.GetConversationImage(fixture.ConversationId, turn.TurnId, default)).Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(404);

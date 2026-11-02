@@ -45,6 +45,7 @@ public class HabitScheduleReadShapeTests(ITestOutputHelper output)
             Schedule = HabitSchedule.OneTime
         }, user.Id);
         var repository = Substitute.For<IGenericRepository<Habit>>();
+        Orbit.Tests.Shared.RepositoryProjections.FromFind<Habit, Guid>(repository);
         repository.ProjectAsync(
                 Arg.Any<Expression<Func<Habit, bool>>>(),
                 Arg.Any<Func<IQueryable<Habit>, IQueryable<HabitScheduleCandidate>>>(),
