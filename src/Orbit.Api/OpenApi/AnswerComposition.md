@@ -1578,7 +1578,8 @@ with a valid date and time and no reminder configuration gets the existing defau
 15 minutes before its due time. Both `reminder_enabled=true` and `reminder_times=[15]` are suggested and form
 one removable group. This completion reads structured arguments only. It preserves
 explicit false, configured reminders and reused habits. It does not run for edits,
-preview revisions, unsupported clients or a conversation with dismissed offers.
+preview revisions or unsupported clients. Existing semantic dismissal keys
+suppress only matching suggestions.
 Refreshing a preview after removal cannot regenerate the suggestion. Parent and
 goal-link choices remain model decisions against the bounded owned account index;
 the offer schema describes these decisions at their argument fields.

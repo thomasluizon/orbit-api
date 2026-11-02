@@ -72,7 +72,6 @@ public sealed class ProactiveProposalTests
 
     [Theory]
     [InlineData("unsupported")]
-    [InlineData("dismissed")]
     [InlineData("update")]
     [InlineData("recurring")]
     [InlineData("general")]
@@ -84,7 +83,6 @@ public sealed class ProactiveProposalTests
         var targetClient = mode switch
         {
             "unsupported" => client with { SupportsProactiveOffers = false },
-            "dismissed" => client with { DismissedOfferKeys = ["dismissed"] },
             _ => client
         };
         if (mode == "recurring") args["frequency_unit"] = "Day";
@@ -94,6 +92,26 @@ public sealed class ProactiveProposalTests
         var call = new AiToolCall(mode == "update" ? "update_habit" : "create_habit", "create", JsonSerializer.SerializeToElement(args));
 
         JsonElement.DeepEquals(ProactiveProposal.CompleteCreateReminder(call, targetClient).Args, call.Args).Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task DatedReminderCompletionRespectsOnlyTheMatchingDismissal(bool matching)
+    {
+        var call = new AiToolCall("create_habit", "create", Parse("""{"title":"Submit form","frequency_unit":"OneTime","due_date":"2026-11-03","due_time":"14:00"}"""));
+        var prepared = ProactiveProposal.CompleteCreateReminder(call, client);
+        var first = (await previewer.PreviewAsync(user, call.Name, prepared.Args, clientContext: client)).Value!;
+        var keys = matching ? first.Items!.Single().Fields.Where(field => field.Removal != null)
+            .Select(field => field.Removal!.OfferKey).ToArray() : ["unrelated"];
+        var dismissedClient = client with { DismissedOfferKeys = keys };
+        var nextCall = ProactiveProposal.CompleteCreateReminder(call, dismissedClient);
+
+        var result = await previewer.PreviewAsync(user, call.Name, nextCall.Args, clientContext: dismissedClient);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        result.Value!.Items!.Single().Fields.Any(field => field.Field == "reminder_times").Should().Be(!matching);
+        result.Value.Items!.Single().Fields.Single(field => field.Field == "due_time").Provenance.Should().Be("requested");
     }
 
     [Theory]

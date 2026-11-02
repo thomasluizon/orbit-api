@@ -19,7 +19,7 @@ public static partial class ProactiveProposal
 
     internal static AiToolCall CompleteCreateReminder(AiToolCall call, AgentClientContext? client)
     {
-        if (!Enabled(client) || client!.DismissedOfferKeys is { Count: > 0 }
+        if (!Enabled(client)
             || call.Name is not ("create_habit" or "bulk_create_habits") || call.Args.ValueKind != JsonValueKind.Object)
             return call;
         var root = JsonNode.Parse(call.Args.GetRawText())!.AsObject();
