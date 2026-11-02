@@ -4,7 +4,7 @@ import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs"
 import { dirname, join, relative, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 
-const GENERATOR_VERSION = 2
+const GENERATOR_VERSION = 3
 const TOOL_DIRECTORY = dirname(fileURLToPath(import.meta.url))
 const DEFAULT_ROOT = resolve(TOOL_DIRECTORY, "..")
 const USAGE = `usage: node tools/gating-matrix.mjs [--root <repository>]
@@ -500,12 +500,26 @@ function updateDataArguments(text) {
   }
 }
 
+function idempotentConfigSeed(args, table) {
+  if (table !== "AppConfigs") return null
+  const literal = args.trim().match(/^"""([\s\S]*?)"""$/)
+  if (!literal) return null
+  const sql = literal[1]
+  const match = sql.match(/^\s*INSERT\s+INTO\s+"AppConfigs"\s*\(\s*"Key"\s*,\s*"Value"\s*,\s*"Description"\s*\)\s*VALUES\s*\(\s*'((?:''|[^'])*)'\s*,\s*'((?:''|[^'])*)'\s*,\s*'((?:''|[^'])*)'\s*\)\s*ON\s+CONFLICT\s*\(\s*"Key"\s*\)\s*DO\s+NOTHING\s*;\s*$/i)
+  if (!match) return null
+  const [Key, Value, Description] = match.slice(1).map(value => value.replaceAll("''", "'"))
+  return { Key, Value, Description }
+}
+
 function applyTableMigrations(files, table, initialRows, constants) {
   const rows = new Map(initialRows.map((row) => [row.Key, { ...row }]))
   for (const [path, source] of files) {
     const body = upBody(source)
     for (const args of extractInvocationArguments(body, "migrationBuilder.Sql")) {
-      if (args.includes(table)) throw new Error(`unsupported SQL mutation of ${table} in ${path}`)
+      if (!args.includes(table)) continue
+      const seed = idempotentConfigSeed(args, table)
+      if (!seed) throw new Error(`unsupported SQL mutation of ${table} in ${path}`)
+      if (!rows.has(seed.Key)) rows.set(seed.Key, seed)
     }
     for (const args of extractInvocations(body, "migrationBuilder.InsertData")) {
       if (parseLiteral(args.table ?? "") !== table) continue

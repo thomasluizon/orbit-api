@@ -10,6 +10,24 @@ namespace Orbit.Infrastructure.Tests.Persistence;
 
 public class HardenAstraTurnReadsMigrationTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Migration_TableChangesUseTransactionLocalLockTimeout(bool rollback)
+    {
+        var migration = new HardenAstraTurnReads();
+        using var db = new OrbitDbContext(new DbContextOptionsBuilder<OrbitDbContext>().UseNpgsql("Host=unused;Database=unused").Options);
+        var model = db.GetService<IModelRuntimeInitializer>().Initialize(migration.TargetModel, designTime: true);
+        var operations = rollback ? migration.DownOperations : migration.UpOperations;
+        var commands = db.GetService<IMigrationsSqlGenerator>().Generate(operations, model);
+
+        var tableChange = commands[rollback ? 1 : 0];
+        tableChange.TransactionSuppressed.Should().BeFalse();
+        tableChange.CommandText.Should().StartWith("SET LOCAL lock_timeout = '5s';");
+        var policy = new MigrationLockPolicy("20261101210800_PersistServerConversations", "applied in production before this gate", []);
+        MigrationLockGate.Check("20261102074154_HardenAstraTurnReads", operations, policy).Should().BeEmpty();
+    }
+
     [Fact]
     public void Migration_RetryAfterIndexFailure_UsesIdempotentColumnSql()
     {

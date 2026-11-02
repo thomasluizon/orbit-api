@@ -170,6 +170,9 @@ jobs:
           if git diff --name-only --diff-filter=d "origin/$BASE_REF...HEAD" -- \
             ':(glob)**/Migrations/*.cs' \
             .github/migration-contracts.json \
+            .github/migration-locks.json \
+            tests/Orbit.Infrastructure.Tests/Persistence/MigrationLockGate.cs \
+            tests/Orbit.Infrastructure.Tests/Persistence/MigrationLockGateTests.cs \
             tests/Orbit.Infrastructure.Tests/Persistence/RollingMigrationGate.cs \
             tests/Orbit.Infrastructure.Tests/Persistence/RollingMigrationGateTests.cs | grep -q .; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
@@ -187,7 +190,7 @@ jobs:
         if: steps.contract-inputs.outputs.changed == 'true'
         env:
           ORBIT_MIGRATION_GUARD_BASE: origin/${{ github.base_ref }}
-        run: dotnet test tests/Orbit.Infrastructure.Tests --filter FullyQualifiedName~RollingMigrationGateTests --nologo
+        run: dotnet test tests/Orbit.Infrastructure.Tests --filter "FullyQualifiedName~RollingMigrationGateTests|FullyQualifiedName~MigrationLockGateTests" --nologo
 
   convention-guard:
     name: Guard Conventions
@@ -206,6 +209,9 @@ jobs:
 
       - name: The allowlist checker's own coverage
         run: node --test tools/__tests__/*.test.mjs
+
+      - name: API release admission tests
+        run: node --test .github/scripts/release-admission.test.mjs .github/scripts/release-admission-security.test.mjs
 
       - name: OpenAPI publication guard tests
         run: python3 -m unittest discover -s .github/scripts -p 'test_openapi_artifacts.py'

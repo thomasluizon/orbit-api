@@ -11,6 +11,7 @@ namespace Orbit.Infrastructure.Migrations
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.Sql("""
+                SET LOCAL lock_timeout = '5s';
                 ALTER TABLE "ConversationTurns" ADD COLUMN IF NOT EXISTS "ModelContextJson" text;
                 """);
 
@@ -28,6 +29,7 @@ namespace Orbit.Infrastructure.Migrations
                 """, suppressTransaction: true);
 
             migrationBuilder.Sql("""
+                SET LOCAL lock_timeout = '5s';
                 ALTER TABLE "ConversationTurns" DROP COLUMN IF EXISTS "ModelContextJson";
                 """);
         }
