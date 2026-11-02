@@ -21,13 +21,14 @@ public sealed record PendingOperationRevisionResult(
     string? Error,
     Guid? PendingOperationId,
     PendingOperationChangePreview? Preview,
-    bool Cancelled = false);
+    bool Cancelled = false,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] AstraPlan? Plan = null);
 
 public sealed partial class PendingOperationRevisionService(
     IPendingAgentOperationStore store,
     IPendingOperationChangePreviewer previewer,
     IValidator<RevisePendingOperationRequest> validator,
-    AiToolRegistry toolRegistry, IConversationOfferStore? offerStore = null)
+    AiToolRegistry toolRegistry, IConversationOfferStore? offerStore = null, IConversationPlanStore? plans = null)
 {
     public async Task<PendingOperationRevisionResult> RefreshAsync(
         Guid userId, Guid pendingOperationId, CancellationToken cancellationToken, AgentClientContext? clientContext = null)
@@ -97,7 +98,8 @@ public sealed partial class PendingOperationRevisionService(
         if (request.Items.Count == 0)
         {
             return store.Cancel(userId, pendingOperationId, expectedFingerprint)
-                ? new PendingOperationRevisionResult(true, null, null, null, Cancelled: true)
+                ? new PendingOperationRevisionResult(true, null, null, null, Cancelled: true,
+                    Plan: plans is null ? null : await plans.ChangeAsync(userId, pendingOperationId, "skipped", cancellationToken))
                 : Failure("revision_conflict");
         }
 

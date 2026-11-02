@@ -46,7 +46,7 @@ public partial class ProcessUserChatCommandHandlerTests
         var request = _aiIntentService.ReceivedCalls().Single(call => call.GetMethodInfo().Name == "SendWithToolsAsync")
             .GetArguments()[0].Should().BeOfType<AiToolRequest>().Subject;
         request.ToolDeclarations.Select(tool => JsonSerializer.SerializeToElement(tool).GetProperty("name").GetString())
-            .Should().BeEquivalentTo(["query_habits", "query_goals"]);
+            .Should().BeEquivalentTo(["query_habits", "query_goals", PlanToolDeclaration.Name]);
         await ask.DidNotReceiveWithAnyArgs().ExecuteAsync(default, default, default);
         await _blockStore.DidNotReceiveWithAnyArgs().AddAsync(default!, default);
         AssertStoredComposition(result.Value, client, language);

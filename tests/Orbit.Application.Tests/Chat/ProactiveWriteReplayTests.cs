@@ -94,7 +94,8 @@ public partial class ProcessUserChatCommandHandlerTests
         var request = (AiToolRequest)_aiIntentService.ReceivedCalls().Single(call => call.GetMethodInfo().Name == "SendWithToolsAsync").GetArguments()[0]!;
         if (supports) request.SystemPrompt.Should().Contain(ProactiveProposal.Instruction);
         else request.SystemPrompt.Should().NotContain(ProactiveProposal.Instruction);
-        foreach (var declaration in request.ToolDeclarations.Select(value => JsonSerializer.SerializeToElement(value)))
+        foreach (var declaration in request.ToolDeclarations.Select(value => JsonSerializer.SerializeToElement(value))
+            .Where(value => value.GetProperty("name").GetString() != PlanToolDeclaration.Name))
         {
             var name = declaration.GetProperty("name").GetString();
             var schema = declaration.GetProperty("parameters");

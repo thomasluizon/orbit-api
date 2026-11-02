@@ -37,7 +37,7 @@ public partial class ProcessUserChatCommandHandlerTests
         result.Value.AiMessage.Should().Be(advice);
         result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatTextPart>().Which.Text.Should().Be(advice);
         await _aiIntentService.Received(1).SendWithToolsAsync(Arg.Is<AiToolRequest>(request =>
-            request.ToolDeclarations.Count == 2), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
+            ToolNames(request.ToolDeclarations).Count == 2), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
         await _operationExecutor.DidNotReceive().ExecuteAsync(Arg.Any<AgentExecuteOperationRequest>(), Arg.Any<CancellationToken>());
     }
 

@@ -35,7 +35,7 @@ public class AiController(
     IAgentOperationExecutor operationExecutor,
     PendingOperationRevisionService revisionService,
     IValidator<ResolveClarificationRequest> resolveClarificationValidator,
-    ILogger<AiController>? logger = null) : ControllerBase
+    ILogger<AiController>? logger = null, IConversationPlanStore? plans = null) : ControllerBase
 {
     [HttpGet("capabilities")]
     public Task<IActionResult> GetCapabilitiesMetadata(CancellationToken cancellationToken) =>
@@ -109,7 +109,8 @@ public class AiController(
         return Ok(readCatalog());
     }
 
-    public record ConfirmPendingOperationResponse(Guid PendingOperationId, string ConfirmationToken, DateTime ExpiresAtUtc);
+    public record ConfirmPendingOperationResponse(Guid PendingOperationId, string ConfirmationToken, DateTime ExpiresAtUtc,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] AstraPlan? Plan = null);
     public record StepUpChallengeRequest(string Language = "en");
     public record VerifyStepUpRequest([property: JsonRequired] Guid ChallengeId, string Code);
     public record ExecutePendingOperationRequest(string ConfirmationToken, AgentClientContext? ClientContext = null);
@@ -218,7 +219,8 @@ public class AiController(
             : Ok(new ConfirmPendingOperationResponse(
                 confirmation.PendingOperationId,
                 confirmation.ConfirmationToken,
-                confirmation.ExpiresAtUtc));
+                confirmation.ExpiresAtUtc,
+                plans is null ? null : await plans.ChangeAsync(userId, id, "running", cancellationToken)));
     }
 
     [HttpPost("pending-operations/{id:guid}/step-up")]

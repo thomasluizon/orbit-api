@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Nodes;
 using Orbit.Domain.Common;
 
 namespace Orbit.Domain.Models;
@@ -16,14 +17,14 @@ public sealed record AstraPlan(Guid Id, string Title, IReadOnlyList<AstraPlanSte
     public static bool IsShortText(string? text) => !string.IsNullOrWhiteSpace(text)
         && text.Length <= 40 && !text.Any(char.IsControl);
 
-    public bool IsValid() => Id != Guid.Empty && IsShortText(Title) && Steps is { Count: >= 2 and <= 8 }
-        && Steps.Select(step => step.Id).Distinct(StringComparer.Ordinal).Count() == Steps.Count
-        && Steps.All(step => !string.IsNullOrWhiteSpace(step.Id) && IsShortText(step.Text)
+    public bool IsValid() => Id != Guid.Empty && IsShortText(Title) && Steps is { Count: >= 2 }
+        && Steps.All(step => step is not null && !string.IsNullOrWhiteSpace(step.Id) && IsShortText(step.Text)
             && !string.IsNullOrWhiteSpace(step.Tool) && step.Tool.Length <= 100
             && !step.Text.Contains(step.Tool, StringComparison.OrdinalIgnoreCase)
             && step.Phase is "execution" or "approval"
             && step.Status is "pending" or "running" or "done" or "failed" or "skipped"
-            && step.PendingOperationId != Guid.Empty);
+            && step.PendingOperationId != Guid.Empty)
+        && Steps.Select(step => step.Id).Distinct(StringComparer.Ordinal).Count() == Steps.Count;
 
     public static Result<AstraPlan> Create(string title, IReadOnlyList<AstraPlanStep> steps)
     {
@@ -49,6 +50,15 @@ public sealed record AstraPlan(Guid Id, string Title, IReadOnlyList<AstraPlanSte
         using var document = JsonDocument.Parse(responseJson);
         return document.RootElement.TryGetProperty("plan", out var value) && value.ValueKind != JsonValueKind.Null
             ? value.Deserialize<AstraPlan>(JsonOptions) : null;
+    }
+
+    public static string? Write(string? responseJson, AstraPlan? plan)
+    {
+        if (responseJson is null || plan is null) return responseJson;
+        if (!plan.IsValid()) throw new ArgumentException("Plan is invalid.", nameof(plan));
+        var response = JsonNode.Parse(responseJson)!.AsObject();
+        response["plan"] = JsonSerializer.SerializeToNode(plan, JsonOptions);
+        return response.ToJsonString();
     }
 
     public AstraPlan PreviewOutcome(Guid pendingId, string outcome) => this with

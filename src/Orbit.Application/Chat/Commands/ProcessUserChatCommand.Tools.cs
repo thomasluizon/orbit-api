@@ -543,6 +543,7 @@ public partial class ProcessUserChatCommandHandler
                 executionResults.PreviewedCalls.Remove(
                     Orbit.Domain.Common.AgentOperationFingerprint.Compute(resolved.Name, resolved.Args.GetRawText()));
             outcomesByCallId[call.Id] = outcome with { ToolResult = outcome.ToolResult with { Name = call.Name } };
+            await CompletePlanCallAsync(call, outcome, request, executionResults);
         }
 
         if (orderedCalls.FirstOrDefault(call => call.Name == "ask") is { } askCall)
@@ -662,8 +663,10 @@ public partial class ProcessUserChatCommandHandler
         var scopedExecutor = scope.ServiceProvider.GetRequiredService<IAgentOperationExecutor>();
         var scopedClarificationStore = scope.ServiceProvider.GetRequiredService<IPendingClarificationStore>();
 
-        return await ExecuteSingleToolCallAsync(
+        var outcome = await ExecuteSingleToolCallAsync(
             call, request, executionResults, scopedExecutor, scopedClarificationStore, cancellationToken);
+        await CompletePlanCallAsync(call, outcome, request, executionResults);
+        return outcome;
     }
 
     /// <summary>

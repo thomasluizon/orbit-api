@@ -4128,7 +4128,24 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatStreamEvent"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatStreamEvent"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatStreamEvent"
+                }
+              }
+            }
           },
           "400": {
             "description": "Bad Request",
@@ -17597,6 +17614,16 @@
                 "$ref": "#/components/schemas/AgentPolicyDenial"
               }
             ]
+          },
+          "plan": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AstraPlan"
+              }
+            ]
           }
         }
       },
@@ -20042,6 +20069,131 @@
           }
         }
       },
+      "ChatStreamEvent": {
+        "required": [
+          "type"
+        ],
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string"
+          },
+          "text": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "iteration": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "response": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ChatResponse"
+              }
+            ]
+          },
+          "status": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "error": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "code": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "domain": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "access": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "evalTrace": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ChatEvalTrace"
+              }
+            ]
+          },
+          "turnId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "state": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "replayed": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "plan": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AstraPlan"
+              }
+            ]
+          },
+          "planId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "planStep": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AstraPlanStep"
+              }
+            ]
+          }
+        }
+      },
       "ChatTurnTiming": {
         "required": [
           "totalMilliseconds",
@@ -20262,6 +20414,16 @@
               },
               {
                 "$ref": "#/components/schemas/ConversationImageReference"
+              }
+            ]
+          },
+          "plan": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AstraPlan"
               }
             ]
           }
@@ -24783,6 +24945,16 @@
           "cancelled": {
             "type": "boolean",
             "default": false
+          },
+          "plan": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AstraPlan"
+              }
+            ]
           }
         }
       },

@@ -22,7 +22,7 @@ public partial class AgentOperationExecutor(
     IPendingOperationChangePreviewer changePreviewer,
     IPendingAgentOperationStore pendingOperationStore,
     IUnitOfWork unitOfWork,
-    ILogger<AgentOperationExecutor> logger, ReadBlockFactory? readBlocks = null) : IAgentOperationExecutor, Orbit.Application.Chat.Commands.IAgentMutationRunner
+    ILogger<AgentOperationExecutor> logger, ReadBlockFactory? readBlocks = null, IConversationPlanStore? plans = null) : IAgentOperationExecutor, Orbit.Application.Chat.Commands.IAgentMutationRunner
 {
     private const int MaxToolConcurrencyAttempts = 3;
     private const string UnknownOperationCapabilityId = "unknown";
@@ -31,6 +31,25 @@ public partial class AgentOperationExecutor(
     public async Task<AgentExecuteOperationResponse> ExecuteAsync(
         AgentExecuteOperationRequest request,
         CancellationToken cancellationToken = default)
+    {
+        var operation = catalogService.GetOperation(request.OperationId);
+        var arguments = request.Arguments.ValueKind == JsonValueKind.Undefined ? EmptyArguments : request.Arguments;
+        var pending = request.ConfirmationToken is { } token && operation is { IsMutation: true } && plans is not null
+            ? pendingOperationStore.GetConfirmedExecution(request.UserId, operation.CapabilityId,
+                AgentOperationFingerprint.Compute(operation.Id, arguments.GetRawText()), token) : null;
+        var response = await ExecuteCoreAsync(request, cancellationToken);
+        if (pending is not null && plans is not null)
+            response = response with
+            {
+                Plan = await plans.ChangeAsync(request.UserId, pending.PendingOperationId,
+                response.Operation.Status == AgentOperationStatus.Succeeded && !IsPartialMutation(response.Operation.Payload) ? "done" : "failed", cancellationToken)
+            };
+        return response;
+    }
+
+    private async Task<AgentExecuteOperationResponse> ExecuteCoreAsync(
+        AgentExecuteOperationRequest request,
+        CancellationToken cancellationToken)
     {
         var arguments = request.Arguments.ValueKind == JsonValueKind.Undefined
             ? EmptyArguments

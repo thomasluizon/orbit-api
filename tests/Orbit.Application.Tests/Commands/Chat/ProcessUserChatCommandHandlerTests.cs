@@ -529,7 +529,11 @@ public partial class ProcessUserChatCommandHandlerTests
     }
 
     private static List<string> ToolNames(IReadOnlyList<object> declarations) =>
-        declarations.Select(declaration => (string)declaration.GetType().GetProperty("name")!.GetValue(declaration)!).ToList();
+        declarations.Select(declaration => (string)declaration.GetType().GetProperty("name")!.GetValue(declaration)!)
+            .Where(name => name != PlanToolDeclaration.Name).ToList();
+
+    private static JsonElement DeclaredTool(AiToolRequest request, string name) => request.ToolDeclarations
+        .Select(declaration => JsonSerializer.SerializeToElement(declaration)).Single(declaration => declaration.GetProperty("name").GetString() == name);
 
     [Fact]
     public async Task Handle_PayGateBlocks_ReturnsPayGateError()
@@ -3256,7 +3260,7 @@ public partial class ProcessUserChatCommandHandlerTests
             new ProcessUserChatCommand(UserId, "ok", ConfirmationToken: "confirm-token"), CancellationToken.None);
 
         await _aiIntentService.Received(1).SendWithToolsAsync(
-            Arg.Is<AiToolRequest>(request => request.ToolDeclarations.Count == 1),
+            Arg.Is<AiToolRequest>(request => ToolNames(request.ToolDeclarations).Count == 1),
             Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
     }
 
@@ -3274,7 +3278,7 @@ public partial class ProcessUserChatCommandHandlerTests
             CancellationToken.None);
 
         await _aiIntentService.Received(1).SendWithToolsAsync(
-            Arg.Is<AiToolRequest>(request => request.ToolDeclarations.Count == 1),
+            Arg.Is<AiToolRequest>(request => ToolNames(request.ToolDeclarations).Count == 1),
             Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
     }
 

@@ -118,7 +118,9 @@ public partial class ProcessUserChatCommandHandler
                 parameters = ChatToolSchema(tool, request.ClientContext, UsesComposition(request, context))
             })
             .ToList();
-        toolDeclarations.Add(PlanToolDeclaration.Declaration);
+        if (toolDeclarations.Count > 0)
+            toolDeclarations.Add(PlanToolDeclaration.Declaration);
+        toolDeclarations = toolDeclarations.OrderBy(declaration => JsonSerializer.SerializeToElement(declaration).GetProperty("name").GetString(), StringComparer.Ordinal).ToList();
 
         if (turn.ChoiceSelection is { } selection)
             dynamicContext = string.Join(Environment.NewLine, dynamicContext, selection.ToModelContext());

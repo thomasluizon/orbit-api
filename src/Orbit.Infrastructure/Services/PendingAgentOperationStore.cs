@@ -415,13 +415,16 @@ public class PendingAgentOperationStore(
                 var rows = dbContext.ConversationTurns.AsNoTracking().Where(turn => turn.UserId == group.Key.UserId
                     && turn.ConversationId == group.Key.ConversationId && turn.Role == "assistant"
                     && turn.CreatedAtUtc >= earliestAtUtc)
-                    .Select(turn => new { turn.Id, turn.PreviewOutcomesJson }).ToArray();
+                    .Select(turn => new { turn.Id, turn.PreviewOutcomesJson, turn.ResponseJson }).ToArray();
                 foreach (var row in rows)
                 {
                     var values = JsonSerializer.Deserialize<List<ConversationPreviewOutcome>>(row.PreviewOutcomesJson) ?? [];
                     if (!values.Any(value => previews.ContainsKey(value.PendingOperationId))) continue;
                     var updated = values.Select(value => previews.GetValueOrDefault(value.PendingOperationId, value)).ToArray();
-                    patches.Add(new(row.Id, JsonSerializer.Serialize(updated)));
+                    var plan = AstraPlan.Read(row.ResponseJson);
+                    foreach (var preview in updated)
+                        plan = plan?.PreviewOutcome(preview.PendingOperationId, preview.Outcome);
+                    patches.Add(new(row.Id, JsonSerializer.Serialize(updated), AstraPlan.Write(row.ResponseJson, plan)));
                 }
             }
             if (dbContext.Database.IsRelational())

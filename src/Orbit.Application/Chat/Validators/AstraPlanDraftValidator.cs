@@ -9,8 +9,8 @@ public sealed class AstraPlanDraftValidator : AbstractValidator<AstraPlanDraft>
     public AstraPlanDraftValidator()
     {
         RuleFor(plan => plan.Title).Must(AstraPlan.IsShortText);
-        RuleFor(plan => plan.Steps).NotNull().Must(steps => steps is { Count: >= 2 and <= 8 });
-        RuleForEach(plan => plan.Steps).ChildRules(step =>
+        RuleFor(plan => plan.Steps).NotNull().Must(steps => steps is { Count: >= 2 });
+        RuleForEach(plan => plan.Steps).NotNull().ChildRules(step =>
         {
             step.RuleFor(value => value.Text).Must(AstraPlan.IsShortText);
             step.RuleFor(value => value.Tool).NotEmpty().MaximumLength(100);

@@ -22,6 +22,7 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<Orbit.Application.Proactive.Services.IProactiveEngine, ProactiveEngineService>();
 
         builder.Services.AddScoped<Orbit.Application.Chat.IConversationTurnRecorder, ConversationTurnRecorder>();
+        builder.Services.AddScoped<IConversationPlanStore, ConversationPlanStore>();
 
         if (!BuildTimeDocumentGeneration.IsActive)
         {

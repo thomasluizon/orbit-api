@@ -64,7 +64,7 @@ public partial class ProcessUserChatCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         transport.Requests.Should().Be(complete ? 1 : 2);
-        var schema = transport.RequestBody.GetProperty("tools").EnumerateArray().Single().GetProperty("parameters");
+        var schema = transport.RequestBody.GetProperty("tools").EnumerateArray().Single(declaration => declaration.GetProperty("name").GetString() == tool.Name).GetProperty("parameters");
         schema.GetProperty("properties").GetProperty("orbit_read_complete").GetProperty("type").GetString().Should().Be("boolean");
         schema.GetProperty("required").EnumerateArray().Select(item => item.GetString()).Should().Contain("orbit_read_complete");
         JsonSerializer.Serialize(tool.GetParameterSchema()).Should().NotContain("orbit_read_complete");

@@ -24,7 +24,6 @@ public static class PlanToolDeclaration
                 {
                     type = "array",
                     minItems = 2,
-                    maxItems = 8,
                     items = new
                     {
                         type = "object",

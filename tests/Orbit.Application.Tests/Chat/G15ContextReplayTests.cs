@@ -81,7 +81,7 @@ public partial class ProcessUserChatCommandHandlerTests
         var request = _aiIntentService.ReceivedCalls().SelectMany(call => call.GetArguments().OfType<AiToolRequest>()).Single();
         request.DynamicContext.Should().Contain(JsonSerializer.Serialize(new { previousStartingStep = previous }, ChatStreamEvent.SerializerOptions))
             .And.Contain(TouchRefinementGuidance);
-        JsonSerializer.SerializeToElement(request.ToolDeclarations.Single()).GetProperty("description").GetString().Should()
+        DeclaredTool(request, tool.Name).GetProperty("description").GetString().Should()
             .NotContain(TouchRefinementGuidance, "the typed previous-step context already supplies the complete guidance");
         result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>().Which.Kind.Should().Be("oneSmallStep");
         await AssertNoCompositionContinuation();

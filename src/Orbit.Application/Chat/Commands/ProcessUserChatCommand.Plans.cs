@@ -85,6 +85,20 @@ public partial class ProcessUserChatCommandHandler
         }
     }
 
+    private static async Task CompletePlanCallAsync(AiToolCall call, ToolCallOutcome outcome, ProcessUserChatCommand request, ToolExecutionAccumulator results)
+    {
+        if (results.Recording?.Plan is null) return;
+        await results.PlanGate.WaitAsync();
+        try
+        {
+            await CompletePlanCallsAsync(new Dictionary<string, ToolCallOutcome> { [call.Id] = outcome }, request, results);
+        }
+        finally
+        {
+            results.PlanGate.Release();
+        }
+    }
+
     private static async Task ChangePlanStepAsync(ProcessUserChatCommand request, ToolExecutionAccumulator results, string id, string status,
         string? callId = null, Guid? pendingId = null)
     {
