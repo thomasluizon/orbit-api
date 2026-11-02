@@ -89,12 +89,12 @@ public class PushSubscription : Entity
     /// <summary>
     /// True when a registration presents the credentials only the device holding this subscription can
     /// read. A Web Push endpoint alone is not enough: the request must also carry the browser-generated
-    /// <see cref="P256dh"/> key and <see cref="Auth"/> secret. An FCM registration token is the only
-    /// credential Firebase issues to one app install, so the matched token plus the FCM sentinel is the proof.
+    /// <see cref="P256dh"/> key and <see cref="Auth"/> secret. Native transports require an install
+    /// secret in <see cref="Auth"/>; a stored transport sentinel cannot authorize another account.
     /// </summary>
     public bool MatchesCredentials(string p256dh, string auth) =>
         Transport is PushTransport.Fcm or PushTransport.Apns or PushTransport.Wns
-            ? ClassifyTransport(p256dh) == Transport
+            ? ClassifyTransport(p256dh) == Transport && Auth != P256dh && FixedTimeEquals(Auth, auth)
             : FixedTimeEquals(P256dh, p256dh) && FixedTimeEquals(Auth, auth);
 
     public Result RenewRegistration(string endpoint, string auth, string? apnsTopic, Guid? deviceId)
