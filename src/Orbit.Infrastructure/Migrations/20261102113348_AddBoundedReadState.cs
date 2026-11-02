@@ -36,6 +36,14 @@ namespace Orbit.Infrastructure.Migrations
                 type: "integer",
                 nullable: true);
 
+            migrationBuilder.AddColumn<bool>(
+                name: "XpHistoryInitialized",
+                table: "Users",
+                type: "boolean",
+                nullable: true);
+
+            migrationBuilder.Sql("ALTER TABLE \"Users\" ALTER COLUMN \"XpHistoryInitialized\" SET DEFAULT TRUE;");
+
             migrationBuilder.CreateTable(
                 name: "XpDailyTotals",
                 columns: table => new
@@ -58,48 +66,12 @@ namespace Orbit.Infrastructure.Migrations
                 });
 
             migrationBuilder.CreateIndex(
-                name: "IX_XpAwardLogs_UserId_Source_SourceId",
-                table: "XpAwardLogs",
-                columns: new[] { "UserId", "Source", "SourceId" });
-
-            migrationBuilder.CreateIndex(
-                name: "IX_Users_GoogleCalendarAutoSyncEnabled_GoogleCalendarLastAttem~",
-                table: "Users",
-                columns: new[] { "GoogleCalendarAutoSyncEnabled", "GoogleCalendarLastAttemptAtUtc" });
-
-            migrationBuilder.CreateIndex(
                 name: "IX_XpDailyTotals_UserId_Date",
                 table: "XpDailyTotals",
                 columns: new[] { "UserId", "Date" },
                 unique: true);
 
             migrationBuilder.Sql("""
-                LOCK TABLE "XpAwardLogs" IN SHARE ROW EXCLUSIVE MODE;
-                DO $$
-                DECLARE cursor_id uuid := NULL; next_id uuid;
-                BEGIN
-                    LOOP
-                        SELECT "Id" INTO next_id FROM (
-                            SELECT "Id" FROM "Users" WHERE cursor_id IS NULL OR "Id" > cursor_id
-                            ORDER BY "Id" LIMIT 100
-                        ) batch ORDER BY "Id" DESC LIMIT 1;
-                        EXIT WHEN next_id IS NULL;
-                        WITH daily AS (
-                            SELECT "UserId", ("AwardedAtUtc" AT TIME ZONE 'UTC')::date AS day,
-                                SUM("Amount")::integer AS amount
-                            FROM "XpAwardLogs"
-                            WHERE (cursor_id IS NULL OR "UserId" > cursor_id) AND "UserId" <= next_id
-                            GROUP BY "UserId", ("AwardedAtUtc" AT TIME ZONE 'UTC')::date
-                        )
-                        INSERT INTO "XpDailyTotals" ("Id", "UserId", "Date", "DailyXp", "CumulativeXp")
-                        SELECT gen_random_uuid(), "UserId", day, amount,
-                            SUM(amount) OVER (PARTITION BY "UserId" ORDER BY day)::integer FROM daily
-                        ON CONFLICT ("UserId", "Date") DO UPDATE
-                            SET "DailyXp" = EXCLUDED."DailyXp", "CumulativeXp" = EXCLUDED."CumulativeXp";
-                        cursor_id := next_id;
-                    END LOOP;
-                END $$;
-
                 CREATE OR REPLACE FUNCTION maintain_xp_daily_totals() RETURNS trigger
                 LANGUAGE plpgsql AS $$
                 DECLARE owner_id uuid; award_date date; delta integer;
@@ -141,26 +113,39 @@ namespace Orbit.Infrastructure.Migrations
                 SELECT set_config('statement_timeout', current_setting('orbit.bounded_reads_statement_timeout'), true),
                     set_config('lock_timeout', current_setting('orbit.bounded_reads_lock_timeout'), true);
                 """);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_XpAwardLogs_UserId_Source_SourceId",
+                table: "XpAwardLogs",
+                columns: new[] { "UserId", "Source", "SourceId" })
+                .Annotation("Npgsql:CreatedConcurrently", true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Users_GoogleCalendarAutoSyncEnabled_GoogleCalendarLastAttem~",
+                table: "Users",
+                columns: new[] { "GoogleCalendarAutoSyncEnabled", "GoogleCalendarLastAttemptAtUtc" })
+                .Annotation("Npgsql:CreatedConcurrently", true);
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.Sql("""
+                DROP INDEX CONCURRENTLY IF EXISTS "IX_XpAwardLogs_UserId_Source_SourceId";
+                """, suppressTransaction: true);
+            migrationBuilder.Sql("""
+                DROP INDEX CONCURRENTLY IF EXISTS "IX_Users_GoogleCalendarAutoSyncEnabled_GoogleCalendarLastAttem~";
+                """, suppressTransaction: true);
+
+            migrationBuilder.Sql("""
+                SET LOCAL lock_timeout = '1s';
+                SET LOCAL statement_timeout = '5s';
                 DROP TRIGGER IF EXISTS maintain_xp_daily_totals ON "XpAwardLogs";
                 DROP FUNCTION IF EXISTS maintain_xp_daily_totals();
                 """);
 
             migrationBuilder.DropTable(
                 name: "XpDailyTotals");
-
-            migrationBuilder.DropIndex(
-                name: "IX_XpAwardLogs_UserId_Source_SourceId",
-                table: "XpAwardLogs");
-
-            migrationBuilder.DropIndex(
-                name: "IX_Users_GoogleCalendarAutoSyncEnabled_GoogleCalendarLastAttem~",
-                table: "Users");
 
             migrationBuilder.DropColumn(
                 name: "GoogleAccessTokenExpiresAtUtc",
@@ -173,6 +158,10 @@ namespace Orbit.Infrastructure.Migrations
             migrationBuilder.DropColumn(
                 name: "LongestRecordedStreak",
                 table: "Habits");
+
+            migrationBuilder.DropColumn(
+                name: "XpHistoryInitialized",
+                table: "Users");
         }
     }
 }

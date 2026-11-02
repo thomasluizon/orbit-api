@@ -259,7 +259,8 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("UserId");
+                    b.HasIndex("UserId")
+                        .HasAnnotation("Npgsql:CreatedConcurrently", true);
 
                     b.HasIndex("Date", "Model", "Purpose", "UserId")
                         .IsUnique();
@@ -2694,6 +2695,11 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<int>("WeekStartDay")
                         .HasColumnType("integer");
 
+                    b.Property<bool?>("XpHistoryInitialized")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
                     b.Property<uint>("xmin")
                         .IsConcurrencyToken()
                         .ValueGeneratedOnAddOrUpdate()
@@ -2725,7 +2731,8 @@ namespace Orbit.Infrastructure.Migrations
                         .IsUnique()
                         .HasFilter("\"ReferralCode\" IS NOT NULL");
 
-                    b.HasIndex("GoogleCalendarAutoSyncEnabled", "GoogleCalendarLastAttemptAtUtc");
+                    b.HasIndex("GoogleCalendarAutoSyncEnabled", "GoogleCalendarLastAttemptAtUtc")
+                        .HasAnnotation("Npgsql:CreatedConcurrently", true);
 
                     b.HasIndex("GoogleCalendarAutoSyncEnabled", "GoogleCalendarLastSyncedAt")
                         .HasFilter("\"GoogleCalendarAutoSyncEnabled\" = TRUE");
@@ -2856,7 +2863,8 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.HasIndex("UserId", "AwardedAtUtc");
 
-                    b.HasIndex("UserId", "Source", "SourceId");
+                    b.HasIndex("UserId", "Source", "SourceId")
+                        .HasAnnotation("Npgsql:CreatedConcurrently", true);
 
                     b.ToTable("XpAwardLogs");
                 });

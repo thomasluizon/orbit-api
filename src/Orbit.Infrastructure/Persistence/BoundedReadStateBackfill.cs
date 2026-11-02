@@ -15,8 +15,14 @@ public sealed class BoundedReadStateBackfill(OrbitDbContext db, IUserDateService
         .Where(h => h.LongestRecordedStreak == null && (cursor == null || h.Id.CompareTo(cursor.Value) > 0))
         .OrderBy(h => h.Id).Take(100);
 
+    internal IQueryable<User> PendingUsers(Guid? cursor) => db.Users.AsNoTracking()
+        .Where(user => EF.Property<bool?>(user, XpHistoryStore.InitializedProperty) != true
+            && (cursor == null || user.Id.CompareTo(cursor.Value) > 0))
+        .OrderBy(user => user.Id).Take(100);
+
     public async Task RunAsync(CancellationToken ct = default)
     {
+        await BackfillXpAsync(ct);
         if (await db.AppConfigs.AnyAsync(config => config.Key == CompletionKey, ct)) return;
         Guid? cursor = null;
         while (true)
@@ -54,5 +60,41 @@ public sealed class BoundedReadStateBackfill(OrbitDbContext db, IUserDateService
             db.AppConfigs.Add(AppConfig.Create(CompletionKey, "true", "Historical habit streak state is initialized"));
             await db.SaveChangesAsync(ct);
         }
+    }
+
+    private async Task BackfillXpAsync(CancellationToken ct)
+    {
+        Guid? cursor = null;
+        while (true)
+        {
+            var users = await PendingUsers(cursor).Select(user => user.Id).ToArrayAsync(ct);
+            if (users.Length == 0) return;
+            foreach (var userId in users)
+                await db.Database.CreateExecutionStrategy().ExecuteAsync(() => BackfillUserXpAsync(userId, ct));
+            cursor = users[^1];
+        }
+    }
+
+    private async Task BackfillUserXpAsync(Guid userId, CancellationToken ct)
+    {
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        await db.Database.ExecuteSqlRawAsync("SET LOCAL lock_timeout = '1s'; SET LOCAL statement_timeout = '5s';", ct);
+        await UserRowLock.AcquireAsync(db, userId, ct);
+        if (!await db.Users.AnyAsync(user => user.Id == userId
+                && EF.Property<bool?>(user, XpHistoryStore.InitializedProperty) != true, ct)) return;
+
+        await db.XpDailyTotals.Where(row => row.UserId == userId).ExecuteDeleteAsync(ct);
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            WITH daily AS (
+                SELECT ("AwardedAtUtc" AT TIME ZONE 'UTC')::date AS day, SUM("Amount")::integer AS amount
+                FROM "XpAwardLogs" WHERE "UserId" = {userId}
+                GROUP BY ("AwardedAtUtc" AT TIME ZONE 'UTC')::date
+            )
+            INSERT INTO "XpDailyTotals" ("Id", "UserId", "Date", "DailyXp", "CumulativeXp")
+            SELECT gen_random_uuid(), {userId}, day, amount, SUM(amount) OVER (ORDER BY day)::integer FROM daily;
+            """, ct);
+        await db.Users.Where(user => user.Id == userId).ExecuteUpdateAsync(update => update
+            .SetProperty(user => EF.Property<bool?>(user, XpHistoryStore.InitializedProperty), (bool?)true), ct);
+        await transaction.CommitAsync(ct);
     }
 }

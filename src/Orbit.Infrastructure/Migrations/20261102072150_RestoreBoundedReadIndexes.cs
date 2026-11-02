@@ -13,15 +13,14 @@ namespace Orbit.Infrastructure.Migrations
             migrationBuilder.CreateIndex(
                 name: "IX_AiUsageDaily_UserId",
                 table: "AiUsageDaily",
-                column: "UserId");
+                column: "UserId")
+                .Annotation("Npgsql:CreatedConcurrently", true);
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropIndex(
-                name: "IX_AiUsageDaily_UserId",
-                table: "AiUsageDaily");
+            migrationBuilder.Sql("DROP INDEX CONCURRENTLY IF EXISTS \"IX_AiUsageDaily_UserId\";", suppressTransaction: true);
         }
     }
 }

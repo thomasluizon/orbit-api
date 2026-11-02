@@ -259,7 +259,8 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("UserId");
+                    b.HasIndex("UserId")
+                        .HasAnnotation("Npgsql:CreatedConcurrently", true);
 
                     b.HasIndex("Date", "Model", "Purpose", "UserId")
                         .IsUnique();

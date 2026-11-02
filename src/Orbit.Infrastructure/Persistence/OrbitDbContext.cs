@@ -434,7 +434,7 @@ public class OrbitDbContext : DbContext
     {
         modelBuilder.Entity<AiUsageDaily>(entity =>
         {
-            entity.HasIndex(u => u.UserId);
+            entity.HasIndex(u => u.UserId).IsCreatedConcurrently();
             entity.HasIndex(u => new { u.Date, u.Model, u.Purpose, u.UserId })
                 .IsUnique()
                 .AreNullsDistinct(false);
@@ -452,7 +452,7 @@ public class OrbitDbContext : DbContext
             entity.HasIndex(row => new { row.UserId, row.Date }).IsUnique();
             entity.HasOne<User>().WithMany().HasForeignKey(row => row.UserId).OnDelete(DeleteBehavior.Cascade);
         });
-        modelBuilder.Entity<XpAwardLog>().HasIndex(row => new { row.UserId, row.Source, row.SourceId });
+        modelBuilder.Entity<XpAwardLog>().HasIndex(row => new { row.UserId, row.Source, row.SourceId }).IsCreatedConcurrently();
 
         modelBuilder.Entity<Notification>(entity =>
         {
@@ -818,7 +818,8 @@ public class OrbitDbContext : DbContext
 
             entity.Property(u => u.GoogleCalendarSelectedIds).HasColumnType("text");
 
-            entity.HasIndex(u => new { u.GoogleCalendarAutoSyncEnabled, u.GoogleCalendarLastAttemptAtUtc });
+            entity.Property<bool?>(XpHistoryStore.InitializedProperty).HasDefaultValue(true);
+            entity.HasIndex(u => new { u.GoogleCalendarAutoSyncEnabled, u.GoogleCalendarLastAttemptAtUtc }).IsCreatedConcurrently();
             entity.HasIndex(u => new { u.GoogleCalendarAutoSyncEnabled, u.GoogleCalendarLastSyncedAt })
                 .HasFilter("\"GoogleCalendarAutoSyncEnabled\" = TRUE");
 

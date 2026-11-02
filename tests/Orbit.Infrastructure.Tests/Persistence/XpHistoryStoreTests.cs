@@ -12,6 +12,29 @@ namespace Orbit.Infrastructure.Tests.Persistence;
 
 public class XpHistoryStoreTests
 {
+    [Fact]
+    public async Task InitializationMarker_IsPreservedByDetachedUserUpdates()
+    {
+        using var factory = new SqliteOrbitDbContextFactory();
+        var db = factory.Context;
+        var user = User.Create("XP marker", "xp-marker@example.test").Value;
+        db.Users.Add(user);
+        await db.SaveChangesAsync();
+        foreach (var initialized in new bool?[] { null, true })
+        {
+            await db.Users.Where(row => row.Id == user.Id).ExecuteUpdateAsync(update => update
+                .SetProperty(row => EF.Property<bool?>(row, XpHistoryStore.InitializedProperty), initialized));
+            db.ChangeTracker.Clear();
+            var repository = new GenericRepository<User>(db);
+            var detached = (await repository.FindAsync(row => row.Id == user.Id)).Single();
+            detached.SetTimeZone("UTC");
+            repository.Update(detached);
+            await db.SaveChangesAsync();
+            (await db.Users.Select(row => EF.Property<bool?>(row, XpHistoryStore.InitializedProperty)).SingleAsync())
+                .Should().Be(initialized);
+        }
+    }
+
     [PostgresFact]
     public Task HistoricalRange_UsesStoredBaselineAndKeepsLateAndLegacyAwardsConsistent() =>
         PostgresTestDatabase.WithDatabase(async db =>

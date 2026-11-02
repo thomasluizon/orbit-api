@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Migrations.Operations;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Orbit.Infrastructure.Migrations;
 using Orbit.Infrastructure.Persistence;
 
@@ -8,6 +9,17 @@ namespace Orbit.Infrastructure.Tests.Persistence;
 
 public class BoundedReadIndexMigrationTests(Xunit.Abstractions.ITestOutputHelper output)
 {
+    [Theory]
+    [InlineData(typeof(RestoreBoundedReadIndexes), "20261102072150_RestoreBoundedReadIndexes")]
+    [InlineData(typeof(AddBoundedReadState), "20261102113348_AddBoundedReadState")]
+    public void UnappliedMigrations_MeetLockRulesWithoutExceptions(Type type, string id)
+    {
+        var migration = (Migration)(Activator.CreateInstance(type) ?? throw new InvalidOperationException());
+        migration.ActiveProvider = "Npgsql.EntityFrameworkCore.PostgreSQL";
+        var policy = new MigrationLockPolicy("20261101210800_PersistServerConversations", "applied in production before this gate", []);
+        MigrationLockGate.Check(id, migration.UpOperations, policy).Should().BeEmpty();
+    }
+
     [Fact]
     public void Migration_AddsReminderAndUserIndexesWithoutChangingTheUsageUniqueKey()
     {

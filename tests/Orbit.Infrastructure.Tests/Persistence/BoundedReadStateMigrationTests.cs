@@ -2,6 +2,8 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
+using NSubstitute;
+using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.Persistence;
 
 namespace Orbit.Infrastructure.Tests.Persistence;
@@ -11,7 +13,7 @@ public class BoundedReadStateMigrationTests
     private const string Before = "20261102072150_RestoreBoundedReadIndexes";
 
     [PostgresFact]
-    public Task Migration_BackfillsMoreThanOneUserBatchAndRebuildsAfterRollback() =>
+    public Task Migration_DefersBackfillToUserBatchesAndRebuildsAfterRollback() =>
         PostgresTestDatabase.WithDatabase(async db =>
         {
             var firstAtUtc = new DateTime(2026, 6, 1, 12, 0, 0, DateTimeKind.Utc);
@@ -31,6 +33,12 @@ public class BoundedReadStateMigrationTests
             }
             var migrator = db.GetService<IMigrator>();
             await migrator.MigrateAsync();
+            (await db.XpDailyTotals.CountAsync()).Should().Be(0, "schema expansion must not scan award history while holding table locks");
+            var userWithHistory = await db.Users.Select(user => user.Id).FirstAsync();
+            var history = new XpHistoryStore(db);
+            (await history.ReadBaselineAsync(userWithHistory, new DateOnly(2026, 6, 2))).Should().Be(10);
+            var backfill = new BoundedReadStateBackfill(db, Substitute.For<IUserDateService>());
+            await backfill.RunAsync();
             (await db.XpDailyTotals.CountAsync()).Should().Be(202);
             (await db.XpDailyTotals.Where(x => x.Date == new DateOnly(2026, 6, 2)).Select(x => x.CumulativeXp).ToArrayAsync())
                 .Should().HaveCount(101).And.OnlyContain(value => value == 12);
@@ -38,6 +46,8 @@ public class BoundedReadStateMigrationTests
             await migrator.MigrateAsync(Before);
             (await db.Database.SqlQueryRaw<bool>("SELECT to_regprocedure('maintain_xp_daily_totals()') IS NULL AS \"Value\"").SingleAsync()).Should().BeTrue();
             await migrator.MigrateAsync();
+            (await db.XpDailyTotals.CountAsync()).Should().Be(0);
+            await backfill.RunAsync();
             (await db.XpDailyTotals.CountAsync()).Should().Be(202);
         }, Before);
 }

@@ -28,7 +28,7 @@ public sealed class BoundedReadStateBackfillHostedService(
         }
         catch (Exception exception) when (exception is not OperationCanceledException || !ct.IsCancellationRequested)
         {
-            logger.LogWarning(exception, "Historical habit streak backfill failed and will retry");
+            logger.LogWarning(exception, "Historical habit and XP state backfill failed and will retry");
             return false;
         }
     }
