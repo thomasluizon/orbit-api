@@ -42,6 +42,7 @@ public partial class ProcessUserChatCommandHandler
         public bool ServerEnabled { get; set; }
         public bool ConversationPrepared { get; set; }
         public Guid? ConversationId { get; set; }
+        public AstraPlan? Plan { get; set; }
     }
 
     private async Task<Result<ProcessUserChatCommand>> PrepareConversationAsync(ProcessUserChatCommand request,

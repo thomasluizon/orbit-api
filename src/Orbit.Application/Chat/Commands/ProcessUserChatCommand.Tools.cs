@@ -186,7 +186,7 @@ public partial class ProcessUserChatCommandHandler
     /// Processes one iteration of AI tool calls: orders them, executes each, and sends results
     /// back to the AI. Returns the next AI response, or null if continuation failed.
     /// </summary>
-    private async Task<ToolRoundResult> ProcessToolCallsAsync(
+    private async Task<ToolRoundResult> ProcessActionCallsAsync(
         AiResponse aiResponse,
         ProcessUserChatCommand request,
         ChatContext context,
@@ -196,15 +196,18 @@ public partial class ProcessUserChatCommandHandler
         RejectedCallCorrection? correction,
         string? language,
         Func<AiStreamEvent, Task>? aiStreamSink,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IReadOnlyList<AiToolCallResult> planResults)
     {
         LogToolCallingIteration(logger, iteration, aiResponse.ToolCalls!.Count);
 
         var orderedCalls = OrderCallsForAsk(aiResponse.ToolCalls!.Select(call =>
             ProactiveProposal.CompleteCreateReminder(call, request.ClientContext)).ToArray(), context.UserHabits);
+        await StartPlanCallsAsync(orderedCalls, request, executionResults);
         var outcomesByCallId = correction is null
             ? await ExecuteToolCallsAsync(orderedCalls, request, executionResults, language, cancellationToken)
             : await ExecuteCorrectionsAsync(orderedCalls, correction, request, executionResults, cancellationToken);
+        await CompletePlanCallsAsync(outcomesByCallId, request, executionResults);
         var toolResults = RecordToolRound(aiResponse, orderedCalls, outcomesByCallId, executionResults, correction is not null);
         RecordReadOfferIntents(aiResponse, request, executionResults);
         executionResults.CapturePreviewDiscussionText(aiResponse.TextMessage);
@@ -246,6 +249,7 @@ public partial class ProcessUserChatCommandHandler
             toolResults.Add(new AiToolCallResult(skipped.Name, skipped.Id, false, null, null,
                 "This call was withheld while ask was unresolved. Continue the original request using the ask result; prepare only changes whose inputs are resolved."));
         RefreshAskSchema(aiResponse.ConversationContext, request, context, executionResults);
+        toolResults.AddRange(planResults);
         cancellationToken.ThrowIfCancellationRequested();
         var continueResult = await ai.IntentService.ContinueWithToolResultsAsync(aiResponse.ConversationContext!, toolResults,
             correction is null ? aiStreamSink : null, cancellationToken);

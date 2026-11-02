@@ -18185,6 +18185,69 @@
           }
         }
       },
+      "AstraPlan": {
+        "required": [
+          "id",
+          "title",
+          "steps"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string"
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AstraPlanStep"
+            }
+          }
+        }
+      },
+      "AstraPlanStep": {
+        "required": [
+          "id",
+          "text",
+          "status",
+          "tool",
+          "phase"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "tool": {
+            "type": "string"
+          },
+          "phase": {
+            "type": "string"
+          },
+          "toolCallId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "pendingOperationId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          }
+        }
+      },
       "AstraQuestion": {
         "required": [
           "id",
@@ -19702,6 +19765,16 @@
               "string"
             ],
             "format": "uuid"
+          },
+          "plan": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AstraPlan"
+              }
+            ]
           }
         }
       },

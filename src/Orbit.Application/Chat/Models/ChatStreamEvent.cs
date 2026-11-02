@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Orbit.Application.Chat.Commands;
+using Orbit.Domain.Models;
 
 namespace Orbit.Application.Chat.Models;
 
@@ -17,7 +18,10 @@ public sealed record ChatStreamEvent(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ChatEvalTrace? EvalTrace = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Guid? TurnId = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? State = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? Replayed = null)
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? Replayed = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] AstraPlan? Plan = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Guid? PlanId = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] AstraPlanStep? PlanStep = null)
 {
     internal static readonly JsonSerializerOptions SerializerOptions = new()
     {
