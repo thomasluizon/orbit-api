@@ -11,48 +11,39 @@ namespace Orbit.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.Sql("SET LOCAL lock_timeout = '5s';");
-            migrationBuilder.AddColumn<string>(
-                name: "PartitionKey",
-                table: "OAuthStates",
-                type: "character varying(64)",
-                maxLength: 64,
-                nullable: true);
+            migrationBuilder.Sql("""
+                SET LOCAL lock_timeout = '5s';
+                ALTER TABLE "OAuthStates" ADD COLUMN IF NOT EXISTS "PartitionKey" character varying(64);
+                CREATE TABLE IF NOT EXISTS "OAuthClients" (
+                    "Id" uuid NOT NULL,
+                    "ClientName" character varying(200) NOT NULL,
+                    "RedirectUris" text[] NOT NULL,
+                    "AuthorizedAtUtc" timestamp with time zone,
+                    "CreatedAtUtc" timestamp with time zone NOT NULL,
+                    CONSTRAINT "PK_OAuthClients" PRIMARY KEY ("Id")
+                );
+                """);
 
-            migrationBuilder.CreateTable(
-                name: "OAuthClients",
-                columns: table => new
-                {
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    ClientName = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
-                    RedirectUris = table.Column<string[]>(type: "text[]", nullable: false),
-                    AuthorizedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    CreatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_OAuthClients", x => x.Id);
-                });
+            migrationBuilder.Sql("""
+                DROP INDEX CONCURRENTLY IF EXISTS "IX_OAuthStates_Kind_PartitionKey_ExpiresAtUtc";
+                """, suppressTransaction: true);
 
-            migrationBuilder.CreateIndex(
-                name: "IX_OAuthStates_Kind_PartitionKey_ExpiresAtUtc",
-                table: "OAuthStates",
-                columns: new[] { "Kind", "PartitionKey", "ExpiresAtUtc" })
-                .Annotation("Npgsql:CreatedConcurrently", true);
+            migrationBuilder.Sql("""
+                CREATE INDEX CONCURRENTLY IF NOT EXISTS "IX_OAuthStates_Kind_PartitionKey_ExpiresAtUtc"
+                ON "OAuthStates" ("Kind", "PartitionKey", "ExpiresAtUtc");
+                """, suppressTransaction: true);
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropTable(
-                name: "OAuthClients");
+            migrationBuilder.Sql("DROP TABLE IF EXISTS \"OAuthClients\";");
 
             migrationBuilder.Sql("DROP INDEX CONCURRENTLY IF EXISTS \"IX_OAuthStates_Kind_PartitionKey_ExpiresAtUtc\";", suppressTransaction: true);
-            migrationBuilder.Sql("SET LOCAL lock_timeout = '5s';");
-
-            migrationBuilder.DropColumn(
-                name: "PartitionKey",
-                table: "OAuthStates");
+            migrationBuilder.Sql("""
+                SET LOCAL lock_timeout = '5s';
+                ALTER TABLE "OAuthStates" DROP COLUMN IF EXISTS "PartitionKey";
+                """);
         }
     }
 }

@@ -90,7 +90,7 @@ public partial class OAuthControllerTests
         _controller.Response.Headers.Remove("Set-Cookie");
         var response = (await _controller.VerifyCode(new("user@example.com", "123456", "state", "challenge", OAuthTestClient.RedirectUri,
             OAuthTestClient.ClientId), default)).Should().BeOfType<OkObjectResult>().Subject;
-        _controller.Response.Headers.SetCookie.Should().ContainSingle().Which.Should().Contain("max-age=300");
+        _controller.Response.Headers.SetCookie.Should().ContainSingle().Which.Should().Contain("max-age=1800");
         _timeProvider.Advance(TimeSpan.FromMinutes(4));
         var url = JsonSerializer.SerializeToElement(response.Value).GetProperty("redirectUrl").GetString()!;
         var ticket = System.Web.HttpUtility.ParseQueryString(new Uri("https://api.example.com" + url).Query)["ticket"]!;
@@ -108,7 +108,7 @@ public partial class OAuthControllerTests
         _timeProvider.Advance(TimeSpan.FromMinutes(4));
         var response = (await _controller.GoogleCallback(pending.GoogleState, "code", null, default))
             .Should().BeOfType<RedirectResult>().Subject;
-        _controller.Response.Headers.SetCookie.Should().ContainSingle().Which.Should().Contain("max-age=300");
+        _controller.Response.Headers.SetCookie.Should().ContainSingle().Which.Should().Contain("max-age=1800");
         original.Should().Contain(_controller.Response.Headers.SetCookie.Single()!.Split(';')[0]);
         _timeProvider.Advance(TimeSpan.FromMinutes(4));
         var ticket = System.Web.HttpUtility.ParseQueryString(new Uri("https://api.example.com" + response.Url).Query)["ticket"]!;

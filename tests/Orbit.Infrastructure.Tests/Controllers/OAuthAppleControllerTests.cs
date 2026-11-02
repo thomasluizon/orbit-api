@@ -99,7 +99,7 @@ public class OAuthAppleControllerTests
         entry.ClientId.Should().Be(clientId);
         entry.ClientName.Should().Be("Claude");
         entry.RedirectUri.Should().Be(Redirect);
-        _controller.Response.Headers.SetCookie.Should().ContainSingle().Which.Should().Contain("max-age=300");
+        _controller.Response.Headers.SetCookie.Should().ContainSingle().Which.Should().Contain("max-age=1800");
     }
 
     [Fact]
@@ -150,7 +150,7 @@ public class OAuthAppleControllerTests
         _controller.Request.Headers.Cookie = originalCookie;
         _controller.Response.Headers.Remove("Set-Cookie");
         _controller.Consent(ticket).Should().BeOfType<ContentResult>();
-        _controller.Response.Headers.SetCookie.Should().ContainSingle().Which.Should().Contain("max-age=300");
+        _controller.Response.Headers.SetCookie.Should().ContainSingle().Which.Should().Contain("max-age=1800");
         (await _controller.AppleCallback(_flow, new() { State = state, Code = "code" }, default)).Should().BeOfType<UnauthorizedResult>();
     }
 

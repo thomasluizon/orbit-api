@@ -8,6 +8,7 @@ namespace Orbit.Api.OAuth;
 public sealed class OAuthAuthorizationStore(IOAuthStateStore states, TimeProvider timeProvider)
 {
     private static readonly TimeSpan CodeExpiry = TimeSpan.FromMinutes(5);
+    internal static readonly TimeSpan BrowserBindingLifetime = TimeSpan.FromMinutes(30);
     internal const int MaxPendingGoogleRequestsPerIp = 20;
     internal const int MaxPendingGoogleRequests = 1_000;
 
@@ -47,7 +48,7 @@ public sealed class OAuthAuthorizationStore(IOAuthStateStore states, TimeProvide
             Encoding.ASCII.GetBytes(Challenge(codeVerifier)), Encoding.ASCII.GetBytes(entry.CodeChallenge)) ? entry : null;
     }
 
-    public string CreateBrowserBinding(string state) => Put("browser", state, CodeExpiry);
+    public string CreateBrowserBinding(string state) => Put("browser", state, BrowserBindingLifetime);
     public string? ReadBrowserBinding(string secret) =>
         Deserialize<string>(states.Read(secret, "browser", timeProvider.GetUtcNow().UtcDateTime));
 

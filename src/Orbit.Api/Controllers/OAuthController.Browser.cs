@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using Orbit.Api.OAuth;
 
 namespace Orbit.Api.Controllers;
 
@@ -16,7 +17,7 @@ public partial class OAuthController
         Secure = true,
         SameSite = SameSiteMode.Lax,
         Path = "/oauth",
-        MaxAge = TimeSpan.FromMinutes(5),
+        MaxAge = OAuthAuthorizationStore.BrowserBindingLifetime,
         IsEssential = true
     });
 

@@ -12,6 +12,9 @@ internal static class RollingMigrationGate
 
     private const RegexOptions SqlOptions = RegexOptions.IgnoreCase | RegexOptions.CultureInvariant;
     private const string Identifier = "(?:\"identifier\"|[a-z_][a-z0-9_$]*)";
+    private static readonly Regex ConcurrentIndexDrop = new(
+        @"\A\s*DROP\s+INDEX\s+CONCURRENTLY\s+IF\s+EXISTS\s+" + Identifier
+        + @"(?:\s*\.\s*" + Identifier + @")?\s*\z", SqlOptions);
     private static readonly Regex AlterTable = new(
         @"\A\s*ALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?(?:ONLY\s+)?" + Identifier
         + @"(?:\s*\.\s*" + Identifier + @")?\s*\*?\s+(?<actions>.+)\z", SqlOptions | RegexOptions.Singleline);
@@ -24,12 +27,13 @@ internal static class RollingMigrationGate
 
     private static bool RequiresSqlContract(string sql)
     {
-        if (ContractSql.IsMatch(sql))
-            return true;
-
         var masked = MaskQuotedSqlAndComments(sql);
         if (masked is null || SplitTopLevel(masked, ';') is not { } statements)
             return true;
+
+        if (ContractSql.IsMatch(sql))
+            return statements.Where(statement => !string.IsNullOrWhiteSpace(statement)).ToArray() is not [var only]
+                || !ConcurrentIndexDrop.IsMatch(only);
 
         foreach (var statement in statements.Where(statement => Regex.IsMatch(statement, @"\bALTER\s+TABLE\b", SqlOptions)))
         {
