@@ -57,7 +57,7 @@ internal static class RollingMigrationGate
         return Regex.IsMatch(tail, @"\A(?:(?:NOT\s+)?NULL\s+)?DEFAULT\s+\S", SqlOptions);
     }
 
-    internal static string? MaskQuotedSqlAndComments(string sql)
+    internal static string? MaskQuotedSqlAndComments(string sql, bool preserveIdentifiers = false)
     {
         var masked = new StringBuilder();
         for (var i = 0; i < sql.Length;)
@@ -84,6 +84,7 @@ internal static class RollingMigrationGate
             }
             else if (sql[i] is '\'' or '"')
             {
+                var quoteStart = i;
                 var quote = sql[i++];
                 var closed = false;
                 while (i < sql.Length)
@@ -98,7 +99,7 @@ internal static class RollingMigrationGate
                 }
                 if (!closed)
                     return null;
-                masked.Append(quote == '"' ? "\"identifier\"" : "'literal'");
+                masked.Append(quote == '"' && preserveIdentifiers ? sql[quoteStart..i] : quote == '"' ? "\"identifier\"" : "'literal'");
             }
             else if (sql[i] == '$' && Regex.Match(sql[i..], @"\A\$(?:[a-z_][a-z0-9_]*)?\$", SqlOptions) is { Success: true } tag)
             {

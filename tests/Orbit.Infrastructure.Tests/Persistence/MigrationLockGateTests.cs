@@ -59,15 +59,15 @@ public class MigrationLockGateTests
     [Fact]
     public void ConstraintsNeedSeparateValidation_AndNotNullNeedsItsValidatedCheck()
     {
-        var add = Sql("SET LOCAL lock_timeout = '5s'; ALTER TABLE \"Habits\" ADD CONSTRAINT \"RequiredTitle\" CHECK (\"Title\" IS NOT NULL) NOT VALID;");
-        var validate = Sql("ALTER TABLE \"Habits\" VALIDATE CONSTRAINT \"RequiredTitle\";");
-        var required = Sql("ALTER TABLE \"Habits\" ALTER COLUMN \"Title\" SET NOT NULL;");
+        var add = Sql("SET lock_timeout = '5s'; ALTER TABLE \"Habits\" ADD CONSTRAINT \"RequiredTitle\" CHECK (\"Title\" IS NOT NULL) NOT VALID;", true);
+        var validate = Sql("SET lock_timeout = '5s'; ALTER TABLE \"Habits\" VALIDATE CONSTRAINT \"RequiredTitle\";", true);
+        var required = Sql("SET lock_timeout = '5s'; ALTER TABLE \"Habits\" ALTER COLUMN \"Title\" SET NOT NULL;");
         MigrationLockGate.Check(Id, [add, validate, required], Policy).Should().BeEmpty();
         MigrationLockGate.Check(Id, [add, required], Policy).Should().NotBeEmpty();
         MigrationLockGate.Check(Id, [required], Policy).Should().NotBeEmpty();
         MigrationLockGate.Check(Id, [Sql(add.Sql + validate.Sql)], Policy).Should().NotBeEmpty();
-        var fk = Sql("SET LOCAL lock_timeout = '5s'; ALTER TABLE \"Habits\" ADD CONSTRAINT \"FK\" FOREIGN KEY (\"UserId\") REFERENCES \"Users\" (\"Id\") NOT VALID;");
-        MigrationLockGate.Check(Id, [fk, Sql("ALTER TABLE \"Habits\" VALIDATE CONSTRAINT \"FK\";")], Policy).Should().BeEmpty();
+        var fk = Sql("SET lock_timeout = '5s'; ALTER TABLE \"Habits\" ADD CONSTRAINT \"FK\" FOREIGN KEY (\"UserId\") REFERENCES \"Users\" (\"Id\") NOT VALID;", true);
+        MigrationLockGate.Check(Id, [fk, Sql("SET lock_timeout = '5s'; ALTER TABLE \"Habits\" VALIDATE CONSTRAINT \"FK\";", true)], Policy).Should().BeEmpty();
     }
 
     [Fact]
@@ -91,6 +91,22 @@ public class MigrationLockGateTests
         MigrationLockGate.Check(Id, [operation], policy).Should().NotBeEmpty();
         policy.Exceptions[Id] = [new("column-rewrite", -1, 0, "unreviewed", "")];
         MigrationLockGate.Check(Id, [operation], policy).Should().NotBeEmpty();
+    }
+
+    [Theory]
+    [InlineData("UPDATE \"Users\" SET \"Name\" = 'a' WHERE \"Id\" > 0 AND \"Id\" <= 100 OR true;")]
+    [InlineData("UPDATE \"Users\" SET \"Name\" = 'a' WHERE true /* WHERE \"Id\" > 0 AND \"Id\" <= 100 */;")]
+    public void UnboundedBatchCannotUseOrOrCommentsAsKeyEvidence(string sql)
+        => MigrationLockGate.Check(Id, [Sql(sql, true)], Policy).Should().NotBeEmpty();
+
+    [Fact]
+    public void ValidationCannotBorrowACheckFromAnotherTable()
+    {
+        var operations = new[] {
+            Sql("SET LOCAL lock_timeout = '5s'; ALTER TABLE \"Tags\" ADD CONSTRAINT \"RequiredTitle\" CHECK (\"Title\" IS NOT NULL) NOT VALID;"),
+            Sql("ALTER TABLE \"Habits\" VALIDATE CONSTRAINT \"RequiredTitle\";"),
+            Sql("ALTER TABLE \"Habits\" ALTER COLUMN \"Title\" SET NOT NULL;") };
+        MigrationLockGate.Check(Id, operations, Policy).Should().NotBeEmpty();
     }
 
     [Fact]

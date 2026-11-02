@@ -93,7 +93,12 @@ internal sealed class MigrationLockGate(string id, MigrationLockPolicy policy)
             if (Matches(raw, @"\b(?:CREATE\s+(?:UNIQUE\s+)?INDEX|DROP\s+INDEX)\b"))
                 Index(raw, Matches(raw, @"\bINDEX\s+CONCURRENTLY\b"), sql.SuppressTransaction);
             if (Matches(raw, @"\b(?:UPDATE|DELETE\s+FROM)\b")) InspectBatch(sql, statements);
-            if (Matches(raw, @"^ALTER\s+TABLE\b")) InspectAlter(raw, sql.Sql);
+            if (Matches(raw, @"^ALTER\s+TABLE\b"))
+            {
+                if (Matches(raw, @"\b(?:NOT\s+VALID|VALIDATE\s+CONSTRAINT)\b") && !sql.SuppressTransaction)
+                    Fail("not-valid-constraint", "Add and validate constraints in separate transaction-suppressed operations so the initial table lock is released before validation.");
+                InspectAlter(raw, sql.Sql);
+            }
         }
         if (sql.SuppressTransaction || Matches(masked, @"\bRESET\s+lock_timeout\b")) lockTimeout = false;
     }
@@ -106,9 +111,10 @@ internal sealed class MigrationLockGate(string id, MigrationLockPolicy policy)
 
     private void InspectBatch(SqlOperation sql, List<string> statements)
     {
-        var keyed = Matches(sql.Sql, "WHERE\\s+\"Id\"\\s*>\\s*[^;]+\\s+AND\\s+\"Id\"\\s*<=\\s*[^;]+");
+        var clean = RollingMigrationGate.MaskQuotedSqlAndComments(sql.Sql, preserveIdentifiers: true) ?? "";
+        var keyed = Matches(clean, "WHERE\\s+\"Id\"\\s*>\\s*(?:-?[0-9]+|'literal')\\s+AND\\s+\"Id\"\\s*<=\\s*(?:-?[0-9]+|'literal')\\s*;?\\s*$");
         var writes = statements.Count(statement => Matches(statement, @"\b(?:UPDATE|DELETE\s+FROM)\b"));
-        if (!sql.SuppressTransaction || !keyed || writes != 1 || Matches(sql.Sql, @"\b(?:BEGIN|START\s+TRANSACTION)\b"))
+        if (!sql.SuppressTransaction || !keyed || writes != 1 || Matches(clean, @"\b(?:BEGIN|START\s+TRANSACTION|OR)\b"))
             Fail("batched-data", "Use a keyed Id WHERE range per Sql operation and SuppressTransaction so each bounded batch commits independently.");
     }
 
@@ -123,14 +129,15 @@ internal sealed class MigrationLockGate(string id, MigrationLockPolicy policy)
         if (Matches(masked, @"\bSET\s+NOT\s+NULL\b")) RequireValidatedCheck(sql);
     }
 
-    private static string Constraint(string sql) => Regex.Match(sql, "CONSTRAINT\\s+\"(?<name>[^\"]+)\"", Options).Groups["name"].Value;
+    private static string Table(string sql) => Regex.Match(sql, "ALTER\\s+TABLE\\s+(?<table>\"[^\"]+\"(?:\\.\"[^\"]+\")?)", Options).Groups["table"].Value;
+    private static string Constraint(string sql) => Table(sql) + "." + Regex.Match(sql, "CONSTRAINT\\s+\"(?<name>[^\"]+)\"", Options).Groups["name"].Value;
     private void AddConstraint(string sql)
     {
         var identity = Constraint(sql);
         if (identity.Length == 0) Fail("review-sql", "Use quoted constraint identifiers so validation evidence can be matched.");
         notValid.Add(identity);
         var check = Regex.Match(sql, "CHECK\\s*\\(\\s*\"(?<column>[^\"]+)\"\\s+IS\\s+NOT\\s+NULL\\s*\\)", Options);
-        if (check.Success) nullChecks[check.Groups["column"].Value] = identity;
+        if (check.Success) nullChecks[Table(sql) + "." + check.Groups["column"].Value] = identity;
     }
     private void ValidateConstraint(string sql)
     {
@@ -142,7 +149,7 @@ internal sealed class MigrationLockGate(string id, MigrationLockPolicy policy)
     private void RequireValidatedCheck(string sql)
     {
         var column = Regex.Match(sql, "ALTER\\s+(?:COLUMN\\s+)?\"(?<column>[^\"]+)\"\\s+SET\\s+NOT\\s+NULL", Options).Groups["column"].Value;
-        if (!nullChecks.TryGetValue(column, out var constraint) || !validated.Contains(constraint))
+        if (!nullChecks.TryGetValue(Table(sql) + "." + column, out var constraint) || !validated.Contains(constraint))
             Fail("validated-not-null", "SET NOT NULL requires a previously validated check for the same column.");
     }
 }

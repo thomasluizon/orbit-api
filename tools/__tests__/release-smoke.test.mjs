@@ -38,3 +38,12 @@ test('production smoke only authenticates and reads', async () => {
   assert.deepEqual(h.calls, ['POST /api/auth/send-code', 'POST /api/auth/verify-code', 'GET /api/habits/count'])
   await assert.rejects(smoke('https://api.useorbit.org', { ...options, ...h, write: true }), /staging/)
 })
+test('malformed login JSON cannot expose response text in diagnostics', async () => {
+  const h = harness()
+  const fetcher = (url, init) => url.pathname.endsWith('verify-code')
+    ? Promise.resolve(new Response('private-token-response')) : h.fetcher(url, init)
+  await assert.rejects(smoke('https://api.useorbit.org', { ...options, fetcher }), error => {
+    assert.equal(error.message, 'Smoke sign-in returned invalid JSON')
+    return true
+  })
+})

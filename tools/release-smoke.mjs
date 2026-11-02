@@ -22,14 +22,18 @@ export async function smoke(origin, { email, code, turnstileToken, write = false
   }
   const json = body => ({ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
   await request('/api/auth/send-code', json({ email, turnstileToken }), true)
-  const login = await (await request('/api/auth/verify-code', json({ email, code, turnstileToken }))).json()
+  const loginResponse = await request('/api/auth/verify-code', json({ email, code, turnstileToken }))
+  let login
+  try { login = await loginResponse.json() } catch { throw new Error('Smoke sign-in returned invalid JSON') }
   if (typeof login.token !== 'string' || !login.token) throw new Error('Smoke sign-in returned no token')
   const headers = { Authorization: `Bearer ${login.token}`, 'Content-Type': 'application/json' }
   await request('/api/habits/count', { headers })
   if (write) {
-    const created = await (await request('/api/habits', {
+    const createResponse = await request('/api/habits', {
       method: 'POST', headers, body: JSON.stringify({ title: `Release smoke ${randomUUID()}`, isGeneral: true }),
-    })).json()
+    })
+    let created
+    try { created = await createResponse.json() } catch { throw new Error('Smoke create returned invalid JSON') }
     if (typeof created.id !== 'string' || !/^[0-9a-f-]{36}$/i.test(created.id)) throw new Error('Smoke create returned no habit id')
     await request(`/api/habits/${created.id}`, { method: 'DELETE', headers })
   }
