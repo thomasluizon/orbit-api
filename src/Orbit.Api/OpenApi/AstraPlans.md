@@ -60,11 +60,12 @@ to receive the additive fields, and existing parts and action blocks retain
 their composition and approval behavior.
 
 Offline cost evidence uses the `o200k_base` tokenizer and SDK-serialized
-requests from the same local transport as the #1916 cache checks. The baseline
+requests and function calls from the same local transport as the #1916 cache checks. The baseline
 removes only the plan declaration and instruction. A representative two-tool
-turn adds 290 input tokens and 52 output tokens. With the existing warm static
-prefix, 47,806 input tokens (46,976 cached) and 95 output tokens cost
-0.00062101 USD under the configured prices, below the 0.0009 USD warm-call
+turn adds 290 input tokens and 64 output tokens, conservatively including the
+function-call envelopes. With the existing warm static prefix, 47,806 input
+tokens (46,976 cached) and 121 output tokens cost 0.00063401 USD under the
+configured prices, below the 0.0009 USD warm-call
 ceiling. Cold requests retain #1916's separate cold-start bounds. Reproduce with
 `dotnet test tests/Orbit.Infrastructure.Tests --filter FullyQualifiedName~Plan_TwoToolTokenDeltaFitsExistingWarmCallCeiling`.
 The measurement writes `orbit-1976-plan-cost.txt` in the process temporary

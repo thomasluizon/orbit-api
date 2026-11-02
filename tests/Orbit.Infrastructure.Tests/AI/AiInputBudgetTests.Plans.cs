@@ -1,3 +1,6 @@
+#pragma warning disable OPENAI001
+
+using System.ClientModel.Primitives;
 using System.Text.Json;
 using FluentAssertions;
 using Microsoft.Extensions.Configuration;
@@ -6,6 +9,7 @@ using Orbit.Domain.Entities;
 using Orbit.Domain.Models;
 using Orbit.Infrastructure.AI;
 using Orbit.Infrastructure.Configuration;
+using OpenAI.Responses;
 
 namespace Orbit.Infrastructure.Tests.AI;
 
@@ -37,18 +41,21 @@ public partial class AiInputBudgetTests
             title = "Your progress",
             steps = new[] { new { text = "Read habits", tool = "query_habits", phase = "execution" }, new { text = "Read goals", tool = "query_goals", phase = "execution" } }
         }));
-        var outputBefore = Count(JsonSerializer.Serialize(actions));
-        var outputAfter = Count(JsonSerializer.Serialize(new[] { planCall }.Concat(actions)));
+        var outputBefore = Count(string.Concat(actions.Select(PlanOutput)));
+        var outputAfter = Count(string.Concat(new[] { planCall }.Concat(actions).Select(PlanOutput)));
         var settings = new ConfigurationBuilder().AddJsonFile(Path.Combine(AppContext.BaseDirectory, "appsettings.json")).Build().GetSection("AI").Get<AiSettings>()!;
         var price = AiRequestCostEstimator.GetPrice(settings, "gpt-6-luna");
         var shared = CachedPrefixTokens([CostStaticPrefix(after)], after);
         var cached = shared >= 1024 ? shared / 128 * 128 : 0;
         var cost = ((inputs - cached) * price.CacheWritePerMillionUsd!.Value + cached * price.CachedInputPerMillionUsd
             + outputAfter * price.OutputPerMillionUsd) / 1_000_000;
-        var report = FormattableString.Invariant($"o200k_base, SDK-serialized request, model-port tool output; input delta {inputDelta}; output delta {outputAfter - outputBefore}; input {inputs}; cached {cached}; output {outputAfter}; warm two-tool call USD {cost:F8}.");
+        var report = FormattableString.Invariant($"o200k_base, SDK-serialized request and function calls; input delta {inputDelta}; output delta {outputAfter - outputBefore}; input {inputs}; cached {cached}; output {outputAfter}; warm two-tool call USD {cost:F8}.");
         output.WriteLine(report);
         await File.WriteAllTextAsync(Path.Combine(Path.GetTempPath(), "orbit-1976-plan-cost.txt"), report);
         inputDelta.Should().BePositive();
         cost.Should().BeLessThanOrEqualTo(0.0009m, report);
     }
+
+    private static string PlanOutput(AiToolCall call) => ModelReaderWriter.Write(ResponseItem.CreateFunctionCallItem(
+        call.Id, call.Name, BinaryData.FromString(call.Args.GetRawText()))).ToString();
 }
