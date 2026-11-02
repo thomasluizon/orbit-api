@@ -82,7 +82,7 @@ public class McpPlanAccessTests
             Substitute.For<IAppConfigService>(), Substitute.For<IUserDateService>(), Substitute.For<IFeatureFlagService>());
         var catalog = new AgentCatalogService();
         var policy = Substitute.For<IAgentPolicyEvaluator>();
-        policy.Evaluate(Arg.Any<AgentPolicyEvaluationContext>())
+        policy.EvaluateAsync(Arg.Any<AgentPolicyEvaluationContext>())
             .Returns(new AgentPolicyDecision(
                 AgentPolicyDecisionStatus.Allowed, catalog.GetCapabilityByMcpTool("list_habits")));
         var rateLimiter = Substitute.For<IDistributedRateLimitService>();

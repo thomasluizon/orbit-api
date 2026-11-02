@@ -23,7 +23,7 @@ public class JoinWaitlistCommandHandlerTests
             SigningKey = "k",
             ApiBaseUrl = "https://api.useorbit.org"
         });
-        _handler = new JoinWaitlistCommandHandler(_cache, _tokenService, _emailService, settings);
+        _handler = new JoinWaitlistCommandHandler(ChallengeTestDatabase.For(_cache).Store(), _tokenService, _emailService, settings);
     }
 
     [Fact]

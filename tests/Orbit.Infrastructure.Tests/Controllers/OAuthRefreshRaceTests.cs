@@ -59,7 +59,7 @@ public class OAuthRefreshRaceTests
                 payGate.CanManageApiKeys(user.Id, Arg.Any<CancellationToken>()).Returns(Result.Success());
                 var appConfig = Substitute.For<IAppConfigService>();
                 using var cache = new MemoryCache(new MemoryCacheOptions());
-                var authorization = new ApiKeyManagementAuthorization(appConfig, new EmailChallengeService(cache, TimeProvider.System));
+                var authorization = new ApiKeyManagementAuthorization(appConfig, new EmailChallengeService(ChallengeTestDatabase.For(cache).Store(TimeProvider.System)));
                 var revoker = new RevokeApiKeyCommandHandler(new GenericRepository<ApiKey>(revokeDb), payGate,
                     new UnitOfWork(revokeDb, new DatabaseConnectionSettings()), cache, authorization);
                 (await revoker.Handle(new(user.Id, key.Id), default)).IsSuccess.Should().BeTrue();

@@ -38,7 +38,7 @@ public interface IAgentCatalogService
 
 public interface IAgentPolicyEvaluator
 {
-    AgentPolicyDecision Evaluate(AgentPolicyEvaluationContext context);
+    Task<AgentPolicyDecision> EvaluateAsync(AgentPolicyEvaluationContext context);
 }
 
 public interface IPendingAgentOperationStore
@@ -125,7 +125,7 @@ public interface IAgentStepUpAuthorizationBridge
         string capabilityId,
         CancellationToken cancellationToken = default);
 
-    void OnStepUpVerified(string capabilityId, Guid userId);
+    Task OnStepUpVerifiedAsync(string capabilityId, Guid userId);
 }
 
 public interface IAgentAuditService

@@ -423,7 +423,7 @@ public class OAuthControllerTests : IDisposable
         traces[0].Should().Equal(traces[1]);
         traces[0].Should().Equal("exchange", "upsert", "save", "session", "enqueue");
         using var cache = new MemoryCache(new MemoryCacheOptions());
-        cache.Set("verify:email@example.com", new VerificationEntry("123456", 0, DateTime.UtcNow));
+        ChallengeTestDatabase.For(cache).Seed("verify:email@example.com", "123456");
         var emailStore = Substitute.For<IAuthUserStore>();
         User? emailUser = null;
         emailStore.UpsertAsync(Arg.Any<User>(), Arg.Any<CancellationToken>()).Returns(call => emailUser = call.Arg<User>());
@@ -433,7 +433,8 @@ public class OAuthControllerTests : IDisposable
         var emailWork = Substitute.For<IUnitOfWork>();
         emailWork.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task<Result<LoginResponse>>>>(), Arg.Any<CancellationToken>())
             .Returns(call => call.Arg<Func<CancellationToken, Task<Result<LoginResponse>>>>()(call.Arg<CancellationToken>()));
-        var verify = new VerifyCodeCommandHandler(cache, emailStore, emailWork, emailSessions, new SignupJobDispatcher(Substitute.For<IBackgroundJobClient>(), new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance), Substitute.For<IBackgroundJobClient>(), new AccountReactivation(Substitute.For<IGenericRepository<OwedSubscriptionCancellation>>()));
+        var verify = new VerifyCodeCommandHandler(
+            ChallengeTestDatabase.For(cache).Store(), emailStore, emailWork, emailSessions, new SignupJobDispatcher(Substitute.For<IBackgroundJobClient>(), new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance), Substitute.For<IBackgroundJobClient>(), new AccountReactivation(Substitute.For<IGenericRepository<OwedSubscriptionCancellation>>()));
 
         (await verify.Handle(new VerifyCodeCommand("email@example.com", "123456"), CancellationToken.None)).IsSuccess.Should().BeTrue();
 
@@ -1038,7 +1039,7 @@ public class OAuthControllerTests : IDisposable
     {
         using var cache = new MemoryCache(new MemoryCacheOptions());
         var jobs = Substitute.For<IBackgroundJobClient>();
-        var handler = new SendCodeCommandHandler(cache, jobs);
+        var handler = new SendCodeCommandHandler(ChallengeTestDatabase.For(cache).Store(), ChallengeTestDatabase.Environment(), jobs);
         _mediator.Send(Arg.Any<SendCodeCommand>(), Arg.Any<CancellationToken>())
             .Returns(call => handler.Handle((SendCodeCommand)call[0], CancellationToken.None));
         var verifier = Substitute.For<ITurnstileVerificationService>();
@@ -1076,7 +1077,7 @@ public class OAuthControllerTests : IDisposable
         var result = (context.Result ?? actionResult).Should().BeAssignableTo<ObjectResult>().Subject;
         result.StatusCode.Should().Be(statusCode);
         var delivered = statusCode == 200;
-        cache.TryGetValue("verify:oauth-person@example.com", out _).Should().Be(delivered);
+        ChallengeTestDatabase.For(cache).HasCode("verify:oauth-person@example.com").Should().Be(delivered);
         jobs.Received(delivered ? 1 : 0).Create(Arg.Any<Job>(), Arg.Any<IState>());
         if (delivered)
             await _mediator.Received(1).Send(Arg.Is<SendCodeCommand>(command => command.Language == "pt-BR"), Arg.Any<CancellationToken>());

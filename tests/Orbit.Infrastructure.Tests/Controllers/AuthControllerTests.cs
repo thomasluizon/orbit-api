@@ -105,13 +105,13 @@ public partial class AuthControllerTests
                     : call.Arg<Orbit.Domain.Entities.User>());
             using var cache = new MemoryCache(new MemoryCacheOptions());
             if (mode != "absent")
-                cache.Set("verify:person@example.com", new VerificationEntry("123456", 0, DateTime.UtcNow));
+                ChallengeTestDatabase.For(cache).Seed("verify:person@example.com", "123456");
             if (mode == "expired")
-                cache.Set("verify:person@example.com", new VerificationEntry("123456", 0, DateTime.UtcNow),
-                    new MemoryCacheEntryOptions { AbsoluteExpiration = DateTimeOffset.UtcNow.AddMinutes(-1) });
+                ChallengeTestDatabase.For(cache).Seed("verify:person@example.com", "123456", expired: true);
             if (mode == "throttled")
-                cache.Set("verify-attempts:person@example.com", 3);
-            var handler = new VerifyCodeCommandHandler(cache, store, work, sessions, new SignupJobDispatcher(jobs, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance), jobs, new AccountReactivation(Substitute.For<IGenericRepository<OwedSubscriptionCancellation>>()));
+                ChallengeTestDatabase.For(cache).SetAttempts("verify:person@example.com", 3);
+            var handler = new VerifyCodeCommandHandler(
+            ChallengeTestDatabase.For(cache).Store(), store, work, sessions, new SignupJobDispatcher(jobs, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance), jobs, new AccountReactivation(Substitute.For<IGenericRepository<OwedSubscriptionCancellation>>()));
             _mediator.Send(Arg.Any<VerifyCodeCommand>(), Arg.Any<CancellationToken>())
                 .Returns(call => handler.Handle(call.Arg<VerifyCodeCommand>(), call.Arg<CancellationToken>()));
 

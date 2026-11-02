@@ -13,8 +13,29 @@ namespace Orbit.Infrastructure.Tests.Extensions;
 /// section/key must throw a specific <see cref="InvalidOperationException"/> at
 /// boot rather than surfacing as a null-reference deep in a request path.
 /// </summary>
+[Collection("ProcessEnvironment")]
 public class StartupConfigValidationTests
 {
+    [Theory]
+    [InlineData("review@example.com:123456")]
+    [InlineData("")]
+    public void ValidateOrbitSecuritySettings_ProductionWithTestAccounts_Throws(string accounts)
+    {
+        var previous = Environment.GetEnvironmentVariable("TEST_ACCOUNTS");
+        try
+        {
+            Environment.SetEnvironmentVariable("TEST_ACCOUNTS", accounts);
+            var builder = BuildWith(ValidJwt());
+            builder.Environment.EnvironmentName = "Production";
+            Action validate = () => builder.ValidateOrbitSecuritySettings();
+            validate.Should().Throw<InvalidOperationException>().WithMessage("*TEST_ACCOUNTS*");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("TEST_ACCOUNTS", previous);
+        }
+    }
+
     [Theory]
     [InlineData(0, 0)]
     [InlineData(-1, 0)]

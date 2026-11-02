@@ -218,7 +218,7 @@ public partial class ProcessUserChatCommandHandlerTests
         var handler = CreateHandler(tool);
         var gateway = InstallCorrectionGateway(tool);
         var capability = new AgentCatalogService([tool]).GetCapabilityByChatTool(tool.Name)!;
-        gateway.Policy.Evaluate(Arg.Any<AgentPolicyEvaluationContext>()).Returns(
+        gateway.Policy.EvaluateAsync(Arg.Any<AgentPolicyEvaluationContext>()).Returns(
             new AgentPolicyDecision(AgentPolicyDecisionStatus.Denied, capability, "synthetic_correction_policy_denial"));
         SetupAiResponse(ToolResponse(tool.Name, "rejected", WithMinuteSeconds(ProductionAdaptationArguments)));
         QueueCorrection(ParseArguments(ProductionAdaptationArguments));
@@ -290,7 +290,7 @@ public partial class ProcessUserChatCommandHandlerTests
 
         gateway.Requests.Should().HaveCount(2);
         gateway.Responses[1].Operation.ConfirmationRequirement.Should().Be(AgentConfirmationRequirement.StepUp);
-        gateway.Policy.Received(1).Evaluate(Arg.Is<AgentPolicyEvaluationContext>(context =>
+        await gateway.Policy.Received(1).EvaluateAsync(Arg.Is<AgentPolicyEvaluationContext>(context =>
             context.ConfirmationRequirementOverride == AgentConfirmationRequirement.StepUp));
         result.Value.Actions.Should().BeEmpty();
         result.Value.PendingOperations.Should().ContainSingle();
@@ -325,7 +325,7 @@ public partial class ProcessUserChatCommandHandlerTests
         var handler = CreateHandler(tool);
         var gateway = InstallCorrectionGateway(tool);
         var capability = new AgentCatalogService([tool]).GetCapabilityByChatTool(tool.Name)!;
-        gateway.Policy.Evaluate(Arg.Any<AgentPolicyEvaluationContext>()).Returns(call =>
+        gateway.Policy.EvaluateAsync(Arg.Any<AgentPolicyEvaluationContext>()).Returns(call =>
             new AgentPolicyDecision(call.ArgAt<AgentPolicyEvaluationContext>(0).GrantedScopes.Contains(capability.Scope)
                 ? AgentPolicyDecisionStatus.Allowed : AgentPolicyDecisionStatus.Denied, capability, "synthetic_scope_check"));
         SetupAiResponse(ToolResponse(tool.Name, "rejected", WithMinuteSeconds(ProductionAdaptationArguments)));

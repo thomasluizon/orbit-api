@@ -141,7 +141,7 @@ public sealed partial class OfferDeadlineControllerTests
         }));
         var blocks = new ReadBlockFactory(dates, tokens, users);
         IAgentPolicyEvaluator policy = Substitute.For<IAgentPolicyEvaluator>();
-        policy.Evaluate(Arg.Any<AgentPolicyEvaluationContext>()).Returns(call => new AgentPolicyDecision(
+        policy.EvaluateAsync(Arg.Any<AgentPolicyEvaluationContext>()).Returns(call => new AgentPolicyDecision(
             AgentPolicyDecisionStatus.Allowed, catalog.GetCapability(call.Arg<AgentPolicyEvaluationContext>().CapabilityId)!));
         var work = Substitute.For<IUnitOfWork>();
         work.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())

@@ -233,8 +233,8 @@ public sealed class CheckChatCommandQueryHandler(IServiceProvider services) : IR
     {
         var user = await Repository<User>().GetByIdAsync(command.UserId, ct);
         return user is null ? Result.Failure(ErrorMessages.UserNotFound)
-            : services.GetRequiredService<Orbit.Application.Auth.Services.EmailChallengeService>()
-                .CheckConfirmation(Orbit.Application.Auth.Services.EmailChallengeOperation.AccountDeletion, user.Email, command.Code);
+            : await services.GetRequiredService<Orbit.Application.Auth.Services.EmailChallengeService>()
+                .CheckConfirmationAsync(Orbit.Application.Auth.Services.EmailChallengeOperation.AccountDeletion, user.Email, command.Code);
     }
 
     private Task<Result> CheckSubHabitAsync(CreateSubHabitCommand command, CancellationToken ct) =>

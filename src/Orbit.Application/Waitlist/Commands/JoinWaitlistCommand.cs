@@ -1,5 +1,5 @@
 using MediatR;
-using Microsoft.Extensions.Caching.Memory;
+using Orbit.Application.Auth.Services;
 using Microsoft.Extensions.Options;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
@@ -10,7 +10,7 @@ namespace Orbit.Application.Waitlist.Commands;
 public record JoinWaitlistCommand(string Email, string Language = "en") : IRequest<Result>;
 
 public class JoinWaitlistCommandHandler(
-    IMemoryCache cache,
+    IEmailChallengeStore challenges,
     IWaitlistConfirmationTokenService tokenService,
     IEmailService emailService,
     IOptions<WaitlistSettings> waitlistOptions) : IRequestHandler<JoinWaitlistCommand, Result>
@@ -23,23 +23,13 @@ public class JoinWaitlistCommandHandler(
             return Result.Failure("Unsupported waitlist language.");
 
         var email = request.Email.Trim().ToLowerInvariant();
-        var cacheKey = $"waitlist:{email}";
-
-        if (cache.TryGetValue(cacheKey, out DateTime lastSentAt) &&
-#pragma warning disable ORBIT0004 // The lastSentAt comparison enforces a 60-second waitlist email resend interval against a cached UTC instant. https://github.com/thomasluizon/orbit-tickets/issues/230
-            (DateTime.UtcNow - lastSentAt).TotalSeconds < 60)
-#pragma warning restore ORBIT0004
+        if (!await challenges.TryThrottleAsync("waitlist", email, TimeSpan.FromSeconds(60), cancellationToken))
             return Result.Success();
 
         var token = tokenService.CreateToken(email, language);
         var confirmUrl = $"{_settings.ApiBaseUrl.TrimEnd('/')}/api/waitlist/confirm?token={Uri.EscapeDataString(token)}";
 
         await emailService.SendWaitlistConfirmationAsync(email, confirmUrl, language, cancellationToken);
-
-        cache.Set(cacheKey, DateTime.UtcNow, new MemoryCacheEntryOptions
-        {
-            AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5)
-        });
 
         return Result.Success();
     }

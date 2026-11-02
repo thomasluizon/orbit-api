@@ -36,7 +36,7 @@ public partial class ProcessUserChatCommandHandlerTests
         var handler = CreateHandler(tool);
         var catalog = new AgentCatalogService([tool]);
         var policy = Substitute.For<IAgentPolicyEvaluator>();
-        policy.Evaluate(Arg.Any<AgentPolicyEvaluationContext>()).Returns(call => new AgentPolicyDecision(
+        policy.EvaluateAsync(Arg.Any<AgentPolicyEvaluationContext>()).Returns(call => new AgentPolicyDecision(
             AgentPolicyDecisionStatus.ConfirmationRequired, catalog.GetCapability(call.Arg<AgentPolicyEvaluationContext>().CapabilityId)!,
             PendingOperation: new(Guid.NewGuid(), call.Arg<AgentPolicyEvaluationContext>().CapabilityId, "Create habit", "Preview", AgentRiskClass.Low,
                 AgentConfirmationRequirement.FreshConfirmation, TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(10))));
@@ -156,7 +156,7 @@ public partial class ProcessUserChatCommandHandlerTests
         var catalog = new AgentCatalogService([tool]);
         var policy = Substitute.For<IAgentPolicyEvaluator>();
         var pendingId = Guid.NewGuid();
-        policy.Evaluate(Arg.Any<AgentPolicyEvaluationContext>()).Returns(call =>
+        policy.EvaluateAsync(Arg.Any<AgentPolicyEvaluationContext>()).Returns(call =>
         {
             var context = call.Arg<AgentPolicyEvaluationContext>();
             using var args = JsonDocument.Parse(context.OperationArgumentsJson!);

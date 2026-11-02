@@ -23,7 +23,7 @@ public class ConfirmAccountDeletionCommandHandler(
         if (user is null)
             return Result.Failure<DateTime>(ErrorMessages.UserNotFound);
 
-        var confirmation = challengeService.Confirm(
+        var confirmation = await challengeService.ConfirmAsync(
             EmailChallengeOperation.AccountDeletion,
             user.Email,
             request.Code);

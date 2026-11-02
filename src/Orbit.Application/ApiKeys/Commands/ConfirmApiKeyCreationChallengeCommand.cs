@@ -23,14 +23,14 @@ public sealed class ConfirmApiKeyCreationChallengeCommandHandler(
         if (user is null)
             return Result.Failure(ErrorMessages.UserNotFound);
 
-        var confirmation = challengeService.Confirm(
+        var confirmation = await challengeService.ConfirmAsync(
             EmailChallengeOperation.ApiKeyManagement,
             user.Email,
             request.Code);
         if (confirmation.IsFailure)
             return confirmation.PropagateError();
 
-        authorization.Grant(request.UserId, confirmation.Value.RemainingLifetime);
+        await authorization.GrantAsync(request.UserId, confirmation.Value.RemainingLifetime);
 
         return Result.Success();
     }

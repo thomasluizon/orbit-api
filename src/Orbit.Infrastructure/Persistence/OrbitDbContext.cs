@@ -33,6 +33,7 @@ public class OrbitDbContext : DbContext
     internal CancellationToken? TransactionCompletionToken { get; set; }
 
     public DbSet<OwedSubscriptionCancellation> OwedSubscriptionCancellations => Set<OwedSubscriptionCancellation>();
+    public DbSet<EmailChallenge> EmailChallenges => Set<EmailChallenge>();
     public DbSet<User> Users => Set<User>();
     public DbSet<MarketingContact> MarketingContacts => Set<MarketingContact>();
     public DbSet<Habit> Habits => Set<Habit>();
@@ -84,6 +85,16 @@ public class OrbitDbContext : DbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<EmailChallenge>(entity =>
+        {
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Operation).HasMaxLength(64).IsRequired();
+            entity.Property(row => row.Subject).HasMaxLength(320).IsRequired();
+            entity.Property(row => row.CodeHash).IsRequired();
+            entity.Property(row => row.Attempts).IsConcurrencyToken();
+            entity.HasIndex(row => new { row.Operation, row.Subject }).IsUnique();
+            entity.HasIndex(row => row.ExpiresAtUtc);
+        });
         modelBuilder.Entity<TransactionCommit>(entity =>
         {
             entity.ToTable("TransactionCommits");

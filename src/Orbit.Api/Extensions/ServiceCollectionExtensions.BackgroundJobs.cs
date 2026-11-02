@@ -63,6 +63,7 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddHostedService<StreakGoalSyncService>();
         builder.Services.AddHostedService<SyncCleanupService>();
         builder.Services.AddHostedService<PlayNotificationCleanupService>();
+        builder.Services.AddHostedService<AuthStateCleanupService>();
         builder.Services.AddHostedService<CalendarAutoSyncService>();
         builder.Services.AddHostedService<NotionAutoSyncService>();
         builder.Services.AddHostedService<AiUsageSummaryService>();
@@ -115,6 +116,7 @@ public static partial class ServiceCollectionExtensions
         AddScheduledJob<StreakGoalSyncService>(builder);
         AddScheduledJob<SyncCleanupService>(builder);
         AddScheduledJob<PlayNotificationCleanupService>(builder);
+        AddScheduledJob<AuthStateCleanupService>(builder);
         AddScheduledJob<CalendarAutoSyncService>(builder);
         AddScheduledJob<NotionAutoSyncService>(builder);
         AddScheduledJob<AiUsageSummaryService>(builder);

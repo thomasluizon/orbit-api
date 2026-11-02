@@ -1,4 +1,4 @@
-﻿using System.Linq.Expressions;
+using System.Linq.Expressions;
 using FluentAssertions;
 using Microsoft.Extensions.Caching.Memory;
 using NSubstitute;
@@ -12,7 +12,7 @@ using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Tests.Commands.ApiKeys;
 
-public class CreateApiKeyCommandHandlerTests
+public class CreateApiKeyCommandHandlerTests : IAsyncLifetime
 {
     private readonly IGenericRepository<ApiKey> _apiKeyRepo = Substitute.For<IGenericRepository<ApiKey>>();
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
@@ -26,7 +26,7 @@ public class CreateApiKeyCommandHandlerTests
 
     public CreateApiKeyCommandHandlerTests()
     {
-        _challengeService = new EmailChallengeService(_cache, TimeProvider.System);
+        _challengeService = new EmailChallengeService(ChallengeTestDatabase.For(_cache).Store(TimeProvider.System));
         _handler = new CreateApiKeyCommandHandler(
             _apiKeyRepo,
             _payGate,
@@ -39,7 +39,6 @@ public class CreateApiKeyCommandHandlerTests
                 false,
                 Arg.Any<CancellationToken>())
             .Returns(true);
-        AuthorizeCreation();
 
         _payGate.CanCreateApiKeys(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success());
@@ -50,6 +49,9 @@ public class CreateApiKeyCommandHandlerTests
             .Returns(0);
     }
 
+    public Task InitializeAsync() => AuthorizeAsync();
+    public Task DisposeAsync() => Task.CompletedTask;
+
     [Fact]
     public async Task Handle_WithoutChallenge_ReturnsNamedRefusalAndWritesNothing()
     {
@@ -59,7 +61,7 @@ public class CreateApiKeyCommandHandlerTests
             _payGate,
             _unitOfWork,
             emptyCache,
-            new ApiKeyManagementAuthorization(_appConfigService, new EmailChallengeService(emptyCache, TimeProvider.System)));
+            new ApiKeyManagementAuthorization(_appConfigService, new EmailChallengeService(ChallengeTestDatabase.For(emptyCache).Store(TimeProvider.System))));
 
         var result = await handler.Handle(
             new CreateApiKeyCommand(UserId, "My API Key"),
@@ -198,7 +200,7 @@ public class CreateApiKeyCommandHandlerTests
                 false,
                 Arg.Any<CancellationToken>())
             .Returns(false);
-        _challengeService.TryConsumeAuthorization(EmailChallengeOperation.ApiKeyManagement, UserId);
+        await _challengeService.TryConsumeAuthorizationAsync(EmailChallengeOperation.ApiKeyManagement, UserId);
 
         var result = await _handler.Handle(
             new CreateApiKeyCommand(UserId, "Kill switch path"),
@@ -208,7 +210,7 @@ public class CreateApiKeyCommandHandlerTests
         await _apiKeyRepo.Received(1).AddAsync(Arg.Any<ApiKey>(), Arg.Any<CancellationToken>());
     }
 
-    private void AuthorizeCreation() => _challengeService.AuthorizeOnce(
+    private Task AuthorizeAsync() => _challengeService.AuthorizeOnceAsync(
         EmailChallengeOperation.ApiKeyManagement,
         UserId,
         TimeSpan.FromMinutes(10));

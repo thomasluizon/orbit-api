@@ -24,6 +24,7 @@ public class SendCodeCommandHandlerTests
     private readonly MemoryCache _cache = new(new MemoryCacheOptions());
     private readonly IBackgroundJobClient _backgroundJobClient = Substitute.For<IBackgroundJobClient>();
     private readonly SendCodeCommandHandler _handler;
+    private readonly Microsoft.Extensions.Hosting.IHostEnvironment _environment = ChallengeTestDatabase.Environment();
     private Job? _enqueuedJob;
 
     private const string SmokeEmail = "smoke@useorbit.org";
@@ -32,15 +33,49 @@ public class SendCodeCommandHandlerTests
     public SendCodeCommandHandlerTests()
     {
         _backgroundJobClient.Create(Arg.Do<Job>(job => _enqueuedJob = job), Arg.Any<IState>());
-        _handler = new SendCodeCommandHandler(_cache, _backgroundJobClient);
+        _handler = new SendCodeCommandHandler(ChallengeTestDatabase.For(_cache).Store(), _environment, _backgroundJobClient);
+    }
+
+    [Theory]
+    [InlineData("Development", true)]
+    [InlineData("Staging", true)]
+    [InlineData("Production", false)]
+    [InlineData("", false)]
+    public async Task TestAccountCode_IsLimitedToDevelopmentAndStaging(string environmentName, bool fixedCodeAllowed)
+    {
+        var previous = Environment.GetEnvironmentVariable("TEST_ACCOUNTS");
+        try
+        {
+            Environment.SetEnvironmentVariable("TEST_ACCOUNTS", "review@example.com:123456");
+            await WithEnv(environmentName, null, null, async () =>
+            {
+                (await _handler.Handle(new SendCodeCommand("review@example.com"), CancellationToken.None)).IsSuccess.Should().BeTrue();
+                if (fixedCodeAllowed)
+                {
+                    (await ChallengeTestDatabase.For(_cache).Store().ConfirmAsync(
+                        Orbit.Application.Auth.Services.EmailChallengeOperation.SignIn, "review@example.com", "123456")).IsSuccess.Should().BeTrue();
+                    _backgroundJobClient.DidNotReceive().Create(Arg.Any<Job>(), Arg.Any<IState>());
+                }
+                else
+                    _backgroundJobClient.Received(1).Create(Arg.Any<Job>(), Arg.Any<IState>());
+            });
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("TEST_ACCOUNTS", previous);
+        }
     }
 
     [Fact]
-    public void Handler_HasNoRegistrationDependentCollaborators()
+    public async Task SignInCode_SurvivesAFreshServiceInstance()
     {
-        typeof(SendCodeCommandHandler).GetConstructors().Single().GetParameters()
-            .Select(parameter => parameter.ParameterType)
-            .Should().BeEquivalentTo(new[] { typeof(IMemoryCache), typeof(IBackgroundJobClient) });
+        await WithEnv("Production", SmokeEmail, SmokeCode, async () =>
+        {
+            await _handler.Handle(new SendCodeCommand(SmokeEmail), CancellationToken.None);
+            var freshVerifier = BuildVerifyHandler();
+            var result = await freshVerifier.Handle(new VerifyCodeCommand(SmokeEmail, SmokeCode), CancellationToken.None);
+            result.IsSuccess.Should().BeTrue("a fresh context must preserve an unexpired sign-in code");
+        });
     }
 
     [Fact]
@@ -51,8 +86,10 @@ public class SendCodeCommandHandlerTests
             var result = await _handler.Handle(new SendCodeCommand(SmokeEmail), CancellationToken.None);
 
             result.IsSuccess.Should().BeTrue();
-            _cache.TryGetValue($"verify:{SmokeEmail}", out VerificationEntry? entry).Should().BeTrue();
-            entry!.Code.Should().Be(SmokeCode);
+            var entry = ChallengeTestDatabase.For(_cache).Row($"verify:{SmokeEmail}");
+            entry.Should().NotBeNull();
+            entry!.CodeHash.Should().HaveCount(32);
+            System.Text.Encoding.UTF8.GetString(entry!.CodeHash).Should().NotContain(SmokeCode);
             _backgroundJobClient.DidNotReceive().Create(Arg.Any<Job>(), Arg.Any<IState>());
         });
     }
@@ -95,9 +132,10 @@ public class SendCodeCommandHandlerTests
             var result = await _handler.Handle(new SendCodeCommand("someone-else@useorbit.org"), CancellationToken.None);
 
             result.IsSuccess.Should().BeTrue();
-            _cache.TryGetValue($"verify:someone-else@useorbit.org", out VerificationEntry? entry).Should().BeTrue();
-            entry!.Code.Should().NotBe(SmokeCode);
-            AssertEnqueuedVerificationEmail("someone-else@useorbit.org", entry.Code, "en");
+            ChallengeTestDatabase.For(_cache).Row($"verify:someone-else@useorbit.org").Should().NotBeNull();
+            var code = (string)_enqueuedJob!.Args[1];
+            code.Should().NotBe(SmokeCode);
+            AssertEnqueuedVerificationEmail("someone-else@useorbit.org", code, "en");
         });
     }
 
@@ -109,9 +147,10 @@ public class SendCodeCommandHandlerTests
             var result = await _handler.Handle(new SendCodeCommand(SmokeEmail), CancellationToken.None);
 
             result.IsSuccess.Should().BeTrue();
-            _cache.TryGetValue($"verify:{SmokeEmail}", out VerificationEntry? entry).Should().BeTrue();
-            entry!.Code.Should().NotBe(SmokeCode);
-            AssertEnqueuedVerificationEmail(SmokeEmail, entry.Code, "en");
+            ChallengeTestDatabase.For(_cache).Row($"verify:{SmokeEmail}").Should().NotBeNull();
+            var code = (string)_enqueuedJob!.Args[1];
+            code.Should().NotBe(SmokeCode);
+            AssertEnqueuedVerificationEmail(SmokeEmail, code, "en");
         });
     }
 
@@ -123,8 +162,9 @@ public class SendCodeCommandHandlerTests
             var result = await _handler.Handle(new SendCodeCommand(SmokeEmail, "pt-BR"), CancellationToken.None);
 
             result.IsSuccess.Should().BeTrue();
-            _cache.TryGetValue($"verify:{SmokeEmail}", out VerificationEntry? entry).Should().BeTrue();
-            AssertEnqueuedVerificationEmail(SmokeEmail, entry!.Code, "pt-BR");
+            ChallengeTestDatabase.For(_cache).Row($"verify:{SmokeEmail}").Should().NotBeNull();
+            var code = (string)_enqueuedJob!.Args[1];
+            AssertEnqueuedVerificationEmail(SmokeEmail, code, "pt-BR");
         });
     }
 
@@ -136,9 +176,10 @@ public class SendCodeCommandHandlerTests
             var result = await _handler.Handle(new SendCodeCommand(SmokeEmail), CancellationToken.None);
 
             result.IsSuccess.Should().BeTrue();
-            _cache.TryGetValue($"verify:{SmokeEmail}", out VerificationEntry? entry).Should().BeTrue();
-            entry!.Code.Should().NotBe(SmokeCode);
-            AssertEnqueuedVerificationEmail(SmokeEmail, entry.Code, "en");
+            ChallengeTestDatabase.For(_cache).Row($"verify:{SmokeEmail}").Should().NotBeNull();
+            var code = (string)_enqueuedJob!.Args[1];
+            code.Should().NotBe(SmokeCode);
+            AssertEnqueuedVerificationEmail(SmokeEmail, code, "en");
         });
     }
 
@@ -150,9 +191,10 @@ public class SendCodeCommandHandlerTests
             var result = await _handler.Handle(new SendCodeCommand(SmokeEmail), CancellationToken.None);
 
             result.IsSuccess.Should().BeTrue();
-            _cache.TryGetValue($"verify:{SmokeEmail}", out VerificationEntry? entry).Should().BeTrue();
-            entry!.Code.Should().NotBe("short");
-            AssertEnqueuedVerificationEmail(SmokeEmail, entry.Code, "en");
+            ChallengeTestDatabase.For(_cache).Row($"verify:{SmokeEmail}").Should().NotBeNull();
+            var code = (string)_enqueuedJob!.Args[1];
+            code.Should().NotBe("short");
+            AssertEnqueuedVerificationEmail(SmokeEmail, code, "en");
         });
     }
 
@@ -164,9 +206,10 @@ public class SendCodeCommandHandlerTests
             var result = await _handler.Handle(new SendCodeCommand(SmokeEmail), CancellationToken.None);
 
             result.IsSuccess.Should().BeTrue();
-            _cache.TryGetValue($"verify:{SmokeEmail}", out VerificationEntry? entry).Should().BeTrue();
-            entry!.Code.Should().NotBe("abc123");
-            AssertEnqueuedVerificationEmail(SmokeEmail, entry.Code, "en");
+            ChallengeTestDatabase.For(_cache).Row($"verify:{SmokeEmail}").Should().NotBeNull();
+            var code = (string)_enqueuedJob!.Args[1];
+            code.Should().NotBe("abc123");
+            AssertEnqueuedVerificationEmail(SmokeEmail, code, "en");
         });
     }
 
@@ -175,8 +218,7 @@ public class SendCodeCommandHandlerTests
     {
         await WithEnv("Development", SmokeEmail, SmokeCode, async () =>
         {
-            _cache.Set($"verify:{SmokeEmail}", new VerificationEntry("111111", 0, DateTime.UtcNow),
-                new MemoryCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5) });
+            ChallengeTestDatabase.For(_cache).Seed($"verify:{SmokeEmail}", "111111");
 
             var result = await _handler.Handle(new SendCodeCommand(SmokeEmail), CancellationToken.None);
 
@@ -208,11 +250,12 @@ public class SendCodeCommandHandlerTests
             .Returns(Result.Success(new SessionTokens("jwt-token", "refresh-token")));
 
         return new VerifyCodeCommandHandler(
-            _cache, userRepo, unitOfWork, authSessionService, new SignupJobDispatcher(_backgroundJobClient, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance), _backgroundJobClient, new AccountReactivation(Substitute.For<IGenericRepository<OwedSubscriptionCancellation>>()));
+            ChallengeTestDatabase.For(_cache).Store(), userRepo, unitOfWork, authSessionService, new SignupJobDispatcher(_backgroundJobClient, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance), _backgroundJobClient, new AccountReactivation(Substitute.For<IGenericRepository<OwedSubscriptionCancellation>>()));
     }
 
-    private static async Task WithEnv(string aspNetEnv, string? smokeEmail, string? smokeCode, Func<Task> body)
+    private async Task WithEnv(string aspNetEnv, string? smokeEmail, string? smokeCode, Func<Task> body)
     {
+        _environment.EnvironmentName.Returns(aspNetEnv);
         var priorEnv = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT");
         var priorEmail = Environment.GetEnvironmentVariable("SMOKE_TEST_EMAIL");
         var priorCode = Environment.GetEnvironmentVariable("SMOKE_TEST_CODE");

@@ -34,7 +34,7 @@ public class GetApiKeysQueryHandler(
             return gateCheck.PropagateError<IReadOnlyList<ApiKeyResponse>>();
 
         var requiresStepUp = await authorization.IsRequiredAsync(cancellationToken);
-        if (requiresStepUp && !authorization.HasGrant(request.UserId))
+        if (requiresStepUp && !await authorization.HasGrantAsync(request.UserId))
             return Result.Failure<IReadOnlyList<ApiKeyResponse>>(ErrorMessages.ApiKeyCreationChallengeRequired);
 
         var cacheKey = ReferenceCacheKeys.ApiKeys(request.UserId);

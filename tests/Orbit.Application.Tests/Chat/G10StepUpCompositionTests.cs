@@ -32,7 +32,7 @@ public partial class ProcessUserChatCommandHandlerTests
             "Get API keys requested via Chat", capability.RiskClass, capability.ConfirmationRequirement,
             TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(10), ActionKey: PendingOperationActionKeys.GetRequired(tool.Name, "{}"));
         gateway.Bridge.GetRequiredConfirmationAsync(capability.Id, Arg.Any<CancellationToken>()).Returns(capability.ConfirmationRequirement);
-        gateway.Policy.Evaluate(Arg.Any<AgentPolicyEvaluationContext>()).Returns(new AgentPolicyDecision(
+        gateway.Policy.EvaluateAsync(Arg.Any<AgentPolicyEvaluationContext>()).Returns(new AgentPolicyDecision(
             AgentPolicyDecisionStatus.ConfirmationRequired, capability, "step_up_required", pending));
         SetupAiResponse(CapturedCompositionPlan("g10-composition-api-keys-" + language + "-r1"));
         _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(),

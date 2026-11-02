@@ -54,4 +54,8 @@
     <Compile Include="../Shared/GoalToolCommandMediator.cs" Link="Common/GoalToolCommandMediator.cs" />
     <Compile Include="../Shared/HabitToolCommandMediator.cs" Link="Common/HabitToolCommandMediator.cs" />
   </ItemGroup>
+  <ItemGroup>
+    <Compile Include="../Shared/ChallengeTestDatabase.cs" Link="Common/ChallengeTestDatabase.cs" />
+    <Using Include="Orbit.Tests.Shared" />
+  </ItemGroup>
 </Project>

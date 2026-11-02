@@ -309,7 +309,7 @@ public sealed class HeldWriteRevisionTests
         var original = JsonSerializer.Deserialize<JsonElement>(context.Expand(arguments));
 
         for (var attempt = 0; attempt < ordinaryAttempts; attempt++)
-            context.Challenges.Confirm(EmailChallengeOperation.AccountDeletion, email, "000000")
+            (await context.Challenges.ConfirmAsync(EmailChallengeOperation.AccountDeletion, email, "000000"))
                 .Error.Should().Be(ErrorMessages.InvalidDeletionCode.Format(AppConstants.MaxVerificationAttempts - attempt - 1).Message);
         for (var attempt = ordinaryAttempts; attempt < AppConstants.MaxVerificationAttempts; attempt++)
         {
@@ -323,7 +323,7 @@ public sealed class HeldWriteRevisionTests
         JsonElement.DeepEquals(stored, original).Should().BeTrue();
         var check = await ((IArgumentCheckTool)tool).CheckArgumentsAsync(original, context.UserId, CancellationToken.None);
         check.Error.Should().Be(ErrorMessages.TooManyCodeAttempts.Message);
-        var confirmation = context.Challenges.Confirm(EmailChallengeOperation.AccountDeletion, email, context.DeletionCode);
+        var confirmation = (await context.Challenges.ConfirmAsync(EmailChallengeOperation.AccountDeletion, email, context.DeletionCode));
         confirmation.Error.Should().Be(ErrorMessages.TooManyCodeAttempts.Message);
         context.Commands.Should().BeEmpty();
     }
@@ -340,7 +340,7 @@ public sealed class HeldWriteRevisionTests
             revision.IsSuccess.Should().BeTrue(revision.Error);
         }
         var email = context.Records.OfType<User>().Single().Email;
-        context.Challenges.Confirm(EmailChallengeOperation.AccountDeletion, email, context.DeletionCode)
+        (await context.Challenges.ConfirmAsync(EmailChallengeOperation.AccountDeletion, email, context.DeletionCode))
             .IsSuccess.Should().BeTrue();
         context.Commands.Should().BeEmpty();
     }
@@ -348,22 +348,22 @@ public sealed class HeldWriteRevisionTests
     [Theory]
     [InlineData(EmailChallengeOperation.AccountDeletion)]
     [InlineData(EmailChallengeOperation.ApiKeyManagement)]
-    public void ChallengeCheck_WrongCodesExhaustConfirmationBudget(EmailChallengeOperation operation)
+    public async Task ChallengeCheck_WrongCodesExhaustConfirmationBudget(EmailChallengeOperation operation)
     {
         using var context = new HeldWriteTestContext();
         const string email = "challenge@example.com";
-        var code = context.Challenges.Issue(operation, email).Value;
+        var code = (await context.Challenges.IssueAsync(operation, email)).Value;
         for (var attempt = 0; attempt < AppConstants.MaxVerificationAttempts; attempt++)
         {
-            var invalid = context.Challenges.CheckConfirmation(operation, email, "000000");
+            var invalid = (await context.Challenges.CheckConfirmationAsync(operation, email, "000000"));
             var expected = operation == EmailChallengeOperation.AccountDeletion
                 ? ErrorMessages.InvalidDeletionCode : ErrorMessages.InvalidApiKeyCreationCode;
             invalid.Error.Should().Be(expected.Format(AppConstants.MaxVerificationAttempts - attempt - 1).Message);
         }
 
-        context.Challenges.CheckConfirmation(operation, email, code)
+        (await context.Challenges.CheckConfirmationAsync(operation, email, code))
             .Error.Should().Be(ErrorMessages.TooManyCodeAttempts.Message);
-        context.Challenges.Confirm(operation, email, code)
+        (await context.Challenges.ConfirmAsync(operation, email, code))
             .Error.Should().Be(ErrorMessages.TooManyCodeAttempts.Message);
     }
 

@@ -23,11 +23,11 @@ public class AgentPolicyEvaluator(
         && context.AuthMethod is AgentAuthMethod.ApiKey or AgentAuthMethod.OAuth
         && !context.GrantedScopes.Contains(AgentScopes.ReadGoals, StringComparer.OrdinalIgnoreCase);
 
-    public AgentPolicyDecision Evaluate(AgentPolicyEvaluationContext context)
+    public async Task<AgentPolicyDecision> EvaluateAsync(AgentPolicyEvaluationContext context)
     {
         if (context.PreviewOnly)
-            return EvaluateInternal(context, createPendingOperations: true);
-        var evaluated = EvaluateInternal(context, createPendingOperations: !_settings.ShadowModeEnabled);
+            return await EvaluateInternalAsync(context, createPendingOperations: true);
+        var evaluated = await EvaluateInternalAsync(context, createPendingOperations: !_settings.ShadowModeEnabled);
         if (!_settings.ShadowModeEnabled)
             return evaluated;
 
@@ -39,7 +39,7 @@ public class AgentPolicyEvaluator(
             ConsumedConfirmation: evaluated.ConsumedConfirmation);
     }
 
-    private AgentPolicyDecision EvaluateInternal(
+    private async Task<AgentPolicyDecision> EvaluateInternalAsync(
         AgentPolicyEvaluationContext context,
         bool createPendingOperations)
     {
@@ -62,7 +62,7 @@ public class AgentPolicyEvaluator(
         if (accessDecision is not null)
             return accessDecision;
 
-        return EvaluateConfirmationRequirement(context, capability, createPendingOperations);
+        return await EvaluateConfirmationRequirementAsync(context, capability, createPendingOperations);
     }
 
     private User? GetUser(Guid userId)
@@ -121,7 +121,7 @@ public class AgentPolicyEvaluator(
         return null;
     }
 
-    private AgentPolicyDecision EvaluateConfirmationRequirement(
+    private async Task<AgentPolicyDecision> EvaluateConfirmationRequirementAsync(
         AgentPolicyEvaluationContext context,
         AgentCapability capability,
         bool createPendingOperations)
@@ -133,7 +133,7 @@ public class AgentPolicyEvaluator(
         if (HasFreshConfirmation(context, capability, requireStepUp))
         {
             if (requireStepUp)
-                stepUpAuthorizationBridge.OnStepUpVerified(capability.Id, context.UserId);
+                await stepUpAuthorizationBridge.OnStepUpVerifiedAsync(capability.Id, context.UserId);
 
             return new AgentPolicyDecision(AgentPolicyDecisionStatus.Allowed, capability,
                 ConsumedConfirmation: true);

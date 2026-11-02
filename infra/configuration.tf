@@ -13,7 +13,6 @@ locals {
     "Sentry__Dsn",
     "Stripe__SecretKey",
     "Stripe__WebhookSecret",
-    "TEST_ACCOUNTS",
     "Vapid__PrivateKey",
     "Waitlist__SigningKey",
     "Wns__ClientSecret",
@@ -144,7 +143,7 @@ data "aws_ssm_parameter" "production_api" {
 }
 
 data "aws_ssm_parameter" "staging_api" {
-  for_each = setunion(local.api_secret_keys, local.api_eval_secret_keys["staging"])
+  for_each = setunion(local.api_secret_keys, local.api_eval_secret_keys["staging"], toset(["TEST_ACCOUNTS"]))
   name     = "/orbit/staging/api/${each.key}"
 }
 

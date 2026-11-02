@@ -99,7 +99,7 @@ public class ChatContextScaleTests(ITestOutputHelper output)
         var blocks = new ReadBlockFactory(dates, new ReadQueryTokenService(jwt), users);
         var catalog = new AgentCatalogService([tool]);
         var policy = Substitute.For<IAgentPolicyEvaluator>();
-        policy.Evaluate(Arg.Any<AgentPolicyEvaluationContext>()).Returns(call =>
+        policy.EvaluateAsync(Arg.Any<AgentPolicyEvaluationContext>()).Returns(call =>
             new AgentPolicyDecision(AgentPolicyDecisionStatus.Allowed,
                 catalog.GetCapability(call.Arg<AgentPolicyEvaluationContext>().CapabilityId)!));
         var ownership = Substitute.For<IAgentTargetOwnershipService>();

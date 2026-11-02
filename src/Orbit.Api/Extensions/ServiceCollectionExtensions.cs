@@ -41,6 +41,9 @@ public static partial class ServiceCollectionExtensions
         if (BuildTimeDocumentGeneration.IsActive)
             return builder;
 
+        if (builder.Environment.IsProduction() && Environment.GetEnvironmentVariable("TEST_ACCOUNTS") is not null)
+            throw new InvalidOperationException("Production must not configure TEST_ACCOUNTS.");
+
         var jwtSettings = builder.Configuration.GetSection(JwtSettings.SectionName).Get<JwtSettings>();
         jwtSettings?.Validate();
 
@@ -102,7 +105,8 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<ChatTurnStream>();
         builder.Services.AddScoped<IClosedMonthRecapStore, ClosedMonthRecapStore>();
         builder.Services.AddScoped<IAppConfigService, AppConfigService>();
-        builder.Services.AddSingleton<Orbit.Application.Auth.Services.EmailChallengeService>();
+        builder.Services.AddScoped<Orbit.Application.Auth.Services.EmailChallengeService>();
+        builder.Services.AddScoped<Orbit.Application.Auth.Services.IEmailChallengeStore, IndependentEmailChallengeStore>();
         builder.Services.AddScoped<Orbit.Application.ApiKeys.Services.ApiKeyManagementAuthorization>();
         builder.Services.AddScoped<IAgentStepUpAuthorizationBridge>(sp =>
             sp.GetRequiredService<Orbit.Application.ApiKeys.Services.ApiKeyManagementAuthorization>());

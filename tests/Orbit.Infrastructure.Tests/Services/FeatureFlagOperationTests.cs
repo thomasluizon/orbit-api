@@ -126,7 +126,7 @@ public class FeatureFlagOperationTests
         if (!oauthFamily)
         {
             gateway.ConfirmAgentOperation(principal, Guid.NewGuid().ToString()).IsError.Should().BeTrue();
-            var missingScope = evaluator.Evaluate(new AgentPolicyEvaluationContext(AgentCapabilityIds.HabitsRead,
+            var missingScope = await evaluator.EvaluateAsync(new AgentPolicyEvaluationContext(AgentCapabilityIds.HabitsRead,
                 admin.Id, AgentExecutionSurface.Mcp, AgentAuthMethod.ApiKey, [], "list_habits", "List habits"));
             missingScope.Reason.Should().Be($"missing_scope:{AgentScopes.ReadHabits}");
         }

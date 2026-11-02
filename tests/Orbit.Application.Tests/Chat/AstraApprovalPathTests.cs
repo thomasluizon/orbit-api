@@ -208,7 +208,7 @@ public sealed partial class AstraApprovalPathTests : IDisposable
         var config = Substitute.For<IAppConfigService>();
         config.GetAsync(AppConfigKeys.RequireApiKeyCreationStepUp, false, Arg.Any<CancellationToken>()).Returns(true);
         var authorization = new Orbit.Application.ApiKeys.Services.ApiKeyManagementAuthorization(config,
-            new Orbit.Application.Auth.Services.EmailChallengeService(_cache, TimeProvider.System));
+            new Orbit.Application.Auth.Services.EmailChallengeService(ChallengeTestDatabase.For(_cache).Store()));
         var (executor, store, _) = Build(tool, authorization);
 
         var result = await executor.ExecuteAsync(new(_userId, tool.Name, JsonSerializer.SerializeToElement(new { }),
@@ -219,7 +219,7 @@ public sealed partial class AstraApprovalPathTests : IDisposable
         result.PendingOperation.Should().NotBeNull();
         result.PendingOperation!.ActionKey.Should().Be(PendingOperationActionKeys.GetRequired(tool.Name, "{}"));
         store.IsAwaitingConfirmation(_userId, result.PendingOperation.Id).Should().BeTrue();
-        authorization.HasGrant(_userId).Should().BeFalse();
+        (await authorization.HasGrantAsync(_userId)).Should().BeFalse();
         await mediator.DidNotReceive().Send(Arg.Any<Orbit.Application.ApiKeys.Queries.GetApiKeysQuery>(), Arg.Any<CancellationToken>());
     }
 

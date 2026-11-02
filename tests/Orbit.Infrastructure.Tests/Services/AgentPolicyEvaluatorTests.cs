@@ -21,10 +21,10 @@ public class AgentPolicyEvaluatorTests : IDisposable
     [InlineData(AgentAuthMethod.ApiKey, true)]
     [InlineData(AgentAuthMethod.OAuth, false)]
     [InlineData(AgentAuthMethod.OAuth, true)]
-    public void HabitSuggestions_RequireGoalsScopeAlongsideHabitsScope(AgentAuthMethod auth, bool readGoals)
+    public async Task HabitSuggestions_RequireGoalsScopeAlongsideHabitsScope(AgentAuthMethod auth, bool readGoals)
     {
         var scopes = readGoals ? new[] { AgentScopes.ReadHabits, AgentScopes.ReadGoals } : [AgentScopes.ReadHabits];
-        var result = _policyEvaluator.Evaluate(new(AgentCapabilityIds.HabitsRead, _userId,
+        var result = await _policyEvaluator.EvaluateAsync(new(AgentCapabilityIds.HabitsRead, _userId,
             AgentExecutionSurface.Chat, auth, scopes, "suggest_habits", "Suggest habits"));
         result.Status.Should().Be(readGoals ? AgentPolicyDecisionStatus.Allowed : AgentPolicyDecisionStatus.Denied);
         if (!readGoals) result.Reason.Should().Be($"missing_scope:{AgentScopes.ReadGoals}");
@@ -72,7 +72,7 @@ public class AgentPolicyEvaluatorTests : IDisposable
     }
 
     [Fact]
-    public void Evaluate_TargetedFlag_AllowsOnlyTargetedAccount()
+    public async Task Evaluate_TargetedFlag_AllowsOnlyTargetedAccount()
     {
         var other = User.Create("Other", "other@example.com").Value;
         _dbContext.Users.Add(other);
@@ -80,20 +80,20 @@ public class AgentPolicyEvaluatorTests : IDisposable
         _dbContext.AppFeatureFlagAccounts.Add(AppFeatureFlagAccount.Create("ai_retrospective", _userId));
         _dbContext.SaveChanges();
 
-        AgentPolicyDecision EvaluateFor(Guid userId) => _policyEvaluator.Evaluate(new AgentPolicyEvaluationContext(
+        async Task<AgentPolicyDecision> EvaluateFor(Guid userId) => await _policyEvaluator.EvaluateAsync(new AgentPolicyEvaluationContext(
             AgentCapabilityIds.RetrospectiveRead, userId, AgentExecutionSurface.Mcp, AgentAuthMethod.Jwt, [],
             "get_retrospective", "Get retrospective"));
 
-        EvaluateFor(_userId).Status.Should().Be(AgentPolicyDecisionStatus.Allowed);
-        EvaluateFor(other.Id).Reason.Should().Be("feature_disabled:ai_retrospective");
+        (await EvaluateFor(_userId)).Status.Should().Be(AgentPolicyDecisionStatus.Allowed);
+        (await EvaluateFor(other.Id)).Reason.Should().Be("feature_disabled:ai_retrospective");
     }
 
     [Theory]
     [InlineData(AgentAuthMethod.ApiKey)]
     [InlineData(AgentAuthMethod.OAuth)]
-    public void Evaluate_MissingApiKeyScope_DeniesOperation(AgentAuthMethod authMethod)
+    public async Task Evaluate_MissingApiKeyScope_DeniesOperation(AgentAuthMethod authMethod)
     {
-        var decision = _policyEvaluator.Evaluate(new AgentPolicyEvaluationContext(
+        var decision = await _policyEvaluator.EvaluateAsync(new AgentPolicyEvaluationContext(
             AgentCapabilityIds.HabitsRead,
             _userId,
             AgentExecutionSurface.Mcp,
@@ -107,7 +107,7 @@ public class AgentPolicyEvaluatorTests : IDisposable
     }
 
     [Fact]
-    public void Evaluate_UnknownFeaturePlanRequirement_FailsClosed()
+    public async Task Evaluate_UnknownFeaturePlanRequirement_FailsClosed()
     {
         var user = _dbContext.Users.Single(item => item.Id == _userId);
         user.SetStripeSubscription("sub_123", DateTime.UtcNow.AddDays(30), Orbit.Domain.Enums.SubscriptionInterval.Monthly);
@@ -116,7 +116,7 @@ public class AgentPolicyEvaluatorTests : IDisposable
             "ai_retrospective", true, unknownRequirement, "AI retrospective analysis"));
         _dbContext.SaveChanges();
 
-        var decision = _policyEvaluator.Evaluate(new AgentPolicyEvaluationContext(
+        var decision = await _policyEvaluator.EvaluateAsync(new AgentPolicyEvaluationContext(
             AgentCapabilityIds.RetrospectiveRead,
             _userId,
             AgentExecutionSurface.Chat,
@@ -130,9 +130,9 @@ public class AgentPolicyEvaluatorTests : IDisposable
     }
 
     [Fact]
-    public void Evaluate_DestructiveOperationWithoutConfirmation_CreatesPendingOperation()
+    public async Task Evaluate_DestructiveOperationWithoutConfirmation_CreatesPendingOperation()
     {
-        var decision = _policyEvaluator.Evaluate(new AgentPolicyEvaluationContext(
+        var decision = await _policyEvaluator.EvaluateAsync(new AgentPolicyEvaluationContext(
             AgentCapabilityIds.HabitsDelete,
             _userId,
             AgentExecutionSurface.Chat,
@@ -149,9 +149,9 @@ public class AgentPolicyEvaluatorTests : IDisposable
     }
 
     [Fact]
-    public void Evaluate_HighRiskMutationWithoutStepUp_RequiresPendingOperation()
+    public async Task Evaluate_HighRiskMutationWithoutStepUp_RequiresPendingOperation()
     {
-        var decision = _policyEvaluator.Evaluate(new AgentPolicyEvaluationContext(
+        var decision = await _policyEvaluator.EvaluateAsync(new AgentPolicyEvaluationContext(
             AgentCapabilityIds.ApiKeysManage,
             _userId,
             AgentExecutionSurface.Chat,
@@ -169,9 +169,9 @@ public class AgentPolicyEvaluatorTests : IDisposable
     }
 
     [Fact]
-    public void Evaluate_WithFreshConfirmationToken_AllowsDestructiveOperation()
+    public async Task Evaluate_WithFreshConfirmationToken_AllowsDestructiveOperation()
     {
-        var initialDecision = _policyEvaluator.Evaluate(new AgentPolicyEvaluationContext(
+        var initialDecision = await _policyEvaluator.EvaluateAsync(new AgentPolicyEvaluationContext(
             AgentCapabilityIds.HabitsDelete,
             _userId,
             AgentExecutionSurface.Chat,
@@ -184,7 +184,7 @@ public class AgentPolicyEvaluatorTests : IDisposable
         var confirmation = _pendingOperationStore.Confirm(_userId, initialDecision.PendingOperation!.Id);
         confirmation.Should().NotBeNull();
 
-        var confirmedDecision = _policyEvaluator.Evaluate(new AgentPolicyEvaluationContext(
+        var confirmedDecision = await _policyEvaluator.EvaluateAsync(new AgentPolicyEvaluationContext(
             AgentCapabilityIds.HabitsDelete,
             _userId,
             AgentExecutionSurface.Chat,
@@ -200,9 +200,9 @@ public class AgentPolicyEvaluatorTests : IDisposable
     }
 
     [Fact]
-    public void Evaluate_WithStepUpConfirmation_AllowsHighRiskOperation()
+    public async Task Evaluate_WithStepUpConfirmation_AllowsHighRiskOperation()
     {
-        var initialDecision = _policyEvaluator.Evaluate(new AgentPolicyEvaluationContext(
+        var initialDecision = await _policyEvaluator.EvaluateAsync(new AgentPolicyEvaluationContext(
             AgentCapabilityIds.ApiKeysManage,
             _userId,
             AgentExecutionSurface.Chat,
@@ -223,7 +223,7 @@ public class AgentPolicyEvaluatorTests : IDisposable
         storedOperation.MarkStepUpSatisfied();
         _dbContext.SaveChanges();
 
-        var confirmedDecision = _policyEvaluator.Evaluate(new AgentPolicyEvaluationContext(
+        var confirmedDecision = await _policyEvaluator.EvaluateAsync(new AgentPolicyEvaluationContext(
             AgentCapabilityIds.ApiKeysManage,
             _userId,
             AgentExecutionSurface.Chat,
@@ -238,9 +238,9 @@ public class AgentPolicyEvaluatorTests : IDisposable
     }
 
     [Fact]
-    public void Evaluate_ApiKeyReadWithoutEscalation_AllowsTheReadOutright()
+    public async Task Evaluate_ApiKeyReadWithoutEscalation_AllowsTheReadOutright()
     {
-        var decision = _policyEvaluator.Evaluate(new AgentPolicyEvaluationContext(
+        var decision = await _policyEvaluator.EvaluateAsync(new AgentPolicyEvaluationContext(
             AgentCapabilityIds.ApiKeysRead,
             _userId,
             AgentExecutionSurface.Mcp,
@@ -255,9 +255,9 @@ public class AgentPolicyEvaluatorTests : IDisposable
     }
 
     [Fact]
-    public void Evaluate_ApiKeyReadEscalatedToStepUp_OpensAPendingOperationDoor()
+    public async Task Evaluate_ApiKeyReadEscalatedToStepUp_OpensAPendingOperationDoor()
     {
-        var decision = _policyEvaluator.Evaluate(new AgentPolicyEvaluationContext(
+        var decision = await _policyEvaluator.EvaluateAsync(new AgentPolicyEvaluationContext(
             AgentCapabilityIds.ApiKeysRead,
             _userId,
             AgentExecutionSurface.Mcp,
@@ -275,9 +275,9 @@ public class AgentPolicyEvaluatorTests : IDisposable
     }
 
     [Fact]
-    public void Evaluate_VerifiedStepUpOnTheApiKeyRead_TellsTheAuthorizationBridge()
+    public async Task Evaluate_VerifiedStepUpOnTheApiKeyRead_TellsTheAuthorizationBridge()
     {
-        var initialDecision = _policyEvaluator.Evaluate(new AgentPolicyEvaluationContext(
+        var initialDecision = await _policyEvaluator.EvaluateAsync(new AgentPolicyEvaluationContext(
             AgentCapabilityIds.ApiKeysRead,
             _userId,
             AgentExecutionSurface.Mcp,
@@ -298,7 +298,7 @@ public class AgentPolicyEvaluatorTests : IDisposable
         storedOperation.MarkStepUpSatisfied();
         _dbContext.SaveChanges();
 
-        var confirmedDecision = _policyEvaluator.Evaluate(new AgentPolicyEvaluationContext(
+        var confirmedDecision = await _policyEvaluator.EvaluateAsync(new AgentPolicyEvaluationContext(
             AgentCapabilityIds.ApiKeysRead,
             _userId,
             AgentExecutionSurface.Mcp,
@@ -311,13 +311,13 @@ public class AgentPolicyEvaluatorTests : IDisposable
             ConfirmationRequirementOverride: AgentConfirmationRequirement.StepUp));
 
         confirmedDecision.Status.Should().Be(AgentPolicyDecisionStatus.Allowed);
-        _stepUpAuthorizationBridge.Received(1).OnStepUpVerified(AgentCapabilityIds.ApiKeysRead, _userId);
+        await _stepUpAuthorizationBridge.Received(1).OnStepUpVerifiedAsync(AgentCapabilityIds.ApiKeysRead, _userId);
     }
 
     [Fact]
-    public void Evaluate_VerifiedStepUpOnApiKeyManagement_TellsTheAuthorizationBridge()
+    public async Task Evaluate_VerifiedStepUpOnApiKeyManagement_TellsTheAuthorizationBridge()
     {
-        var initialDecision = _policyEvaluator.Evaluate(new AgentPolicyEvaluationContext(
+        var initialDecision = await _policyEvaluator.EvaluateAsync(new AgentPolicyEvaluationContext(
             AgentCapabilityIds.ApiKeysManage,
             _userId,
             AgentExecutionSurface.Chat,
@@ -335,7 +335,7 @@ public class AgentPolicyEvaluatorTests : IDisposable
         storedOperation.MarkStepUpSatisfied();
         _dbContext.SaveChanges();
 
-        var confirmedDecision = _policyEvaluator.Evaluate(new AgentPolicyEvaluationContext(
+        var confirmedDecision = await _policyEvaluator.EvaluateAsync(new AgentPolicyEvaluationContext(
             AgentCapabilityIds.ApiKeysManage,
             _userId,
             AgentExecutionSurface.Chat,
@@ -347,13 +347,13 @@ public class AgentPolicyEvaluatorTests : IDisposable
             ConfirmationToken: confirmation!.ConfirmationToken));
 
         confirmedDecision.Status.Should().Be(AgentPolicyDecisionStatus.Allowed);
-        _stepUpAuthorizationBridge.Received(1).OnStepUpVerified(AgentCapabilityIds.ApiKeysManage, _userId);
+        await _stepUpAuthorizationBridge.Received(1).OnStepUpVerifiedAsync(AgentCapabilityIds.ApiKeysManage, _userId);
     }
 
     [Fact]
-    public void Evaluate_FreshConfirmationWithoutStepUp_TellsTheBridgeNothing()
+    public async Task Evaluate_FreshConfirmationWithoutStepUp_TellsTheBridgeNothing()
     {
-        var initialDecision = _policyEvaluator.Evaluate(new AgentPolicyEvaluationContext(
+        var initialDecision = await _policyEvaluator.EvaluateAsync(new AgentPolicyEvaluationContext(
             AgentCapabilityIds.HabitsDelete,
             _userId,
             AgentExecutionSurface.Chat,
@@ -365,7 +365,7 @@ public class AgentPolicyEvaluatorTests : IDisposable
 
         var confirmation = _pendingOperationStore.Confirm(_userId, initialDecision.PendingOperation!.Id);
 
-        var confirmedDecision = _policyEvaluator.Evaluate(new AgentPolicyEvaluationContext(
+        var confirmedDecision = await _policyEvaluator.EvaluateAsync(new AgentPolicyEvaluationContext(
             AgentCapabilityIds.HabitsDelete,
             _userId,
             AgentExecutionSurface.Chat,
@@ -377,11 +377,11 @@ public class AgentPolicyEvaluatorTests : IDisposable
             ConfirmationToken: confirmation!.ConfirmationToken));
 
         confirmedDecision.Status.Should().Be(AgentPolicyDecisionStatus.Allowed);
-        _stepUpAuthorizationBridge.DidNotReceive().OnStepUpVerified(Arg.Any<string>(), Arg.Any<Guid>());
+        await _stepUpAuthorizationBridge.DidNotReceive().OnStepUpVerifiedAsync(Arg.Any<string>(), Arg.Any<Guid>());
     }
 
     [Fact]
-    public void Evaluate_InShadowMode_ReturnsAllowedWithShadowDecision()
+    public async Task Evaluate_InShadowMode_ReturnsAllowedWithShadowDecision()
     {
         var shadowEvaluator = new AgentPolicyEvaluator(
             _dbContext,
@@ -391,7 +391,7 @@ public class AgentPolicyEvaluatorTests : IDisposable
             Options.Create(new AgentPlatformSettings { ShadowModeEnabled = true }),
             new FeatureFlagService(_dbContext, new MemoryCache(new MemoryCacheOptions()), Substitute.For<IHostEnvironment>(), new ConfigurationBuilder().Build()));
 
-        var decision = shadowEvaluator.Evaluate(new AgentPolicyEvaluationContext(
+        var decision = (await shadowEvaluator.EvaluateAsync(new AgentPolicyEvaluationContext(
             AgentCapabilityIds.ApiKeysManage,
             _userId,
             AgentExecutionSurface.Chat,
@@ -399,7 +399,7 @@ public class AgentPolicyEvaluatorTests : IDisposable
             [],
             "manage_api_key",
             "Create API key",
-            OperationFingerprint: "create_api_key:{\"name\":\"Claude\"}"));
+            OperationFingerprint: "create_api_key:{\"name\":\"Claude\"}")));
 
         decision.Status.Should().Be(AgentPolicyDecisionStatus.Allowed);
         decision.ShadowStatus.Should().Be(AgentPolicyDecisionStatus.ConfirmationRequired);
@@ -409,10 +409,10 @@ public class AgentPolicyEvaluatorTests : IDisposable
     }
 
     [Fact]
-    public void Evaluate_InShadowMode_PreservesConsumedConfirmation()
+    public async Task Evaluate_InShadowMode_PreservesConsumedConfirmation()
     {
         const string fingerprint = "delete_habit:{\"habitId\":\"123\"}";
-        var pending = _policyEvaluator.Evaluate(new AgentPolicyEvaluationContext(
+        var pending = await _policyEvaluator.EvaluateAsync(new AgentPolicyEvaluationContext(
             AgentCapabilityIds.HabitsDelete,
             _userId,
             AgentExecutionSurface.Chat,
@@ -431,7 +431,7 @@ public class AgentPolicyEvaluatorTests : IDisposable
             _stepUpAuthorizationBridge,
             Options.Create(new AgentPlatformSettings { ShadowModeEnabled = true }),
             new FeatureFlagService(_dbContext, new MemoryCache(new MemoryCacheOptions()), Substitute.For<IHostEnvironment>(), new ConfigurationBuilder().Build()));
-        var decision = shadowEvaluator.Evaluate(new AgentPolicyEvaluationContext(
+        var decision = (await shadowEvaluator.EvaluateAsync(new AgentPolicyEvaluationContext(
             AgentCapabilityIds.HabitsDelete,
             _userId,
             AgentExecutionSurface.Chat,
@@ -440,13 +440,13 @@ public class AgentPolicyEvaluatorTests : IDisposable
             "delete_habit",
             "Delete habit via chat",
             OperationFingerprint: fingerprint,
-            ConfirmationToken: confirmation!.ConfirmationToken));
+            ConfirmationToken: confirmation!.ConfirmationToken)));
 
         decision.Status.Should().Be(AgentPolicyDecisionStatus.Allowed);
         decision.ShadowStatus.Should().Be(AgentPolicyDecisionStatus.Allowed);
         decision.ConsumedConfirmation.Should().BeTrue();
 
-        var replay = shadowEvaluator.Evaluate(new AgentPolicyEvaluationContext(
+        var replay = (await shadowEvaluator.EvaluateAsync(new AgentPolicyEvaluationContext(
             AgentCapabilityIds.HabitsDelete,
             _userId,
             AgentExecutionSurface.Chat,
@@ -455,7 +455,7 @@ public class AgentPolicyEvaluatorTests : IDisposable
             "delete_habit",
             "Delete habit via chat",
             OperationFingerprint: fingerprint,
-            ConfirmationToken: confirmation.ConfirmationToken));
+            ConfirmationToken: confirmation.ConfirmationToken)));
 
         replay.ConsumedConfirmation.Should().BeFalse();
         replay.ShadowStatus.Should().Be(AgentPolicyDecisionStatus.ConfirmationRequired);
@@ -465,11 +465,11 @@ public class AgentPolicyEvaluatorTests : IDisposable
     [InlineData(AgentCapabilityIds.HabitsDelete, "delete_habit")]
     [InlineData(AgentCapabilityIds.HabitsBulkDelete, "bulk_delete_habits")]
     [InlineData(AgentCapabilityIds.TagsDelete, "delete_tag")]
-    public void Evaluate_DestructiveChatCapability_OnChatSurface_RequiresConfirmation(
+    public async Task Evaluate_DestructiveChatCapability_OnChatSurface_RequiresConfirmation(
         string capabilityId,
         string sourceName)
     {
-        var decision = _policyEvaluator.Evaluate(new AgentPolicyEvaluationContext(
+        var decision = await _policyEvaluator.EvaluateAsync(new AgentPolicyEvaluationContext(
             capabilityId,
             _userId,
             AgentExecutionSurface.Chat,
@@ -491,15 +491,15 @@ public class AgentPolicyEvaluatorTests : IDisposable
     [InlineData("bulk_skip_habits")]
     [InlineData("bulk_update_habits")]
     [InlineData("bulk_reschedule_habits")]
-    public void Evaluate_ReversibleBulkCapability_RequiresConfirmationWhenChatHoldIsApplied(string sourceName)
+    public async Task Evaluate_ReversibleBulkCapability_RequiresConfirmationWhenChatHoldIsApplied(string sourceName)
     {
         var context = new AgentPolicyEvaluationContext(
             AgentCapabilityIds.HabitsBulkWrite, _userId, AgentExecutionSurface.Chat,
             AgentAuthMethod.Jwt, [], sourceName, $"{sourceName} via chat",
             OperationFingerprint: $"{sourceName}:{{}}");
 
-        var declared = _policyEvaluator.Evaluate(context);
-        var held = _policyEvaluator.Evaluate(context with
+        var declared = await _policyEvaluator.EvaluateAsync(context);
+        var held = await _policyEvaluator.EvaluateAsync(context with
         {
             ConfirmationRequirementOverride = AgentConfirmationRequirement.FreshConfirmation
         });
@@ -513,9 +513,9 @@ public class AgentPolicyEvaluatorTests : IDisposable
     }
 
     [Fact]
-    public void Evaluate_GoalsDelete_FreeUserRequiresConfirmation()
+    public async Task Evaluate_GoalsDelete_FreeUserRequiresConfirmation()
     {
-        var decision = _policyEvaluator.Evaluate(new AgentPolicyEvaluationContext(
+        var decision = await _policyEvaluator.EvaluateAsync(new AgentPolicyEvaluationContext(
             AgentCapabilityIds.GoalsDelete,
             _userId,
             AgentExecutionSurface.Chat,
@@ -531,13 +531,13 @@ public class AgentPolicyEvaluatorTests : IDisposable
     }
 
     [Fact]
-    public void Evaluate_DeactivatedUser_NonAuthCapability_DeniesWithAccountDeactivated()
+    public async Task Evaluate_DeactivatedUser_NonAuthCapability_DeniesWithAccountDeactivated()
     {
         var user = _dbContext.Users.First(item => item.Id == _userId);
         user.Deactivate(DateTime.UtcNow.AddDays(7));
         _dbContext.SaveChanges();
 
-        var decision = _policyEvaluator.Evaluate(new AgentPolicyEvaluationContext(
+        var decision = await _policyEvaluator.EvaluateAsync(new AgentPolicyEvaluationContext(
             AgentCapabilityIds.HabitsWrite,
             _userId,
             AgentExecutionSurface.Chat,
@@ -552,13 +552,13 @@ public class AgentPolicyEvaluatorTests : IDisposable
     }
 
     [Fact]
-    public void Evaluate_DeactivatedUser_AccountManageCapability_IsNotBlockedByDeactivation()
+    public async Task Evaluate_DeactivatedUser_AccountManageCapability_IsNotBlockedByDeactivation()
     {
         var user = _dbContext.Users.First(item => item.Id == _userId);
         user.Deactivate(DateTime.UtcNow.AddDays(7));
         _dbContext.SaveChanges();
 
-        var decision = _policyEvaluator.Evaluate(new AgentPolicyEvaluationContext(
+        var decision = await _policyEvaluator.EvaluateAsync(new AgentPolicyEvaluationContext(
             AgentCapabilityIds.AccountManage,
             _userId,
             AgentExecutionSurface.Chat,
@@ -575,9 +575,9 @@ public class AgentPolicyEvaluatorTests : IDisposable
     [Theory]
     [InlineData("create_habit")]
     [InlineData("log_habit")]
-    public void Evaluate_LowRiskHabitWrite_OnChatSurface_WaitsForApproval(string sourceName)
+    public async Task Evaluate_LowRiskHabitWrite_OnChatSurface_WaitsForApproval(string sourceName)
     {
-        var decision = _policyEvaluator.Evaluate(new AgentPolicyEvaluationContext(
+        var decision = await _policyEvaluator.EvaluateAsync(new AgentPolicyEvaluationContext(
             AgentCapabilityIds.HabitsWrite,
             _userId,
             AgentExecutionSurface.Chat,
@@ -598,9 +598,9 @@ public class AgentPolicyEvaluatorTests : IDisposable
     [Theory]
     [InlineData("create_habit")]
     [InlineData("log_habit")]
-    public void Evaluate_LowRiskHabitWrite_OnMcpSurface_IsAllowed(string sourceName)
+    public async Task Evaluate_LowRiskHabitWrite_OnMcpSurface_IsAllowed(string sourceName)
     {
-        var decision = _policyEvaluator.Evaluate(new AgentPolicyEvaluationContext(
+        var decision = await _policyEvaluator.EvaluateAsync(new AgentPolicyEvaluationContext(
             AgentCapabilityIds.HabitsWrite,
             _userId,
             AgentExecutionSurface.Mcp,

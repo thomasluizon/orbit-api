@@ -32,7 +32,7 @@ public class ConfirmAccountDeletionCommandHandlerTests
     public ConfirmAccountDeletionCommandHandlerTests()
     {
         _handler = new ConfirmAccountDeletionCommandHandler(
-            new EmailChallengeService(_cache, TimeProvider.System),
+            new EmailChallengeService(ChallengeTestDatabase.For(_cache).Store(TimeProvider.System)),
             _userRepo,
             _unitOfWork, _jobs);
     }
@@ -67,7 +67,7 @@ public class ConfirmAccountDeletionCommandHandlerTests
         result.Value.Should().BeAfter(DateTime.UtcNow);
         user.IsDeactivated.Should().BeTrue();
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
-        _cache.TryGetValue($"delete:{TestEmail}", out _).Should().BeFalse();
+        ChallengeTestDatabase.For(_cache).HasCode($"delete:{TestEmail}").Should().BeFalse();
     }
 
     [Fact]
@@ -223,7 +223,7 @@ public class ConfirmAccountDeletionCommandHandlerTests
         user.IsDeactivated.Should().BeFalse();
         user.ScheduledDeletionAt.Should().BeNull();
         _jobs.DidNotReceive().Create(Arg.Any<Job>(), Arg.Any<IState>());
-        _cache.TryGetValue($"delete-attempts:{TestEmail}", out int attempts).Should().BeTrue();
+        var attempts = ChallengeTestDatabase.For(_cache).Attempts($"delete-attempts:{TestEmail}");
         attempts.Should().Be(1);
     }
 
@@ -280,8 +280,7 @@ public class ConfirmAccountDeletionCommandHandlerTests
         SetupUser(user);
         SetupDeletionCode(TestEmail, "123456");
 
-        _cache.Set($"delete-attempts:{TestEmail}", 3,
-            new MemoryCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(15) });
+        ChallengeTestDatabase.For(_cache).SetAttempts($"delete:{TestEmail}", 3);
 
         var command = new ConfirmAccountDeletionCommand(UserId, "123456");
 
@@ -297,7 +296,7 @@ public class ConfirmAccountDeletionCommandHandlerTests
     public void Command_IsNotConcurrencyRetryable_BecauseItConsumesTheOtpBeforeSaving()
     {
         typeof(ConfirmAccountDeletionCommand).Should().NotBeAssignableTo<IConcurrencyRetryable>(
-            "the handler removes the OTP from cache before SaveChangesAsync, so a transparent retry would re-enter, "
+            "the handler consumes the OTP before SaveChangesAsync, so a transparent retry would re-enter, "
             + "find the code consumed, and silently fail with DeletionCodeExpired");
     }
 
@@ -393,8 +392,6 @@ public class ConfirmAccountDeletionCommandHandlerTests
 
     private void SetupDeletionCode(string email, string code)
     {
-        var entry = new VerificationEntry(code, 0, DateTime.UtcNow);
-        _cache.Set($"delete:{email.ToLowerInvariant()}", entry,
-            new MemoryCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(10) });
+        ChallengeTestDatabase.For(_cache).Seed($"delete:{email.ToLowerInvariant()}", code);
     }
 }

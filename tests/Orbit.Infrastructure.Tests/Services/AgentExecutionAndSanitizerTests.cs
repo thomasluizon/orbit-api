@@ -107,7 +107,7 @@ public partial class AgentExecutionAndSanitizerTests
         catalog.GetOperation(operation.Id).Returns(operation);
         catalog.GetCapability(capability.Id).Returns(capability);
         var policy = Substitute.For<IAgentPolicyEvaluator>();
-        policy.Evaluate(Arg.Any<AgentPolicyEvaluationContext>())
+        policy.EvaluateAsync(Arg.Any<AgentPolicyEvaluationContext>())
             .Returns(new AgentPolicyDecision(AgentPolicyDecisionStatus.Allowed, capability));
         var logger = Substitute.For<ILogger<AgentOperationExecutor>>();
         logger.IsEnabled(LogLevel.Error).Returns(true);
@@ -249,7 +249,7 @@ public partial class AgentExecutionAndSanitizerTests
         catalog.GetOperation(operation.Id).Returns(operation);
         catalog.GetCapability(capability.Id).Returns(capability);
         var policy = Substitute.For<IAgentPolicyEvaluator>();
-        policy.Evaluate(Arg.Any<AgentPolicyEvaluationContext>())
+        policy.EvaluateAsync(Arg.Any<AgentPolicyEvaluationContext>())
             .Returns(new AgentPolicyDecision(AgentPolicyDecisionStatus.Denied, capability, "missing_scope:write_habits"));
         var executor = CreateExecutor(catalog, policyEvaluator: policy);
 
@@ -280,7 +280,7 @@ public partial class AgentExecutionAndSanitizerTests
         catalog.GetOperation(operation.Id).Returns(operation);
         catalog.GetCapability(capability.Id).Returns(capability);
         var policy = Substitute.For<IAgentPolicyEvaluator>();
-        policy.Evaluate(Arg.Any<AgentPolicyEvaluationContext>())
+        policy.EvaluateAsync(Arg.Any<AgentPolicyEvaluationContext>())
             .Returns(new AgentPolicyDecision(decisionStatus, capability));
         var events = new List<string>();
         var tool = new StubTool(operation.Id, (_, _, _) =>
@@ -372,7 +372,7 @@ public partial class AgentExecutionAndSanitizerTests
         catalog.GetOperation(operation.Id).Returns(operation);
         catalog.GetCapability(capability.Id).Returns(capability);
         var policy = Substitute.For<IAgentPolicyEvaluator>();
-        policy.Evaluate(Arg.Any<AgentPolicyEvaluationContext>())
+        policy.EvaluateAsync(Arg.Any<AgentPolicyEvaluationContext>())
             .Returns(new AgentPolicyDecision(AgentPolicyDecisionStatus.Allowed, capability));
 
         using var cancellation = new CancellationTokenSource();
@@ -411,7 +411,7 @@ public partial class AgentExecutionAndSanitizerTests
         catalog.GetCapability(capability.Id).Returns(capability);
         var pending = new PendingAgentOperation(Guid.NewGuid(), capability.Id, capability.DisplayName, "Delete habit", capability.RiskClass, capability.ConfirmationRequirement, DateTime.UtcNow.AddMinutes(5));
         var policy = Substitute.For<IAgentPolicyEvaluator>();
-        policy.Evaluate(Arg.Any<AgentPolicyEvaluationContext>())
+        policy.EvaluateAsync(Arg.Any<AgentPolicyEvaluationContext>())
             .Returns(new AgentPolicyDecision(AgentPolicyDecisionStatus.ConfirmationRequired, capability, "confirmation_required", pending));
         var executor = CreateExecutor(catalog, policyEvaluator: policy);
 
@@ -444,7 +444,7 @@ public partial class AgentExecutionAndSanitizerTests
         var pending = new PendingAgentOperation(Guid.NewGuid(), capability.Id, capability.DisplayName,
             "Bulk update", capability.RiskClass, capability.ConfirmationRequirement, DateTime.UtcNow.AddMinutes(5));
         var policy = Substitute.For<IAgentPolicyEvaluator>();
-        policy.Evaluate(Arg.Any<AgentPolicyEvaluationContext>())
+        policy.EvaluateAsync(Arg.Any<AgentPolicyEvaluationContext>())
             .Returns(new AgentPolicyDecision(AgentPolicyDecisionStatus.ConfirmationRequired, capability,
                 "step_up_required", pending));
         var previewer = Substitute.For<IPendingOperationChangePreviewer>();
@@ -478,7 +478,7 @@ public partial class AgentExecutionAndSanitizerTests
         var pending = new PendingAgentOperation(Guid.NewGuid(), capability.Id, capability.DisplayName,
             "Bulk update", capability.RiskClass, capability.ConfirmationRequirement, DateTime.UtcNow.AddMinutes(5));
         var policy = Substitute.For<IAgentPolicyEvaluator>();
-        policy.Evaluate(Arg.Any<AgentPolicyEvaluationContext>())
+        policy.EvaluateAsync(Arg.Any<AgentPolicyEvaluationContext>())
             .Returns(new AgentPolicyDecision(AgentPolicyDecisionStatus.ConfirmationRequired, capability,
                 "confirmation_required", pending));
         var previewer = Substitute.For<IPendingOperationChangePreviewer>();
@@ -505,7 +505,7 @@ public partial class AgentExecutionAndSanitizerTests
         catalog.GetCapability(capability.Id).Returns(capability);
         var policy = Substitute.For<IAgentPolicyEvaluator>();
         var capturedContexts = new List<AgentPolicyEvaluationContext>();
-        policy.Evaluate(Arg.Do<AgentPolicyEvaluationContext>(capturedContexts.Add))
+        policy.EvaluateAsync(Arg.Do<AgentPolicyEvaluationContext>(capturedContexts.Add))
             .Returns(callInfo => new AgentPolicyDecision(
                 AgentPolicyDecisionStatus.Denied,
                 capability,
@@ -544,7 +544,7 @@ public partial class AgentExecutionAndSanitizerTests
         catalog.GetCapabilities().Returns([capability]);
         var capturedContext = default(AgentPolicyEvaluationContext);
         var policy = Substitute.For<IAgentPolicyEvaluator>();
-        policy.Evaluate(Arg.Do<AgentPolicyEvaluationContext>(context => capturedContext = context))
+        policy.EvaluateAsync(Arg.Do<AgentPolicyEvaluationContext>(context => capturedContext = context))
             .Returns(new AgentPolicyDecision(AgentPolicyDecisionStatus.Allowed, capability));
         var executor = CreateExecutor(
             catalog,
@@ -579,7 +579,7 @@ public partial class AgentExecutionAndSanitizerTests
             .Returns(AgentConfirmationRequirement.StepUp);
         var capturedContext = default(AgentPolicyEvaluationContext);
         var policy = Substitute.For<IAgentPolicyEvaluator>();
-        policy.Evaluate(Arg.Do<AgentPolicyEvaluationContext>(context => capturedContext = context))
+        policy.EvaluateAsync(Arg.Do<AgentPolicyEvaluationContext>(context => capturedContext = context))
             .Returns(new AgentPolicyDecision(AgentPolicyDecisionStatus.ConfirmationRequired, capability, "step_up_required"));
         var executor = CreateExecutor(
             catalog,
@@ -609,7 +609,7 @@ public partial class AgentExecutionAndSanitizerTests
         catalog.GetCapability(capability.Id).Returns(capability);
         var capturedContext = default(AgentPolicyEvaluationContext);
         var policy = Substitute.For<IAgentPolicyEvaluator>();
-        policy.Evaluate(Arg.Do<AgentPolicyEvaluationContext>(context => capturedContext = context))
+        policy.EvaluateAsync(Arg.Do<AgentPolicyEvaluationContext>(context => capturedContext = context))
             .Returns(new AgentPolicyDecision(AgentPolicyDecisionStatus.Allowed, capability));
         var executor = CreateExecutor(
             catalog,
@@ -637,7 +637,7 @@ public partial class AgentExecutionAndSanitizerTests
         catalog.GetOperation(operation.Id).Returns(operation);
         catalog.GetCapability(capability.Id).Returns(capability);
         var policy = Substitute.For<IAgentPolicyEvaluator>();
-        policy.Evaluate(Arg.Any<AgentPolicyEvaluationContext>())
+        policy.EvaluateAsync(Arg.Any<AgentPolicyEvaluationContext>())
             .Returns(new AgentPolicyDecision(AgentPolicyDecisionStatus.Allowed, capability));
         var auditService = Substitute.For<IAgentAuditService>();
         var executor = CreateExecutor(
@@ -676,7 +676,7 @@ public partial class AgentExecutionAndSanitizerTests
         catalog.GetOperation(operation.Id).Returns(operation);
         catalog.GetCapability(capability.Id).Returns(capability);
         var policy = Substitute.For<IAgentPolicyEvaluator>();
-        policy.Evaluate(Arg.Any<AgentPolicyEvaluationContext>())
+        policy.EvaluateAsync(Arg.Any<AgentPolicyEvaluationContext>())
             .Returns(new AgentPolicyDecision(AgentPolicyDecisionStatus.Allowed, capability));
         var executor = CreateExecutor(
             catalog,
@@ -706,7 +706,7 @@ public partial class AgentExecutionAndSanitizerTests
         catalog.GetOperation(operation.Id).Returns(operation);
         catalog.GetCapability(capability.Id).Returns(capability);
         var policy = Substitute.For<IAgentPolicyEvaluator>();
-        policy.Evaluate(Arg.Any<AgentPolicyEvaluationContext>())
+        policy.EvaluateAsync(Arg.Any<AgentPolicyEvaluationContext>())
             .Returns(new AgentPolicyDecision(AgentPolicyDecisionStatus.Allowed, capability));
         var executor = CreateExecutor(
             catalog,
@@ -742,7 +742,7 @@ public partial class AgentExecutionAndSanitizerTests
         catalog.GetOperation(operation.Id).Returns(operation);
         catalog.GetCapability(capability.Id).Returns(capability);
         var policy = Substitute.For<IAgentPolicyEvaluator>();
-        policy.Evaluate(Arg.Any<AgentPolicyEvaluationContext>())
+        policy.EvaluateAsync(Arg.Any<AgentPolicyEvaluationContext>())
             .Returns(new AgentPolicyDecision(AgentPolicyDecisionStatus.Allowed, capability));
         var executor = CreateExecutor(
             catalog,
@@ -783,7 +783,7 @@ public partial class AgentExecutionAndSanitizerTests
         catalog.GetOperation(operation.Id).Returns(operation);
         catalog.GetCapability(capability.Id).Returns(capability);
         var policy = Substitute.For<IAgentPolicyEvaluator>();
-        policy.Evaluate(Arg.Any<AgentPolicyEvaluationContext>())
+        policy.EvaluateAsync(Arg.Any<AgentPolicyEvaluationContext>())
             .Returns(new AgentPolicyDecision(AgentPolicyDecisionStatus.Allowed, capability));
         var unitOfWork = Substitute.For<IUnitOfWork>();
 
@@ -824,7 +824,7 @@ public partial class AgentExecutionAndSanitizerTests
         catalog.GetOperation(operation.Id).Returns(operation);
         catalog.GetCapability(capability.Id).Returns(capability);
         var policy = Substitute.For<IAgentPolicyEvaluator>();
-        policy.Evaluate(Arg.Any<AgentPolicyEvaluationContext>()).Returns(_ => policyThrows
+        policy.EvaluateAsync(Arg.Any<AgentPolicyEvaluationContext>()).Returns(_ => policyThrows
             ? throw new InvalidOperationException("policy_failed")
             : new AgentPolicyDecision(AgentPolicyDecisionStatus.Allowed, capability,
                 ShadowStatus: AgentPolicyDecisionStatus.Denied, ShadowReason: "missing_scope:write_habits"));
@@ -860,7 +860,7 @@ public partial class AgentExecutionAndSanitizerTests
         catalog.GetOperation(operation.Id).Returns(operation);
         catalog.GetCapability(capability.Id).Returns(capability);
         var policy = Substitute.For<IAgentPolicyEvaluator>();
-        policy.Evaluate(Arg.Any<AgentPolicyEvaluationContext>())
+        policy.EvaluateAsync(Arg.Any<AgentPolicyEvaluationContext>())
             .Returns(new AgentPolicyDecision(AgentPolicyDecisionStatus.Allowed, capability));
         Exception failure = cancellation
             ? new OperationCanceledException("transaction_canceled")
@@ -904,7 +904,7 @@ public partial class AgentExecutionAndSanitizerTests
         catalog.GetCapability(capability.Id).Returns(capability);
         var policy = Substitute.For<IAgentPolicyEvaluator>();
         var evaluations = 0;
-        policy.Evaluate(Arg.Any<AgentPolicyEvaluationContext>()).Returns(_ =>
+        policy.EvaluateAsync(Arg.Any<AgentPolicyEvaluationContext>()).Returns(_ =>
         {
             evaluations++;
             if (evaluations == 2 && policyThrowsOnRetry)

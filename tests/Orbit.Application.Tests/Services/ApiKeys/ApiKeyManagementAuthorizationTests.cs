@@ -20,7 +20,7 @@ public class ApiKeyManagementAuthorizationTests
 
     public ApiKeyManagementAuthorizationTests()
     {
-        _challengeService = new EmailChallengeService(_cache, TimeProvider.System);
+        _challengeService = new EmailChallengeService(ChallengeTestDatabase.For(_cache).Store(TimeProvider.System));
         _authorization = new ApiKeyManagementAuthorization(_appConfigService, _challengeService);
         SwitchOn(true);
     }
@@ -70,39 +70,39 @@ public class ApiKeyManagementAuthorizationTests
     [Theory]
     [InlineData(AgentCapabilityIds.ApiKeysRead)]
     [InlineData(AgentCapabilityIds.ApiKeysManage)]
-    public void OnStepUpVerified_ApiKeyCapability_OpensTheSameGrantTheHttpDoorOpens(string capabilityId)
+    public async Task OnStepUpVerified_ApiKeyCapability_OpensTheSameGrantTheHttpDoorOpens(string capabilityId)
     {
-        _authorization.OnStepUpVerified(capabilityId, UserId);
+        await _authorization.OnStepUpVerifiedAsync(capabilityId, UserId);
 
-        _authorization.HasGrant(UserId).Should().BeTrue();
-        _challengeService.HasAuthorization(EmailChallengeOperation.ApiKeyManagement, UserId).Should().BeTrue();
+        (await _authorization.HasGrantAsync(UserId)).Should().BeTrue();
+        (await _challengeService.HasAuthorizationAsync(EmailChallengeOperation.ApiKeyManagement, UserId)).Should().BeTrue();
     }
 
     [Fact]
-    public void OnStepUpVerified_OtherCapability_OpensNothing()
+    public async Task OnStepUpVerified_OtherCapability_OpensNothing()
     {
-        _authorization.OnStepUpVerified(AgentCapabilityIds.HabitsDelete, UserId);
+        await _authorization.OnStepUpVerifiedAsync(AgentCapabilityIds.HabitsDelete, UserId);
 
-        _authorization.HasGrant(UserId).Should().BeFalse();
+        (await _authorization.HasGrantAsync(UserId)).Should().BeFalse();
     }
 
     [Fact]
-    public void TryConsumeGrant_SpendsTheGrantExactlyOnce()
+    public async Task TryConsumeGrant_SpendsTheGrantExactlyOnce()
     {
-        _authorization.Grant(UserId, TimeSpan.FromMinutes(10));
+        await _authorization.GrantAsync(UserId, TimeSpan.FromMinutes(10));
 
-        _authorization.TryConsumeGrant(UserId).Should().BeTrue();
-        _authorization.TryConsumeGrant(UserId).Should().BeFalse();
-        _authorization.HasGrant(UserId).Should().BeFalse();
+        (await _authorization.TryConsumeGrantAsync(UserId)).Should().BeTrue();
+        (await _authorization.TryConsumeGrantAsync(UserId)).Should().BeFalse();
+        (await _authorization.HasGrantAsync(UserId)).Should().BeFalse();
     }
 
     [Fact]
-    public void HasGrant_ReadingDoesNotSpendTheGrant()
+    public async Task HasGrant_ReadingDoesNotSpendTheGrant()
     {
-        _authorization.Grant(UserId, TimeSpan.FromMinutes(10));
+        await _authorization.GrantAsync(UserId, TimeSpan.FromMinutes(10));
 
-        _authorization.HasGrant(UserId).Should().BeTrue();
-        _authorization.HasGrant(UserId).Should().BeTrue();
-        _authorization.TryConsumeGrant(UserId).Should().BeTrue();
+        (await _authorization.HasGrantAsync(UserId)).Should().BeTrue();
+        (await _authorization.HasGrantAsync(UserId)).Should().BeTrue();
+        (await _authorization.TryConsumeGrantAsync(UserId)).Should().BeTrue();
     }
 }

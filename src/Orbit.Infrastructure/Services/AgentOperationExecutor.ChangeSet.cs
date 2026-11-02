@@ -53,7 +53,7 @@ public partial class AgentOperationExecutor
         var request = execution.Request with { OperationId = operation.Id, Arguments = member.Arguments, ConfirmationToken = null };
         var context = new OperationExecutionContext(request, operation, capability, member.Arguments,
             $"{operation.DisplayName} approved in account changes", AgentConfirmationRequirement.None);
-        var access = EvaluatePolicy(context);
+        var access = await EvaluatePolicyAsync(context);
         return access.Status == AgentPolicyDecisionStatus.Allowed ? (context, null) : (null, access.Reason ?? "denied");
     }
 

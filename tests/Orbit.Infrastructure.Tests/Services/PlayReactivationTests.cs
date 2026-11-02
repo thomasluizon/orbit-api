@@ -353,11 +353,12 @@ public class PlayReactivationTests
         var reactivation = new AccountReactivation(new GenericRepository<OwedSubscriptionCancellation>(context));
         var dispatcher = new SignupJobDispatcher(_jobs, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance);
         using var cache = new MemoryCache(new MemoryCacheOptions());
-        cache.Set("verify:paid@example.com", new VerificationEntry("123456", 0, DateTime.UtcNow));
+        ChallengeTestDatabase.For(cache).Seed("verify:paid@example.com", "123456");
         var result = google
             ? await new GoogleSignInFlow(users, work, sessions, dispatcher, _jobs, reactivation)
                 .CompleteAsync("paid@example.com", "Returning", "en", null, null, null, CancellationToken.None)
-            : await new VerifyCodeCommandHandler(cache, users, work, sessions, dispatcher, _jobs, reactivation)
+            : await new VerifyCodeCommandHandler(
+            ChallengeTestDatabase.For(cache).Store(), users, work, sessions, dispatcher, _jobs, reactivation)
                 .Handle(new VerifyCodeCommand("paid@example.com", "123456"), CancellationToken.None);
         result.IsSuccess.Should().BeTrue();
     }

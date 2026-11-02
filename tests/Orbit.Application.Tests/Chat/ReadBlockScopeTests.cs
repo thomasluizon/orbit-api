@@ -749,7 +749,7 @@ public sealed class ReadBlockScopeTests
         var bridge = Substitute.For<IAgentStepUpAuthorizationBridge>();
         bridge.GetRequiredConfirmationAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns((AgentConfirmationRequirement?)null);
         var policy = Substitute.For<IAgentPolicyEvaluator>();
-        policy.Evaluate(Arg.Any<AgentPolicyEvaluationContext>()).Returns(c =>
+        policy.EvaluateAsync(Arg.Any<AgentPolicyEvaluationContext>()).Returns(c =>
         {
             var context = c.Arg<AgentPolicyEvaluationContext>();
             var capability = catalog.GetCapability(context.CapabilityId)!;

@@ -87,7 +87,7 @@ public class RequireBotProtectionFilterTests
     {
         using var cache = new MemoryCache(new MemoryCacheOptions());
         var jobs = Substitute.For<IBackgroundJobClient>();
-        var handler = new SendCodeCommandHandler(cache, jobs);
+        var handler = new SendCodeCommandHandler(ChallengeTestDatabase.For(cache).Store(), ChallengeTestDatabase.Environment(), jobs);
         var context = CreateContext(new AuthController.SendCodeRequest("attacker-chosen@example.com"));
 
         await EnabledFilter().OnActionExecutionAsync(context, async () =>
@@ -97,7 +97,7 @@ public class RequireBotProtectionFilterTests
         });
 
         context.Result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(400);
-        cache.TryGetValue("verify:attacker-chosen@example.com", out _).Should().BeFalse();
+        ChallengeTestDatabase.For(cache).HasCode("verify:attacker-chosen@example.com").Should().BeFalse();
         jobs.DidNotReceive().Create(Arg.Any<Job>(), Arg.Any<IState>());
     }
 
@@ -106,7 +106,7 @@ public class RequireBotProtectionFilterTests
     {
         using var cache = new MemoryCache(new MemoryCacheOptions());
         var jobs = Substitute.For<IBackgroundJobClient>();
-        var handler = new SendCodeCommandHandler(cache, jobs);
+        var handler = new SendCodeCommandHandler(ChallengeTestDatabase.For(cache).Store(), ChallengeTestDatabase.Environment(), jobs);
         _verifier.VerifyAsync("valid", Arg.Any<CancellationToken>())
             .Returns(new TurnstileVerificationResult(true, []));
         var request = new AuthController.SendCodeRequest("person@example.com", TurnstileToken: "valid");
@@ -131,7 +131,7 @@ public class RequireBotProtectionFilterTests
 
         context.Result.Should().BeNull();
         controllerResult.Should().BeOfType<OkObjectResult>();
-        cache.TryGetValue("verify:person@example.com", out _).Should().BeTrue();
+        ChallengeTestDatabase.For(cache).HasCode("verify:person@example.com").Should().BeTrue();
         jobs.Received(1).Create(Arg.Any<Job>(), Arg.Any<IState>());
     }
 
@@ -142,7 +142,7 @@ public class RequireBotProtectionFilterTests
         var email = Substitute.For<IEmailService>();
         var tokens = Substitute.For<IWaitlistConfirmationTokenService>();
         var handler = new JoinWaitlistCommandHandler(
-            cache,
+            ChallengeTestDatabase.For(cache).Store(),
             tokens,
             email,
             Options.Create(new WaitlistSettings()));
@@ -155,7 +155,7 @@ public class RequireBotProtectionFilterTests
         });
 
         context.Result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(400);
-        cache.TryGetValue("waitlist:person@example.com", out _).Should().BeFalse();
+        ChallengeTestDatabase.For(cache).Row("waitlist:person@example.com").Should().BeNull();
         await email.DidNotReceiveWithAnyArgs().SendWaitlistConfirmationAsync(default!, default!, default!, default);
     }
 

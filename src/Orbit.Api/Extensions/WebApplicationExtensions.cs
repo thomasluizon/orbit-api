@@ -368,7 +368,7 @@ public static partial class WebApplicationExtensions
         }
 
         var sourceName = toolCall.OperationId ?? toolCall.ToolName;
-        var decision = services.PolicyEvaluator.Evaluate(new AgentPolicyEvaluationContext(
+        var decision = await services.PolicyEvaluator.EvaluateAsync(new AgentPolicyEvaluationContext(
             capability.Id,
             context.User.GetUserId(),
             AgentExecutionSurface.Mcp,

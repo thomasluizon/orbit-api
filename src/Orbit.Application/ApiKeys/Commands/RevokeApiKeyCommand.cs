@@ -27,7 +27,7 @@ public class RevokeApiKeyCommandHandler(
             return gateCheck;
 
         var requiresStepUp = await authorization.IsRequiredAsync(cancellationToken);
-        if (requiresStepUp && !authorization.HasGrant(request.UserId))
+        if (requiresStepUp && !await authorization.HasGrantAsync(request.UserId))
             return Result.Failure(ErrorMessages.ApiKeyCreationChallengeRequired);
 
         var apiKey = await FindKeyAsync(request, cancellationToken);

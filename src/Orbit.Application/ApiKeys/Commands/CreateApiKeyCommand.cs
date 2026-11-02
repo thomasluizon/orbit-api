@@ -37,7 +37,7 @@ public class CreateApiKeyCommandHandler(
     public async Task<Result<CreateApiKeyResponse>> Handle(CreateApiKeyCommand request, CancellationToken cancellationToken)
     {
         var requiresStepUp = await authorization.IsRequiredAsync(cancellationToken);
-        if (requiresStepUp && !authorization.HasGrant(request.UserId))
+        if (requiresStepUp && !await authorization.HasGrantAsync(request.UserId))
             return Result.Failure<CreateApiKeyResponse>(ErrorMessages.ApiKeyCreationChallengeRequired);
 
         var gateCheck = await payGate.CanCreateApiKeys(request.UserId, cancellationToken);
@@ -63,7 +63,7 @@ public class CreateApiKeyCommandHandler(
 
         var (apiKey, rawKey) = createResult.Value;
 
-        if (requiresStepUp && !authorization.TryConsumeGrant(request.UserId))
+        if (requiresStepUp && !await authorization.TryConsumeGrantAsync(request.UserId))
             return Result.Failure<CreateApiKeyResponse>(ErrorMessages.ApiKeyCreationChallengeRequired);
 
         await apiKeyRepository.AddAsync(apiKey, cancellationToken);

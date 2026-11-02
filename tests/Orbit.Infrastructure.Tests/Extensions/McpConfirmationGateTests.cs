@@ -80,7 +80,7 @@ public class McpConfirmationGateTests : IDisposable
             .Returns(_ => _stepUpEnabled);
         _authorization = new ApiKeyManagementAuthorization(
             _appConfigService,
-            new EmailChallengeService(cache, TimeProvider.System));
+            new EmailChallengeService(ChallengeTestDatabase.For(cache).Store(TimeProvider.System)));
         var repository = Substitute.For<IGenericRepository<ApiKey>>();
         repository.FindAsync(Arg.Any<Expression<Func<ApiKey, bool>>>(), Arg.Any<CancellationToken>())
             .Returns(new List<ApiKey> { _apiKey });
@@ -202,7 +202,7 @@ public class McpConfirmationGateTests : IDisposable
         outcome.PolicyError.Should().BeNull();
         outcome.ToolOutput.Should().Be($"Revoked API key {_keyId}.");
         _apiKey.IsRevoked.Should().BeTrue();
-        _authorization.HasGrant(_userId).Should().BeTrue();
+        (await _authorization.HasGrantAsync(_userId)).Should().BeTrue();
     }
 
     [Fact]
@@ -251,7 +251,7 @@ public class McpConfirmationGateTests : IDisposable
 
         outcome.PolicyError.Should().BeNull();
         outcome.ToolOutput.Should().Contain("CI key");
-        _authorization.HasGrant(_userId).Should().BeTrue();
+        (await _authorization.HasGrantAsync(_userId)).Should().BeTrue();
     }
 
     [Fact]
@@ -277,7 +277,7 @@ public class McpConfirmationGateTests : IDisposable
         var pendingOperationId = _dbContext.PendingAgentOperations.Single().Id.ToString();
         OAuthConnectorConfirmationTests.AssertError(
             await _agentTools.StepUpAgentOperation(_apiKeyUser, pendingOperationId), "interactive_confirmation_required");
-        _authorization.HasGrant(_userId).Should().BeFalse();
+        (await _authorization.HasGrantAsync(_userId)).Should().BeFalse();
     }
 
     [Fact]
@@ -303,7 +303,7 @@ public class McpConfirmationGateTests : IDisposable
         outcome.Operation.Status.Should().Be(AgentOperationStatus.Succeeded);
         outcome.Operation.Payload.Should().BeAssignableTo<IReadOnlyList<ApiKeyResponse>>()
             .Which.Should().ContainSingle(key => key.Id == _keyId);
-        _authorization.HasGrant(_userId).Should().BeTrue();
+        (await _authorization.HasGrantAsync(_userId)).Should().BeTrue();
     }
 
     [Fact]
