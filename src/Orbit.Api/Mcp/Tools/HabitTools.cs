@@ -193,28 +193,23 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
             {
                 ["habit_id"] = habitId
             };
-            if (title is not null)
-                arguments["title"] = title;
-            if (description is not null)
-                arguments["description"] = description;
-            if (frequencyUnit is not null)
-                arguments["frequency_unit"] = frequencyUnit;
-            if (frequencyQuantity is not null)
-                arguments["frequency_quantity"] = frequencyQuantity;
-            if (dueDate is not null)
-                arguments["due_date"] = dueDate;
+            AddProvidedArguments(arguments, new Dictionary<string, object?>
+            {
+                ["title"] = title,
+                ["description"] = description,
+                ["frequency_unit"] = frequencyUnit,
+                ["frequency_quantity"] = frequencyQuantity,
+                ["due_date"] = dueDate,
+                ["interval_weeks"] = intervalWeeks,
+                ["is_general"] = isGeneral,
+                ["slip_alert_enabled"] = slipAlertEnabled
+            });
             if (dueTime is not null)
                 arguments["due_time"] = dueTime.Length == 0 ? null : dueTime;
-            if (intervalWeeks is not null)
-                arguments["interval_weeks"] = intervalWeeks;
             if (emoji != string.Empty)
                 arguments["emoji"] = emoji;
             if (dueEndTime != string.Empty)
                 arguments["due_end_time"] = dueEndTime;
-            if (isGeneral is not null)
-                arguments["is_general"] = isGeneral;
-            if (slipAlertEnabled is not null)
-                arguments["slip_alert_enabled"] = slipAlertEnabled;
             McpToolHelpers.AddJsonArguments(arguments, ("relative_reminders", relativeReminders), ("repeat_reminder", repeatReminder));
             var result = await executorBridge.ExecuteAsync(user, "update_habit", arguments, confirmationToken: null, cancellationToken);
             return result.Succeeded ? McpToolHelpers.Text($"Updated habit {habitId}") : McpToolHelpers.Error(result.Message);
@@ -227,6 +222,13 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
         {
             return McpToolHelpers.Error("Invalid JSON input: " + ex.Message);
         }
+    }
+
+    private static void AddProvidedArguments(Dictionary<string, object?> arguments,
+        Dictionary<string, object?> fields)
+    {
+        foreach (var field in fields.Where(field => field.Value is not null))
+            arguments[field.Key] = field.Value;
     }
 
     [McpServerTool(Name = "delete_habit"), Description("Delete a habit by ID.")]

@@ -9,29 +9,28 @@ public partial class OAuthController
     {
         if (string.IsNullOrWhiteSpace(clientId) || clientId.Length > OAuthClientMetadata.MaxClientIdLength)
             return (null, "invalid_client");
-        string? name;
-        IReadOnlyList<string> uris;
-        if (!clientId.Contains(':') && !clientId.StartsWith("//", StringComparison.Ordinal))
-        {
-            if (!Guid.TryParse(clientId, out var id))
-                return (null, "invalid_client");
-            var client = await clients.GetByIdAsync(id, ct);
-            if (client is null || !string.Equals(client.Id.ToString(), clientId, StringComparison.Ordinal))
-                return (null, "invalid_client");
-            name = client.ClientName;
-            uris = client.RedirectUris;
-        }
-        else
+        var identity = await ResolveClientIdentityAsync(clientId, ct);
+        if (identity is null || string.IsNullOrWhiteSpace(identity.ClientName))
+            return (null, "invalid_client");
+        return redirectUri is null || (IsRedirectUriAllowed(redirectUri)
+            && identity.RedirectUris.Contains(redirectUri, StringComparer.Ordinal))
+            ? (identity.ClientName, null) : (null, "invalid_redirect_uri");
+    }
+
+    private async Task<ClientIdentity?> ResolveClientIdentityAsync(string clientId, CancellationToken ct)
+    {
+        if (clientId.Contains(':') || clientId.StartsWith("//", StringComparison.Ordinal))
         {
             var metadata = await clientMetadata.GetAsync(clientId, ct);
-            if (metadata is null)
-                return (null, "invalid_client");
-            name = metadata.ClientName;
-            uris = metadata.RedirectUris;
+            return metadata is null ? null : new(metadata.ClientName, metadata.RedirectUris);
         }
-        if (string.IsNullOrWhiteSpace(name))
-            return (null, "invalid_client");
-        return redirectUri is null || (IsRedirectUriAllowed(redirectUri) && uris.Contains(redirectUri, StringComparer.Ordinal))
-            ? (name, null) : (null, "invalid_redirect_uri");
+
+        if (!Guid.TryParse(clientId, out var id))
+            return null;
+        var client = await clients.GetByIdAsync(id, ct);
+        return client is null || !string.Equals(client.Id.ToString(), clientId, StringComparison.Ordinal)
+            ? null : new(client.ClientName, client.RedirectUris);
     }
+
+    private sealed record ClientIdentity(string ClientName, IReadOnlyList<string> RedirectUris);
 }

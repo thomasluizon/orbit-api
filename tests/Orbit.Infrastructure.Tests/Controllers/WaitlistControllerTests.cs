@@ -1,4 +1,7 @@
 using System.Text.Json;
+using Hangfire;
+using Hangfire.Common;
+using Hangfire.States;
 using FluentAssertions;
 using FluentValidation;
 using MediatR;
@@ -20,6 +23,7 @@ namespace Orbit.Infrastructure.Tests.Controllers;
 
 public class WaitlistControllerTests
 {
+    private readonly IBackgroundJobClient _jobs = Substitute.For<IBackgroundJobClient>();
     private readonly IEmailService _emailService = Substitute.For<IEmailService>();
     private readonly IWaitlistConfirmationTokenService _tokenService = Substitute.For<IWaitlistConfirmationTokenService>();
     private readonly IOptions<WaitlistSettings> _settings = Options.Create(new WaitlistSettings
@@ -44,11 +48,11 @@ public class WaitlistControllerTests
 
         var ok = result.Should().BeOfType<OkObjectResult>().Subject;
         JsonSerializer.Serialize(ok.Value).Should().Contain("Check your inbox");
-        await _emailService.Received(1).SendWaitlistConfirmationAsync(
-            "user@test.com",
-            "https://api.useorbit.org/api/waitlist/confirm?token=tok.sig",
-            "en",
-            Arg.Any<CancellationToken>());
+        _jobs.Received(1).Create(Arg.Is<Job>(job => job.Type == typeof(SendWaitlistConfirmationJob)
+            && (string)job.Args[0] == "user@test.com"
+            && (string)job.Args[1] == "https://api.useorbit.org/api/waitlist/confirm?token=tok.sig"
+            && (string)job.Args[2] == "en"), Arg.Any<IState>());
+        await _emailService.DidNotReceiveWithAnyArgs().SendWaitlistConfirmationAsync(default!, default!, default!, default);
     }
 
     [Fact]
@@ -62,8 +66,8 @@ public class WaitlistControllerTests
 
         first.Should().BeOfType<OkObjectResult>();
         second.Should().BeOfType<OkObjectResult>();
-        await _emailService.Received(1).SendWaitlistConfirmationAsync(
-            "dupe@test.com", Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+        _jobs.Received(1).Create(Arg.Is<Job>(job => job.Type == typeof(SendWaitlistConfirmationJob)
+            && (string)job.Args[0] == "dupe@test.com"), Arg.Any<IState>());
     }
 
     [Theory]
@@ -77,6 +81,7 @@ public class WaitlistControllerTests
             new WaitlistController.JoinWaitlistRequest(email, "en"), CancellationToken.None);
 
         await act.Should().ThrowAsync<ValidationException>();
+        _jobs.DidNotReceive().Create(Arg.Any<Job>(), Arg.Any<IState>());
         await _emailService.DidNotReceive().SendWaitlistConfirmationAsync(
             Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
@@ -90,6 +95,7 @@ public class WaitlistControllerTests
             new WaitlistController.JoinWaitlistRequest("user@test.com", "fr"), CancellationToken.None);
 
         await act.Should().ThrowAsync<ValidationException>();
+        _jobs.DidNotReceive().Create(Arg.Any<Job>(), Arg.Any<IState>());
         await _emailService.DidNotReceive().SendWaitlistConfirmationAsync(
             Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
@@ -170,6 +176,7 @@ public class WaitlistControllerTests
             })
             .AddScoped<IValidator<JoinWaitlistCommand>, JoinWaitlistCommandValidator>()
             .AddMemoryCache()
+            .AddSingleton(_jobs)
             .AddSingleton(_emailService)
             .AddSingleton(_tokenService)
             .AddSingleton(_settings)

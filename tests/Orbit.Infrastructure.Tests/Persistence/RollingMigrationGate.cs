@@ -12,9 +12,6 @@ internal static class RollingMigrationGate
 
     private const RegexOptions SqlOptions = RegexOptions.IgnoreCase | RegexOptions.CultureInvariant;
     private const string Identifier = "(?:\"identifier\"|[a-z_][a-z0-9_$]*)";
-    private static readonly Regex ConcurrentIndexDrop = new(
-        @"\A\s*DROP\s+INDEX\s+CONCURRENTLY\s+IF\s+EXISTS\s+" + Identifier
-        + @"(?:\s*\.\s*" + Identifier + @")?\s*\z", SqlOptions);
     private static readonly Regex AlterTable = new(
         @"\A\s*ALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?(?:ONLY\s+)?" + Identifier
         + @"(?:\s*\.\s*" + Identifier + @")?\s*\*?\s+(?<actions>.+)\z", SqlOptions | RegexOptions.Singleline);
@@ -27,13 +24,12 @@ internal static class RollingMigrationGate
 
     private static bool RequiresSqlContract(string sql)
     {
+        if (ContractSql.IsMatch(sql))
+            return true;
+
         var masked = MaskQuotedSqlAndComments(sql);
         if (masked is null || SplitTopLevel(masked, ';') is not { } statements)
             return true;
-
-        if (ContractSql.IsMatch(sql))
-            return statements.Where(statement => !string.IsNullOrWhiteSpace(statement)).ToArray() is not [var only]
-                || !ConcurrentIndexDrop.IsMatch(only);
 
         foreach (var statement in statements.Where(statement => Regex.IsMatch(statement, @"\bALTER\s+TABLE\b", SqlOptions)))
         {
@@ -146,7 +142,9 @@ internal static class RollingMigrationGate
         Func<string, string, bool>? isAncestor = null,
         string baseRef = "base")
     {
-        var contracts = operations.Where(RequiresContract).Select(operation => operation.GetType().Name)
+        var indexRepairs = ConcurrentIndexRepairs(operations);
+        var contracts = operations.Where(operation => !indexRepairs.Contains(operation) && RequiresContract(operation))
+            .Select(operation => operation.GetType().Name)
             .Distinct().ToArray();
         if (contracts.Length == 0)
             return [];
@@ -172,6 +170,31 @@ internal static class RollingMigrationGate
             failures.Add($"{migrationId}: deployment barrier must record the compatibility condition and evidence that web and background processes drained.");
 
         return failures;
+    }
+
+    private static HashSet<MigrationOperation> ConcurrentIndexRepairs(IReadOnlyList<MigrationOperation> operations)
+    {
+        var repairs = new HashSet<MigrationOperation>();
+        const string identifier = "(?:\"(?:[^\"]|\"\")+\"|[a-z_][a-z0-9_$]*)";
+        for (var index = 0; index < operations.Count; index++)
+        {
+            if (operations[index] is not SqlOperation { SuppressTransaction: true } drop)
+                continue;
+            var masked = MaskQuotedSqlAndComments(drop.Sql, preserveIdentifiers: true);
+            if (masked is null)
+                continue;
+            var match = Regex.Match(masked, @"\A\s*DROP\s+INDEX\s+CONCURRENTLY\s+IF\s+EXISTS\s+(?<name>"
+                + identifier + @")\s*;?\s*\z", SqlOptions);
+            if (!match.Success)
+                continue;
+            var create = @"\A\s*CREATE\s+(?:UNIQUE\s+)?INDEX\s+CONCURRENTLY\s+IF\s+NOT\s+EXISTS\s+(?<name>"
+                + identifier + @")\s+ON\s+";
+            if (operations.Skip(index + 1).OfType<SqlOperation>().Any(operation => operation.SuppressTransaction
+                && Regex.Match(MaskQuotedSqlAndComments(operation.Sql, preserveIdentifiers: true) ?? "", create, SqlOptions)
+                    is { Success: true } recreate && recreate.Groups["name"].Value == match.Groups["name"].Value))
+                repairs.Add(drop);
+        }
+        return repairs;
     }
 
     internal static IReadOnlyList<string> CheckRelease(

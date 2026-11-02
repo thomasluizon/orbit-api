@@ -15,7 +15,6 @@ public sealed class OAuthAuthorizationStore(IOAuthStateStore states, TimeProvide
     public GoogleAuthorizationRequest? TryCreateGoogleRequest(string clientId, string redirectUri, string clientState,
         string codeChallenge, string? nonce, string googleRedirectUri, string language, IReadOnlyList<string>? scopes = null, string clientIp = "unknown", string? browserBindingHash = null)
     {
-        Cleanup();
         var verifier = NewSecret();
         var challenge = Challenge(verifier);
         var request = new GoogleAuthorizationRequest(NewSecret(), clientId, redirectUri, clientState,
@@ -30,7 +29,6 @@ public sealed class OAuthAuthorizationStore(IOAuthStateStore states, TimeProvide
     public string CreateCode(Guid userId, string codeChallenge, string redirectUri, string clientId, string? nonce = null,
         IReadOnlyList<string>? scopes = null, bool isReadOnly = false)
     {
-        Cleanup();
         var code = NewSecret();
         var entry = new AuthorizationEntry(userId, codeChallenge, redirectUri, clientId, nonce, timeProvider.GetUtcNow().UtcDateTime, scopes, isReadOnly);
         states.Put(code, "code", JsonSerializer.Serialize(entry), timeProvider.GetUtcNow().UtcDateTime.Add(CodeExpiry));
@@ -88,15 +86,9 @@ public sealed class OAuthAuthorizationStore(IOAuthStateStore states, TimeProvide
 
     private string PutUntil<T>(string kind, T entry, DateTime expiresAtUtc)
     {
-        Cleanup();
         var secret = NewSecret();
         states.Put(secret, kind, JsonSerializer.Serialize(entry), expiresAtUtc);
         return secret;
-    }
-
-    private void Cleanup()
-    {
-        states.RemoveExpired(timeProvider.GetUtcNow().UtcDateTime);
     }
 
     private static T? Deserialize<T>(string? payload) => payload is null ? default : JsonSerializer.Deserialize<T>(payload);

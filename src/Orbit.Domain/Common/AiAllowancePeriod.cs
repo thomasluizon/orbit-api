@@ -2,6 +2,8 @@ namespace Orbit.Domain.Common;
 
 public readonly record struct AiAllowancePeriod
 {
+    public const int MaximumProPeriodDays = 13;
+
     public DateOnly Start { get; }
     public DateOnly End { get; }
     public string Name { get; }

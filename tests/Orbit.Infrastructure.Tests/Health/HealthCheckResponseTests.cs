@@ -1,3 +1,5 @@
+using Microsoft.AspNetCore.Builder;
+using Microsoft.Extensions.DependencyInjection;
 using System.Text;
 using System.Text.Json;
 using FluentAssertions;
@@ -34,6 +36,48 @@ public class HealthCheckResponseTests
 
         var raw = Encoding.UTF8.GetString(stream.ToArray());
         return (context.Response.StatusCode, context.Response.ContentType ?? string.Empty, JsonDocument.Parse(raw), raw);
+    }
+
+    [Fact]
+    public async Task HealthEndpoints_StaleJobDoesNotFailRenderProbe_JobReportReturns503()
+    {
+        var jobCalls = 0;
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSingleton(new System.Diagnostics.DiagnosticListener("HealthCheckTests"));
+        services.AddRouting();
+        services.AddHealthChecks()
+            .AddCheck("database", () => HealthCheckResult.Healthy("Database reachable"))
+            .AddCheck("background-services", () =>
+            {
+                jobCalls++;
+                return HealthCheckResult.Unhealthy("Stale services: reminder-scheduler");
+            }, tags: ["jobs"]);
+        using var provider = services.BuildServiceProvider();
+        var app = new ApplicationBuilder(provider);
+        app.UseRouting();
+        app.UseEndpoints(endpoints => endpoints.MapOrbitHealthChecks());
+        var pipeline = app.Build();
+        var liveness = new DefaultHttpContext { RequestServices = provider };
+        liveness.Request.Path = "/health";
+        liveness.Request.Method = "GET";
+        using var liveBody = new MemoryStream();
+        liveness.Response.Body = liveBody;
+        await pipeline(liveness);
+        liveness.Response.StatusCode.Should().Be(200);
+        jobCalls.Should().Be(0);
+        using var liveJson = JsonDocument.Parse(liveBody.ToArray());
+        liveJson.RootElement.TryGetProperty("commit", out _).Should().BeTrue();
+
+        var jobs = new DefaultHttpContext { RequestServices = provider };
+        jobs.Request.Path = "/health/jobs";
+        jobs.Request.Method = "GET";
+        using var jobBody = new MemoryStream();
+        jobs.Response.Body = jobBody;
+        await pipeline(jobs);
+        jobs.Response.StatusCode.Should().Be(503);
+        jobCalls.Should().Be(1);
+        Encoding.UTF8.GetString(jobBody.ToArray()).Should().Contain("reminder-scheduler");
     }
 
     [Fact]

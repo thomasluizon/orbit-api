@@ -1467,7 +1467,7 @@ public class HabitTests
 
         habit.CatchUpDueDate(today);
 
-        habit.NextDueDate.Should().BeOnOrAfter(today);
+        habit.NextDueDate.Should().Be(today);
         habit.IsCompleted.Should().BeFalse();
     }
 
@@ -1479,7 +1479,7 @@ public class HabitTests
 
         habit.CatchUpDueDate(today);
 
-        habit.NextDueDate.Should().BeOnOrAfter(today);
+        habit.NextDueDate.Should().Be(today);
     }
 
     [Fact]
@@ -1491,7 +1491,7 @@ public class HabitTests
 
         habit.CatchUpDueDate(today);
 
-        habit.NextDueDate.Should().BeOnOrAfter(today);
+        habit.NextDueDate.Should().Be(new DateOnly(2025, 4, 15));
     }
 
     [Fact]
@@ -1503,7 +1503,7 @@ public class HabitTests
 
         habit.CatchUpDueDate(today);
 
-        habit.NextDueDate.Should().BeOnOrAfter(today);
+        habit.NextDueDate.Should().Be(new DateOnly(2026, 6, 15));
     }
 
     [Fact]

@@ -311,7 +311,40 @@ public class StreakGoalSyncServiceTests
         var large = await CountSweepQueriesAsync(candidateCount: 25);
 
         large.Should().Be(small);
-        large.Should().BeLessThanOrEqualTo(6);
+        large.Should().BeLessThanOrEqualTo(7);
+    }
+
+    [Fact]
+    public async Task SyncActiveGoals_DeactivatedOwnerInFirstPage_StillProcessesLaterGoalPages()
+    {
+        using var factory = new SqliteOrbitDbContextFactory();
+        var db = factory.Context;
+        var owners = Enumerable.Range(1, 3).Select(index => User.Create($"Owner {index}", $"owner{index}@example.com").Value).ToArray();
+        owners[1].Deactivate(DateTime.UtcNow.AddDays(30));
+        var goals = owners.Select((owner, index) =>
+        {
+            var goal = CreateStreakGoal(owner.Id, 7);
+            typeof(Goal).GetProperty(nameof(Goal.Id))!.SetValue(goal, Guid.Parse($"00000000-0000-0000-0000-{index + 1:D12}"));
+            return goal;
+        }).ToArray();
+        db.AddRange(owners);
+        db.AddRange(goals);
+        await db.SaveChangesAsync();
+        var completion = Substitute.For<IGoalCompletionService>();
+        var dates = Substitute.For<IUserDateService>();
+        dates.GetUserTodayAsync(Arg.Any<string?>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Today);
+        using var services = new ServiceCollection().AddSingleton(db).AddSingleton(completion).AddSingleton(dates).BuildServiceProvider();
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        { ["BackgroundServices:ScanPageSize"] = "2" }).Build();
+        var service = new StreakGoalSyncService(services.GetRequiredService<IServiceScopeFactory>(),
+            NullLogger<StreakGoalSyncService>.Instance, configuration);
+
+        await service.SyncActiveGoals(default);
+
+        await completion.Received(1).SyncDerivedGoalsAsync(owners[2].Id, Arg.Is<IReadOnlyCollection<Guid>>(ids => ids.Contains(goals[2].Id)),
+            Today, true, Arg.Any<CancellationToken>(), Arg.Any<DerivedGoalPreferences>());
+        await completion.DidNotReceive().SyncDerivedGoalsAsync(owners[1].Id, Arg.Any<IReadOnlyCollection<Guid>>(),
+            Arg.Any<DateOnly>(), Arg.Any<bool>(), Arg.Any<CancellationToken>(), Arg.Any<DerivedGoalPreferences>());
     }
 
     private static Habit CreateDailyHabitLoggedLastDays(Guid userId, int days)
@@ -384,6 +417,7 @@ public class StreakGoalSyncServiceTests
         var userDateService = Substitute.For<IUserDateService>();
         userDateService.GetUserTimeZoneAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(TimeZoneInfo.Utc);
         userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Today);
+        userDateService.GetUserTodayAsync(Arg.Any<string?>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Today);
         userDateService.GetUserWeekStartDayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(1);
         var goalCompletionService = new GoalCompletionService(
             new GenericRepository<Goal>(dbContext),

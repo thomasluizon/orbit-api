@@ -7,18 +7,20 @@ namespace Orbit.Infrastructure.Persistence;
 
 public sealed class FoundingAchievementReader(OrbitDbContext context) : IFoundingAchievementReader
 {
-    public Task<FoundingAchievementEvidence?> ReadEvidenceAsync(
-        Guid userId,
-        CancellationToken cancellationToken = default)
+    public async Task<FoundingAchievementEvidence?> ReadEvidenceAsync(Guid userId, CancellationToken cancellationToken = default) =>
+        (await ReadEvidencePageAsync([userId], cancellationToken)).GetValueOrDefault(userId);
+
+    public async Task<IReadOnlyDictionary<Guid, FoundingAchievementEvidence>> ReadEvidencePageAsync(
+        IReadOnlyCollection<Guid> userIds, CancellationToken cancellationToken = default)
     {
         var habits = context.Habits.IgnoreQueryFilters();
         var habitLogs = context.HabitLogs.IgnoreQueryFilters();
         var goals = context.Goals.IgnoreQueryFilters();
-
-        return context.Users
-            .AsNoTracking()
-            .Where(user => user.Id == userId && !user.IsDeactivated)
-            .Select(user => new FoundingAchievementEvidence(
+        return await context.Users.AsNoTracking().Where(user => userIds.Contains(user.Id) && !user.IsDeactivated)
+            .Select(user => new
+            {
+                user.Id,
+                Evidence = new FoundingAchievementEvidence(
                 habits.Any(habit => habit.UserId == user.Id
                     && !habit.IsBadHabit
                     && habitLogs.Any(log => log.HabitId == habit.Id && log.Value > 0)),
@@ -28,8 +30,9 @@ public sealed class FoundingAchievementReader(OrbitDbContext context) : IFoundin
                     && award.Source == XpAwardSource.GoalCompleted)
                     || goals.Any(goal => goal.UserId == user.Id
                         && (goal.Status == GoalStatus.Completed || goal.FirstCompletedAtUtc != null)),
-                user.HasCompletedOnboardingChecklist))
-            .FirstOrDefaultAsync(cancellationToken);
+                user.HasCompletedOnboardingChecklist)
+            })
+            .ToDictionaryAsync(row => row.Id, row => row.Evidence, cancellationToken);
     }
 
     public Task<IReadOnlyList<FoundingAchievementCursor>> ReadCandidatePageAsync(

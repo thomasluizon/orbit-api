@@ -72,8 +72,19 @@ public static partial class WebApplicationExtensions
         app.MapControllers();
         app.MapMcp("/mcp").RequireCors("ThirdParty");
 
+        app.MapOrbitHealthChecks();
+    }
+
+    internal static void MapOrbitHealthChecks(this Microsoft.AspNetCore.Routing.IEndpointRouteBuilder app)
+    {
         app.MapHealthChecks("/health", new HealthCheckOptions
         {
+            Predicate = registration => !registration.Tags.Contains("jobs"),
+            ResponseWriter = WriteHealthCheckResponseAsync
+        }).AllowAnonymous();
+        app.MapHealthChecks("/health/jobs", new HealthCheckOptions
+        {
+            Predicate = registration => registration.Tags.Contains("jobs"),
             ResponseWriter = WriteHealthCheckResponseAsync
         }).AllowAnonymous();
     }

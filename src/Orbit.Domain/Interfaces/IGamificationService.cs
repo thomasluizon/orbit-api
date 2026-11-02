@@ -4,6 +4,8 @@ namespace Orbit.Domain.Interfaces;
 
 public record HabitLogGamificationResult(int XpEarned, IReadOnlyList<string> NewAchievementIds);
 
+public sealed record FoundingReconciliationResult(Guid UserId, IReadOnlyList<string> Granted, Exception? Error = null);
+
 public interface IGamificationService
 {
     Task<HabitLogGamificationResult?> ProcessHabitLogged(Guid userId, Guid habitId, CancellationToken ct = default);
@@ -11,6 +13,9 @@ public interface IGamificationService
     Task ProcessHabitCreated(Guid userId, CancellationToken ct = default);
     Task ProcessGoalCreated(Guid userId, CancellationToken ct = default);
     Task ProcessGoalCompleted(Guid userId, Guid goalId, CancellationToken ct = default);
+    Task<IReadOnlyList<FoundingReconciliationResult>> ReconcileFoundingAchievementPageAsync(
+        IReadOnlyCollection<Guid> userIds, CancellationToken ct = default);
+
     Task ProcessOnboardingChecklistAsync(Guid userId, OnboardingChecklistSignal signal, CancellationToken ct = default);
 
     /// <summary>

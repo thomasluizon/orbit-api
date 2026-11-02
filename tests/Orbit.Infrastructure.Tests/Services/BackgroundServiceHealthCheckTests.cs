@@ -1,65 +1,72 @@
 using FluentAssertions;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Logging.Abstractions;
+using NSubstitute;
+using Orbit.Infrastructure.BackgroundJobs;
 using Orbit.Infrastructure.Services;
+using Orbit.Infrastructure.Tests.Persistence;
 
 namespace Orbit.Infrastructure.Tests.Services;
 
-public class BackgroundServiceHealthCheckTests
+public sealed class BackgroundServiceHealthCheckTests
 {
-    private readonly BackgroundServiceHealthCheck _sut = new();
-
     [Fact]
-    public async Task CheckHealthAsync_AllServicesRecordedRecently_ReturnsHealthy()
+    public async Task NeverTicked_AfterExpectedInterval_ReturnsUnhealthyAndNamesJob()
     {
-        BackgroundServiceHealthCheck.RecordTick("ReminderScheduler");
-        BackgroundServiceHealthCheck.RecordTick("GoalDeadlineNotification");
-        BackgroundServiceHealthCheck.RecordTick("SlipAlertScheduler");
-        BackgroundServiceHealthCheck.RecordTick("HabitDueDateAdvancement");
-        BackgroundServiceHealthCheck.RecordTick("AccountDeletion");
-
-        var result = await _sut.CheckHealthAsync(new HealthCheckContext());
-
-        result.Status.Should().Be(HealthStatus.Healthy);
-        result.Description.Should().Contain("All background services running");
+        using var db = new SqliteOrbitDbContextFactory();
+        using var services = new ServiceCollection().AddScoped(_ => db.CreateContext()).BuildServiceProvider();
+        var clock = new Clock();
+        var check = Create(services, clock);
+        await check.RegisterAsync(default);
+        (await check.CheckHealthAsync(new())).Status.Should().Be(HealthStatus.Healthy);
+        clock.Now = clock.Now.AddMinutes(4);
+        var result = await check.CheckHealthAsync(new());
+        result.Status.Should().Be(HealthStatus.Unhealthy);
+        result.Description.Should().Contain("reminder-scheduler");
     }
 
     [Fact]
-    public async Task CheckHealthAsync_NoTicksRecorded_ReturnsHealthy()
+    public async Task TickWrittenByAnotherScope_IsSharedAndRegistrationDoesNotResetGrace()
     {
-        var freshCheck = new BackgroundServiceHealthCheck();
-        var result = await freshCheck.CheckHealthAsync(new HealthCheckContext());
-
-        result.Should().NotBeNull();
+        using var db = new SqliteOrbitDbContextFactory();
+        using var services = new ServiceCollection().AddScoped(_ => db.CreateContext()).BuildServiceProvider();
+        var clock = new Clock();
+        var first = Create(services, clock);
+        await first.RegisterAsync(default);
+        clock.Now = clock.Now.AddMinutes(4);
+        var second = Create(services, clock);
+        await second.RegisterAsync(default);
+        (await second.CheckHealthAsync(new())).Status.Should().Be(HealthStatus.Unhealthy);
+        await first.RecordTick("reminder-scheduler");
+        (await second.CheckHealthAsync(new())).Status.Should().Be(HealthStatus.Healthy);
     }
 
     [Fact]
-    public async Task RecordTick_SetsTimestamp()
+    public async Task RecordTick_WriteFails_DoesNotFailTheJob()
     {
-        var before = DateTime.UtcNow;
-        BackgroundServiceHealthCheck.RecordTick("ReminderScheduler");
-        var after = DateTime.UtcNow;
-
-        var result = await _sut.CheckHealthAsync(new HealthCheckContext());
-        result.Should().NotBeNull();
-        result.Data.Should().ContainKey("ReminderScheduler");
-        result.Data["ReminderScheduler"].ToString().Should().Contain("Last tick");
+        var scopeFactory = Substitute.For<IServiceScopeFactory>();
+        scopeFactory.CreateScope().Returns(_ => throw new InvalidOperationException("database unavailable"));
+        var check = new BackgroundServiceHealthCheck(scopeFactory, [], TimeProvider.System,
+            NullLogger<BackgroundServiceHealthCheck>.Instance);
+        await check.RecordTick("reminder-scheduler");
     }
 
-    [Fact]
-    public async Task CheckHealthAsync_ReturnsDataForAllExpectedServices()
+    internal static BackgroundServiceHealthCheck Create(IServiceProvider services, TimeProvider? clock = null, params IScheduledJob[] jobs)
     {
-        BackgroundServiceHealthCheck.RecordTick("ReminderScheduler");
-        BackgroundServiceHealthCheck.RecordTick("GoalDeadlineNotification");
-        BackgroundServiceHealthCheck.RecordTick("SlipAlertScheduler");
-        BackgroundServiceHealthCheck.RecordTick("HabitDueDateAdvancement");
-        BackgroundServiceHealthCheck.RecordTick("AccountDeletion");
+        if (jobs.Length == 0)
+        {
+            var job = Substitute.For<IScheduledJob>();
+            job.Name.Returns("reminder-scheduler");
+            jobs = [job];
+        }
+        return new(services.GetRequiredService<IServiceScopeFactory>(), jobs, clock ?? TimeProvider.System,
+            NullLogger<BackgroundServiceHealthCheck>.Instance);
+    }
 
-        var result = await _sut.CheckHealthAsync(new HealthCheckContext());
-
-        result.Data.Should().ContainKey("ReminderScheduler");
-        result.Data.Should().ContainKey("GoalDeadlineNotification");
-        result.Data.Should().ContainKey("SlipAlertScheduler");
-        result.Data.Should().ContainKey("HabitDueDateAdvancement");
-        result.Data.Should().ContainKey("AccountDeletion");
+    private sealed class Clock : TimeProvider
+    {
+        internal DateTimeOffset Now { get; set; } = new(2026, 11, 2, 1, 30, 0, TimeSpan.Zero);
+        public override DateTimeOffset GetUtcNow() => Now;
     }
 }

@@ -36,7 +36,6 @@ public partial class StreakFreezeAutoActivationService(
     protected override async Task ExecuteTickAsync(CancellationToken stoppingToken)
     {
         await ActivateMissedDayFreezes(stoppingToken);
-        BackgroundServiceHealthCheck.RecordTick("StreakFreezeAutoActivation");
     }
 
     protected override void LogStarted() => LogServiceStarted(logger);
@@ -49,56 +48,68 @@ public partial class StreakFreezeAutoActivationService(
     {
         using var scope = scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
-        var pushService = scope.ServiceProvider.GetRequiredService<IPushNotificationService>();
         var userDateService = scope.ServiceProvider.GetRequiredService<IUserDateService>();
 
-        var candidates = await dbContext.Users
-            .Where(user => user.CurrentStreak > 0
-                && user.StreakFreezesAccumulated > 0)
-            .ToListAsync(cancellationToken);
-
-        if (candidates.Count == 0)
-            return;
-
-        var featureFlagService = scope.ServiceProvider.GetRequiredService<IFeatureFlagService>();
-        var enabledKeys = await featureFlagService.GetEnabledKeysForUsersAsync(candidates, cancellationToken);
-        var freeTierAccounts = enabledKeys.Where(account => account.Value.Contains(FeatureFlagKeys.GamificationFreeTier))
-            .Select(account => account.Key).ToHashSet();
-
-        var repairBatch = await LoadRepairBatchAsync(
-            candidates,
-            dbContext,
-            userDateService,
-            cancellationToken);
-        var staged = new List<StagedFreeze>(candidates.Count);
-        foreach (var user in candidates)
+        Guid? cursor = null;
+        while (true)
         {
-            var stagedFreeze = StageFreeze(
-                user,
-                freeTierAccounts.Contains(user.Id),
+            var candidates = await dbContext.Users
+                .Where(user => user.CurrentStreak > 0
+                    && user.StreakFreezesAccumulated > 0)
+                .Page(cursor, configuration.GetValue("BackgroundServices:ScanPageSize", JobPaging.DefaultPageSize))
+                .ToListAsync(cancellationToken);
+
+            if (candidates.Count == 0)
+                return;
+
+            cursor = candidates[^1].Id;
+            var featureFlagService = scope.ServiceProvider.GetRequiredService<IFeatureFlagService>();
+            var enabledKeys = await featureFlagService.GetEnabledKeysForUsersAsync(candidates, cancellationToken);
+            var freeTierAccounts = enabledKeys.Where(account => account.Value.Contains(FeatureFlagKeys.GamificationFreeTier))
+                .Select(account => account.Key).ToHashSet();
+
+            var repairBatch = await LoadRepairBatchAsync(
+                candidates,
                 dbContext,
-                repairBatch);
-            if (stagedFreeze is not null)
-                staged.Add(stagedFreeze);
+                userDateService,
+                cancellationToken);
+            var staged = new List<StagedFreeze>(candidates.Count);
+            foreach (var user in candidates)
+            {
+                var stagedFreeze = StageFreeze(
+                    user,
+                    freeTierAccounts.Contains(user.Id),
+                    dbContext,
+                    repairBatch);
+                if (stagedFreeze is not null)
+                    staged.Add(stagedFreeze);
+            }
+
+            if (staged.Count == 0)
+            {
+                dbContext.ChangeTracker.Clear();
+                if (candidates.Count < configuration.GetValue("BackgroundServices:ScanPageSize", JobPaging.DefaultPageSize)) return;
+                continue;
+            }
+
+            if (await TrySaveBatchAsync(dbContext, cancellationToken))
+            {
+                await NotifyActivatedAsync(staged, cancellationToken);
+                dbContext.ChangeTracker.Clear();
+                if (candidates.Count < configuration.GetValue("BackgroundServices:ScanPageSize", JobPaging.DefaultPageSize)) return;
+                continue;
+            }
+
+            dbContext.ChangeTracker.Clear();
+            await ActivatePerUserFallbackAsync(
+                staged.Select(freeze => freeze.User.Id).ToList(),
+                freeTierAccounts,
+                dbContext,
+                userDateService,
+                cancellationToken);
+            dbContext.ChangeTracker.Clear();
+            if (candidates.Count < configuration.GetValue("BackgroundServices:ScanPageSize", JobPaging.DefaultPageSize)) return;
         }
-
-        if (staged.Count == 0)
-            return;
-
-        if (await TrySaveBatchAsync(dbContext, cancellationToken))
-        {
-            await NotifyActivatedAsync(staged, pushService, cancellationToken);
-            return;
-        }
-
-        dbContext.ChangeTracker.Clear();
-        await ActivatePerUserFallbackAsync(
-            staged.Select(freeze => freeze.User.Id).ToList(),
-            freeTierAccounts,
-            pushService,
-            dbContext,
-            userDateService,
-            cancellationToken);
     }
 
     private sealed record StagedFreeze(User User, DateOnly MissedDate, string Title, string Body);
@@ -227,20 +238,21 @@ public partial class StreakFreezeAutoActivationService(
 
     private async Task NotifyActivatedAsync(
         List<StagedFreeze> staged,
-        IPushNotificationService pushService,
         CancellationToken cancellationToken)
     {
-        foreach (var freeze in staged)
-            await NotifyFreezeActivatedAsync(freeze, pushService, cancellationToken);
+        await Parallel.ForEachAsync(staged, new ParallelOptions
+        { MaxDegreeOfParallelism = Math.Clamp(configuration.GetValue("BackgroundServices:PushParallelism", 4), 1, 8), CancellationToken = cancellationToken },
+            async (freeze, token) => await NotifyFreezeActivatedAsync(freeze, token));
     }
 
     private async Task NotifyFreezeActivatedAsync(
         StagedFreeze freeze,
-        IPushNotificationService pushService,
         CancellationToken cancellationToken)
     {
         try
         {
+            using var deliveryScope = scopeFactory.CreateScope();
+            var pushService = deliveryScope.ServiceProvider.GetRequiredService<IPushNotificationService>();
             await pushService.SendToUserAsync(
                 freeze.User.Id,
                 freeze.Title,
@@ -260,7 +272,6 @@ public partial class StreakFreezeAutoActivationService(
     private async Task ActivatePerUserFallbackAsync(
         List<Guid> candidateIds,
         HashSet<Guid> freeTierAccounts,
-        IPushNotificationService pushService,
         OrbitDbContext dbContext,
         IUserDateService userDateService,
         CancellationToken cancellationToken)
@@ -287,7 +298,7 @@ public partial class StreakFreezeAutoActivationService(
             if (!await TrySaveUserFreezeAsync(user.Id, dbContext, cancellationToken))
                 continue;
 
-            await NotifyFreezeActivatedAsync(staged, pushService, cancellationToken);
+            await NotifyFreezeActivatedAsync(staged, cancellationToken);
         }
     }
 

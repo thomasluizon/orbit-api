@@ -1,6 +1,5 @@
 using Hangfire;
 using MediatR;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Orbit.Application.Common;
@@ -12,11 +11,8 @@ using Orbit.Domain.Interfaces;
 namespace Orbit.Application.Marketing.Commands;
 
 public record SendMarketingBroadcastCommand(
-    string SubjectEn,
-    string SubjectPt,
-    string BodyHtmlEn,
-    string BodyHtmlPt,
-    string? TestEmail) : IRequest<Result<MarketingBroadcastResult>>;
+    string SubjectEn, string SubjectPt, string BodyHtmlEn, string BodyHtmlPt, string? TestEmail)
+    : IRequest<Result<MarketingBroadcastResult>>;
 
 public record MarketingBroadcastResult(int RecipientCount, bool WasTest);
 
@@ -25,120 +21,86 @@ public partial class SendMarketingBroadcastCommandHandler(
     IGenericRepository<MarketingContact> contactRepository,
     IBackgroundJobClient backgroundJobClient,
     IMarketingUnsubscribeTokenService unsubscribeTokenService,
-    IServiceScopeFactory scopeFactory,
     IOptions<MarketingSettings> marketingSettings,
-    ILogger<SendMarketingBroadcastCommandHandler> logger)
+    ILogger<SendMarketingBroadcastCommandHandler> logger,
+    TimeProvider clock)
     : IRequestHandler<SendMarketingBroadcastCommand, Result<MarketingBroadcastResult>>
 {
     private readonly MarketingSettings _settings = marketingSettings.Value;
 
-    public async Task<Result<MarketingBroadcastResult>> Handle(
-        SendMarketingBroadcastCommand request, CancellationToken cancellationToken)
+    public async Task<Result<MarketingBroadcastResult>> Handle(SendMarketingBroadcastCommand request, CancellationToken cancellationToken)
     {
         if (!string.IsNullOrWhiteSpace(request.TestEmail))
         {
-            string testEmail = request.TestEmail;
-            var preview = RenderFor(request, "en");
-            var previewUrl = BuildUnsubscribeUrl(unsubscribeTokenService.CreateToken(Guid.Empty), "en");
-            backgroundJobClient.Enqueue<SendMarketingEmailJob>(
-                job => job.ExecuteAsync(testEmail, preview.Subject, preview.BodyHtml, "en", previewUrl));
-
+            var url = $"{_settings.ApiBaseUrl.TrimEnd('/')}/api/marketing/unsubscribe?token={Uri.EscapeDataString(unsubscribeTokenService.CreateToken(Guid.Empty))}&lang=en";
+            backgroundJobClient.Enqueue<SendMarketingEmailJob>(job => job.ExecuteAsync(request.TestEmail,
+                request.SubjectEn, request.BodyHtmlEn, "en", url));
             LogPreviewSent(logger, request.SubjectEn);
-            return Result.Success(new MarketingBroadcastResult(RecipientCount: 1, WasTest: true));
+            return Result.Success(new MarketingBroadcastResult(1, true));
         }
 
-        var users = await userRepository.FindIgnoringFiltersAsync(user => true, cancellationToken: cancellationToken);
-        var contacts = await contactRepository.GetAllAsync(cancellationToken);
-
-        var userEmails = users.Select(user => user.Email.Trim().ToLowerInvariant()).ToHashSet(StringComparer.Ordinal);
-        var blockedEmails = contacts
-            .Where(contact => contact.UnsubscribedAtUtc is not null || contact.SuppressedAtUtc is not null)
-            .Select(contact => contact.Email)
-            .ToHashSet(StringComparer.Ordinal);
-        var recipients = users
-            .Where(user => !user.IsDeactivated && user.MarketingEmailConsent == true &&
-                !blockedEmails.Contains(user.Email.Trim().ToLowerInvariant()))
-            .Select(user => new MarketingRecipient(user.Id, user.Email, user.Language ?? "en"))
-            .GroupBy(recipient => recipient.Email.Trim().ToLowerInvariant(), StringComparer.Ordinal)
-            .Select(group => group.First())
-            .ToList();
-
-        recipients.AddRange(contacts
-            .Where(contact => contact.Source == "waitlist" && !userEmails.Contains(contact.Email) &&
-                contact.UnsubscribedAtUtc is null && contact.SuppressedAtUtc is null)
-            .Select(contact => new MarketingRecipient(contact.Id, contact.Email, contact.Language)));
-
-        LogBroadcastQueued(logger, recipients.Count, request.SubjectEn);
-        FanOutInBackground(request, recipients);
-
-        return Result.Success(new MarketingBroadcastResult(recipients.Count, WasTest: false));
-    }
-
-    private void FanOutInBackground(SendMarketingBroadcastCommand request, IReadOnlyList<MarketingRecipient> recipients)
-    {
-        _ = Task.Run(async () =>
+        var pageSize = Math.Clamp(_settings.BroadcastPageSize, 1, 500);
+        var broadcastId = Guid.NewGuid();
+        var expiresAtUtc = clock.GetUtcNow().UtcDateTime.AddDays(SendMarketingBroadcastPageJob.RetryWindowDays);
+        var pending = new List<MarketingRecipient>(pageSize);
+        var pageNumber = 0;
+        var total = 0;
+        void Flush()
         {
-            try
-            {
-                using var scope = scopeFactory.CreateScope();
-                var bgEmailService = scope.ServiceProvider.GetRequiredService<IEmailService>();
-                var bgTokenService = scope.ServiceProvider.GetRequiredService<IMarketingUnsubscribeTokenService>();
-                var bgLogger = scope.ServiceProvider.GetRequiredService<ILogger<SendMarketingBroadcastCommandHandler>>();
+            if (pending.Count == 0) return;
+            var page = pending.ToArray();
+            var number = pageNumber++;
+            backgroundJobClient.Enqueue<SendMarketingBroadcastPageJob>(job => job.ExecuteAsync(
+                broadcastId, number, request, page, expiresAtUtc, CancellationToken.None));
+            pending.Clear();
+        }
+        void Add(MarketingRecipient recipient)
+        {
+            pending.Add(recipient);
+            total++;
+            if (pending.Count == pageSize) Flush();
+        }
 
-                var failureCount = 0;
-                foreach (var recipient in recipients)
-                {
-                    try
-                    {
-                        var content = RenderFor(request, recipient.Language);
-                        var unsubscribeUrl = BuildUnsubscribeUrl(bgTokenService.CreateToken(recipient.UserId), recipient.Language);
-                        await bgEmailService.SendMarketingEmailAsync(
-                            recipient.Email, content.Subject, content.BodyHtml, recipient.Language, unsubscribeUrl, CancellationToken.None);
-                    }
-                    catch (Exception ex)
-                    {
-                        failureCount++;
-                        LogRecipientSendFailed(bgLogger, ex, recipient.UserId);
-                    }
-
-                    if (_settings.SendDelayMilliseconds > 0)
-                        await Task.Delay(_settings.SendDelayMilliseconds, CancellationToken.None);
-                }
-
-                LogBroadcastCompleted(bgLogger, recipients.Count - failureCount, failureCount);
-            }
-            catch (Exception ex)
-            {
-                LogBroadcastFailed(logger, ex, recipients.Count);
-            }
-        }, CancellationToken.None);
+        Guid? cursor = null;
+        while (true)
+        {
+            var users = await userRepository.FindIgnoringFiltersAsync(
+                user => !user.IsDeactivated && user.MarketingEmailConsent == true
+                    && (!cursor.HasValue || user.Id.CompareTo(cursor.Value) > 0),
+                query => query.OrderBy(user => user.Id).Take(pageSize), cancellationToken);
+            if (users.Count == 0) break;
+            cursor = users[^1].Id;
+            var emails = users.Select(user => user.Email.Trim().ToLowerInvariant()).ToList();
+            var blocked = (await contactRepository.FindAsync(contact => emails.Contains(contact.Email)
+                && (contact.UnsubscribedAtUtc != null || contact.SuppressedAtUtc != null), cancellationToken))
+                .Select(contact => contact.Email).ToHashSet(StringComparer.Ordinal);
+            foreach (var user in users.Where(user => !blocked.Contains(user.Email.Trim().ToLowerInvariant())))
+                Add(new MarketingRecipient(user.Id, user.Email, user.Language ?? "en"));
+            if (users.Count < pageSize) break;
+        }
+        cursor = null;
+        while (true)
+        {
+            var contacts = await contactRepository.FindAsync(contact => contact.Source == "waitlist"
+                && contact.UnsubscribedAtUtc == null && contact.SuppressedAtUtc == null
+                && (!cursor.HasValue || contact.Id.CompareTo(cursor.Value) > 0),
+                query => query.OrderBy(contact => contact.Id).Take(pageSize), cancellationToken);
+            if (contacts.Count == 0) break;
+            cursor = contacts[^1].Id;
+            var emails = contacts.Select(contact => contact.Email).ToList();
+            var userEmails = (await userRepository.FindIgnoringFiltersAsync(user => emails.Contains(user.Email.ToLower()),
+                cancellationToken: cancellationToken)).Select(user => user.Email.Trim().ToLowerInvariant()).ToHashSet(StringComparer.Ordinal);
+            foreach (var contact in contacts.Where(contact => !userEmails.Contains(contact.Email)))
+                Add(new MarketingRecipient(contact.Id, contact.Email, contact.Language));
+            if (contacts.Count < pageSize) break;
+        }
+        Flush();
+        LogBroadcastQueued(logger, total, request.SubjectEn);
+        return Result.Success(new MarketingBroadcastResult(total, false));
     }
-
-    private static RenderedContent RenderFor(SendMarketingBroadcastCommand request, string language) =>
-        LocaleHelper.IsPortuguese(language)
-            ? new RenderedContent(request.SubjectPt, request.BodyHtmlPt)
-            : new RenderedContent(request.SubjectEn, request.BodyHtmlEn);
-
-    private string BuildUnsubscribeUrl(string token, string language) =>
-        $"{_settings.ApiBaseUrl.TrimEnd('/')}/api/marketing/unsubscribe" +
-        $"?token={Uri.EscapeDataString(token)}&lang={(LocaleHelper.IsPortuguese(language) ? "pt" : "en")}";
-
-    private sealed record MarketingRecipient(Guid UserId, string Email, string Language);
-
-    private sealed record RenderedContent(string Subject, string BodyHtml);
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Marketing broadcast preview sent; subject={Subject}")]
     private static partial void LogPreviewSent(ILogger logger, string subject);
-
     [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "Marketing broadcast queued: {RecipientCount} recipients, subject={Subject}")]
     private static partial void LogBroadcastQueued(ILogger logger, int recipientCount, string subject);
-
-    [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "Marketing broadcast fan-out completed: {SentCount} sent, {FailedCount} failed")]
-    private static partial void LogBroadcastCompleted(ILogger logger, int sentCount, int failedCount);
-
-    [LoggerMessage(EventId = 4, Level = LogLevel.Error, Message = "Marketing broadcast fan-out failed after queuing {RecipientCount} recipients")]
-    private static partial void LogBroadcastFailed(ILogger logger, Exception ex, int recipientCount);
-
-    [LoggerMessage(EventId = 5, Level = LogLevel.Error, Message = "Marketing broadcast send failed for recipient {UserId}; continuing with the rest")]
-    private static partial void LogRecipientSendFailed(ILogger logger, Exception ex, Guid userId);
 }

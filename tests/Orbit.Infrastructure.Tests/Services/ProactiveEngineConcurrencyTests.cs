@@ -48,6 +48,7 @@ public class ProactiveEngineConcurrencyTests
         var tokens = Substitute.For<IGoogleTokenService>();
         tokens.TryRefreshAsync(Arg.Any<User>(), Arg.Any<CancellationToken>()).Returns(call =>
         {
+            database.Context.Database.CurrentTransaction.Should().BeNull();
             call.Arg<User>().SetGoogleTokens("refreshed", null);
             return new GoogleTokenRefreshOutcome("refreshed", GoogleTokenRefreshResult.Success, null);
         });
@@ -60,7 +61,7 @@ public class ProactiveEngineConcurrencyTests
         var analytics = Substitute.For<IProductAnalytics>();
         var engine = new ProactiveEngineService(database.Context,
             new ProactiveEngineServiceTests.FixedClock(today.ToDateTime(new TimeOnly(8, 0), DateTimeKind.Utc)),
-            messages, Substitute.For<IPushNotificationService>(), calendar, tokens, analytics,
+            messages, ProactiveEngineServiceTests.ExecutingJobs(Substitute.For<IPushNotificationService>()), calendar, tokens, analytics,
             dates, flags, NullLogger<ProactiveEngineService>.Instance);
 
         await engine.EvaluateAsync(default);

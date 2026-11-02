@@ -434,11 +434,20 @@ public class OrbitDbContextTests
         return data;
     }
 
+    [Fact]
+    public void Model_HabitUserLookup_UsesCompositePrefixWithoutRedundantIndex()
+    {
+        using var context = CreatePostgresContext();
+        var habit = context.Model.FindEntityType(typeof(Habit))!;
+        habit.GetIndexes().Should().Contain(index => KeyOf(index).SequenceEqual(new[] { nameof(Habit.UserId), nameof(Habit.IsDeleted) }));
+        habit.GetIndexes().Should().NotContain(index => KeyOf(index).SequenceEqual(new[] { nameof(Habit.UserId) }));
+    }
+
     public static TheoryData<Type, string[]> PerformanceIndexCases()
     {
         (Type Entity, string[] Keys)[] cases =
         {
-            (typeof(Habit), new[] { nameof(Habit.UserId) }),
+            (typeof(Habit), new[] { nameof(Habit.UserId), nameof(Habit.IsDeleted) }),
             (typeof(Habit), new[] { nameof(Habit.UserId), nameof(Habit.UpdatedAtUtc) }),
             (typeof(HabitLog), new[] { nameof(HabitLog.HabitId), nameof(HabitLog.Date) }),
             (typeof(HabitLog), new[] { nameof(HabitLog.HabitId), nameof(HabitLog.UpdatedAtUtc) }),

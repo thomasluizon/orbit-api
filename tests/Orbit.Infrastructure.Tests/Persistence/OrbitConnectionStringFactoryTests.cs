@@ -8,6 +8,30 @@ namespace Orbit.Infrastructure.Tests.Persistence;
 public class OrbitConnectionStringFactoryTests
 {
     [Fact]
+    public void HangfireAndLeases_UseIndependentPools_AndHonorDedicatedQueueConnection()
+    {
+        var configuration = BuildConfiguration(new Dictionary<string, string?>
+        {
+            ["ConnectionStrings:DefaultConnection"] = "Host=request;Database=orbit",
+            ["ConnectionStrings:SessionConnection"] = "Host=session;Database=orbit",
+            ["ConnectionStrings:HangfireConnection"] = "Host=queue;Database=jobs"
+        });
+        var queue = new NpgsqlConnectionStringBuilder(OrbitConnectionStringFactory.ForHangfire(configuration));
+        var leases = new NpgsqlConnectionStringBuilder(OrbitConnectionStringFactory.ForJobLocks(configuration));
+        var session = new NpgsqlConnectionStringBuilder(OrbitConnectionStringFactory.ForSession(configuration));
+        queue.Host.Should().Be("queue");
+        queue.Database.Should().Be("jobs");
+        queue.ApplicationName.Should().Be("orbit-hangfire");
+        queue.MaxPoolSize.Should().Be(12);
+        leases.Host.Should().Be("session");
+        leases.ApplicationName.Should().Be("orbit-job-locks");
+        leases.MaxPoolSize.Should().Be(8);
+        session.MaxPoolSize.Should().Be(5);
+        queue.ConnectionString.Should().NotBe(session.ConnectionString);
+        leases.ConnectionString.Should().NotBe(session.ConnectionString);
+    }
+
+    [Fact]
     public void KeepsOneConnectionWarmPerPool_WithinConfiguredCaps()
     {
         var configuration = BuildConfiguration(new Dictionary<string, string?>

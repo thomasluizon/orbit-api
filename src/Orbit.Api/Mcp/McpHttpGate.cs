@@ -215,7 +215,7 @@ internal static partial class McpHttpGate
     {
         context.Request.EnableBuffering();
         using var reader = new StreamReader(context.Request.Body, leaveOpen: true);
-        var body = await reader.ReadToEndAsync();
+        var body = await reader.ReadToEndAsync(context.RequestAborted);
         context.Request.Body.Position = 0;
         return body;
     }
@@ -362,65 +362,68 @@ internal static partial class McpHttpGate
         operationId = null;
         operationFingerprint = null;
 
-        if (root is not { ValueKind: JsonValueKind.Object } element)
-            return false;
-
-        JsonRpcMessage? message;
-        try
-        {
-            message = element.Deserialize<JsonRpcMessage>(McpJsonUtilities.DefaultOptions);
-        }
-        catch (JsonException)
-        {
-            return false;
-        }
-
-        if (message is not JsonRpcRequest request)
+        if (root is not { ValueKind: JsonValueKind.Object } element
+            || DeserializeMcpMessage<JsonRpcMessage>(element) is not JsonRpcRequest request)
             return false;
 
         requestId = JsonSerializer.SerializeToElement(request.Id, McpJsonUtilities.DefaultOptions);
         if (!string.Equals(request.Method, RequestMethods.ToolsCall, StringComparison.Ordinal))
             return false;
 
-        CallToolRequestParams? callParams;
-        try
-        {
-            callParams = request.Params?.Deserialize<CallToolRequestParams>(McpJsonUtilities.DefaultOptions);
-        }
-        catch (JsonException)
-        {
-            return false;
-        }
-
+        var callParams = DeserializeMcpMessage<CallToolRequestParams>(request.Params);
         if (callParams is null || string.IsNullOrWhiteSpace(callParams.Name))
             return false;
 
         toolName = callParams.Name;
-        var arguments = callParams.Arguments;
-        if (string.Equals(toolName, AgentOperationMcpTool, StringComparison.OrdinalIgnoreCase))
-        {
-            if (arguments is not null
-                && arguments.TryGetValue("operationId", out var operationIdElement)
-                && operationIdElement.ValueKind == JsonValueKind.String)
-            {
-                operationId = operationIdElement.GetString();
-            }
-
-            operationFingerprint = arguments is not null
-                && arguments.TryGetValue("arguments", out var argumentsElement)
-                ? AgentOperationFingerprint.Compute(operationId ?? string.Empty, argumentsElement.GetRawText())
-                : AgentOperationFingerprint.Compute(operationId ?? string.Empty, "{}");
-        }
-        else
-        {
-            operationFingerprint = AgentOperationFingerprint.Compute(
-                toolName,
-                arguments is null
-                    ? "{}"
-                    : JsonSerializer.Serialize(arguments, McpJsonUtilities.DefaultOptions));
-        }
-
+        (operationId, operationFingerprint) = GetOperationIdentity(toolName, callParams.Arguments);
         return true;
+    }
+
+    private static (string? OperationId, string Fingerprint) GetOperationIdentity(string toolName,
+        IDictionary<string, JsonElement>? arguments)
+    {
+        if (!string.Equals(toolName, AgentOperationMcpTool, StringComparison.OrdinalIgnoreCase))
+        {
+            return (null, AgentOperationFingerprint.Compute(toolName, arguments is null
+                ? "{}" : JsonSerializer.Serialize(arguments, McpJsonUtilities.DefaultOptions)));
+        }
+
+        string? operationId = null;
+        if (arguments is not null
+            && arguments.TryGetValue("operationId", out var operationIdElement)
+            && operationIdElement.ValueKind == JsonValueKind.String)
+        {
+            operationId = operationIdElement.GetString();
+        }
+
+        var fingerprint = arguments is not null && arguments.TryGetValue("arguments", out var argumentsElement)
+            ? AgentOperationFingerprint.Compute(operationId ?? string.Empty, argumentsElement.GetRawText())
+            : AgentOperationFingerprint.Compute(operationId ?? string.Empty, "{}");
+        return (operationId, fingerprint);
+    }
+
+    private static T? DeserializeMcpMessage<T>(JsonElement element)
+    {
+        try
+        {
+            return element.Deserialize<T>(McpJsonUtilities.DefaultOptions);
+        }
+        catch (JsonException)
+        {
+            return default;
+        }
+    }
+
+    private static T? DeserializeMcpMessage<T>(System.Text.Json.Nodes.JsonNode? node)
+    {
+        try
+        {
+            return node is null ? default : node.Deserialize<T>(McpJsonUtilities.DefaultOptions);
+        }
+        catch (JsonException)
+        {
+            return default;
+        }
     }
 
     private static async Task WriteMcpPolicyErrorAsync(
@@ -446,7 +449,7 @@ internal static partial class McpHttpGate
                     pendingOperationId
                 }
             }
-        });
+        }, context.RequestAborted);
     }
 
     private static async Task WriteMcpRateLimitErrorAsync(

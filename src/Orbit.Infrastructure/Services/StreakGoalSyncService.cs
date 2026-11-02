@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Goals.Services;
+using Orbit.Application.Common;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.BackgroundJobs;
@@ -26,7 +27,6 @@ public partial class StreakGoalSyncService(
     public async Task RunAsync(CancellationToken cancellationToken)
     {
         await SyncActiveGoals(cancellationToken);
-        BackgroundServiceHealthCheck.RecordTick("StreakGoalSync");
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -40,7 +40,6 @@ public partial class StreakGoalSyncService(
                 try
                 {
                     await SyncActiveGoals(stoppingToken);
-                    BackgroundServiceHealthCheck.RecordTick("StreakGoalSync");
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
@@ -63,28 +62,41 @@ public partial class StreakGoalSyncService(
         var goalCompletionService = scope.ServiceProvider.GetRequiredService<IGoalCompletionService>();
         var userDateService = scope.ServiceProvider.GetRequiredService<IUserDateService>();
 
-        var goals = await dbContext.Goals
-            .Where(g => g.Status == GoalStatus.Active
-                        && !g.IsDeleted
-                        && (g.Type == GoalType.Streak
-                            || (g.Type == GoalType.Standard && g.Habits.Any())))
-            .Select(g => new { g.Id, g.UserId })
-            .AsNoTracking()
-            .ToListAsync(ct);
-
-        if (goals.Count == 0) return;
-
+        Guid? cursor = null;
         var synced = 0;
-        foreach (var userGoals in goals.GroupBy(g => g.UserId))
+        var pageSize = configuration.GetValue("BackgroundServices:ScanPageSize", JobPaging.DefaultPageSize);
+        while (true)
         {
-            var userToday = await userDateService.GetUserTodayAsync(userGoals.Key, ct);
-            var updates = await goalCompletionService.SyncDerivedGoalsAsync(
-                userGoals.Key,
-                userGoals.Select(g => g.Id).ToList(),
-                userToday,
-                passiveSync: true,
-                cancellationToken: ct);
-            synced += updates.Count;
+            var goals = await dbContext.Goals
+                .Where(g => g.Status == GoalStatus.Active
+                            && !g.IsDeleted
+                            && (g.Type == GoalType.Streak
+                                || (g.Type == GoalType.Standard && g.Habits.Any())))
+                .Page(cursor, pageSize)
+                .AsNoTracking()
+                .Select(goal => new { goal.Id, goal.UserId }).ToListAsync(ct);
+
+            if (goals.Count == 0) break;
+            cursor = goals[^1].Id;
+            var ownerIds = goals.Select(goal => goal.UserId).Distinct().ToList();
+            var owners = await dbContext.Users.AsNoTracking().Where(user => ownerIds.Contains(user.Id))
+                .Select(user => new { user.Id, user.TimeZone, user.WeekStartDay }).ToDictionaryAsync(user => user.Id, ct);
+            foreach (var userGoals in goals.GroupBy(g => g.UserId))
+            {
+                if (!owners.TryGetValue(userGoals.Key, out var user)) continue;
+                var userToday = await userDateService.GetUserTodayAsync(user.TimeZone, user.Id, ct);
+                var updates = await goalCompletionService.SyncDerivedGoalsAsync(
+                    userGoals.Key,
+                    userGoals.Select(g => g.Id).ToList(),
+                    userToday,
+                    passiveSync: true,
+                    cancellationToken: ct,
+                    preferences: new DerivedGoalPreferences(user.WeekStartDay, TimeZoneHelper.FindTimeZone(user.TimeZone, logger, user.Id)));
+                synced += updates.Count;
+            }
+
+            dbContext.ChangeTracker.Clear();
+            if (goals.Count < pageSize) break;
         }
 
         if (synced > 0 && logger.IsEnabled(LogLevel.Information))

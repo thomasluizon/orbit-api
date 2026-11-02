@@ -35,7 +35,6 @@ public sealed class NotionAutoSyncService(IServiceScopeFactory scopeFactory, Tim
                 logger.LogWarning(ex, "Notion sync could not finish for {UserId}", userId);
             }
         }
-        BackgroundServiceHealthCheck.RecordTick("NotionAutoSync");
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
