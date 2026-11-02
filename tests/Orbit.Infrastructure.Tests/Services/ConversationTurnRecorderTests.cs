@@ -20,6 +20,72 @@ namespace Orbit.Infrastructure.Tests.Services;
 
 public class ConversationTurnRecorderTests
 {
+    [Fact]
+    public async Task Record_UploadRunsOutsideTransaction()
+    {
+        using var fixture = new Fixture();
+        fixture.Storage.PutPrivateAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<byte[]>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                fixture.Db.Database.CurrentTransaction.Should().BeNull();
+                return Task.CompletedTask;
+            });
+        var capture = fixture.Capture(image: true);
+        (await fixture.Store.RecordAsync(capture)).Should().BeTrue();
+        var page = await fixture.Store.GetLatestAsync(fixture.User.Id, fixture.ConversationId, null, 10);
+        page!.Turns.Single(turn => turn.Role == "user").Image!.FileName.Should().Be($"{capture.TurnId}.png");
+    }
+
+    [Fact]
+    public async Task Delete_ThirdRowDeleteFails_RollsBackRowsAndKeepsImages()
+    {
+        var failure = new FailingThirdDelete();
+        using var fixture = new Fixture(interceptor: failure);
+        await fixture.Store.RecordAsync(fixture.Capture(image: true));
+        failure.Enabled = true;
+        var delete = () => fixture.Store.DeleteAsync(fixture.User.Id, fixture.ConversationId);
+        await delete.Should().ThrowAsync<InvalidOperationException>().WithMessage("delete failed");
+        (await fixture.Db.ConversationTurns.CountAsync()).Should().Be(2);
+        (await fixture.Db.ConversationObjectCleanups.CountAsync()).Should().Be(0);
+        await fixture.Storage.DidNotReceiveWithAnyArgs().DeleteConversationObjectsAsync(default);
+    }
+
+    [Fact]
+    public async Task Delete_StorageFailsAfterCommit_RetryCleansObjectsWithoutRows()
+    {
+        using var fixture = new Fixture();
+        await fixture.Store.RecordAsync(fixture.Capture(image: true));
+        var attempts = 0;
+        fixture.Storage.DeleteConversationObjectsAsync(fixture.User.Id, fixture.ConversationId, Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                fixture.Db.Database.CurrentTransaction.Should().BeNull();
+                if (++attempts == 1) throw new HttpRequestException("storage unavailable");
+                return Task.CompletedTask;
+            });
+        var delete = () => fixture.Store.DeleteAsync(fixture.User.Id, fixture.ConversationId);
+        await delete.Should().ThrowAsync<HttpRequestException>();
+        (await fixture.Db.ConversationTurns.CountAsync()).Should().Be(0);
+        (await fixture.Db.ConversationObjectCleanups.CountAsync()).Should().Be(1);
+        fixture.Db.ChangeTracker.Clear();
+        (await fixture.Store.DeleteAsync(fixture.User.Id, fixture.ConversationId)).Should().BeTrue();
+        (await fixture.Db.ConversationObjectCleanups.CountAsync()).Should().Be(0);
+        attempts.Should().Be(2);
+    }
+
+    private sealed class FailingThirdDelete : DbCommandInterceptor
+    {
+        internal bool Enabled;
+        private int _deletes;
+        public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(System.Data.Common.DbCommand command,
+            CommandEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            if (Enabled && command.CommandText.StartsWith("DELETE", StringComparison.Ordinal) && ++_deletes == 3)
+                throw new InvalidOperationException("delete failed");
+            return ValueTask.FromResult(result);
+        }
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

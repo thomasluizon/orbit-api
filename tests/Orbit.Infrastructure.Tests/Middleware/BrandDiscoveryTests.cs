@@ -3,7 +3,6 @@ using System.Security.Cryptography;
 using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
-using System.Threading.RateLimiting;
 using System.Xml.Linq;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authentication;
@@ -12,6 +11,9 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using System.Text.Encodings.Web;
 using NSubstitute;
 using Orbit.Api.Extensions;
 using Orbit.Domain.Interfaces;
@@ -22,7 +24,7 @@ namespace Orbit.Infrastructure.Tests.Middleware;
 public class BrandDiscoveryTests(ITestOutputHelper output)
 {
     [Fact]
-    public async Task Shutdown_RejectsBeforeBrandRoutesAuthenticationAndRateLimits()
+    public async Task Shutdown_RejectsBeforeBrandRoutesAndAuthentication()
     {
         await using var app = await CreateApplication();
         app.Lifetime.StopApplication();
@@ -40,7 +42,7 @@ public class BrandDiscoveryTests(ITestOutputHelper output)
     [InlineData("/apple-touch-icon.png", "image/png")]
     [InlineData("/orbit-icon-512.png", "image/png")]
     [InlineData("/bimi/orbit.svg", "image/svg+xml")]
-    public async Task IconRoute_ServesAnonymousImageBeforeAuthenticationAndRateLimits(string path, string contentType)
+    public async Task IconRoute_ServesAnonymousImageBeforeAuthentication(string path, string contentType)
     {
         await using var app = await CreateApplication();
         var invoke = ((IApplicationBuilder)app).Build();
@@ -93,13 +95,13 @@ public class BrandDiscoveryTests(ITestOutputHelper output)
     [InlineData("POST", "/favicon.ico")]
     [InlineData("GET", "/bimi/orbit.svg/extra")]
     [InlineData("POST", "/bimi/orbit.svg")]
-    public async Task OtherRequests_StillReachTheRejectingRateLimiter(string method, string path)
+    public async Task OtherRequests_StillRequireAuthentication(string method, string path)
     {
         await using var app = await CreateApplication();
         var context = CreateRequest(app, path);
         context.Request.Method = method;
         await ((IApplicationBuilder)app).Build()(context);
-        context.Response.StatusCode.Should().Be(429);
+        context.Response.StatusCode.Should().Be(401);
         context.Response.Headers.CacheControl.ToString().Should().BeEmpty();
     }
 
@@ -196,20 +198,8 @@ public class BrandDiscoveryTests(ITestOutputHelper output)
         builder.Services.AddResponseCompression();
         builder.Services.AddExceptionHandler(options => options.ExceptionHandler = _ => Task.CompletedTask);
         builder.Services.AddCors(options => options.AddPolicy("ThirdParty", policy => policy.WithOrigins("https://claude.ai")));
-        builder.Services.AddRateLimiter(options =>
-        {
-            if (!blockDownstream) return;
-            options.RejectionStatusCode = 429;
-            options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(_ =>
-                RateLimitPartition.GetFixedWindowLimiter("all", _ => new FixedWindowRateLimiterOptions
-                {
-                    PermitLimit = 1,
-                    Window = TimeSpan.FromHours(1),
-                    AutoReplenishment = false
-                }));
-            options.GlobalLimiter.AttemptAcquire(new DefaultHttpContext()).Dispose();
-        });
-        builder.Services.AddAuthentication();
+        builder.Services.AddAuthentication("BrandTest")
+            .AddScheme<AuthenticationSchemeOptions, AnonymousHandler>("BrandTest", _ => { });
         if (!blockDownstream)
         {
             var principal = new ClaimsPrincipal(new ClaimsIdentity([
@@ -234,4 +224,10 @@ public class BrandDiscoveryTests(ITestOutputHelper output)
         app.Run(context => { context.Response.StatusCode = 404; return Task.CompletedTask; });
         return app;
     }
+    public sealed class AnonymousHandler(IOptionsMonitor<AuthenticationSchemeOptions> options,
+        ILoggerFactory logger, UrlEncoder encoder) : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
+    {
+        protected override Task<AuthenticateResult> HandleAuthenticateAsync() => Task.FromResult(AuthenticateResult.NoResult());
+    }
+
 }

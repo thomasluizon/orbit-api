@@ -24,7 +24,7 @@ public class ResetAccountCommandHandlerTests
 
     public ResetAccountCommandHandlerTests()
     {
-        _handler = new ResetAccountCommandHandler(_userRepo, _accountResetRepo, _unitOfWork, _userDateService, _cache);
+        _handler = new ResetAccountCommandHandler(_userRepo, _accountResetRepo, _unitOfWork, _userDateService, _cache, NSubstitute.Substitute.For<Orbit.Application.Connections.INotionConnectionService>(), NSubstitute.Substitute.For<Orbit.Domain.Interfaces.IGoogleTokenService>());
         _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Today);
         _unitOfWork.ExecuteInTransactionAsync(
                 Arg.Any<Func<CancellationToken, Task<Result>>>(),
@@ -79,6 +79,10 @@ public class ResetAccountCommandHandlerTests
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
         Received.InOrder(() =>
         {
+            _userRepo.FindOneTrackedAsync(
+                Arg.Any<Expression<Func<User, bool>>>(),
+                Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(),
+                Arg.Any<CancellationToken>());
             _unitOfWork.AcquireAdvisoryLockAsync(
                 $"closed-month-recap:{UserId}",
                 Arg.Any<CancellationToken>());

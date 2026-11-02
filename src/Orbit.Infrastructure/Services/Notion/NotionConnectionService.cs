@@ -84,6 +84,13 @@ internal sealed class NotionConnectionService(OrbitDbContext db, INotionApi api,
                 JsonSerializer.Deserialize<NotionDatabase[]>(connection.SharedDatabasesJson, JsonOptions) ?? []);
     }
 
+    public async Task RevokeForAccountRemovalAsync(Guid userId, CancellationToken ct)
+    {
+        var connection = await db.NotionConnections.AsNoTracking().SingleOrDefaultAsync(c => c.UserId == userId, ct);
+        if (connection is not null)
+            await RevokeBestEffortAsync(userId, connection.AccessToken, ct);
+    }
+
     public async Task<Result> DisconnectAsync(Guid userId, CancellationToken ct)
     {
         var connection = await db.NotionConnections.AsNoTracking().SingleOrDefaultAsync(c => c.UserId == userId, ct);

@@ -15,6 +15,24 @@ public partial class GoogleTokenService(
 {
     public const string HttpClientName = "GoogleOAuth";
     private readonly string _googleTokenUrl = configuration["Google:TokenUrl"]!;
+    public async Task RevokeBestEffortAsync(Guid userId, string token, CancellationToken ct)
+    {
+        try
+        {
+            var client = httpClientFactory.CreateClient(HttpClientName);
+            using var body = new FormUrlEncodedContent(new Dictionary<string, string> { ["token"] = token });
+            using var response = await client.PostAsync("https://oauth2.googleapis.com/revoke", body, ct);
+            response.EnsureSuccessStatusCode();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+        {
+            LogGoogleRevokeFailed(logger, userId);
+        }
+    }
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Warning, Message = "Google revocation failed for user {UserId}; removing local connection data")]
+    private static partial void LogGoogleRevokeFailed(ILogger logger, Guid userId);
+
     public async Task<string?> GetValidAccessTokenAsync(User user, CancellationToken ct = default)
     {
         if (user.GoogleAccessToken is null)

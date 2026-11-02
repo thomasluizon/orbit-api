@@ -21,6 +21,8 @@ public static class GoogleTokenErrorCodes
 
 public interface IGoogleTokenService
 {
+    Task RevokeBestEffortAsync(Guid userId, string token, CancellationToken ct);
+
     Task<string?> GetValidAccessTokenAsync(User user, CancellationToken ct = default);
 
     Task<GoogleTokenRefreshOutcome> TryRefreshAsync(User user, CancellationToken ct = default);

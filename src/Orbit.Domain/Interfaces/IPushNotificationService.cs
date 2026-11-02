@@ -2,6 +2,8 @@ namespace Orbit.Domain.Interfaces;
 
 public interface IPushNotificationService
 {
+    Task SendManyAsync(IReadOnlyList<Orbit.Domain.Models.PushDelivery> deliveries, CancellationToken cancellationToken = default);
+
     Task SendToUserAsync(Guid userId, string title, string body, string? url = null, CancellationToken cancellationToken = default);
 
     Task SendReminderToUserAsync(Guid userId, string title, string body, IReadOnlyDictionary<string, string> data,

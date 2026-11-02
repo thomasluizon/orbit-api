@@ -205,7 +205,7 @@ public class SkipHabitToolTests
         await context.SaveChangesAsync();
 
         attackerResult.Success.Should().BeFalse();
-        attackerResult.ErrorCode.Should().Be(ErrorCodes.HabitNotOwned);
+        attackerResult.ErrorCode.Should().Be(ErrorCodes.HabitNotFound);
         await using (var afterAttack = CreateContext(databaseName))
             (await afterAttack.Habits.SingleAsync(h => h.Id == habitId)).NextDueDate
                 .Should().Be(Today, "a foreign user must not advance another user's schedule");

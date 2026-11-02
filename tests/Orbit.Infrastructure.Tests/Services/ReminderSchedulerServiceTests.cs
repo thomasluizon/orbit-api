@@ -950,8 +950,9 @@ public partial class ReminderSchedulerServiceTests : IDisposable
     private OrbitDbContext CreateSqliteDbContext() => (_factory ??= new SqliteOrbitDbContextFactory()).Context;
 
     private static ReminderSchedulerService CreateService(
-        OrbitDbContext dbContext, IPushNotificationService pushService, TimeProvider? timeProvider = null)
+        OrbitDbContext dbContext, IPushNotificationService pushService, TimeProvider? timeProvider = null, bool forwardBatches = true)
     {
+        if (forwardBatches) PushBatchTestAdapter.ForwardToSingleSends(pushService);
         var serviceProvider = new ServiceCollection()
             .AddSingleton(dbContext)
             .AddSingleton(pushService)

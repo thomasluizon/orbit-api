@@ -86,7 +86,7 @@ public class SubscribePushCommandHandler(
         if (existing.UserId == request.UserId && request.DeviceId is null && request.ApnsTopic is null)
             return Result.Success();
 
-        if (!existing.MatchesCredentials(request.P256dh, request.Auth))
+        if (existing.UserId != request.UserId && !existing.MatchesCredentials(request.P256dh, request.Auth))
             return Result.Failure(ErrorMessages.PushEndpointOwnedByOtherUser);
 
         var transfer = existing.TransferTo(request.UserId);

@@ -66,8 +66,13 @@ public class RepairStreakGapConcurrencyTests
                 return releaseRepair.Task;
             });
 
-        _habits.GetByIdAsync(habit.Id, Arg.Any<CancellationToken>())
-            .Returns(_ => { _unitOfWork.Record("delete:load"); return habit; });
+        _habits.FindOneTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                _unitOfWork.Record("delete:load");
+                return call.Arg<Expression<Func<Habit, bool>>>().Compile()(habit) ? habit : null;
+            });
         _habits.FindTrackedAsync(
                 Arg.Any<Expression<Func<Habit, bool>>>(),
                 Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>>(),

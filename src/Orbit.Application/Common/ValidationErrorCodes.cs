@@ -16,11 +16,6 @@ public static class ValidationErrorCodes
     public const string DesktopHandoffInvalid = "VALIDATION_DESKTOP_HANDOFF_INVALID";
     public const string CalendarSelectionLimit = "VALIDATION_CALENDAR_SELECTION_LIMIT";
     public const string CalendarIdsRequired = "VALIDATION_CALENDAR_IDS_REQUIRED";
-    public const string ChatMessageRequired = "VALIDATION_CHAT_MESSAGE_REQUIRED";
-    public const string ChatMessageLength = "VALIDATION_CHAT_MESSAGE_LENGTH";
-    public const string ChatHistoryLimit = "VALIDATION_CHAT_HISTORY_LIMIT";
-    public const string ChatHistoryRole = "VALIDATION_CHAT_HISTORY_ROLE";
-    public const string ChatHistoryMessageLength = "VALIDATION_CHAT_HISTORY_MESSAGE_LENGTH";
     public const string RevisionItemLimit = "VALIDATION_REVISION_ITEM_LIMIT";
     public const string RevisionItemIdsUnique = "VALIDATION_REVISION_ITEM_IDS_UNIQUE";
     public const string AudioRequired = "VALIDATION_AUDIO_REQUIRED";
