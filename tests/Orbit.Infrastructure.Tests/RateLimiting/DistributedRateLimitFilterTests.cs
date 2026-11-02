@@ -537,7 +537,7 @@ public class DistributedRateLimitFilterTests
         var retryAfter = int.Parse(http.Response.Headers.RetryAfter.ToString());
         retryAfter.Should().BeInRange(rejectIp ? 297 : 117, rejectIp ? 300 : 120);
         http.Response.Headers["X-Orbit-Request-Id"].ToString().Should().Be("req_composite");
-        await _service.Received(1).TryAcquireAsync("auth", "auth:email:a@x.com", Arg.Any<CancellationToken>());
+        await _service.Received(1).TryAcquireAsync("auth", "auth:email:478ABEC7430569163161DFEA8513B8CE89D05F559456A26E945C66E1FE55A29D", Arg.Any<CancellationToken>());
         await _service.Received(1).TryAcquireAsync("auth-ip", "ip:unknown", Arg.Any<CancellationToken>());
     }
 
@@ -560,6 +560,23 @@ public class DistributedRateLimitFilterTests
 
         await act.Should().ThrowAsync<InvalidOperationException>();
         nextCalled.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task VerifiedBff_GoogleCodeWithoutEmail_UsesSeparateVisitorBuckets()
+    {
+        using var scope = new RateLimitFilterTestScope("test-forwarding-secret");
+        var action = typeof(AuthController).GetMethod(nameof(AuthController.GoogleCodeAuth))!;
+        for (var client = 1; client <= 2; client++)
+        {
+            var context = scope.CreateContext(new { Code = "google-code" }, action);
+            context.HttpContext.Request.Headers["X-Orbit-Bff-Secret"] = "test-forwarding-secret";
+            context.HttpContext.Request.Headers["X-Orbit-Client-Ip"] = $"198.51.100.{client}";
+            await scope.ExecuteAsync(context);
+            RateLimitFilterTestScope.AssertOutcome(context, true);
+        }
+        (await scope.DbContext.DistributedRateLimitBuckets.Select(b => b.PartitionKey).ToListAsync())
+            .Should().BeEquivalentTo(["ip:198.51.100.1", "ip:198.51.100.2"]);
     }
 
     private void SetupAllowedLease(Guid userId)

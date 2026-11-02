@@ -20,6 +20,9 @@ public class WaitlistConfirmationTokenServiceTests
         var service = BuildService();
 
         var token = service.CreateToken("user@test.com", "pt-BR");
+        var encoded = token.Split('.')[0].Replace('-', '+').Replace('_', '/');
+        var decoded = Convert.FromBase64String(encoded.PadRight((encoded.Length + 3) / 4 * 4, '='));
+        System.Text.Encoding.UTF8.GetString(decoded).Should().NotContain("user@test.com");
         var valid = service.TryValidateToken(token, out var email, out var language);
 
         valid.Should().BeTrue();
@@ -79,6 +82,27 @@ public class WaitlistConfirmationTokenServiceTests
     public void Validate_MalformedToken_IsRejected(string token)
     {
         BuildService().TryValidateToken(token, out _, out _).Should().BeFalse();
+    }
+
+    [Fact]
+    public void LegacySignedPlaintext_IsRejectedWithoutFallback()
+    {
+        var payload = System.Text.Encoding.UTF8.GetBytes("user@test.com|en|9999999999");
+        var token = SignedTokenCodec.Encode(payload, "super-secret-signing-key");
+        BuildService().TryValidateToken(token, out _, out _).Should().BeFalse();
+    }
+
+    [Fact]
+    public void FreshTokens_UseDifferentNoncesAndAuthenticatedCiphertext()
+    {
+        var service = BuildService();
+        var first = service.CreateToken("user@test.com", "en");
+        var second = service.CreateToken("user@test.com", "en");
+        first.Should().NotBe(second);
+        SignedTokenCodec.TryDecode(first, "super-secret-signing-key", out var encrypted).Should().BeTrue();
+        encrypted[^1] ^= 1;
+        var tampered = SignedTokenCodec.Encode(encrypted, "super-secret-signing-key");
+        service.TryValidateToken(tampered, out _, out _).Should().BeFalse();
     }
 
     [Fact]

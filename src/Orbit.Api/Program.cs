@@ -29,6 +29,8 @@ builder
     .AddOrbitObservability();
 
 var app = builder.Build();
+if (app.Environment.IsProduction() && !app.Configuration.GetValue<bool>("BotProtection:Enabled"))
+    app.Logger.LogWarning("Bot protection is disabled in Production.");
 
 await app.ConfigureOrbitPipeline();
 

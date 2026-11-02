@@ -8,6 +8,20 @@ locals {
     ]
   }
 
+  bot_protection_landing_hostnames = {
+    production = ["useorbit.org", "www.useorbit.org"]
+    staging    = []
+  }
+
+  bot_protection_api_values = {
+    for environment, origins in local.onboarding_allowed_origins : environment => {
+      for index, hostname in sort(setintersection(
+        toset(concat([for origin in origins : trimprefix(origin, "https://")], local.bot_protection_landing_hostnames[environment])),
+        toset(cloudflare_turnstile_widget.orbit.domains)
+      )) : "BotProtection__AllowedHostnames__${index}" => hostname
+    }
+  }
+
   onboarding_platform_values = {
     for environment, parameters in data.aws_ssm_parameters_by_path.onboarding_platform : environment => {
       for name, value in zipmap(parameters.names, parameters.values) :
@@ -19,12 +33,6 @@ locals {
   onboarding_api_values = {
     for environment, origins in local.onboarding_allowed_origins : environment => merge(
       { for index, origin in origins : "OnboardingSecurity__AllowedOrigins__${index}" => origin },
-      {
-        for index, hostname in sort(setintersection(
-          toset([for origin in origins : trimprefix(origin, "https://")]),
-          toset(cloudflare_turnstile_widget.orbit.domains)
-        )) : "OnboardingSecurity__TurnstileHostnames__${index}" => hostname
-      },
       local.onboarding_platform_values[environment],
     )
   }
