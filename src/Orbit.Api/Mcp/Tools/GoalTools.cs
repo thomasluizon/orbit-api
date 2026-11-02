@@ -234,7 +234,7 @@ public class GoalTools(IMediator mediator, McpExecutorBridge executorBridge)
         try
         {
             _ = McpInputParser.ParseGuid(goalId, "goalId");
-            var ids = habitIds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(s => McpInputParser.ParseGuid(s, "habitIds")).ToList();
+            var ids = McpToolHelpers.ParseGuidCsv(habitIds, "habitIds");
             var result = await executorBridge.ExecuteAsync(user, "link_habits_to_goal", new { goal_id = goalId, habit_ids = ids.Select(i => i.ToString()) }, confirmationToken: null, cancellationToken);
             return result.Succeeded ? McpToolHelpers.Text($"Linked {ids.Count} habits to goal {goalId}") : McpToolHelpers.Error(result.Message);
         }

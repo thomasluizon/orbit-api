@@ -12,13 +12,13 @@ public sealed class OAuthAuthorizationStore(IOAuthStateStore states, TimeProvide
     internal const int MaxPendingGoogleRequests = 1_000;
 
     public GoogleAuthorizationRequest? TryCreateGoogleRequest(string clientId, string redirectUri, string clientState,
-        string codeChallenge, string? nonce, string googleRedirectUri, string language, IReadOnlyList<string>? scopes = null, string clientIp = "unknown")
+        string codeChallenge, string? nonce, string googleRedirectUri, string language, IReadOnlyList<string>? scopes = null, string clientIp = "unknown", string? browserBindingHash = null)
     {
         Cleanup();
         var verifier = NewSecret();
         var challenge = Challenge(verifier);
         var request = new GoogleAuthorizationRequest(NewSecret(), clientId, redirectUri, clientState,
-            codeChallenge, nonce, googleRedirectUri, language, verifier, challenge, timeProvider.GetUtcNow(), scopes);
+            codeChallenge, nonce, googleRedirectUri, language, verifier, challenge, timeProvider.GetUtcNow(), scopes, browserBindingHash);
         return states.Put(request.GoogleState, "google", JsonSerializer.Serialize(request),
             timeProvider.GetUtcNow().UtcDateTime.Add(CodeExpiry), MaxPendingGoogleRequests, Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(clientIp))), MaxPendingGoogleRequestsPerIp) ? request : null;
     }
@@ -46,6 +46,10 @@ public sealed class OAuthAuthorizationStore(IOAuthStateStore states, TimeProvide
         return entry.RedirectUri == redirectUri && CryptographicOperations.FixedTimeEquals(
             Encoding.ASCII.GetBytes(Challenge(codeVerifier)), Encoding.ASCII.GetBytes(entry.CodeChallenge)) ? entry : null;
     }
+
+    public string CreateBrowserBinding(string state) => Put("browser", state, CodeExpiry);
+    public string? ReadBrowserBinding(string secret) =>
+        Deserialize<string>(states.Read(secret, "browser", timeProvider.GetUtcNow().UtcDateTime));
 
     public string CreatePendingConsent(ConsentEntry entry) => Put("consent", entry, CodeExpiry);
     public ConsentTicket? ReadPendingConsent(string secret)
@@ -102,7 +106,7 @@ public sealed class OAuthAuthorizationStore(IOAuthStateStore states, TimeProvide
 }
 
 public record ConsentEntry(Guid UserId, string CodeChallenge, string RedirectUri, string ClientId,
-    string State, string? Nonce, string Language, IReadOnlyList<string>? Scopes = null, string? ClientName = null);
+    string State, string? Nonce, string Language, IReadOnlyList<string>? Scopes = null, string? ClientName = null, string? BrowserBindingHash = null);
 public sealed record ConsentTicket(ConsentEntry Entry, bool IsConsumed);
 public record RefreshEntry(Guid UserId, Guid ApiKeyId, string ClientId, Guid FamilyId = default, DateTime? FamilyExpiresAtUtc = null);
 
@@ -128,4 +132,5 @@ public record GoogleAuthorizationRequest(
     string GoogleCodeVerifier,
     string GoogleCodeChallenge,
     DateTimeOffset CreatedAtUtc,
-    IReadOnlyList<string>? Scopes = null);
+    IReadOnlyList<string>? Scopes = null,
+    string? BrowserBindingHash = null);

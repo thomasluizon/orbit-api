@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json;
 using FluentAssertions;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.WebUtilities;
@@ -65,7 +66,7 @@ public class OAuthCimdControllerTests : IDisposable
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
         };
-        OAuthTestClient.Bind(_controller.HttpContext, "state");
+        OAuthTestClient.Bind(_controller.HttpContext, _store, "state");
         _controller.Request.Scheme = "https";
         _controller.Request.Host = new HostString("api.useorbit.org");
         var login = Result.Success(new LoginResponse(UserId, "login-token", "Alex", "alex@example.com"));
@@ -99,6 +100,8 @@ public class OAuthCimdControllerTests : IDisposable
         var code = QueryHelpers.ParseQuery(new Uri(granted.Url).Query)["code"].ToString();
         var token = (await _controller.Token("authorization_code", code, Verifier, RedirectUri, default, client_id: clientId))
             .Should().BeOfType<OkObjectResult>().Subject;
+        if (dcr)
+            (await _db.Context.OAuthClients.SingleAsync()).AuthorizedAtUtc.Should().NotBeNull();
         _minted!.OAuthClientId.Should().Be(clientId);
         _minted.OAuthFamilyId.Should().NotBeNull();
         var old = _minted;
@@ -107,7 +110,7 @@ public class OAuthCimdControllerTests : IDisposable
         _keys.FindOneTrackedAsync(Arg.Any<Expression<Func<ApiKey, bool>>>(),
             Arg.Any<Func<IQueryable<ApiKey>, IQueryable<ApiKey>>?>(), Arg.Any<CancellationToken>()).Returns(old);
         Error(await _controller.Token("refresh_token", null, null, null, default, refresh, "another-client"))
-            .Should().Be("invalid_client");
+            .Should().Be("invalid_grant");
         (await _controller.Token("refresh_token", null, null, null, default, refresh, clientId)).Should().BeOfType<OkObjectResult>();
         _minted!.OAuthClientId.Should().Be(clientId);
         _minted.OAuthFamilyId.Should().Be(old.OAuthFamilyId);
@@ -151,7 +154,7 @@ public class OAuthCimdControllerTests : IDisposable
         Error(await Verify(ClientId, unlisted)).Should().Be("invalid_redirect_uri");
         Error(await _controller.GoogleStart(ClientId, unlisted, "state", Challenge(), "S256")).Should().Be("invalid_redirect_uri");
         await _mediator.DidNotReceive().Send(Arg.Any<VerifyCodeCommand>(), Arg.Any<CancellationToken>());
-        _db.Context.OAuthStates.Should().BeEmpty();
+        _db.Context.OAuthStates.Where(state => state.Kind != "browser").Should().BeEmpty();
     }
 
     [Fact]
@@ -169,7 +172,7 @@ public class OAuthCimdControllerTests : IDisposable
     {
         _handler.Body = _handler.Body.Replace(RedirectUri, "https://claude.ai/unlisted");
         Error(await Authorize(ClientId, "https://claude.ai/unlisted")).Should().Be("invalid_redirect_uri");
-        _db.Context.OAuthStates.Should().BeEmpty();
+        _db.Context.OAuthStates.Where(state => state.Kind != "browser").Should().BeEmpty();
     }
 
     [Fact]

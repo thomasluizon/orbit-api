@@ -244,6 +244,24 @@ public class SyncCleanupServiceTests
         (await dbContext.ChecklistTemplates.IgnoreQueryFilters().CountAsync()).Should().Be(0);
     }
 
+    [Fact]
+    public async Task PurgeSoftDeletedEntities_OldUnusedOAuthClientsAreRemoved()
+    {
+        using var sqliteFactory = new SqliteOrbitDbContextFactory();
+        var db = sqliteFactory.Context;
+        var old = OAuthClient.Create("Unused", ["https://claude.ai/api/mcp/auth_callback"]);
+        var recent = OAuthClient.Create("Recent", ["https://claude.ai/api/mcp/auth_callback"]);
+        var authorized = OAuthClient.Create("Authorized", ["https://claude.ai/api/mcp/auth_callback"]);
+        authorized.MarkAuthorized(DateTime.UtcNow.AddDays(-8));
+        db.AddRange(old, recent, authorized);
+        db.Entry(old).Property(client => client.CreatedAtUtc).CurrentValue = DateTime.UtcNow.AddDays(-8);
+        db.Entry(authorized).Property(client => client.CreatedAtUtc).CurrentValue = DateTime.UtcNow.AddDays(-9);
+        await db.SaveChangesAsync();
+        await CreateService(db).PurgeSoftDeletedEntities(default);
+        (await db.OAuthClients.AsNoTracking().Select(client => client.Id).ToListAsync())
+            .Should().BeEquivalentTo([recent.Id, authorized.Id]);
+    }
+
     private static void SetDeletedAt(object entity, double daysAgo)
     {
         entity.GetType()

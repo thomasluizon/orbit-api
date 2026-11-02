@@ -35,8 +35,13 @@ public class OAuthAppleControllerTests
 
     public OAuthAppleControllerTests()
     {
-        _states.Put(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<DateTime>(), Arg.Any<int?>()).Returns(call =>
+        _states.Put(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<DateTime>(), Arg.Any<int?>(), Arg.Any<string?>(), Arg.Any<int?>()).Returns(call =>
         { _entries[(call.ArgAt<string>(0), call.ArgAt<string>(1))] = call.ArgAt<string>(2); return true; });
+        _states.Read(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<DateTime>()).Returns(call =>
+            _entries.GetValueOrDefault((call.ArgAt<string>(0), call.ArgAt<string>(1))));
+        _states.ReadState(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<DateTime>()).Returns(call =>
+            _entries.TryGetValue((call.ArgAt<string>(0), call.ArgAt<string>(1)), out var payload)
+                ? new OAuthStateSnapshot(payload, false) : null);
         _states.Take(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<DateTime>()).Returns(call =>
             _entries.Remove((call.ArgAt<string>(0), call.ArgAt<string>(1)), out var value) ? value : null);
         var users = Substitute.For<IGenericRepository<User>>();
@@ -84,6 +89,7 @@ public class OAuthAppleControllerTests
         const string clientId = "https://claude.ai/oauth/mcp-oauth-client-metadata";
         _metadata.GetAsync(clientId, Arg.Any<CancellationToken>())
             .Returns(OAuthClientMetadata.Create(clientId, "Claude", [Redirect], "none").Value);
+        OAuthTestClient.Bind(_controller.HttpContext, _store, "state");
         var start = (await _controller.AppleStart(_flow, clientId, Redirect, "state", "challenge", "S256"))
             .Should().BeOfType<RedirectResult>().Subject;
         var state = System.Web.HttpUtility.ParseQueryString(new Uri(start.Url).Query)["state"]!;
@@ -93,6 +99,7 @@ public class OAuthAppleControllerTests
         entry.ClientId.Should().Be(clientId);
         entry.ClientName.Should().Be("Claude");
         entry.RedirectUri.Should().Be(Redirect);
+        _controller.Response.Headers.SetCookie.Should().ContainSingle().Which.Should().Contain("max-age=300");
     }
 
     [Fact]
@@ -109,14 +116,17 @@ public class OAuthAppleControllerTests
     [Fact]
     public async Task StartAndCallback_PreserveConsentContextAndRejectReplay()
     {
+        OAuthTestClient.Bind(_controller.HttpContext, _store, "client-state");
+        var originalCookie = _controller.Request.Headers.Cookie;
         var start = (RedirectResult)(await _controller.AppleStart(_flow, "https://claude.ai/oauth/mcp-oauth-client-metadata", Redirect, "client-state", "challenge", "S256", "nonce", AgentScopes.ReadHabits));
         var state = System.Web.HttpUtility.ParseQueryString(new Uri(start.Url).Query)["state"]!;
+        _controller.Request.Headers.Remove("Cookie");
         var result = await _controller.AppleCallback(_flow, new() { State = state, Code = "code" }, default);
         ((StatusCodeResult)result).StatusCode.Should().Be(StatusCodes.Status303SeeOther);
         var location = _controller.Response.Headers.Location.ToString();
         location.Should().StartWith("/oauth/consent?ticket=");
         var ticket = location.Split('=')[1];
-        var consent = _store.ConsumePendingConsent(ticket)!.Entry;
+        var consent = _store.ReadPendingConsent(ticket)!.Entry;
         consent.UserId.Should().NotBeEmpty();
         consent.ClientId.Should().Be("https://claude.ai/oauth/mcp-oauth-client-metadata");
         consent.RedirectUri.Should().Be(Redirect);
@@ -125,6 +135,22 @@ public class OAuthAppleControllerTests
         consent.Nonce.Should().Be("nonce");
         _controller.Response.Headers.CacheControl.ToString().Should().Be("no-store");
         _controller.Response.Headers.SetCookie.Should().BeEmpty();
+        _controller.Consent(ticket).Should().BeOfType<BadRequestObjectResult>();
+        await _controller.Authorize(new OAuthController.AuthorizeRequest
+        {
+            ClientId = OAuthTestClient.ClientId,
+            RedirectUri = Redirect,
+            State = "client-state",
+            ResponseType = "code",
+            CodeChallenge = "challenge",
+            CodeChallengeMethod = "S256"
+        });
+        _controller.Request.Headers.Cookie = _controller.Response.Headers.SetCookie.Last()!.Split(';')[0];
+        _controller.GrantConsent(ticket, "requested").Should().BeOfType<BadRequestObjectResult>();
+        _controller.Request.Headers.Cookie = originalCookie;
+        _controller.Response.Headers.Remove("Set-Cookie");
+        _controller.Consent(ticket).Should().BeOfType<ContentResult>();
+        _controller.Response.Headers.SetCookie.Should().ContainSingle().Which.Should().Contain("max-age=300");
         (await _controller.AppleCallback(_flow, new() { State = state, Code = "code" }, default)).Should().BeOfType<UnauthorizedResult>();
     }
 
@@ -145,6 +171,7 @@ public class OAuthAppleControllerTests
     {
         (await _controller.AppleStart(_flow, "https://claude.ai/oauth/mcp-oauth-client-metadata", Redirect, "state", "challenge", "S256", scope: "unsupported"))
             .Should().BeOfType<BadRequestObjectResult>();
+        OAuthTestClient.Bind(_controller.HttpContext, _store, "state");
         _apple.IsConfigured.Returns(false);
         ((StatusCodeResult)(await _controller.AppleStart(_flow, "https://claude.ai/oauth/mcp-oauth-client-metadata", Redirect, "state", "challenge", "S256")))
             .StatusCode.Should().Be(StatusCodes.Status503ServiceUnavailable);
@@ -174,6 +201,7 @@ public class OAuthAppleControllerTests
     [InlineData("redirect")]
     public async Task Callback_InvalidStoredConsent_Rejects(string failure)
     {
+        OAuthTestClient.Bind(_controller.HttpContext, _store, "state");
         var start = (RedirectResult)(await _controller.AppleStart(_flow, "https://claude.ai/oauth/mcp-oauth-client-metadata", Redirect, "state", "challenge", "S256"));
         var state = System.Web.HttpUtility.ParseQueryString(new Uri(start.Url).Query)["state"]!;
         var key = (state, "apple-authorization");

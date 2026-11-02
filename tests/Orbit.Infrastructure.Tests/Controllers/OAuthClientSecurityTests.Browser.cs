@@ -14,12 +14,17 @@ public partial class OAuthClientSecurityTests
     [Theory]
     [InlineData(null)]
     [InlineData("wrong-cookie")]
+    [InlineData("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx")]
     public async Task VerifyCode_MissingOrMismatchedBrowserBinding_RejectsBeforeSignIn(string? cookie)
     {
         var client = OAuthClient.Create("Claude", [RedirectUri]);
         _db.Context.Add(client);
         await _db.Context.SaveChangesAsync();
-        if (cookie is not null) _controller.Request.Headers.Cookie = cookie;
+        if (cookie is not null)
+        {
+            var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes("state")));
+            _controller.Request.Headers.Cookie = $"orbit_oauth_{hash}={cookie}";
+        }
         var result = await _controller.VerifyCode(new OAuthController.VerifyCodeRequest("user@example.com", "123456",
             "state", "challenge", RedirectUri, client.Id.ToString()), default);
         Error(result).Should().Be("invalid_request");

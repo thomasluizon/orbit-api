@@ -45,7 +45,7 @@ public partial class OAuthClientSecurityTests
         cookie.Should().Contain("secure").And.Contain("httponly").And.Contain("samesite=lax").And.Contain("path=/oauth").And.Contain("max-age=300");
         _controller.Request.Headers.Cookie = cookie.Split(';')[0];
         var ticket = _store.CreatePendingConsent(new(Guid.NewGuid(), "challenge", RedirectUri, clientId,
-            "state", null, "en", ClientName: "Claude"));
+            "state", null, "en", ClientName: "Claude", BrowserBindingHash: OAuthTestClient.BindingHash(_controller.HttpContext, "state")));
         var page = _controller.Consent(ticket).Should().BeOfType<ContentResult>().Subject;
         page.Content.Should().Contain("Claude · claude.ai");
         _controller.Request.Headers.Cookie = cookie.Split(';')[0] + "tampered";

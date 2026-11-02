@@ -11,6 +11,7 @@ namespace Orbit.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.Sql("SET LOCAL lock_timeout = '5s';");
             migrationBuilder.AddColumn<string>(
                 name: "PartitionKey",
                 table: "OAuthStates",
@@ -25,6 +26,7 @@ namespace Orbit.Infrastructure.Migrations
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
                     ClientName = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
                     RedirectUris = table.Column<string[]>(type: "text[]", nullable: false),
+                    AuthorizedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     CreatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>
@@ -35,7 +37,8 @@ namespace Orbit.Infrastructure.Migrations
             migrationBuilder.CreateIndex(
                 name: "IX_OAuthStates_Kind_PartitionKey_ExpiresAtUtc",
                 table: "OAuthStates",
-                columns: new[] { "Kind", "PartitionKey", "ExpiresAtUtc" });
+                columns: new[] { "Kind", "PartitionKey", "ExpiresAtUtc" })
+                .Annotation("Npgsql:CreatedConcurrently", true);
         }
 
         /// <inheritdoc />
@@ -44,9 +47,8 @@ namespace Orbit.Infrastructure.Migrations
             migrationBuilder.DropTable(
                 name: "OAuthClients");
 
-            migrationBuilder.DropIndex(
-                name: "IX_OAuthStates_Kind_PartitionKey_ExpiresAtUtc",
-                table: "OAuthStates");
+            migrationBuilder.Sql("DROP INDEX CONCURRENTLY IF EXISTS \"IX_OAuthStates_Kind_PartitionKey_ExpiresAtUtc\";", suppressTransaction: true);
+            migrationBuilder.Sql("SET LOCAL lock_timeout = '5s';");
 
             migrationBuilder.DropColumn(
                 name: "PartitionKey",

@@ -223,7 +223,7 @@ public class OrbitDbContext : DbContext
             entity.Property(state => state.SecretHash).HasMaxLength(64);
             entity.Property(state => state.Kind).HasMaxLength(30);
             entity.Property(state => state.PartitionKey).HasMaxLength(64);
-            entity.HasIndex(state => new { state.Kind, state.PartitionKey, state.ExpiresAtUtc });
+            entity.HasIndex(state => new { state.Kind, state.PartitionKey, state.ExpiresAtUtc }).IsCreatedConcurrently();
             entity.Property(state => state.Payload).HasConversion(encConverter).HasColumnType("text");
         });
         modelBuilder.Entity<DesktopHandoff>(entity =>

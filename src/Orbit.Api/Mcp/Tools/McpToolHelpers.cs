@@ -32,9 +32,9 @@ internal static class McpToolHelpers
         Content = [new ModelContextProtocol.Protocol.TextContentBlock { Text = message }]
     };
 
-    public static List<Guid> ParseGuidCsv(string value) =>
-        value.Split(',', StringSplitOptions.TrimEntries)
-            .Select(item => McpInputParser.ParseGuid(item, "ids")).ToList();
+    public static List<Guid> ParseGuidCsv(string value, string field) =>
+        value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(item => McpInputParser.ParseGuid(item, field)).ToList();
 
     public static T DeserializeJson<T>(string json) =>
         ParseJson(json, JsonValueKind.Array, "list").Deserialize<T>(CaseInsensitiveJsonOptions)

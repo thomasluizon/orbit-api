@@ -45,7 +45,7 @@ public class OAuthLoginPageTests : IDisposable
         httpContext.Request.Scheme = "https";
         httpContext.Request.Host = new HostString("api.useorbit.org");
         _controller.ControllerContext = new ControllerContext { HttpContext = httpContext };
-        OAuthTestClient.Bind(httpContext, "state", "client-state");
+        OAuthTestClient.Bind(httpContext, _authStore, "state", "client-state");
     }
 
     public void Dispose()
@@ -79,7 +79,7 @@ public class OAuthLoginPageTests : IDisposable
     public async Task EveryPage_LinksBrandIconsAndUsesTheSharedShell(string language)
     {
         _controller.Request.Headers.AcceptLanguage = language;
-        var consentTicket = _authStore.CreatePendingConsent(new ConsentEntry(Guid.NewGuid(), "challenge",
+        var consentTicket = OAuthTestClient.Consent(_authStore, _controller.HttpContext, new ConsentEntry(Guid.NewGuid(), "challenge",
             "https://claude.ai/api/mcp/auth_callback", "https://claude.ai/oauth/mcp-oauth-client-metadata", "state", null, language, ClientName: "Claude"));
         var consent = _controller.Consent(consentTicket).Should().BeOfType<ContentResult>().Subject;
         var invalid = (await _controller.GoogleCallback("unknown", null, null, CancellationToken.None))
@@ -216,7 +216,7 @@ public class OAuthLoginPageTests : IDisposable
     {
         var login = OAuthLoginPage.Render("https://claude.ai/oauth/mcp-oauth-client-metadata", "https://claude.ai/api/mcp/auth_callback", "state", "challenge", "S256",
             language: language, appleSignInEnabled: true);
-        var ticket = _authStore.CreatePendingConsent(new ConsentEntry(Guid.NewGuid(), "challenge",
+        var ticket = OAuthTestClient.Consent(_authStore, _controller.HttpContext, new ConsentEntry(Guid.NewGuid(), "challenge",
             "https://claude.ai/api/mcp/auth_callback", "https://claude.ai/oauth/mcp-oauth-client-metadata", "state", null, language, ClientName: "Claude"));
         var consent = _controller.Consent(ticket).Should().BeOfType<ContentResult>().Subject.Content!;
         _controller.Request.Headers.AcceptLanguage = language;

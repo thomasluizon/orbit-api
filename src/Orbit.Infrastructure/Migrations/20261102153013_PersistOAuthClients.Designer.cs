@@ -1729,6 +1729,9 @@ namespace Orbit.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<DateTime?>("AuthorizedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("ClientName")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -1783,7 +1786,8 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.HasIndex("Kind", "ExpiresAtUtc");
 
-                    b.HasIndex("Kind", "PartitionKey", "ExpiresAtUtc");
+                    b.HasIndex("Kind", "PartitionKey", "ExpiresAtUtc")
+                        .HasAnnotation("Npgsql:CreatedConcurrently", true);
 
                     b.ToTable("OAuthStates");
                 });

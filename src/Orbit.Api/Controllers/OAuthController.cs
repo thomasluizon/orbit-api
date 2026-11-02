@@ -230,7 +230,8 @@ public partial class OAuthController(
         if (client.Error is not null)
             return BadRequest(new { error = client.Error });
 
-        if (!IsBrowserBound(request.State))
+        var browserSecret = BrowserSecret(request.State);
+        if (browserSecret is null)
             return BadRequest(new { error = MissingStateError });
 
         var result = await mediator.Send(
@@ -244,14 +245,15 @@ public partial class OAuthController(
             return BadRequest(new { error = "invalid_scope" });
         var consent = authStore.CreatePendingConsent(new ConsentEntry(result.Value.UserId,
             request.CodeChallenge, request.RedirectUri, request.ClientId, request.State, request.Nonce, ResolveLanguage(), scopes,
-            client.ClientName));
+            client.ClientName, StateHash(browserSecret)));
+        RenewBrowser(request.State, browserSecret);
         return Ok(new { redirectUrl = $"/oauth/consent?ticket={Uri.EscapeDataString(consent)}" });
     }
 
     /// <summary>
     /// Starts Google sign-in for an MCP authorization request. The authorize page links here with the same
-    /// parameters it was itself given, and this action revalidates every one of them before it allocates any
-    /// server state, so a page view alone allocates nothing and cannot grow the pending-request store.
+    /// parameters it was itself given. The client and browser binding are validated before allocating
+    /// the pending provider request.
     /// </summary>
     [HttpGet("/oauth/google/start")]
     [DistributedRateLimit("auth")]
@@ -264,8 +266,10 @@ public partial class OAuthController(
         [FromQuery] string? nonce = null,
         [FromQuery] string? scope = null)
     {
-        if (string.IsNullOrWhiteSpace(client_id)
-            || string.IsNullOrEmpty(state)
+        var client = await ValidateClientAsync(client_id, redirect_uri, HttpContext.RequestAborted);
+        if (client.Error is not null)
+            return BadRequest(new { error = client.Error });
+        if (string.IsNullOrEmpty(state)
             || string.IsNullOrEmpty(code_challenge)
             || code_challenge_method != "S256")
             return InvalidGoogleState();
@@ -273,18 +277,18 @@ public partial class OAuthController(
         var requestedScopes = RequestedScopes(scope);
         if (requestedScopes is null)
             return BadRequest(new { error = "invalid_scope" });
-        var client = await ValidateClientAsync(client_id, redirect_uri, HttpContext.RequestAborted);
-        if (client.Error is not null)
-            return BadRequest(new { error = client.Error });
+        var browserSecret = BrowserSecret(state);
+        if (browserSecret is null)
+            return BadRequest(new { error = MissingStateError });
         var googleRedirectUri = BuildGoogleRedirectUri();
         if (string.IsNullOrWhiteSpace(googleSettings.Value.ClientId)
             || !googleSettings.Value.AllowedRedirectUris.Contains(googleRedirectUri, StringComparer.Ordinal))
-            return RedirectToAuthorize(client_id, redirect_uri, state, code_challenge, nonce, "unavailable", requestedScopes);
+            return RedirectToSignInPage(client_id, redirect_uri, state, code_challenge, nonce, "unavailable", requestedScopes);
 
         var pending = authStore.TryCreateGoogleRequest(client_id, redirect_uri, state,
-            code_challenge, nonce, googleRedirectUri, ResolveLanguage(), requestedScopes, HttpContext.GetClientIpAddress() ?? "unknown");
+            code_challenge, nonce, googleRedirectUri, ResolveLanguage(), requestedScopes, HttpContext.GetClientIpAddress() ?? "unknown", StateHash(browserSecret));
         if (pending is null)
-            return RedirectToAuthorize(client_id, redirect_uri, state, code_challenge, nonce, "unavailable", requestedScopes);
+            return RedirectToSignInPage(client_id, redirect_uri, state, code_challenge, nonce, "unavailable", requestedScopes);
 
         var url = "https://accounts.google.com/o/oauth2/v2/auth"
             + $"?client_id={Uri.EscapeDataString(googleSettings.Value.ClientId)}"
@@ -312,24 +316,25 @@ public partial class OAuthController(
         if (client.Error is not null)
             return BadRequest(new { error = client.Error });
 
-        if (!IsBrowserBound(pending.ClientState))
+        if (!IsBrowserBound(pending.ClientState, pending.BrowserBindingHash))
             return BadRequest(new { error = MissingStateError });
 
         if (error is not null)
-            return RedirectToAuthorize(pending, error == "access_denied" ? "cancelled" : "failed");
+            return RedirectToSignInPage(pending, error == "access_denied" ? "cancelled" : "failed");
 
         if (string.IsNullOrEmpty(code))
-            return RedirectToAuthorize(pending, "failed");
+            return RedirectToSignInPage(pending, "failed");
 
         var result = await mediator.Send(new GoogleCodeAuthCommand(
             code, pending.GoogleCodeVerifier, pending.GoogleRedirectUri, pending.Language,
             PersistGoogleTokens: false), ct);
         if (result.IsFailure)
-            return RedirectToAuthorize(pending, "failed");
+            return RedirectToSignInPage(pending, "failed");
 
         var consent = authStore.CreatePendingConsent(new ConsentEntry(result.Value.UserId, pending.CodeChallenge,
             pending.RedirectUri, pending.ClientId, pending.ClientState, pending.Nonce, pending.Language, pending.Scopes,
-            client.ClientName));
+            client.ClientName, pending.BrowserBindingHash));
+        RenewBrowser(pending.ClientState, Request.Cookies[CookieName(pending.ClientState)]!);
         return Redirect($"/oauth/consent?ticket={Uri.EscapeDataString(consent)}");
     }
 
@@ -340,11 +345,11 @@ public partial class OAuthController(
         StatusCode = StatusCodes.Status400BadRequest
     };
 
-    private static IActionResult RedirectToAuthorize(GoogleAuthorizationRequest pending, string googleError) =>
-        RedirectToAuthorize(pending.ClientId, pending.RedirectUri, pending.ClientState,
+    private static IActionResult RedirectToSignInPage(GoogleAuthorizationRequest pending, string googleError) =>
+        RedirectToSignInPage(pending.ClientId, pending.RedirectUri, pending.ClientState,
             pending.CodeChallenge, pending.Nonce, googleError, pending.Scopes);
 
-    private static IActionResult RedirectToAuthorize(string clientId, string redirectUri, string clientState,
+    private static IActionResult RedirectToSignInPage(string clientId, string redirectUri, string clientState,
         string codeChallenge, string? nonce, string googleError, IReadOnlyList<string>? scopes = null)
     {
         var url = "/oauth/authorize"
@@ -386,14 +391,14 @@ public partial class OAuthController(
         [FromForm] string? refresh_token = null,
         [FromForm] string? client_id = null)
     {
+        if (grant_type == "refresh_token")
+            return await RefreshAsync(refresh_token, client_id, ct);
         if (!string.IsNullOrWhiteSpace(client_id))
         {
             var client = await ValidateClientAsync(client_id, null, ct);
             if (client.Error is not null)
                 return BadRequest(new { error = client.Error });
         }
-        if (grant_type == "refresh_token")
-            return await RefreshAsync(refresh_token, client_id, ct);
         if (grant_type != "authorization_code")
             return BadRequest(new { error = "unsupported_grant_type" });
 
@@ -437,6 +442,11 @@ public partial class OAuthController(
                 }
 
                 var (apiKey, rawKey) = keyResult.Value;
+                if (Guid.TryParse(entry.ClientId, out var registeredId))
+                {
+                    var registered = await clients.FindOneTrackedAsync(client => client.Id == registeredId, cancellationToken: token);
+                    registered?.MarkAuthorized(DateTime.UtcNow);
+                }
                 await apiKeyRepository.AddAsync(apiKey, token);
                 await unitOfWork.SaveChangesAsync(token);
 
@@ -471,8 +481,9 @@ public partial class OAuthController(
         var consent = authStore.ReadPendingConsent(ticket);
         if (consent is null)
             return InvalidGoogleState();
-        if (!IsBrowserBound(consent.Entry.State) || string.IsNullOrWhiteSpace(consent.Entry.ClientName))
+        if (!IsBrowserBound(consent.Entry.State, consent.Entry.BrowserBindingHash) || string.IsNullOrWhiteSpace(consent.Entry.ClientName))
             return BadRequest(new { error = MissingStateError });
+        RenewBrowser(consent.Entry.State, Request.Cookies[CookieName(consent.Entry.State)]!);
         return consent.IsConsumed
             ? CompletedConsent(consent.Entry.Language)
             : Content(OAuthConsentPage.Render(ticket, consent.Entry), "text/html");
@@ -486,7 +497,7 @@ public partial class OAuthController(
         if (access is not ("read_only" or "requested"))
             return BadRequest(new { error = "invalid_request" });
         var pending = authStore.ReadPendingConsent(ticket);
-        if (pending is null || !IsBrowserBound(pending.Entry.State) || string.IsNullOrWhiteSpace(pending.Entry.ClientName))
+        if (pending is null || !IsBrowserBound(pending.Entry.State, pending.Entry.BrowserBindingHash) || string.IsNullOrWhiteSpace(pending.Entry.ClientName))
             return BadRequest(new { error = MissingStateError });
         var consent = authStore.ConsumePendingConsent(ticket);
         if (consent is null || !IsRedirectUriAllowed(consent.Entry.RedirectUri))
@@ -509,7 +520,7 @@ public partial class OAuthController(
     public IActionResult CancelConsent([FromForm] string ticket)
     {
         var pending = authStore.ReadPendingConsent(ticket);
-        if (pending is null || !IsBrowserBound(pending.Entry.State) || string.IsNullOrWhiteSpace(pending.Entry.ClientName))
+        if (pending is null || !IsBrowserBound(pending.Entry.State, pending.Entry.BrowserBindingHash) || string.IsNullOrWhiteSpace(pending.Entry.ClientName))
             return BadRequest(new { error = MissingStateError });
         var consent = authStore.ConsumePendingConsent(ticket);
         if (consent is null || !IsRedirectUriAllowed(consent.Entry.RedirectUri))

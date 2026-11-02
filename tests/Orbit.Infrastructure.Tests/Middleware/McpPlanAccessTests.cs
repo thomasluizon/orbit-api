@@ -211,7 +211,7 @@ public class McpPlanAccessTests
             Options.Create(new GoogleSettings()), new ConfigurationBuilder().Build(),
             NullLogger<OAuthController>.Instance, OAuthTestClient.Metadata(), Substitute.For<IGenericRepository<OAuthClient>>());
         controller.ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() };
-        OAuthTestClient.Bind(controller.HttpContext, "client-state");
+        OAuthTestClient.Bind(controller.HttpContext, store, "client-state");
         const string verifier = "mcp-client-code-verifier";
         const string redirectUri = "https://claude.ai/api/mcp/auth_callback";
         var challenge = WebEncoders.Base64UrlEncode(SHA256.HashData(Encoding.ASCII.GetBytes(verifier)));

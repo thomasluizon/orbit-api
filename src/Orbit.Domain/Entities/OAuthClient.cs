@@ -7,9 +7,17 @@ public sealed class OAuthClient : Entity
     public const int MaxNameLength = 200;
     public string ClientName { get; private set; } = string.Empty;
     public string[] RedirectUris { get; private set; } = [];
+    public DateTime? AuthorizedAtUtc { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
 
     private OAuthClient() { }
+
+    public void MarkAuthorized(DateTime authorizedAtUtc)
+    {
+        if (authorizedAtUtc.Kind != DateTimeKind.Utc)
+            throw new ArgumentException("A UTC authorization timestamp is required.", nameof(authorizedAtUtc));
+        AuthorizedAtUtc ??= authorizedAtUtc;
+    }
 
     public static OAuthClient Create(string clientName, string[] redirectUris)
     {

@@ -937,6 +937,27 @@ public class HabitToolsTests
         result.Should().Contain("Linked 1 goals");
     }
 
+    [Theory]
+    [InlineData("")]
+    [InlineData(" , , ")]
+    public async Task LinkGoalsToHabit_EmptyList_ClearsLinks(string goalIds)
+    {
+        StubExecutor(AgentOperationStatus.Succeeded);
+        var result = await _tools.LinkGoalsToHabit(_user, Guid.NewGuid().ToString(), goalIds);
+        result.IsError.Should().NotBeTrue();
+        result.AsText().Should().Contain("Linked 0 goals");
+    }
+
+    [Fact]
+    public async Task LinkGoalsToHabit_TrailingComma_IsAcceptedAndMalformedIdNamesParameter()
+    {
+        StubExecutor(AgentOperationStatus.Succeeded);
+        (await _tools.LinkGoalsToHabit(_user, Guid.NewGuid().ToString(), Guid.NewGuid() + ",")).IsError.Should().NotBeTrue();
+        var invalid = await _tools.LinkGoalsToHabit(_user, Guid.NewGuid().ToString(), "not-a-guid");
+        invalid.IsError.Should().BeTrue();
+        invalid.AsText().Should().Contain("Invalid goalIds:");
+    }
+
     [Fact]
     public async Task LinkGoalsToHabit_Failure_ReturnsError()
     {

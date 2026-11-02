@@ -602,7 +602,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
     {
         try
         {
-            var ids = string.IsNullOrWhiteSpace(habitIds) ? [] : McpToolHelpers.ParseGuidCsv(habitIds);
+            var ids = string.IsNullOrWhiteSpace(habitIds) ? [] : McpToolHelpers.ParseGuidCsv(habitIds, "habitIds");
             var filter = string.IsNullOrWhiteSpace(filterJson) ? (JsonElement?)null : McpToolHelpers.ParseJson(filterJson, JsonValueKind.Object, "filterJson");
             var result = await executorBridge.ExecuteAsync(user, "bulk_delete_habits", new { habit_ids = ids.Count > 0 ? ids.Select(id => id.ToString()) : null, filter }, confirmationToken, cancellationToken);
             return FormatBulkMutationResult(result);
@@ -726,7 +726,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
     {
         try
         {
-            var ids = string.IsNullOrWhiteSpace(habitIds) ? [] : McpToolHelpers.ParseGuidCsv(habitIds);
+            var ids = string.IsNullOrWhiteSpace(habitIds) ? [] : McpToolHelpers.ParseGuidCsv(habitIds, "habitIds");
             var filter = string.IsNullOrWhiteSpace(filterJson) ? (JsonElement?)null : McpToolHelpers.ParseJson(filterJson, JsonValueKind.Object, "filterJson");
             var result = await executorBridge.ExecuteAsync(user, operation, new { habit_ids = ids.Count > 0 ? ids.Select(id => id.ToString()) : null, filter, date }, confirmationToken, cancellationToken);
             return FormatBulkMutationResult(result);
@@ -813,7 +813,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
         try
         {
             _ = McpInputParser.ParseGuid(habitId, "habitId");
-            var ids = McpToolHelpers.ParseGuidCsv(goalIds);
+            var ids = McpToolHelpers.ParseGuidCsv(goalIds, "goalIds");
             var result = await executorBridge.ExecuteAsync(user, "link_goals_to_habit", new { habit_id = habitId, goal_ids = ids.Select(id => id.ToString()) }, confirmationToken: null, cancellationToken);
             return result.Succeeded ? McpToolHelpers.Text($"Linked {ids.Count} goals to habit {habitId}") : McpToolHelpers.Error(result.Message);
         }
