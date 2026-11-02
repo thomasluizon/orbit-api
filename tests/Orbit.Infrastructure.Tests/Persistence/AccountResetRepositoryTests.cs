@@ -58,6 +58,7 @@ public class AccountResetRepositoryTests : IDisposable
 
     private void SeedForUser(Guid userId)
     {
+        AccountRemovalRows.Seed(_dbContext, userId);
         var replay = ChatTurn.Create(userId, new string('A', 64), new string('B', 64), DateTime.UtcNow.AddMinutes(4));
         replay.Complete(ChatStreamEvent.Final(new ChatResponse("Private response", [])).ToJson());
         _dbContext.ChatTurns.AddRange(replay,
@@ -129,13 +130,14 @@ public class AccountResetRepositoryTests : IDisposable
         dates.GetUserTodayAsync(_userId, Arg.Any<CancellationToken>()).Returns(new DateOnly(2026, 6, 15));
         var unitOfWork = new UnitOfWork(_dbContext, new DatabaseConnectionSettings(), _eventCollector);
         var handler = new ResetAccountCommandHandler(
-            new GenericRepository<User>(_dbContext), _repository, unitOfWork, dates, cache);
+            new GenericRepository<User>(_dbContext), _repository, unitOfWork, dates, cache, NSubstitute.Substitute.For<Orbit.Application.Connections.INotionConnectionService>(), NSubstitute.Substitute.For<Orbit.Domain.Interfaces.IGoogleTokenService>());
         var retry = new ConcurrencyRetryBehavior<ResetAccountCommand, Result>(unitOfWork);
         var command = new ResetAccountCommand(_userId);
 
         var result = await retry.Handle(command, ct => handler.Handle(command, ct), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
+        await AccountRemovalRows.AssertAsync(_dbContext, _userId, 0, 1, false);
         _eventCollector.Received(1).MarkResync(_userId);
         _dbContext.ChangeTracker.Clear();
         var saved = await _dbContext.Users.SingleAsync(u => u.Id == _userId);
@@ -185,6 +187,8 @@ public class AccountResetRepositoryTests : IDisposable
         await _dbContext.SaveChangesAsync();
 
         await _repository.DeleteAllUserDataAsync(_userId);
+        await AccountRemovalRows.AssertAsync(_dbContext, _userId, 0, 1, false);
+        await AccountRemovalRows.AssertAsync(_dbContext, _otherUserId, 1, 1, false);
 
         (await _dbContext.ChatTurns.CountAsync(turn => turn.UserId == _userId)).Should().Be(0);
         (await _dbContext.ChatTurns.CountAsync(turn => turn.UserId == _otherUserId)).Should().Be(2);
@@ -326,6 +330,54 @@ public class AccountResetRepositoryTests : IDisposable
 
         (await _dbContext.ApiKeys.CountAsync(k => k.UserId == _otherUserId)).Should().Be(1);
         (await _dbContext.PushSubscriptions.CountAsync(p => p.UserId == _otherUserId)).Should().Be(1);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Reset_ImageStorageUnavailableOrFails_PreservesEveryRowAndUserState(bool configured)
+    {
+        var user = SeedUser(_userId, "storage-target@example.com");
+        SeedUser(_otherUserId, "storage-other@example.com");
+        SeedForUser(_userId);
+        SeedForUser(_otherUserId);
+        user.AddXp(123);
+        user.CompleteOnboarding();
+        var conversationId = Guid.NewGuid();
+        _dbContext.ConversationTurns.Add(ConversationTurn.Create(_userId, Guid.NewGuid(), "user", DateTime.UtcNow,
+            null, "Image", "[]", conversationId: conversationId, turnOrder: 1,
+            imageObjectKey: $"{_userId}/conversations/{conversationId}/image.png", imageContentType: "image/png", imageSha256: new string('a', 64)).Value);
+        await _dbContext.SaveChangesAsync();
+        _dbContext.ChangeTracker.Clear();
+        var storage = Substitute.For<IObjectStorageService>();
+        storage.DeleteConversationObjectsAsync(_userId, Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromException(new IOException("storage failed")));
+        var repository = new AccountResetRepository(_dbContext, _eventCollector, configured ? storage : null);
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        var handler = new ResetAccountCommandHandler(new GenericRepository<User>(_dbContext), repository,
+            new UnitOfWork(_dbContext, new DatabaseConnectionSettings()), Substitute.For<IUserDateService>(), cache,
+            Substitute.For<Orbit.Application.Connections.INotionConnectionService>(), Substitute.For<IGoogleTokenService>());
+        var tableCounts = new Dictionary<string, long>();
+        foreach (var table in _dbContext.Model.GetEntityTypes().Select(entity => entity.GetTableName()).OfType<string>().Distinct())
+        {
+            await using var command = _connection.CreateCommand();
+            command.CommandText = $"SELECT COUNT(*) FROM \"{table.Replace("\"", "\"\"")}\"";
+            tableCounts[table] = (long)(await command.ExecuteScalarAsync())!;
+        }
+        var reset = () => handler.Handle(new(_userId), default);
+        await reset.Should().ThrowAsync<Exception>();
+        _dbContext.ChangeTracker.Clear();
+        (await _dbContext.Users.SingleAsync(u => u.Id == _userId)).TotalXp.Should().Be(123);
+        (await _dbContext.Users.SingleAsync(u => u.Id == _userId)).HasCompletedOnboarding.Should().BeTrue();
+        (await _dbContext.ConversationTurns.CountAsync(t => t.UserId == _userId)).Should().Be(2);
+        foreach (var (table, count) in tableCounts)
+        {
+            await using var command = _connection.CreateCommand();
+            command.CommandText = $"SELECT COUNT(*) FROM \"{table.Replace("\"", "\"\"")}\"";
+            ((long)(await command.ExecuteScalarAsync())!).Should().Be(count, $"{table} must survive a failed reset");
+        }
+        await AccountRemovalRows.AssertAsync(_dbContext, _userId, 1, 1, false);
+        await AccountRemovalRows.AssertAsync(_dbContext, _otherUserId, 1, 1, false);
     }
 
     private sealed class SqliteCompatOrbitDbContext(DbContextOptions<OrbitDbContext> options)

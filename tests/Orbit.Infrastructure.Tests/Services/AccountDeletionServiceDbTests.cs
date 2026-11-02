@@ -1,4 +1,8 @@
 using FluentAssertions;
+using NSubstitute;
+using Orbit.Application.Common;
+using Orbit.Application.Connections;
+using Orbit.Application.Auth.Jobs;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -10,6 +14,7 @@ using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.Configuration;
 using Orbit.Infrastructure.Persistence;
+using Orbit.Infrastructure.Tests.Persistence;
 using Orbit.Infrastructure.Services;
 
 namespace Orbit.Infrastructure.Tests.Services;
@@ -22,8 +27,14 @@ public class AccountDeletionServiceDbTests : IDisposable
     private readonly FakeObjectStore _objects = new();
     private readonly FakeObjectStore _legacyObjects = new();
 
+    private readonly IBillingService _billing = Substitute.For<IBillingService>();
+    private readonly IGoogleTokenService _google = Substitute.For<IGoogleTokenService>();
+    private readonly Microsoft.Extensions.Logging.ILogger<AccountDeletionService> _logger = Substitute.For<Microsoft.Extensions.Logging.ILogger<AccountDeletionService>>();
+    private readonly IAppleIdentityService _apple = Substitute.For<IAppleIdentityService>();
+
     public AccountDeletionServiceDbTests()
     {
+        _logger.IsEnabled(Arg.Any<Microsoft.Extensions.Logging.LogLevel>()).Returns(true);
         _connection = new SqliteConnection("Data Source=:memory:");
         _connection.Open();
 
@@ -36,6 +47,11 @@ public class AccountDeletionServiceDbTests : IDisposable
 
         var serviceProvider = new ServiceCollection()
             .AddSingleton(_dbContext)
+            .AddSingleton(_billing)
+            .AddSingleton(_google)
+            .AddSingleton(_apple)
+            .AddSingleton<IGenericRepository<User>>(new GenericRepository<User>(_dbContext))
+            .AddSingleton<RevokeAppleTokenOnDeletionJob>()
             .AddSingleton<IObjectStorageDeletionService>(_objects)
             .AddSingleton<IObjectStorageDeletionService>(_legacyObjects)
             .AddSingleton<IUnitOfWork>(new UnitOfWork(_dbContext, new DatabaseConnectionSettings()))
@@ -45,7 +61,7 @@ public class AccountDeletionServiceDbTests : IDisposable
 
         _service = new AccountDeletionService(
             serviceProvider.GetRequiredService<IServiceScopeFactory>(),
-            NullLogger<AccountDeletionService>.Instance,
+            _logger,
             new ConfigurationBuilder().Build());
     }
 
@@ -91,6 +107,8 @@ public class AccountDeletionServiceDbTests : IDisposable
         SeedUser(otherUserId, "other-owned@example.com");
         _dbContext.Tags.Add(Tag.Create(userId, "Fitness", "#ff0000").Value);
         _dbContext.ProcessedRequests.Add(ProcessedRequest.Create(userId, "mutation-key-1", "LogHabitCommand", 0));
+        AccountRemovalRows.Seed(_dbContext, userId);
+        AccountRemovalRows.Seed(_dbContext, otherUserId);
         SeedProactiveData(userId);
         SeedProactiveData(otherUserId);
         SeedChatTurns(userId);
@@ -100,6 +118,8 @@ public class AccountDeletionServiceDbTests : IDisposable
         await AssertRetiredLedgerAbsent();
 
         await _service.RunAsync(CancellationToken.None);
+        await AccountRemovalRows.AssertAsync(_dbContext, userId, 0, 0, true);
+        await AccountRemovalRows.AssertAsync(_dbContext, otherUserId, 1, 1, true);
 
         (await _dbContext.Users.AnyAsync(u => u.Id == userId)).Should().BeFalse();
         (await _dbContext.Tags.IgnoreQueryFilters().AnyAsync(t => t.UserId == userId)).Should().BeFalse();
@@ -285,6 +305,79 @@ public class AccountDeletionServiceDbTests : IDisposable
         (await _dbContext.Users.IgnoreQueryFilters().AnyAsync(user => user.Id == erased)).Should().BeFalse();
         (await _dbContext.ConversationTurns.ToListAsync()).Should().ContainSingle().Which.UserId.Should().Be(retained);
         _objects.Keys.Should().ContainSingle().Which.Should().StartWith($"{retained}/");
+    }
+
+    [Fact]
+    public async Task Erasure_WithGoogleRefreshToken_RevokesBeforeRowRemoval()
+    {
+        var userId = Guid.NewGuid();
+        SeedDeactivatedUser(userId, "google-erasure@example.com", DateTime.UtcNow.AddDays(-1));
+        var user = _dbContext.Users.Local.Single(u => u.Id == userId);
+        user.SetGoogleTokens("access", "stored-refresh");
+        user.Deactivate(DateTime.UtcNow.AddDays(-1));
+        await _dbContext.SaveChangesAsync();
+        _dbContext.ChangeTracker.Clear();
+        _google.RevokeBestEffortAsync(userId, "stored-refresh", Arg.Any<CancellationToken>()).Returns(async _ =>
+        {
+            (await _dbContext.Users.IgnoreQueryFilters().SingleAsync(u => u.Id == userId)).GoogleRefreshToken.Should().Be("stored-refresh");
+        });
+        await _service.RunAsync(default);
+        await _google.Received(1).RevokeBestEffortAsync(userId, "stored-refresh", Arg.Any<CancellationToken>());
+        (await _dbContext.Users.IgnoreQueryFilters().AnyAsync(u => u.Id == userId)).Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Erasure_WithStripeCustomer_DeletesBeforeRemovalAndRetriesFailure(bool failFirst)
+    {
+        var userId = Guid.NewGuid();
+        SeedDeactivatedUser(userId, "stripe-erasure@example.com", DateTime.UtcNow.AddDays(-1));
+        var user = _dbContext.Users.Local.Single(u => u.Id == userId);
+        user.SetStripeCustomerId("cus_erased");
+        await _dbContext.SaveChangesAsync();
+        _dbContext.ChangeTracker.Clear();
+        var attempts = 0;
+        _billing.DeleteCustomerAsync("cus_erased", Arg.Any<CancellationToken>()).Returns(_ =>
+        {
+            _dbContext.Users.IgnoreQueryFilters().Any(u => u.Id == userId).Should().BeTrue();
+            if (++attempts == 1 && failFirst) throw new BillingProviderException("unavailable");
+            return Task.CompletedTask;
+        });
+        await _service.RunAsync(default);
+        if (failFirst)
+        {
+            (await _dbContext.Users.IgnoreQueryFilters().AnyAsync(u => u.Id == userId)).Should().BeTrue();
+            _dbContext.ChangeTracker.Clear();
+            await _service.RunAsync(default);
+        }
+        attempts.Should().Be(failFirst ? 2 : 1);
+        (await _dbContext.Users.IgnoreQueryFilters().AnyAsync(u => u.Id == userId)).Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData(false, 1, false)]
+    [InlineData(true, 1, true)]
+    [InlineData(true, 8, false)]
+    public async Task Erasure_AppleTokenStillSet_RevokesOrDefers(bool fails, int daysOverdue, bool retained)
+    {
+        var userId = Guid.NewGuid();
+        SeedDeactivatedUser(userId, "apple-erasure@example.com", DateTime.UtcNow.AddDays(-daysOverdue));
+        _dbContext.Users.Local.Single(u => u.Id == userId).SetAppleIdentity("subject", "stored-apple", "client");
+        await _dbContext.SaveChangesAsync();
+        _dbContext.ChangeTracker.Clear();
+        _apple.RevokeAsync("stored-apple", "client", Arg.Any<CancellationToken>()).Returns(_ =>
+        {
+            _dbContext.Users.IgnoreQueryFilters().Any(u => u.Id == userId).Should().BeTrue();
+            return fails ? Task.FromException(new HttpRequestException("unavailable")) : Task.CompletedTask;
+        });
+        await _service.RunAsync(default);
+        await _apple.Received(1).RevokeAsync("stored-apple", "client", Arg.Any<CancellationToken>());
+        (await _dbContext.Users.IgnoreQueryFilters().AnyAsync(u => u.Id == userId)).Should().Be(retained);
+        if (fails && !retained)
+            _logger.Received(1).Log(Microsoft.Extensions.Logging.LogLevel.Error,
+                Arg.Is<Microsoft.Extensions.Logging.EventId>(eventId => eventId.Id == 11), Arg.Any<Arg.AnyType>(),
+                Arg.Any<Exception?>(), Arg.Any<Func<Arg.AnyType, Exception?, string>>());
     }
 
     private async Task AssertRetiredLedgerAbsent()

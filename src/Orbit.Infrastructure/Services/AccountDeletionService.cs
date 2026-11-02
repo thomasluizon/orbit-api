@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using Orbit.Application.Marketing.Services;
 using Orbit.Application.Auth.Jobs;
 using Orbit.Application.Common;
+using Orbit.Application.Connections;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
@@ -102,6 +103,22 @@ public partial class AccountDeletionService(
                 return;
 
             await StopRenewalsBeforeErasureAsync(scope.ServiceProvider, user, nowAtUtc, ct);
+            if (await dbContext.NotionConnections.AnyAsync(connection => connection.UserId == userId, ct))
+                await scope.ServiceProvider.GetRequiredService<INotionConnectionService>().RevokeForAccountRemovalAsync(userId, ct);
+            if ((user.GoogleRefreshToken ?? user.GoogleAccessToken) is { } googleToken)
+                await scope.ServiceProvider.GetRequiredService<IGoogleTokenService>().RevokeBestEffortAsync(userId, googleToken, ct);
+            if (user.AppleRefreshToken is not null)
+            {
+                try
+                {
+                    await scope.ServiceProvider.GetRequiredService<RevokeAppleTokenOnDeletionJob>().ExecuteAsync(userId, ct);
+                }
+                catch (Exception ex) when ((ex is not OperationCanceledException || !ct.IsCancellationRequested)
+                    && nowAtUtc - user.ScheduledDeletionAt.Value >= MaxBillingDeferral)
+                {
+                    LogAppleRevocationAbandoned(logger, userId);
+                }
+            }
             unitOfWork.ResetTracking();
             var owedRecords = new List<(Guid Id, SubscriptionSource Provider)>();
             var deleted = await unitOfWork.ExecuteInTransactionAsync(
@@ -151,6 +168,9 @@ public partial class AccountDeletionService(
             if (!string.IsNullOrWhiteSpace(user.PlayPurchaseToken))
                 owedRecords.Add((await cancellations.RecordAsync(SubscriptionSource.GooglePlay, user.PlayPurchaseToken, ct), SubscriptionSource.GooglePlay));
         }
+
+        if (!string.IsNullOrWhiteSpace(user.StripeCustomerId))
+            await services.GetRequiredService<IBillingService>().DeleteCustomerAsync(user.StripeCustomerId, ct);
 
         var contacts = services.GetRequiredService<IGenericRepository<MarketingContact>>();
         await MarketingContactOptOut.RecordAsync(user.Email, contacts, unitOfWork, ct);
@@ -227,6 +247,9 @@ public partial class AccountDeletionService(
 
     [LoggerMessage(EventId = 9, Level = LogLevel.Warning, Message = "Retrying upload deletion for user {UserId} after attempt {Attempt}")]
     private static partial void LogStorageDeletionRetry(ILogger logger, Exception ex, Guid userId, int attempt);
+
+    [LoggerMessage(EventId = 11, Level = LogLevel.Error, Message = "Apple revocation failed past the erasure deferral limit for user {UserId}; erasing local data")]
+    private static partial void LogAppleRevocationAbandoned(ILogger logger, Guid userId);
 
     private const int ProcessedRequestRetentionDays = 30;
     private static readonly TimeSpan MaxBillingDeferral = TimeSpan.FromDays(7);

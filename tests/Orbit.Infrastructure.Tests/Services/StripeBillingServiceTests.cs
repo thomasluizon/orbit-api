@@ -20,6 +20,7 @@ public class StripeBillingServiceTests
     private static readonly Guid UserId = Guid.Parse("7092bf88-d132-46df-b4ee-2dcc2197cd69");
     private readonly List<(SessionCreateOptions Options, RequestOptions Request)> _checkoutRequests = [];
     private readonly List<(PortalCreateOptions Options, RequestOptions Request)> _portalRequests = [];
+    private readonly CustomerService _customers = Substitute.For<CustomerService>();
     private readonly SubscriptionService _subscriptions = Substitute.For<SubscriptionService>();
     private readonly StripeBillingService _service;
 
@@ -41,9 +42,33 @@ public class StripeBillingServiceTests
             });
         var invoices = Substitute.For<InvoiceService>();
         _service = new StripeBillingService(
-            new StripeServiceClients(new CustomerService(), checkout, portal, _subscriptions,
+            new StripeServiceClients(_customers, checkout, portal, _subscriptions,
                 invoices, new PriceService(), new CouponService()),
             NullLogger<StripeBillingService>.Instance);
+    }
+
+    [Fact]
+    public async Task DeleteCustomerAsync_UsesStoredIdentifier()
+    {
+        await _service.DeleteCustomerAsync("cus_erased", default);
+        await _customers.Received(1).DeleteAsync("cus_erased", Arg.Any<CustomerDeleteOptions>(),
+            Arg.Any<RequestOptions>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task DeleteCustomerAsync_AlreadyGone_Completes()
+    {
+        _customers.DeleteAsync("cus_erased", Arg.Any<CustomerDeleteOptions>(), Arg.Any<RequestOptions>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new StripeException(System.Net.HttpStatusCode.NotFound, new StripeError(), "missing"));
+        await _service.Invoking(service => service.DeleteCustomerAsync("cus_erased", default)).Should().NotThrowAsync();
+    }
+
+    [Fact]
+    public async Task DeleteCustomerAsync_ProviderFailure_Throws()
+    {
+        _customers.DeleteAsync("cus_erased", Arg.Any<CustomerDeleteOptions>(), Arg.Any<RequestOptions>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new StripeException(System.Net.HttpStatusCode.Unauthorized, new StripeError(), "unavailable"));
+        await _service.Invoking(service => service.DeleteCustomerAsync("cus_erased", default)).Should().ThrowAsync<BillingProviderException>();
     }
 
     [Theory]

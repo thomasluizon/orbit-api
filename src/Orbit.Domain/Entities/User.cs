@@ -560,12 +560,12 @@ public partial class User : Entity
         DeactivatedAt = DateTime.UtcNow;
         ScheduledDeletionAt = scheduledDeletion;
         GoogleAccessToken = null;
-        GoogleRefreshToken = null;
         GoogleCalendarAutoSyncEnabled = false;
     }
 
     public void CancelDeactivation()
     {
+        GoogleRefreshToken = null;
         PlayRenewalStoppedByDeletion = false;
         if (!IsLifetimePro && SubscriptionExpiresAtUtc.HasValue
             && SubscriptionExpiresAtUtc.Value <= _timeProvider.GetUtcNow().UtcDateTime)

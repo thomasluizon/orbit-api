@@ -30,6 +30,23 @@ public sealed partial class StripeBillingService(
 {
     private const string RequestThreeDSecureWhenSupported = "any";
 
+    public async Task DeleteCustomerAsync(string customerId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await StripeRetryPolicy.ExecuteWithRetryAsync(
+                () => clients.Customers.DeleteAsync(customerId, cancellationToken: cancellationToken), cancellationToken);
+        }
+        catch (StripeException ex) when (IsMissingSubscription(ex))
+        {
+            return;
+        }
+        catch (StripeException ex)
+        {
+            throw new BillingProviderException("Failed to delete customer", ex);
+        }
+    }
+
     public async Task<string> CreateCustomerAsync(string email, string name, Guid userId, CancellationToken cancellationToken)
     {
         try

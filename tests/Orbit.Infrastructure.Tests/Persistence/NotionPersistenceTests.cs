@@ -1,4 +1,12 @@
 using FluentAssertions;
+using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging.Abstractions;
+using Orbit.Application.Connections;
+using Orbit.Application.Profile.Commands;
+using Orbit.Domain.Interfaces;
+using Orbit.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using NSubstitute;
 using Orbit.Domain.Entities;
@@ -32,10 +40,12 @@ public class NotionPersistenceTests
     }
 
     [Theory]
-    [InlineData("disconnect")]
-    [InlineData("reset")]
-    [InlineData("delete")]
-    public async Task DataRightsRemoveAllNotionRowsAndPreserveOtherPeople(string operation)
+    [InlineData("disconnect", false)]
+    [InlineData("reset", false)]
+    [InlineData("delete", false)]
+    [InlineData("reset", true)]
+    [InlineData("delete", true)]
+    public async Task DataRightsRemoveAllNotionRowsAndPreserveOtherPeople(string operation, bool fails)
     {
         using var test = new NotionTestContext();
         await test.SeedConnectionAsync();
@@ -56,6 +66,7 @@ public class NotionPersistenceTests
         {
             revokeSawLocalData = await test.Db.NotionConnections.AnyAsync(c => c.UserId == test.User.Id)
                 && await test.Db.NotionTasks.AnyAsync(t => t.UserId == test.User.Id);
+            if (fails) throw new HttpRequestException("provider unavailable");
         });
         if (operation == "disconnect")
         {
@@ -64,9 +75,34 @@ public class NotionPersistenceTests
             test.Analytics.Received(1).CaptureUserEvent(test.User.Id, "notion_disconnected", "pro");
         }
         else if (operation == "reset")
-            await new AccountResetRepository(test.Db, Substitute.For<Orbit.Domain.Events.IAccountEventCollector>())
-                .DeleteAllUserDataAsync(test.User.Id);
-        else await test.Db.Users.Where(u => u.Id == test.User.Id).ExecuteDeleteAsync();
+        {
+            using var cache = new MemoryCache(new MemoryCacheOptions());
+            var handler = new ResetAccountCommandHandler(new GenericRepository<User>(test.Db),
+                new AccountResetRepository(test.Db, Substitute.For<Orbit.Domain.Events.IAccountEventCollector>()),
+                test.UnitOfWork, test.Dates, cache, test.Connections, Substitute.For<IGoogleTokenService>());
+            (await handler.Handle(new(test.User.Id), default)).IsSuccess.Should().BeTrue();
+        }
+        else
+        {
+            var user = await test.Db.Users.SingleAsync(u => u.Id == test.User.Id);
+            user.Deactivate(DateTime.UtcNow.AddDays(-1));
+            await test.Db.SaveChangesAsync();
+            test.Db.ChangeTracker.Clear();
+            using var services = new ServiceCollection().AddSingleton(test.Db)
+                .AddSingleton(test.UnitOfWork)
+                .AddSingleton<INotionConnectionService>(test.Connections)
+                .AddSingleton<IGenericRepository<MarketingContact>>(new GenericRepository<MarketingContact>(test.Db))
+                .AddSingleton<IAccountResetRepository>(new AccountResetRepository(test.Db, Substitute.For<Orbit.Domain.Events.IAccountEventCollector>()))
+                .AddSingleton(Substitute.For<IObjectStorageDeletionService>()).BuildServiceProvider();
+            using var deletion = new AccountDeletionService(services.GetRequiredService<IServiceScopeFactory>(),
+                NullLogger<AccountDeletionService>.Instance, new ConfigurationBuilder().Build());
+            await deletion.RunAsync(default);
+        }
+        if (fails)
+            test.Logger.Received(1).Log(Microsoft.Extensions.Logging.LogLevel.Warning, Arg.Any<Microsoft.Extensions.Logging.EventId>(),
+                Arg.Any<Arg.AnyType>(), Arg.Any<Exception?>(), Arg.Any<Func<Arg.AnyType, Exception?, string>>());
+        revokeSawLocalData.Should().BeTrue();
+        await test.Api.Received(1).RevokeAsync("access-token", Arg.Any<CancellationToken>());
         (await test.Db.NotionConnections.AnyAsync(c => c.UserId == test.User.Id)).Should().BeFalse();
         (await test.Db.NotionTasks.AnyAsync(t => t.UserId == test.User.Id)).Should().BeFalse();
         (await test.Db.NotionOAuthStates.AnyAsync(s => s.UserId == test.User.Id)).Should().BeFalse();

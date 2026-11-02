@@ -181,7 +181,7 @@ public class ClosedMonthRecapResetRaceTests
                 _accountResetRepository,
                 UnitOfWork,
                 _userDateService,
-                new MemoryCache(new MemoryCacheOptions()));
+                new MemoryCache(new MemoryCacheOptions()), NSubstitute.Substitute.For<Orbit.Application.Connections.INotionConnectionService>(), NSubstitute.Substitute.For<Orbit.Domain.Interfaces.IGoogleTokenService>());
         }
 
         public GetRecapQueryHandler RecapHandler { get; }

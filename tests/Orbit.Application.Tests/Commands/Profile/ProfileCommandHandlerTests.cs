@@ -46,6 +46,22 @@ public class ProfileCommandHandlerTests
             });
     }
 
+    [Fact]
+    public async Task SetAiSummary_FreeUserWithRealGate_RefusesAndKeepsUser()
+    {
+        var user = CreateTestUser();
+        user.StartTrial(DateTime.UtcNow.AddDays(-1));
+        var enabled = user.AiSummaryEnabled;
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        var gate = new PayGateService(Substitute.For<IGenericRepository<Habit>>(), _userRepo,
+            Substitute.For<IAppConfigService>(), _userDateService, Substitute.For<IFeatureFlagService>());
+        var handler = new SetAiSummaryCommandHandler(_userRepo, gate, _unitOfWork);
+        var result = await handler.Handle(new(UserId, !enabled), default);
+        result.ErrorCode.Should().Be(ErrorCodes.PayGate);
+        user.AiSummaryEnabled.Should().Be(enabled);
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
     private void SetupUserFound(User user)
     {
         _userRepo.FindOneTrackedAsync(
@@ -259,7 +275,7 @@ public class ProfileCommandHandlerTests
         SetupUserFound(user);
         var accountResetRepo = Substitute.For<IAccountResetRepository>();
 
-        var handler = new ResetAccountCommandHandler(_userRepo, accountResetRepo, _unitOfWork, _userDateService, _cache);
+        var handler = new ResetAccountCommandHandler(_userRepo, accountResetRepo, _unitOfWork, _userDateService, _cache, NSubstitute.Substitute.For<Orbit.Application.Connections.INotionConnectionService>(), NSubstitute.Substitute.For<Orbit.Domain.Interfaces.IGoogleTokenService>());
         var command = new ResetAccountCommand(UserId);
 
         var result = await handler.Handle(command, CancellationToken.None);
@@ -278,7 +294,7 @@ public class ProfileCommandHandlerTests
         SetupUserNotFound();
         var accountResetRepo = Substitute.For<IAccountResetRepository>();
 
-        var handler = new ResetAccountCommandHandler(_userRepo, accountResetRepo, _unitOfWork, _userDateService, _cache);
+        var handler = new ResetAccountCommandHandler(_userRepo, accountResetRepo, _unitOfWork, _userDateService, _cache, NSubstitute.Substitute.For<Orbit.Application.Connections.INotionConnectionService>(), NSubstitute.Substitute.For<Orbit.Domain.Interfaces.IGoogleTokenService>());
         var command = new ResetAccountCommand(UserId);
 
         var result = await handler.Handle(command, CancellationToken.None);

@@ -2,6 +2,8 @@ namespace Orbit.Application.Common;
 
 public interface IBillingService
 {
+    Task DeleteCustomerAsync(string customerId, CancellationToken cancellationToken);
+
     /// <summary>Create a Stripe customer and return the provider customer ID.</summary>
     Task<string> CreateCustomerAsync(
         string email,

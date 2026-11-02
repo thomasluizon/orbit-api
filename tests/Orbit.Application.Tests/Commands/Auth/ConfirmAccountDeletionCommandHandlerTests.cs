@@ -189,7 +189,7 @@ public class ConfirmAccountDeletionCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         user.GoogleAccessToken.Should().BeNull();
-        user.GoogleRefreshToken.Should().BeNull();
+        user.GoogleRefreshToken.Should().Be("refresh-token");
     }
 
     [Fact]

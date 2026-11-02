@@ -1153,7 +1153,7 @@ public class UserTests
 
         user.IsDeactivated.Should().BeTrue();
         user.GoogleAccessToken.Should().BeNull();
-        user.GoogleRefreshToken.Should().BeNull();
+        user.GoogleRefreshToken.Should().Be("refresh-token");
         user.GoogleCalendarAutoSyncEnabled.Should().BeFalse();
     }
 
@@ -1170,4 +1170,20 @@ public class UserTests
         user.GoogleAccessToken.Should().BeNull();
         user.GoogleRefreshToken.Should().BeNull();
     }
+    [Theory]
+    [InlineData(0, false)]
+    [InlineData(1, true)]
+    public void IsPro_UsesStrictExpiryBoundary(long ticksUntilExpiry, bool expected)
+    {
+        var clock = new ExpiryClock();
+        var user = User.Create("Owner", "expiry@example.com", clock).Value;
+        user.SetStripeSubscription("sub_boundary", clock.GetUtcNow().UtcDateTime.AddTicks(ticksUntilExpiry));
+        user.IsPro.Should().Be(expected);
+    }
+
+    private sealed class ExpiryClock : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => new(2026, 1, 1, 12, 0, 0, TimeSpan.Zero);
+    }
+
 }
