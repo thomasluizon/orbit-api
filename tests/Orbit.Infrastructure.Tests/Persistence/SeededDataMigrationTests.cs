@@ -16,7 +16,10 @@ public class SeededDataMigrationTests
             await db.Database.ExecuteSqlRawAsync(command.CommandText);
     }
     private static async Task<string[]> Rows(OrbitDbContext db, string expression, string table)
-        => await db.Database.SqlQuery<string>($"SELECT {expression} AS \"Value\" FROM \"{table}\" ORDER BY \"Id\"").ToArrayAsync();
+    {
+        var sql = $"SELECT {expression} AS \"Value\" FROM \"{table}\" ORDER BY \"Id\"";
+        return await db.Database.SqlQueryRaw<string>(sql).ToArrayAsync();
+    }
 
     [PostgresFact]
     public async Task RecordAstraChatTokenUsage_Down_SumsAndRemovesExtraRows()
@@ -49,10 +52,13 @@ public class SeededDataMigrationTests
         {
             var indexes = new[] { ("Tags", "UserId"), ("Notifications", "UserId"), ("Habits", "UserId"), ("HabitLogs", "HabitId"), ("Goals", "UserId"), ("GoalProgressLogs", "GoalId"), ("ChecklistTemplates", "UserId") };
             foreach (var (table, owner) in indexes)
-                await db.Database.ExecuteSqlAsync($"""
+            {
+                var schemaSql = $"""
                     CREATE TABLE "{table}" ("Id" int PRIMARY KEY, "{owner}" int, "UpdatedAtUtc" timestamptz);
                     INSERT INTO "{table}" SELECT n, n % 1000, '2026-03-31'::timestamptz + n * INTERVAL '1 second' FROM generate_series(1, 10000) n;
-                    """);
+                    """;
+                await db.Database.ExecuteSqlRawAsync(schemaSql);
+            }
             await Apply(db, new AddSyncChangesV2Indexes());
             await Apply(db, new AddSyncChangesV2Indexes());
             var names = await db.Database.SqlQueryRaw<string>("SELECT indexname AS \"Value\" FROM pg_indexes WHERE schemaname = 'public'").ToArrayAsync();
@@ -60,8 +66,10 @@ public class SeededDataMigrationTests
             {
                 var index = $"IX_{table}_{owner}_UpdatedAtUtc";
                 names.Should().Contain(index);
-                await db.Database.ExecuteSqlAsync($"ANALYZE \"{table}\"");
-                var plan = await db.Database.SqlQuery<string>($"EXPLAIN SELECT * FROM \"{table}\" WHERE \"{owner}\" = 1 AND \"UpdatedAtUtc\" > '2026-03-31T01:00:00Z'").ToArrayAsync();
+                var analyzeSql = $"ANALYZE \"{table}\"";
+                await db.Database.ExecuteSqlRawAsync(analyzeSql);
+                var explainSql = $"EXPLAIN SELECT * FROM \"{table}\" WHERE \"{owner}\" = 1 AND \"UpdatedAtUtc\" > '2026-03-31T01:00:00Z'";
+                var plan = await db.Database.SqlQueryRaw<string>(explainSql).ToArrayAsync();
                 string.Join('\n', plan).Should().Contain(index);
             }
         }, "0");
