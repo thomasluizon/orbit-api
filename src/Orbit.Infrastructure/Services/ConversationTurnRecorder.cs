@@ -24,6 +24,7 @@ public sealed class ConversationTurnRecorder(
     IOptions<AiSettings> aiSettings) : IConversationTurnRecorder
 {
     public const int HistoryRows = 10;
+    public const int ImageHistoryRows = 6;
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 
     public async Task<bool> RecordAsync(ConversationTurnCapture turn, CancellationToken cancellationToken = default)
@@ -114,6 +115,7 @@ public sealed class ConversationTurnRecorder(
         var rows = await db.ConversationTurns.AsNoTracking().Where(row => row.UserId == userId && row.ConversationId == conversationId)
             .OrderByDescending(row => row.TurnOrder).Take(HistoryRows).ToListAsync(cancellationToken);
         rows.Reverse();
+        var image = rows.TakeLast(ImageHistoryRows).LastOrDefault(row => row.ImageObjectKey is not null);
         var messages = new List<ChatHistoryMessage>();
         foreach (var row in rows)
         {
@@ -129,8 +131,16 @@ public sealed class ConversationTurnRecorder(
                 }, JsonOptions);
                 content = ModelToolPayload.Fit(context, 12_000).ToJsonString();
             }
-            if (row.ImageObjectKey is not null) content += "\n[An image was attached to this earlier message.]";
-            messages.Add(new(row.Role, content) { ServerOwned = true });
+            byte[]? bytes = null;
+            if (ReferenceEquals(row, image))
+            {
+                await using var source = await storage.ReadPrivateAsync(row.ImageObjectKey!, cancellationToken);
+                await using var verified = new VerifiedConversationImageStream(source, row.ImageSha256!);
+                using var buffer = new MemoryStream();
+                await verified.CopyToAsync(buffer, cancellationToken);
+                bytes = buffer.ToArray();
+            }
+            messages.Add(new(row.Role, content) { ServerOwned = true, ImageData = bytes, ImageMimeType = row.ImageContentType });
         }
         return Result.Success(new StoredConversationHistory(rows.Count > 0, messages));
     }

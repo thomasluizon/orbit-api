@@ -191,6 +191,12 @@
         "reason": "playCutoff removes processed Play notification dedupe entries by ProcessedAtUtc retention age. stripeCutoff removes processed Stripe event dedupe entries by ProcessedAtUtc retention age."
       }
     },
+    "src/Orbit.Infrastructure/Services/SlipAlertSchedulerService.cs": {
+      "ORBIT0004": {
+        "count": 1,
+        "reason": "utcDate anchors widened end-date, sent-week and history prefetch floors; ProcessHabitSlipAlertAsync chooses the send day and dedupe week from converted userToday."
+      }
+    },
     "src/Orbit.Infrastructure/Services/StripeBillingService.cs": {
       "ORBIT0004": {
         "count": 1,

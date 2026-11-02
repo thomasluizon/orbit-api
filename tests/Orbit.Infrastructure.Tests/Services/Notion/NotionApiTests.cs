@@ -78,7 +78,11 @@ public class NotionApiTests
         for (var index = 0; index < 6; index++)
             http.Responses.Enqueue(NotionHttpStub.List([], true, Guid.NewGuid().ToString()));
         var rows = new List<JsonElement>();
-        await foreach (var row in http.Api.QueryAsync("access", NotionExamples.SourceId, default)) rows.Add(row);
+        var read = async () =>
+        {
+            await foreach (var row in http.Api.QueryAsync("access", NotionExamples.SourceId, default)) rows.Add(row);
+        };
+        (await read.Should().ThrowAsync<NotionPaginationTruncatedException>()).Which.InputCount.Should().Be(0);
         rows.Should().BeEmpty();
         http.Requests.Should().HaveCount(5);
         http.Responses.Should().ContainSingle();

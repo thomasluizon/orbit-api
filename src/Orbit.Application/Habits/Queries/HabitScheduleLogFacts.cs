@@ -5,7 +5,8 @@ using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Habits.Queries;
 
-internal sealed class HabitScheduleLogFacts(IEnumerable<HabitScheduleLogDay> days)
+internal sealed class HabitScheduleLogFacts(IEnumerable<HabitScheduleLogDay> days,
+    IReadOnlyDictionary<Guid, DateOnly>? olderDueDates = null)
 {
     private readonly ILookup<Guid, HabitScheduleLogDay> _byHabit = days.ToLookup(day => day.HabitId);
 
@@ -13,6 +14,7 @@ internal sealed class HabitScheduleLogFacts(IEnumerable<HabitScheduleLogDay> day
         _byHabit[habitId]
             .Where(day => day.CompletedCount > 0 || day.SkippedCount > 0)
             .Select(day => day.Date)
+            .Concat(olderDueDates is not null && olderDueDates.TryGetValue(habitId, out var dueDate) ? [dueDate] : Array.Empty<DateOnly>())
             .ToHashSet();
 
     internal bool HasCompleted(Guid habitId, DateOnly from, DateOnly to) =>

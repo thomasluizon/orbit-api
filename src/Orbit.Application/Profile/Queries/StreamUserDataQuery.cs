@@ -56,24 +56,24 @@ public sealed class StreamUserDataQueryHandler(
         await WriteRows(writer, "tags", repos.Tags.StreamAsync(t => t.UserId == user.Id,
             q => q.Select(t => new ExportedTag(t.Id, t.Name, t.Color, t.CreatedAtUtc)), ct), ct);
         await WriteRows(writer, "notifications", repos.Notifications.StreamAsync(n => n.UserId == user.Id,
-            q => q.OrderBy(n => n.CreatedAtUtc).Select(n => new ExportedNotification(n.Id, n.Title, n.Body, n.Url, n.IsRead, n.CreatedAtUtc)), ct), ct);
+            q => q.OrderBy(n => n.CreatedAtUtc).ThenBy(n => n.Id).Select(n => new ExportedNotification(n.Id, n.Title, n.Body, n.Url, n.IsRead, n.CreatedAtUtc)), ct), ct);
         await WriteRows(writer, "checklistTemplates", repos.ChecklistTemplates.StreamAsync(t => t.UserId == user.Id,
-            q => q.OrderBy(t => t.CreatedAtUtc).Select(t => new ExportedChecklistTemplate(t.Id, t.Name, t.Items, t.CreatedAtUtc)), ct), ct);
+            q => q.OrderBy(t => t.CreatedAtUtc).ThenBy(t => t.Id).Select(t => new ExportedChecklistTemplate(t.Id, t.Name, t.Items, t.CreatedAtUtc)), ct), ct);
         await WriteRows(writer, "achievements", repos.UserAchievements.StreamAsync(a => a.UserId == user.Id,
-            q => q.OrderBy(a => a.EarnedAtUtc).Select(a => new ExportedAchievement(a.AchievementId, a.EarnedAtUtc)), ct), ct);
+            q => q.OrderBy(a => a.EarnedAtUtc).ThenBy(a => a.Id).Select(a => new ExportedAchievement(a.AchievementId, a.EarnedAtUtc)), ct), ct);
         await WriteRows(writer, "streakFreezes", repos.StreakFreezes.StreamAsync(s => s.UserId == user.Id,
-            q => q.OrderBy(s => s.UsedOnDate).Select(s => new ExportedStreakFreeze(s.UsedOnDate, s.CreatedAtUtc)), ct), ct);
+            q => q.OrderBy(s => s.UsedOnDate).ThenBy(s => s.Id).Select(s => new ExportedStreakFreeze(s.UsedOnDate, s.CreatedAtUtc)), ct), ct);
         await WriteRows(writer, "referrals", repos.Referrals.StreamAsync(r => r.ReferrerId == user.Id,
-            q => q.OrderBy(r => r.CreatedAtUtc).Select(r => new ExportedReferral(r.Status.ToString(), r.CreatedAtUtc, r.CompletedAtUtc, r.RewardGrantedAtUtc)), ct), ct);
+            q => q.OrderBy(r => r.CreatedAtUtc).ThenBy(r => r.Id).Select(r => new ExportedReferral(r.Status.ToString(), r.CreatedAtUtc, r.CompletedAtUtc, r.RewardGrantedAtUtc)), ct), ct);
         await WriteRows(writer, "apiKeys", repos.ApiKeys.StreamAsync(k => k.UserId == user.Id,
-            q => q.OrderBy(k => k.CreatedAtUtc).Select(k => ExportUserDataQueryHandler.MapApiKey(k)), ct), ct);
+            q => q.OrderBy(k => k.CreatedAtUtc).ThenBy(k => k.Id).Select(k => ExportUserDataQueryHandler.MapApiKey(k)), ct), ct);
         foreach (var retired in new[] { "friendships", "cheers", "blockedUsers", "reports", "friendFeedEvents" })
         {
             writer.WriteStartArray(retired);
             writer.WriteEndArray();
         }
         await WriteRows(writer, "proactiveItems", repos.ProactiveItems.StreamAsync(i => i.UserId == user.Id,
-            q => q.OrderBy(i => i.CreatedAtUtc).Select(i => new ExportedProactiveItem(i.Id, i.Trigger.ToString(), i.LocalDate,
+            q => q.OrderBy(i => i.CreatedAtUtc).ThenBy(i => i.Id).Select(i => new ExportedProactiveItem(i.Id, i.Trigger.ToString(), i.LocalDate,
                 i.Text, i.ActionLabel, i.ActionPrompt, i.CreatedAtUtc, i.ShownAtUtc, i.PushedAtUtc, i.OpenedAtUtc,
                 i.ActedAtUtc, i.EndedAtUtc, i.EndReason == null ? null : i.EndReason.ToString())), ct), ct);
         var connections = await repos.NotionConnections.ProjectAsync(c => c.UserId == user.Id,
@@ -82,7 +82,7 @@ public sealed class StreamUserDataQueryHandler(
         await WriteRows(writer, "notionTasks", repos.NotionTasks.StreamAsync(t => t.UserId == user.Id,
             q => q.Select(t => NotionTaskResponse.FromEntity(t)), ct), ct);
         await WriteRows(writer, "conversations", repos.ConversationTurns.StreamAsync(t => t.UserId == user.Id,
-            q => q.OrderBy(t => t.CreatedAtUtc).ThenBy(t => t.Role == "user" ? 0 : 1)
+            q => q.OrderBy(t => t.CreatedAtUtc).ThenBy(t => t.Role == "user" ? 0 : 1).ThenBy(t => t.Id)
                 .Select(t => MapConversation(t)), ct), ct);
         writer.WriteStartArray("conversationOffers");
         if (repos.ConversationOffers is { } offers)
@@ -111,7 +111,7 @@ public sealed class StreamUserDataQueryHandler(
                 var row = ExportUserDataQueryHandler.MapHabit(habit, []);
                 WriteWithoutArray(writer, row, "logs");
                 await WriteRows(writer, "logs", repos.HabitLogs.StreamAsync(l => l.HabitId == habit.Id,
-                    q => q.OrderBy(l => l.Date).Select(l => new ExportedHabitLog(l.Date, l.Value, l.Note, l.CreatedAtUtc)), ct), ct);
+                    q => q.OrderBy(l => l.Date).ThenBy(l => l.Id).Select(l => new ExportedHabitLog(l.Date, l.Value, l.Note, l.CreatedAtUtc)), ct), ct);
                 writer.WriteEndObject();
             }
             cursor = batch[^1].Id;
@@ -132,7 +132,7 @@ public sealed class StreamUserDataQueryHandler(
             {
                 WriteWithoutArray(writer, ExportUserDataQueryHandler.MapGoal(goal, [], fresh), "progressLogs");
                 await WriteRows(writer, "progressLogs", repos.GoalProgressLogs.StreamAsync(l => l.GoalId == goal.Id,
-                    q => q.OrderBy(l => l.CreatedAtUtc).Select(l => new ExportedGoalProgressLog(l.Value, l.PreviousValue, l.Note, l.CreatedAtUtc)), ct), ct);
+                    q => q.OrderBy(l => l.CreatedAtUtc).ThenBy(l => l.Id).Select(l => new ExportedGoalProgressLog(l.Value, l.PreviousValue, l.Note, l.CreatedAtUtc)), ct), ct);
                 writer.WriteEndObject();
             }
             cursor = batch[^1].Id;

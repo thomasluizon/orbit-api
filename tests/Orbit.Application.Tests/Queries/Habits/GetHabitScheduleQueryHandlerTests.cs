@@ -70,7 +70,7 @@ public class GetHabitScheduleQueryHandlerTests
     {
         var habitList = habits.ToList().AsReadOnly();
         Orbit.Tests.Shared.RepositoryProjections.FromFind<Habit, Guid>(_habitRepo);
-        Orbit.Tests.Shared.RepositoryProjections.FromFind<Habit, GetHabitScheduleQueryHandler.GeneralCandidate>(_habitRepo, includes: true);
+        Orbit.Tests.Shared.RepositoryProjections.FromFind<Habit, Habit>(_habitRepo, includes: true);
         _habitRepo.ProjectAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<HabitScheduleCandidate>>>(),

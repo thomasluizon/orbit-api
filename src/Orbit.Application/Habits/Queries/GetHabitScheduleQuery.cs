@@ -257,6 +257,8 @@ public class GetHabitScheduleQueryHandler(
         }
         var candidateIds = allHabits.Select(habit => habit.Id).ToArray();
         var logDays = await scheduleLogReader.ReadDaysAsync(candidateIds, logFrom, logTo, cancellationToken);
+        logDays = await ReadOlderOccurrenceDaysAsync(request.IncludeOverdue, allHabits, referenceDate,
+            logFrom, logDays, cancellationToken);
         var logFacts = new HabitScheduleLogFacts(logDays);
         var dueDateResolution = allHabits
             .Where(habit => habit.NextDueDate >= logFrom
@@ -277,6 +279,9 @@ public class GetHabitScheduleQueryHandler(
                 var olderResolutions = await scheduleLogReader.ReadResolvedDueDateIdsAsync(
                     oldDueDateIds, cancellationToken, allHabits.Where(h => oldDueDateIds.Contains(h.Id)).Min(h => h.NextDueDate));
                 dueDateResolution.UnionWith(olderResolutions);
+                logFacts = new HabitScheduleLogFacts(logDays,
+                    allHabits.Where(habit => olderResolutions.Contains(habit.Id))
+                        .ToDictionary(habit => habit.Id, habit => habit.NextDueDate));
             }
         }
 
@@ -323,8 +328,7 @@ public class GetHabitScheduleQueryHandler(
 
         var totalCount = filtered.Count;
         var totalPages = (int)Math.Ceiling((double)totalCount / request.PageSize);
-        var page = request.IncludeGeneral ? Math.Max(1, request.Page)
-            : Math.Max(1, Math.Min(request.Page, Math.Max(1, totalPages)));
+        var page = Math.Max(1, Math.Min(request.Page, Math.Max(1, totalPages)));
 
         var scheduledDatesCache = new Dictionary<Guid, List<DateOnly>>();
         foreach (var item in filtered)
@@ -365,12 +369,12 @@ public class GetHabitScheduleQueryHandler(
             .ToList();
 
         if (request.IncludeGeneral)
-            totalPages = Math.Max(totalPages, await AppendGeneralHabits(
+            await AppendGeneralHabits(
                 pagedItems,
                 request,
                 GetCompletionDate(request, today),
                 weekStartDay,
-                cancellationToken));
+                cancellationToken);
 
         return Result.Success(new PaginatedResponse<HabitScheduleItem>(
             pagedItems,
@@ -378,6 +382,27 @@ public class GetHabitScheduleQueryHandler(
             request.PageSize,
             totalCount,
             totalPages));
+    }
+
+    private async Task<IReadOnlyList<HabitScheduleLogDay>> ReadOlderOccurrenceDaysAsync(bool includeOverdue,
+        IReadOnlyList<Habit> allHabits, DateOnly referenceDate, DateOnly logFrom,
+        IReadOnlyList<HabitScheduleLogDay> logDays, CancellationToken cancellationToken)
+    {
+        if (includeOverdue)
+        {
+            var olderCandidates = allHabits.Where(habit => habit.Schedule == HabitSchedule.Recurring
+                && !habit.IsBadHabit && habit.NextDueDate < logFrom).ToArray();
+            if (olderCandidates.Length > 0)
+            {
+                var oldestOccurrence = referenceDate.AddDays(-AppConstants.MaxReadRangeDays);
+                var oldestDueDate = olderCandidates.Min(habit => habit.NextDueDate);
+                var olderFrom = oldestDueDate > oldestOccurrence ? oldestDueDate : oldestOccurrence;
+                var olderDays = await scheduleLogReader.ReadDaysAsync(olderCandidates.Select(habit => habit.Id).ToArray(),
+                    olderFrom, logFrom.AddDays(-1), cancellationToken);
+                logDays = logDays.Concat(olderDays).ToArray();
+            }
+        }
+        return logDays;
     }
 
     private async Task<IReadOnlyList<Habit>> LoadScheduleHabits(
@@ -505,29 +530,24 @@ public class GetHabitScheduleQueryHandler(
             allPagedItems, allPage, request.PageSize, allTotalCount, allTotalPages));
     }
 
-    private async Task<int> AppendGeneralHabits(
+    private async Task AppendGeneralHabits(
         List<HabitScheduleItem> pagedItems,
         GetHabitScheduleQuery request,
         DateOnly completionDate,
         int weekStartDay,
         CancellationToken cancellationToken)
     {
-        var candidates = await habitRepository.ProjectAsync(
-            h => h.UserId == request.UserId && h.Schedule == HabitSchedule.General,
-            q => q.Select(h => new GeneralCandidate(h.Id, h.ParentHabitId, h.Position, h.CreatedAtUtc)), cancellationToken);
-        var children = candidates.ToLookup(h => h.ParentId);
-        var roots = children[null].OrderBy(h => h.Position ?? int.MaxValue).ThenBy(h => h.CreatedAtUtc).ThenBy(h => h.Id).ToArray();
-        var ids = new HashSet<Guid>();
-        void AddSubtree(Guid id)
+        const int batchSize = 100;
+        var generalHabits = new List<Habit>();
+        for (var offset = 0; ; offset += batchSize)
         {
-            if (!ids.Add(id)) return;
-            foreach (var child in children[id]) AddSubtree(child.Id);
+            var batch = await habitRepository.ProjectAsync(
+                habit => habit.UserId == request.UserId && habit.Schedule == HabitSchedule.General,
+                query => query.OrderBy(habit => habit.Id).Skip(offset).Take(batchSize), cancellationToken);
+            await pageLoader.LoadAsync(batch, completionDate, completionDate, cancellationToken);
+            generalHabits.AddRange(batch);
+            if (batch.Count < batchSize) break;
         }
-        foreach (var root in roots.Skip((Math.Max(1, request.Page) - 1) * request.PageSize).Take(request.PageSize))
-            AddSubtree(root.Id);
-        var generalHabits = ids.Count == 0 ? [] : await habitRepository.FindAsync(
-            h => h.UserId == request.UserId && ids.Contains(h.Id),
-            q => q.Include(h => h.Tags).Include(h => h.Logs.Where(l => l.Date == completionDate)).Include(h => h.Goals), cancellationToken);
         var generalLookup = generalHabits.ToLookup(h => h.ParentHabitId);
         var generalTopLevel = generalLookup[null]
             .OrderBy(h => h.Position ?? int.MaxValue)
@@ -546,10 +566,7 @@ public class GetHabitScheduleQueryHandler(
             .ToList();
 
         pagedItems.AddRange(generalItems);
-        return (int)Math.Ceiling((double)roots.Length / request.PageSize);
     }
-
-    public sealed record GeneralCandidate(Guid Id, Guid? ParentId, int? Position, DateTime CreatedAtUtc);
 
     private static DateOnly GetCompletionDate(GetHabitScheduleQuery request, DateOnly today) =>
         request.DateFrom ?? request.DateTo ?? today;

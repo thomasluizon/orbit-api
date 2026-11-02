@@ -31,6 +31,7 @@ public static partial class ServiceCollectionExtensions
 
             builder.Services.AddHostedService<DataEncryptionMigrationService>();
             builder.Services.AddHostedService<XpAwardLogBackfillHostedService>();
+            builder.Services.AddHostedService<BoundedReadStateBackfillHostedService>();
 
             AddDurableJobQueue(builder);
             builder.Services.TryAddSingleton<ScheduledJobRunner>();

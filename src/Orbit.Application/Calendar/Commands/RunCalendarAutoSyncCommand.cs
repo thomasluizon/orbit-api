@@ -41,6 +41,7 @@ public partial class RunCalendarAutoSyncCommandHandler(
     : IRequestHandler<RunCalendarAutoSyncCommand, Result<CalendarAutoSyncResult>>
 {
     private const int MaxSuggestionsPerTick = 25;
+    private static readonly TimeSpan ManualDedupeWindow = TimeSpan.FromMinutes(5);
     private static readonly TimeSpan BackgroundDedupeWindow = TimeSpan.FromHours(4);
     private static readonly TimeSpan NotificationRateLimitWindow = TimeSpan.FromHours(24);
     private const int QuietHoursStart = 8;
@@ -82,6 +83,9 @@ public partial class RunCalendarAutoSyncCommandHandler(
         return await FetchAndProcess(user, accessToken, request, utcNow, cancellationToken);
     }
 
+    private static TimeSpan DedupeWindow(RunCalendarAutoSyncCommand request) =>
+        request.IsOpportunistic ? ManualDedupeWindow : BackgroundDedupeWindow;
+
     private sealed record SyncPreparation(User User, bool ShouldSync);
 
     private async Task<Result<SyncPreparation>> PrepareAsync(RunCalendarAutoSyncCommand request, CancellationToken cancellationToken)
@@ -110,7 +114,7 @@ public partial class RunCalendarAutoSyncCommandHandler(
             return Result.Failure<SyncPreparation>(ErrorMessages.AutoSyncNotConnected);
 
         if (user.GoogleCalendarLastSyncedAt is { } lastSync
-            && utcNow - lastSync < BackgroundDedupeWindow)
+            && utcNow - lastSync < DedupeWindow(request))
         {
             return Result.Success(new SyncPreparation(user, false));
         }
@@ -163,7 +167,7 @@ public partial class RunCalendarAutoSyncCommandHandler(
                 var gate = await payGate.CanManageCalendar(current.Id, transactionToken);
                 if (gate.IsFailure) { outcome = gate.PropagateError<CalendarAutoSyncResult>(); return; }
                 if (current.GoogleAccessToken is null || (!current.GoogleCalendarAutoSyncEnabled && !request.IsOpportunistic)
-                    || current.GoogleCalendarLastSyncedAt is { } last && utcNow - last < BackgroundDedupeWindow)
+                    || current.GoogleCalendarLastSyncedAt is { } last && utcNow - last < DedupeWindow(request))
                 {
                     outcome = Result.Success(new CalendarAutoSyncResult(0, 0, current.GoogleCalendarAutoSyncStatus ?? GoogleCalendarAutoSyncStatus.Idle));
                     return;

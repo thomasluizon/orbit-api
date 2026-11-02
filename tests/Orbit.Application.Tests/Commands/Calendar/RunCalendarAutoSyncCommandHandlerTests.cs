@@ -797,11 +797,30 @@ public class RunCalendarAutoSyncCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_OpportunisticHonorsDedupe()
+    public async Task Handle_SecondManualSyncInsideFiveMinutesDoesNotFetchAgain()
+    {
+        var user = CreateEnabledProUser();
+        user.MarkCalendarSyncSuccess(_timeProvider.GetUtcNow().UtcDateTime.AddMinutes(-10));
+        StubUser(user);
+        _tokenService.TryRefreshAsync(user, Arg.Any<CancellationToken>())
+            .Returns(new GoogleTokenRefreshOutcome("new", GoogleTokenRefreshResult.Success, null));
+        _fetcher.FetchAsync(Arg.Any<string>(), Arg.Any<IReadOnlyCollection<string>?>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
+            .Returns(new List<CalendarEventItem>());
+        (await _handler.Handle(new(user.Id, IsOpportunistic: true), default)).IsSuccess.Should().BeTrue();
+        _timeProvider.SetUtcNow(_timeProvider.GetUtcNow().UtcDateTime.AddMinutes(4));
+        (await _handler.Handle(new(user.Id, IsOpportunistic: true), default)).IsSuccess.Should().BeTrue();
+        await _fetcher.Received(1).FetchAsync(Arg.Any<string>(), Arg.Any<IReadOnlyCollection<string>?>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(10, true)]
+    [InlineData(4, false)]
+    [InlineData(5, true)]
+    public async Task Handle_ManualSyncUsesFiveMinuteDedupe(int minutes, bool fetches)
     {
         var user = CreateEnabledProUser();
         typeof(User).GetProperty("GoogleCalendarLastSyncedAt")!
-            .SetValue(user, _timeProvider.GetUtcNow().UtcDateTime.AddMinutes(-5));
+            .SetValue(user, _timeProvider.GetUtcNow().UtcDateTime.AddMinutes(-minutes));
         StubUser(user);
         _tokenService.TryRefreshAsync(user, Arg.Any<CancellationToken>())
             .Returns(new GoogleTokenRefreshOutcome("new", GoogleTokenRefreshResult.Success, null));
@@ -811,7 +830,7 @@ public class RunCalendarAutoSyncCommandHandlerTests
         var result = await _handler.Handle(new RunCalendarAutoSyncCommand(user.Id, IsOpportunistic: true), default);
 
         result.IsSuccess.Should().BeTrue();
-        await _tokenService.DidNotReceive().TryRefreshAsync(user, Arg.Any<CancellationToken>());
+        await _fetcher.Received(fetches ? 1 : 0).FetchAsync(Arg.Any<string>(), Arg.Any<IReadOnlyCollection<string>?>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

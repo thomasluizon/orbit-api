@@ -9,16 +9,21 @@ namespace Orbit.Infrastructure.Persistence;
 
 public sealed class BoundedReadStateBackfill(OrbitDbContext db, IUserDateService dates)
 {
+    internal const string CompletionKey = "BoundedReadStateBackfillComplete";
+
+    internal IQueryable<Habit> PendingHabits(Guid? cursor) => db.Habits.AsNoTracking()
+        .Where(h => h.LongestRecordedStreak == null && (cursor == null || h.Id.CompareTo(cursor.Value) > 0))
+        .OrderBy(h => h.Id).Take(100);
+
     public async Task RunAsync(CancellationToken ct = default)
     {
+        if (await db.AppConfigs.AnyAsync(config => config.Key == CompletionKey, ct)) return;
         Guid? cursor = null;
         while (true)
         {
-            var batch = await db.Habits.AsNoTracking().Where(h => h.LongestRecordedStreak == null
-                    && (cursor == null || h.Id.CompareTo(cursor.Value) > 0))
-                .OrderBy(h => h.Id).Take(100)
+            var batch = await PendingHabits(cursor)
                 .Select(h => new { h.Id, h.UserId }).ToArrayAsync(ct);
-            if (batch.Length == 0) return;
+            if (batch.Length == 0) break;
             var ids = batch.Select(h => h.Id).ToArray();
             var userIds = batch.Select(h => h.UserId).Distinct().ToArray();
             var users = await db.Users.AsNoTracking().Where(u => userIds.Contains(u.Id))
@@ -43,6 +48,11 @@ public sealed class BoundedReadStateBackfill(OrbitDbContext db, IUserDateService
                     .SetProperty(h => h.LongestRecordedStreak, h => h.LongestRecordedStreak > longest ? h.LongestRecordedStreak : longest), ct);
             }
             cursor = batch[^1].Id;
+        }
+        if (!await db.AppConfigs.AnyAsync(config => config.Key == CompletionKey, ct))
+        {
+            db.AppConfigs.Add(AppConfig.Create(CompletionKey, "true", "Historical habit streak state is initialized"));
+            await db.SaveChangesAsync(ct);
         }
     }
 }

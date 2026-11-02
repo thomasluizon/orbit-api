@@ -28,7 +28,7 @@ public partial class AiIntentServiceStreamingTests
 
     }
     [Fact]
-    public async Task ThreeRounds_SendAttachmentOnlyInTheFirstRequest()
+    public async Task ThreeRounds_RetainAttachmentInEveryRequest()
     {
         var toolRound = ResponsesTestData.Response();
         toolRound.OutputItems.Add(OpenAI.Responses.ResponseItem.CreateFunctionCallItem("call", "query_habits", BinaryData.FromString("{}")));
@@ -47,8 +47,7 @@ public partial class AiIntentServiceStreamingTests
         third.IsSuccess.Should().BeTrue(third.Error);
         handler.RequestBodies.Should().HaveCount(3);
         handler.RequestBodies[0].Should().Contain("data:image/png;base64,");
-        handler.RequestBodies.Skip(1).Should().OnlyContain(body => !body.Contains("data:image/", StringComparison.Ordinal)
-            && body.Contains("Image supplied in the first round", StringComparison.Ordinal));
+        handler.RequestBodies.Should().OnlyContain(body => body.Contains("data:image/png;base64,iVBORw==", StringComparison.Ordinal));
     }
 
 }

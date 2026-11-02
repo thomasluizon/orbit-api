@@ -12,8 +12,10 @@ namespace Orbit.Infrastructure.Tests.Persistence;
 
 public class StreamingExportTests
 {
-    [Fact]
-    public async Task Export_StreamsTenThousandTurnsInBoundedBatchesAndKeepsTheContent()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Export_StreamsTenThousandTurnsInBoundedBatchesAndKeepsTheContent(bool duplicateSortKeys)
     {
         var counter = new CountingDbCommandInterceptor();
         using var factory = new SqliteOrbitDbContextFactory(counter);
@@ -21,8 +23,9 @@ public class StreamingExportTests
         var user = User.Create("Export", "export-stream@example.test").Value;
         db.Users.Add(user);
         db.Habits.Add(Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, user.Id, "Read", null, null, new DateOnly(2026, 6, 1))).Value);
+        var instant = DateTime.UtcNow;
         for (var index = 0; index < 10_000; index++)
-            db.ConversationTurns.Add(ConversationTurn.Create(user.Id, Guid.NewGuid(), "user", DateTime.UtcNow.AddSeconds(index), null, "Text " + index, "[]").Value);
+            db.ConversationTurns.Add(ConversationTurn.Create(user.Id, Guid.NewGuid(), "user", instant.AddSeconds(duplicateSortKeys ? 0 : index), null, "Text " + index, "[]").Value);
         await db.SaveChangesAsync();
         db.ChangeTracker.Clear();
         var repos = new ExportUserDataRepositories(new GenericRepository<User>(db), new GenericRepository<Habit>(db),
@@ -43,10 +46,17 @@ public class StreamingExportTests
         var conversationReads = counter.Commands.Where(c => c.Sql.Contains("\"ConversationTurns\"", StringComparison.Ordinal)).ToArray();
         conversationReads.Should().HaveCount(101);
         conversationReads.Should().OnlyContain(c => c.Sql.Contains("LIMIT", StringComparison.Ordinal));
+        foreach (var read in conversationReads)
+            read.Sql[read.Sql.IndexOf("ORDER BY", StringComparison.Ordinal)..].Should().Contain("\"Id\"");
         using var actual = JsonDocument.Parse(destination.ToArray());
         var expected = JsonSerializer.SerializeToElement(original.Value, new JsonSerializerOptions(JsonSerializerDefaults.Web));
         foreach (var property in expected.EnumerateObject().Where(p => p.Name != "exportedAtUtc"))
-            JsonElement.DeepEquals(property.Value, actual.RootElement.GetProperty(property.Name)).Should().BeTrue(property.Name);
+        {
+            if (duplicateSortKeys && property.Name == "conversations")
+                actual.RootElement.GetProperty(property.Name).EnumerateArray().Select(row => row.GetProperty("turnId").GetGuid())
+                    .Should().BeEquivalentTo(property.Value.EnumerateArray().Select(row => row.GetProperty("turnId").GetGuid()));
+            else JsonElement.DeepEquals(property.Value, actual.RootElement.GetProperty(property.Name)).Should().BeTrue(property.Name);
+        }
         db.ChangeTracker.Entries().Where(entry => entry.Entity is not User).Should().BeEmpty();
     }
 }

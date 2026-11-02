@@ -144,13 +144,13 @@ public class ConversationTurnRecorderTests
     }
 
     [Fact]
-    public async Task History_DoesNotReloadAttachments_AndLatestPageUsesDisplayOrder()
+    public async Task History_ReloadsOnlyRecentAttachments_AndLatestPageUsesDisplayOrder()
     {
         using var fixture = new Fixture();
         await fixture.Store.RecordAsync(fixture.Capture(image: true));
         var history = await fixture.Store.LoadHistoryAsync(fixture.User.Id, fixture.ConversationId);
-        history.Value.Messages[0].ImageData.Should().BeNull();
-        await fixture.Storage.DidNotReceive().ReadPrivateAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        history.Value.Messages[0].ImageData.Should().Equal(Fixture.Image);
+        await fixture.Storage.Received(1).ReadPrivateAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
         for (var index = 0; index < 3; index++) await fixture.Store.RecordAsync(fixture.Capture());
         history = await fixture.Store.LoadHistoryAsync(fixture.User.Id, fixture.ConversationId);
         history.Value.Messages.Should().OnlyContain(message => message.ImageData == null);

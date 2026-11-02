@@ -15,6 +15,11 @@ internal sealed class NotionApiException(int statusCode) : Exception("Notion req
     public int StatusCode { get; } = statusCode;
 }
 
+internal sealed class NotionPaginationTruncatedException(int inputCount) : Exception("Notion pagination budget was reached.")
+{
+    public int InputCount { get; } = inputCount;
+}
+
 internal interface INotionApi
 {
     Task<NotionCredentials> ExchangeAsync(string code, string redirectUri, CancellationToken ct);
@@ -61,12 +66,17 @@ internal sealed class NotionApi(HttpClient http, IOptions<NotionSettings> settin
     {
         body["page_size"] = 100;
         var pages = 0;
+        var inputCount = 0;
         do
         {
             var response = await SendAsync(endpoint, body, token, ct);
             foreach (var result in response.GetProperty("results").EnumerateArray())
+            {
+                inputCount++;
                 yield return result.Clone();
-            if (++pages >= maxPages || !response.GetProperty("has_more").GetBoolean()) yield break;
+            }
+            if (!response.GetProperty("has_more").GetBoolean()) yield break;
+            if (++pages >= maxPages) throw new NotionPaginationTruncatedException(inputCount);
             body["start_cursor"] = response.GetProperty("next_cursor").GetString()
                 ?? throw new JsonException("Notion pagination cursor is missing.");
         } while (true);

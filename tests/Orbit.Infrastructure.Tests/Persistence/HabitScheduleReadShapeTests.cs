@@ -199,6 +199,77 @@ public class HabitScheduleReadShapeTests(ITestOutputHelper output)
         result.Value.Items.Should().ContainSingle(item => item.Id == unresolved.Id && item.IsOverdue);
     }
 
+    [Theory]
+    [InlineData(false, false, 8)]
+    [InlineData(false, true, 8)]
+    [InlineData(true, false, 8)]
+    [InlineData(true, true, 8)]
+    [InlineData(false, false, 22)]
+    [InlineData(false, true, 22)]
+    public async Task RetrospectiveResolution_RemainsResolvedOutsideRecentWindow(bool skipped, bool summaryPath, int daysAgo)
+    {
+        using var factory = new SqliteOrbitDbContextFactory();
+        var db = factory.Context;
+        var user = User.Create("History", "history@example.test").Value;
+        var due = Today.AddDays(-daysAgo);
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
+            user.Id, "Fortnightly", FrequencyUnit.Week, 2, due)).Value;
+        if (skipped)
+            db.HabitLogs.Add(HabitLog.FromScheduleRead(Guid.NewGuid(), habit.Id, due, 0, 0,
+                DateTime.UtcNow, null, null, null));
+        else
+            habit.Log(due, advanceDueDate: false, loggedOnLocalDate: due.AddDays(1)).IsSuccess.Should().BeTrue();
+        if (daysAgo > 14)
+            habit.Log(due.AddDays(14), advanceDueDate: false, loggedOnLocalDate: due.AddDays(15)).IsSuccess.Should().BeTrue();
+        habit.NextDueDate.Should().Be(due);
+        db.Users.Add(user);
+        db.Habits.Add(habit);
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+        var dates = Substitute.For<IUserDateService>();
+        dates.GetUserTodayAsync(user.Id, Arg.Any<CancellationToken>()).Returns(Today);
+        var handler = new GetHabitScheduleQueryHandler(new GenericRepository<Habit>(db),
+            new HabitScheduleLogReader(db), new HabitSchedulePageLoader(db), dates,
+            Substitute.For<IUnitOfWork>(), Substitute.For<IRepeatReminderReader>());
+        var result = summaryPath
+            ? await new GetDailySummaryScheduleQueryHandler(new GenericRepository<Habit>(db),
+                new HabitScheduleLogReader(db), new HabitSchedulePageLoader(db), dates,
+                Substitute.For<IUnitOfWork>(), Substitute.For<IRepeatReminderReader>())
+                .Handle(new(user.Id, Today, Today, await db.Habits.AsNoTracking().ToArrayAsync()), default)
+            : await handler.Handle(new(user.Id, Today, Today, IncludeOverdue: true), default);
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Items.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    public async Task IncludeGeneral_KeepsEveryGeneralHabitOnEveryScheduledPage(int page)
+    {
+        using var factory = new SqliteOrbitDbContextFactory();
+        var db = factory.Context;
+        var user = User.Create("General", "general-append@example.test").Value;
+        db.Users.Add(user);
+        for (var index = 0; index < 60; index++)
+            db.Habits.Add(Habit.Create(new HabitCreateParams(HabitSchedule.General,
+                user.Id, $"General {index}", null, null, Today)).Value);
+        for (var index = 0; index < 2; index++)
+            db.Habits.Add(Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
+                user.Id, $"Daily {index}", FrequencyUnit.Day, 1, Today)).Value);
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+        var dates = Substitute.For<IUserDateService>();
+        dates.GetUserTodayAsync(user.Id, Arg.Any<CancellationToken>()).Returns(Today);
+        var handler = new GetHabitScheduleQueryHandler(new GenericRepository<Habit>(db),
+            new HabitScheduleLogReader(db), new HabitSchedulePageLoader(db), dates,
+            Substitute.For<IUnitOfWork>(), Substitute.For<IRepeatReminderReader>());
+        var result = await handler.Handle(new(user.Id, Today, Today, IncludeGeneral: true, Page: page, PageSize: 1), default);
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Items.Count(item => item.IsGeneral).Should().Be(60);
+        result.Value.Items.Count(item => !item.IsGeneral).Should().Be(1);
+        result.Value.TotalPages.Should().Be(2);
+    }
+
     [Fact]
     public async Task TodayPage_MaterializesOnlyPageLogsWithinTheResponseWindow()
     {

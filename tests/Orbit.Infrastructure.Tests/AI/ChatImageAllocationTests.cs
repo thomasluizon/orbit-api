@@ -27,7 +27,7 @@ public class ChatImageAllocationTests(Xunit.Abstractions.ITestOutputHelper outpu
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task TenMiBUploadAndModelRequest_AllocateLessThanTwoImageBuffers(bool streaming)
+    public async Task TenMiBUploadAndModelRequest_AllocateOnlyUploadAndEncodedImageBuffers(bool streaming)
     {
         var image = new byte[10 * 1024 * 1024];
         new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 }.CopyTo(image, 0);
@@ -54,11 +54,59 @@ public class ChatImageAllocationTests(Xunit.Abstractions.ITestOutputHelper outpu
         var allocated = GC.GetTotalAllocatedBytes(precise: true) - before;
         result.IsSuccess.Should().BeTrue(result.Error);
         output.WriteLine($"Allocated bytes for streaming={streaming}: {allocated}");
-        allocated.Should().BeLessThan(image.LongLength * 2);
+        allocated.Should().BeLessThan(image.LongLength + ((image.LongLength + 2) / 3 * 4) + 1_000_000);
         transport.Bytes.Should().BeGreaterThan(image.LongLength);
 
         Task<(byte[]? Data, string? MimeType, IActionResult? Error)> Process(IFormFile form) =>
             (Task<(byte[]?, string?, IActionResult?)>)process.Invoke(controller, [form, CancellationToken.None])!;
+    }
+
+    [Fact]
+    public async Task ThreeImageRounds_ReusePayloadAndKeepLaterAllocationsSmall()
+    {
+        var bytes = new byte[10 * 1024 * 1024];
+        using var transport = new RepeatedImageHandler();
+        var sdk = new ResponsesClient(new System.ClientModel.ApiKeyCredential("test-key"), new ResponsesClientOptions
+        {
+            Endpoint = new Uri("https://orbit.test/v1"),
+            Transport = new HttpClientPipelineTransport(new HttpClient(transport))
+        });
+        var client = new AiCompletionClient(sdk, NullLogger<AiCompletionClient>.Instance,
+            Substitute.For<Orbit.Domain.Interfaces.IAiUsageRecorder>());
+        var service = new AiIntentService(AiBudgetTestDouble.Wrap(client),
+            Substitute.For<Orbit.Domain.Interfaces.IAiUsageRecorder>(), NullLogger<AiIntentService>.Instance);
+        var first = await service.SendWithToolsAsync(new("Inspect", "system", [new { name = "query_habits" }],
+            ImageData: bytes, ImageMimeType: "image/png"));
+        first.IsSuccess.Should().BeTrue(first.Error);
+        transport.Lengths.Single().Should().BeGreaterThan(bytes.Length);
+        var before = GC.GetTotalAllocatedBytes(precise: true);
+        var current = first;
+        for (var index = 0; index < 2; index++)
+        {
+            current = await service.ContinueWithToolResultsAsync(current.Value.ConversationContext!,
+                [new("query_habits", "call", true, null, null, null)]);
+            current.IsSuccess.Should().BeTrue(current.Error);
+        }
+        var laterAllocations = GC.GetTotalAllocatedBytes(precise: true) - before;
+        transport.Lengths.Should().HaveCount(3).And.OnlyContain(length => length > bytes.LongLength);
+        laterAllocations.Should().BeLessThan(bytes.LongLength / 2);
+    }
+
+    private sealed class RepeatedImageHandler : HttpMessageHandler
+    {
+        internal List<long> Lengths { get; } = [];
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+        {
+            using var destination = new CountingSink();
+            await request.Content!.CopyToAsync(destination, ct);
+            Lengths.Add(destination.Bytes);
+            var response = ResponsesTestData.Response();
+            response.OutputItems.Add(ResponseItem.CreateFunctionCallItem("call", "query_habits", BinaryData.FromString("{}")));
+            return new(HttpStatusCode.OK)
+            {
+                Content = new StringContent(ModelReaderWriter.Write(response).ToString(), Encoding.UTF8, "application/json")
+            };
+        }
     }
 
     [Fact]
