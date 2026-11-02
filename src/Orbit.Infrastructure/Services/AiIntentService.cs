@@ -240,6 +240,7 @@ public sealed partial class AiIntentService(
             if (logger.IsEnabled(LogLevel.Debug))
                 LogCallingAiWithTools(logger);
             SetInputItems(options, messages);
+            options.StreamingEnabled = streamSink is not null;
             var round = await aiClient.RunAsync(userId, client => CompleteObservedRoundAsync(client,
                 messages, options, userId, telemetry, streamSink, stopwatch, cancellationToken, purpose, currentImage),
                 cancellationToken, ModelReaderWriter.Write(options).ToString());

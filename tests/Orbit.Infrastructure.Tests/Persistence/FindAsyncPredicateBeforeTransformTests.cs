@@ -1,5 +1,4 @@
 using FluentAssertions;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Orbit.Application.Common;
 using Orbit.Application.Notifications.Queries;
@@ -10,7 +9,7 @@ namespace Orbit.Infrastructure.Tests.Persistence;
 
 public class FindAsyncPredicateBeforeTransformTests : IDisposable
 {
-    private readonly SqliteConnection _connection;
+    private readonly SqliteOrbitDbContextFactory _factory;
     private readonly OrbitDbContext _dbContext;
     private readonly Guid _userId = Guid.NewGuid();
     private readonly Guid _otherUserId = Guid.NewGuid();
@@ -19,21 +18,13 @@ public class FindAsyncPredicateBeforeTransformTests : IDisposable
 
     public FindAsyncPredicateBeforeTransformTests()
     {
-        _connection = new SqliteConnection("Data Source=:memory:");
-        _connection.Open();
-
-        var options = new DbContextOptionsBuilder<OrbitDbContext>()
-            .UseSqlite(_connection)
-            .Options;
-
-        _dbContext = new SqliteCompatOrbitDbContext(options);
-        _dbContext.Database.EnsureCreated();
+        _factory = new SqliteOrbitDbContextFactory();
+        _dbContext = _factory.Context;
     }
 
     public void Dispose()
     {
-        _dbContext.Dispose();
-        _connection.Dispose();
+        _factory.Dispose();
         GC.SuppressFinalize(this);
     }
 
@@ -195,25 +186,4 @@ public class FindAsyncPredicateBeforeTransformTests : IDisposable
         return goal;
     }
 
-    private sealed class SqliteCompatOrbitDbContext(DbContextOptions<OrbitDbContext> options)
-        : OrbitDbContext(options)
-    {
-        protected override void OnModelCreating(ModelBuilder modelBuilder)
-        {
-            base.OnModelCreating(modelBuilder);
-
-            foreach (var entityType in modelBuilder.Model.GetEntityTypes())
-            {
-                foreach (var property in entityType.GetProperties())
-                {
-                    var defaultSql = property.GetDefaultValueSql();
-                    if (defaultSql is not null && defaultSql.Contains("::", StringComparison.Ordinal))
-                        property.SetDefaultValueSql(null);
-                }
-
-                foreach (var index in entityType.GetIndexes())
-                    index.SetFilter(null);
-            }
-        }
-    }
 }

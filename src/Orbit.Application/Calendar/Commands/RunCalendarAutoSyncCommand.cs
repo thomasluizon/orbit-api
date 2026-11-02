@@ -237,6 +237,7 @@ public partial class RunCalendarAutoSyncCommandHandler(
             .ToDictionary(group => group.Key, group => group.Single(), StringComparer.Ordinal);
 
         int reconciled = 0;
+        var duplicates = 0;
         foreach (var (key, habit) in habitsByKey)
         {
             if (!eventsByKey.TryGetValue(key, out var googleEventId))
@@ -244,7 +245,7 @@ public partial class RunCalendarAutoSyncCommandHandler(
 
             if (!reservedEventIds.Add(googleEventId))
             {
-                LogDuplicateReconciliationEventId(logger, user.Id, habit.Id, googleEventId);
+                duplicates++;
                 continue;
             }
 
@@ -252,6 +253,7 @@ public partial class RunCalendarAutoSyncCommandHandler(
             reconciled++;
         }
 
+        if (duplicates > 0) LogDuplicateReconciliationEventIds(logger, user.Id, duplicates);
         user.MarkCalendarSyncReconciled(utcNow);
         return reconciled;
     }
@@ -406,6 +408,6 @@ public partial class RunCalendarAutoSyncCommandHandler(
     [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Skipped {Count} duplicate Google Calendar event ids during auto-sync for user {UserId}")]
     private static partial void LogDuplicateFetchedEventIds(ILogger logger, Guid userId, int count);
 
-    [LoggerMessage(EventId = 3, Level = LogLevel.Warning, Message = "Duplicate Google Calendar event id reconciliation skipped for user {UserId}, habit {HabitId}: {GoogleEventId}")]
-    private static partial void LogDuplicateReconciliationEventId(ILogger logger, Guid userId, Guid habitId, string googleEventId);
+    [LoggerMessage(EventId = 3, Level = LogLevel.Warning, Message = "Skipped {Count} duplicate Google Calendar event ids during reconciliation for user {UserId}")]
+    private static partial void LogDuplicateReconciliationEventIds(ILogger logger, Guid userId, int count);
 }

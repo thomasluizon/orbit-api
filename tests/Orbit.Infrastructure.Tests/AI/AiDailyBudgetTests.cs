@@ -9,6 +9,7 @@ using System.Text.Json;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Caching.Distributed;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
@@ -373,8 +374,21 @@ public partial class AiDailyBudgetTests(ITestOutputHelper output)
         result.IsSuccess.Should().BeTrue();
         fixture.Handler.Completions.Should().Be(1);
         fixture.EstimatedRequests.Single().GetProperty("input").GetRawText().Should().Contain("input_image");
-        JsonElement.DeepEquals(fixture.EstimatedRequests.Single().GetProperty("input"),
-            fixture.Handler.CompletionRequests.Single().GetProperty("input")).Should().BeTrue();
+        var estimated = fixture.EstimatedRequests.Single();
+        var sent = fixture.Handler.CompletionRequests.Single();
+        var estimatedImage = estimated.GetProperty("input").EnumerateArray()
+            .SelectMany(item => item.GetProperty("content").EnumerateArray())
+            .Single(part => part.GetProperty("type").GetString() == "input_image");
+        var sentNode = System.Text.Json.Nodes.JsonNode.Parse(sent.GetRawText())!;
+        var sentImage = sentNode["input"]!.AsArray().SelectMany(item => item!["content"]!.AsArray())
+            .Single(part => part!["type"]!.GetValue<string>() == "input_image")!;
+        sentImage["image_url"]!.GetValue<string>().Should().Be("data:image/png;base64," + Convert.ToBase64String(image));
+        sentImage["image_url"] = estimatedImage.GetProperty("image_url").GetString();
+        using var normalized = JsonDocument.Parse(sentNode.ToJsonString());
+        JsonElement.DeepEquals(estimated.GetProperty("input"), normalized.RootElement.GetProperty("input")).Should().BeTrue();
+        using var estimateCache = new MemoryCache(new MemoryCacheOptions());
+        var estimator = new AiRequestCostEstimator(estimateCache, Options.Create(new AiSettings()));
+        estimator.EstimateInputTokens(estimated).Should().Be(estimator.EstimateInputTokens(sent));
         using var read = fixture.Database.CreateContext();
         read.AiBudgetCalls.Single().ChargedMicroDollars.Should().BeLessThan(20_000);
     }

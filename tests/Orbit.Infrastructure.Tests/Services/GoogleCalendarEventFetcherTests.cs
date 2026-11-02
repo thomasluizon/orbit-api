@@ -64,6 +64,34 @@ public class GoogleCalendarEventFetcherTests
             .Returns(events.ToList());
 
     [Fact]
+    public async Task FetchAsync_ThreeCalendarsAndThirtyMasters_OverlapsCallsWithinTheSharedCapAndPreservesOrder()
+    {
+        StubCalendars(Calendar("a", "owner"), Calendar("b", "owner"), Calendar("c", "owner"));
+        var active = 0;
+        var peak = 0;
+        var guard = new object();
+        async Task<T> Delayed<T>(T result, CancellationToken ct)
+        {
+            lock (guard) { active++; peak = Math.Max(peak, active); }
+            try { await Task.Delay(10, ct); return result; }
+            finally { lock (guard) active--; }
+        }
+        _api.ListEventsAsync(Token, Arg.Any<string>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>(), Arg.Any<CalendarReadWindow?>())
+            .Returns(call => Delayed<IReadOnlyList<Event>>(Enumerable.Range(0, 30)
+                .Select(index => TimedEvent($"{call.ArgAt<string>(1)}-{index}", "Recurring", $"master-{index}")).ToArray(),
+                call.Arg<CancellationToken>()));
+        _api.GetEventAsync(Token, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(call => Delayed(new Event { Recurrence = ["RRULE:FREQ=DAILY"] }, call.Arg<CancellationToken>()));
+
+        var result = await _fetcher.FetchAsync(Token, null, null, default);
+
+        peak.Should().BeInRange(2, 4);
+        result.Select(item => (item.CalendarId, item.Id)).Should().Equal(new[] { "a", "b", "c" }
+            .SelectMany(calendar => Enumerable.Range(0, 30).Select(index => (calendar, $"master-{index}"))));
+        await _api.Received(90).GetEventAsync(Token, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task FetchAsync_NullSelection_IncludesOwnedExcludesReader()
     {
         StubCalendars(
