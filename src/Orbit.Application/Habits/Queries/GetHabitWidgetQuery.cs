@@ -55,6 +55,7 @@ public class GetHabitWidgetQueryHandler(
 
         var habits = await LoadWidgetHabits(request.UserId, today, cancellationToken);
         var dueDateResolution = await HabitDueDateResolutionLoader.LoadAsync(
+            request.UserId,
             habitLogRepository,
             habits,
             today.AddDays(-AppConstants.MaxRangeDays),

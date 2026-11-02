@@ -286,4 +286,18 @@ public class RevokeApiKeyCommandHandlerTests
         EmailChallengeOperation.ApiKeyManagement,
         UserId,
         TimeSpan.FromMinutes(10));
+    [Fact]
+    public async Task Handle_KeyOwnedByAnotherUser_RevokesNothing()
+    {
+        var (key, _) = ApiKey.Create(UserId, "Owner key").Value;
+        var attacker = Guid.NewGuid();
+        _challengeService.AuthorizeOnce(EmailChallengeOperation.ApiKeyManagement, attacker, TimeSpan.FromMinutes(10));
+        _apiKeyRepo.FindTrackedAsync(Arg.Any<Expression<Func<ApiKey, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => new[] { key }.Where(call.Arg<Expression<Func<ApiKey, bool>>>().Compile()).ToList());
+        var result = await _handler.Handle(new RevokeApiKeyCommand(attacker, key.Id), default);
+        result.IsFailure.Should().BeTrue();
+        key.IsRevoked.Should().BeFalse();
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
 }

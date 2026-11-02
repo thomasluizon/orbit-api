@@ -65,7 +65,8 @@ public partial class PlayNotificationCleanupService(
         await PurgeAsync(async () =>
         {
             var count = await BatchedDelete.ExecuteAsync(dbContext.ProcessedPlayNotifications
-                .Where(n => n.ProcessedAtUtc < nowAtUtc - PlayRetentionPeriod), ct);
+                .Where(n => n.ProcessedAtUtc < nowAtUtc - PlayRetentionPeriod
+                    && n.ConsumedCouponId == null && n.ProcessingLeaseId == null), ct);
             if (count > 0) LogNotificationsPurged(logger, count);
         }, failures, "ProcessedPlayNotifications");
         await PurgeAsync(async () =>

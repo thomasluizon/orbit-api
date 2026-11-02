@@ -1,3 +1,5 @@
+using Hangfire;
+using Orbit.Application.Subscriptions.Jobs;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Orbit.Application.Common;
@@ -8,7 +10,7 @@ namespace Orbit.Application.Subscriptions.Services;
 
 public partial class PlayReferralCouponConsumer(
     IOptions<GooglePlaySettings> playSettings,
-    IReferralRewardService referralRewardService,
+    IBackgroundJobClient backgroundJobs,
     ILogger<PlayReferralCouponConsumer> logger) : IPlayReferralCouponConsumer
 {
     private readonly GooglePlaySettings _settings = playSettings.Value;
@@ -36,16 +38,10 @@ public partial class PlayReferralCouponConsumer(
         return couponId;
     }
 
-    public async Task CancelConsumedCouponAsync(Guid userId, string couponId, CancellationToken cancellationToken)
+    public Task CancelConsumedCouponAsync(Guid userId, string couponId, CancellationToken cancellationToken)
     {
-        try
-        {
-            await referralRewardService.CancelCouponAsync(couponId, cancellationToken);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            LogCancelCouponFailed(logger, ex, couponId, userId);
-        }
+        backgroundJobs.Enqueue<CancelPlayReferralCouponJob>(job => job.ExecuteAsync(couponId, CancellationToken.None));
+        return Task.CompletedTask;
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Consumed referral coupon {CouponId} for user {UserId} via Play referral offer")]
@@ -54,6 +50,4 @@ public partial class PlayReferralCouponConsumer(
     [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Play purchase used the referral offer but user {UserId} holds no referral coupon")]
     private static partial void LogReferralOfferWithoutCoupon(ILogger logger, Guid userId);
 
-    [LoggerMessage(EventId = 3, Level = LogLevel.Error, Message = "Failed to cancel referral coupon {CouponId} for user {UserId}; user pointer already cleared")]
-    private static partial void LogCancelCouponFailed(ILogger logger, Exception ex, string couponId, Guid userId);
 }

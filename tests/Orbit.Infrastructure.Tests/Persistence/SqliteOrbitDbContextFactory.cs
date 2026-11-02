@@ -72,6 +72,42 @@ internal sealed class SqliteOrbitDbContextFactory : IDisposable
 
         Context = CreateContext();
         Context.Database.EnsureCreated();
+        InstallReminderProbeTriggers(Context);
+    }
+
+    private static void InstallReminderProbeTriggers(OrbitDbContext context)
+    {
+        context.Database.ExecuteSqlRaw("""
+            CREATE TRIGGER IF NOT EXISTS "TR_ReminderProbe_INSERT" AFTER INSERT ON "Habits"
+            WHEN NEW."ReminderEnabled" = 1
+            BEGIN
+                INSERT INTO "ReminderScheduleProbes" ("UserId", "Version")
+                SELECT NEW."UserId", 1 WHERE EXISTS (SELECT 1 FROM "Users" WHERE "Id" = NEW."UserId")
+                ON CONFLICT ("UserId") DO UPDATE SET "Version" = "Version" + 1;
+            END;
+            """);
+        context.Database.ExecuteSqlRaw("""
+            CREATE TRIGGER IF NOT EXISTS "TR_ReminderProbe_UPDATE" AFTER UPDATE ON "Habits"
+            WHEN NEW."ReminderEnabled" = 1 OR OLD."ReminderEnabled" = 1
+            BEGIN
+                INSERT INTO "ReminderScheduleProbes" ("UserId", "Version")
+                SELECT NEW."UserId", 1 WHERE EXISTS (SELECT 1 FROM "Users" WHERE "Id" = NEW."UserId")
+                ON CONFLICT ("UserId") DO UPDATE SET "Version" = "Version" + 1;
+                INSERT INTO "ReminderScheduleProbes" ("UserId", "Version")
+                SELECT OLD."UserId", 1 WHERE OLD."UserId" <> NEW."UserId"
+                    AND EXISTS (SELECT 1 FROM "Users" WHERE "Id" = OLD."UserId")
+                ON CONFLICT ("UserId") DO UPDATE SET "Version" = "Version" + 1;
+            END;
+            """);
+        context.Database.ExecuteSqlRaw("""
+            CREATE TRIGGER IF NOT EXISTS "TR_ReminderProbe_DELETE" AFTER DELETE ON "Habits"
+            WHEN OLD."ReminderEnabled" = 1
+            BEGIN
+                INSERT INTO "ReminderScheduleProbes" ("UserId", "Version")
+                SELECT OLD."UserId", 1 WHERE EXISTS (SELECT 1 FROM "Users" WHERE "Id" = OLD."UserId")
+                ON CONFLICT ("UserId") DO UPDATE SET "Version" = "Version" + 1;
+            END;
+            """);
     }
 
     internal OrbitDbContext Context { get; }

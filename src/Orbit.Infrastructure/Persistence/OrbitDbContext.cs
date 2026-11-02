@@ -79,6 +79,7 @@ public class OrbitDbContext : DbContext
     public DbSet<ChatTurn> ChatTurns => Set<ChatTurn>();
     public DbSet<ProcessedRequest> ProcessedRequests => Set<ProcessedRequest>();
     public DbSet<ConversationTurn> ConversationTurns => Set<ConversationTurn>();
+    public DbSet<ConversationObjectCleanup> ConversationObjectCleanups => Set<ConversationObjectCleanup>();
     public DbSet<ConversationOffer> ConversationOffers => Set<ConversationOffer>();
     public DbSet<AiUsageDaily> AiUsageDaily => Set<AiUsageDaily>();
     public DbSet<ClosedMonthRecap> ClosedMonthRecaps => Set<ClosedMonthRecap>();
@@ -135,6 +136,7 @@ public class OrbitDbContext : DbContext
         ConfigureTagEntity(modelBuilder);
         ConfigurePushSubscriptionEntity(modelBuilder);
         ConfigureSentReminderEntity(modelBuilder);
+        ConfigureReminderScheduleProbeEntity(modelBuilder);
         ConfigureSentSlipAlertEntity(modelBuilder);
         ConfigureProactiveEntities(modelBuilder);
         modelBuilder.Entity<ProcessedAppStoreNotification>(entity =>
@@ -144,6 +146,10 @@ public class OrbitDbContext : DbContext
             entity.Property(notification => notification.Environment).HasMaxLength(20).IsRequired();
         });
         ConfigureProcessedPlayNotificationEntity(modelBuilder);
+        modelBuilder.Entity<ConversationObjectCleanup>(entity =>
+        {
+            entity.HasIndex(row => new { row.UserId, row.ConversationId }).IsUnique();
+        });
         ConfigureProcessedStripeEventEntity(modelBuilder);
         ConfigureProcessedRequestEntity(modelBuilder);
         modelBuilder.Entity<ChatTurn>(entity =>
@@ -332,10 +338,22 @@ public class OrbitDbContext : DbContext
         });
     }
 
+    private static void ConfigureReminderScheduleProbeEntity(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ReminderScheduleProbe>(entity =>
+        {
+            entity.ToTable("ReminderScheduleProbes");
+            entity.HasKey(p => p.UserId);
+            entity.Property(p => p.Version).HasDefaultValue(0L);
+            entity.HasOne<User>().WithMany().HasForeignKey(p => p.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+    }
+
     private static void ConfigureSentReminderEntity(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<SentReminder>(entity =>
         {
+            entity.HasIndex(r => new { r.HabitId, r.Date }).IsCreatedConcurrently();
             entity.HasIndex(r => new { r.HabitId, r.Date, r.MinutesBefore, r.ReminderTimeUtc, r.When })
                 .IsUnique()
                 .AreNullsDistinct(false)
@@ -385,6 +403,7 @@ public class OrbitDbContext : DbContext
     {
         modelBuilder.Entity<ProcessedPlayNotification>(entity =>
         {
+            entity.Property(e => e.ConsumedCouponId).HasMaxLength(255);
             entity.HasIndex(p => p.MessageId).IsUnique();
             entity.Property(p => p.MessageId).IsRequired().HasMaxLength(255);
         });
@@ -632,6 +651,11 @@ public class OrbitDbContext : DbContext
                 AppConfig.Create("ProAiCallsPerWeek", "5500", "Weekly AI call safety budget for Pro users"),
                 AppConfig.Create("FreeAiMicroDollarsPerDay", "150000", "Daily AI safety budget for Free users in USD micro-dollars"),
                 AppConfig.Create("ProAiMicroDollarsPerWeek", "6000000", "Weekly AI safety budget for Pro users in USD micro-dollars"),
+                AppConfig.Create("SendCodeEmailsPerIpPerDay", "100", "Daily code email limit per resolved client IP"),
+                AppConfig.Create("SendCodeEmailsPerDay", "10000", "Global daily code email safety limit"),
+                AppConfig.Create("OnboardingAttestationCallsPerHour", "1000", "Global hourly onboarding challenge and enrollment limit"),
+                AppConfig.Create("OnboardingAttestationCallsPerDay", "10000", "Global daily onboarding challenge and enrollment limit"),
+                AppConfig.Create("OnboardingEnrollAttemptsPerInstallPerHour", "3", "Hourly enrollment attempt limit per signed installation subject"),
                 AppConfig.Create("OnboardingIpCallsPerHour", "10", "Hourly anonymous onboarding call limit per IP address"),
                 AppConfig.Create("OnboardingInstallCallsPerHour", "10", "Hourly anonymous onboarding call limit per verified install"),
                 AppConfig.Create("OnboardingCallsPerDay", "1000", "Global daily anonymous onboarding call limit"),
@@ -753,6 +777,8 @@ public class OrbitDbContext : DbContext
             entity.HasIndex(u => u.PublicProfileSlug).IsUnique().HasFilter("\"PublicProfileSlug\" IS NOT NULL");
 
             entity.Property(u => u.StripeCoverageExpiresAtUtc);
+            entity.Property(u => u.StripeCustomerPendingDeletionId);
+            entity.Property(u => u.StripeCustomerGeneration).HasDefaultValue(0);
             entity.Property(u => u.StripeCoverageInterval);
             entity.Property(u => u.StripeCoverageLapseReason).HasConversion<string>().HasMaxLength(32);
             entity.Property(u => u.PlayCoverageExpiresAtUtc);
@@ -835,6 +861,9 @@ public class OrbitDbContext : DbContext
     {
         modelBuilder.Entity<Habit>(entity =>
         {
+            entity.HasIndex(h => new { h.ReminderEnabled, h.IsCompleted, h.Schedule }, "IX_Habits_Reminder")
+                .HasFilter("\"ReminderEnabled\" = TRUE AND \"IsCompleted\" = FALSE")
+                .IsCreatedConcurrently();
             entity.HasIndex(h => new { h.UserId, h.IsDeleted });
             entity.HasIndex(h => new { h.UserId, h.UpdatedAtUtc });
             entity.HasQueryFilter(h => !h.IsDeleted);

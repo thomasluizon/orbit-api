@@ -115,6 +115,8 @@ resource "cloudflare_turnstile_widget" "orbit" {
   domains = [
     "app.useorbit.org",
     "app-staging.useorbit.org",
+    "api.useorbit.org",
+    "api-staging.useorbit.org",
     "useorbit.org",
     "www.useorbit.org",
   ]

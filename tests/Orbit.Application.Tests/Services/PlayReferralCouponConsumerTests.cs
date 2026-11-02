@@ -1,3 +1,7 @@
+using Hangfire;
+using Hangfire.Common;
+using Hangfire.States;
+using Orbit.Application.Subscriptions.Jobs;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -13,12 +17,13 @@ namespace Orbit.Application.Tests.Services;
 
 public class PlayReferralCouponConsumerTests
 {
+    private readonly IBackgroundJobClient _jobs = Substitute.For<IBackgroundJobClient>();
     private readonly IReferralRewardService _rewardService = Substitute.For<IReferralRewardService>();
 
     private PlayReferralCouponConsumer CreateConsumer(string referralOfferId = "referral10") =>
         new(
             Options.Create(new GooglePlaySettings { ReferralOfferId = referralOfferId }),
-            _rewardService,
+            _jobs,
             Substitute.For<ILogger<PlayReferralCouponConsumer>>());
 
     private static User UserWithCoupon()
@@ -30,6 +35,14 @@ public class PlayReferralCouponConsumerTests
 
     private static PlaySubscriptionState StateWithOffer(string? offerId) =>
         new(true, DateTime.UtcNow.AddMonths(1), SubscriptionInterval.Monthly, true, "orbit_pro", null, null, offerId);
+
+    [Fact]
+    public async Task CancelCouponJob_CouponAlreadyDeleted_CompletesRetry()
+    {
+        _rewardService.CancelCouponAsync("coupon_abc", Arg.Any<CancellationToken>())
+            .ThrowsAsync(new Stripe.StripeException(System.Net.HttpStatusCode.NotFound, new Stripe.StripeError { Code = "resource_missing" }, "gone"));
+        await new CancelPlayReferralCouponJob(_rewardService).ExecuteAsync("coupon_abc", default);
+    }
 
     [Fact]
     public void NewPurchaseWithReferralOfferAndCoupon_ClearsCouponAndReturnsCouponId()
@@ -99,21 +112,23 @@ public class PlayReferralCouponConsumerTests
     }
 
     [Fact]
-    public async Task CancelConsumedCouponAsync_CancelsAtBillingProvider()
+    public async Task CancelConsumedCouponAsync_QueuesProviderCancellation()
     {
         await CreateConsumer().CancelConsumedCouponAsync(Guid.NewGuid(), "coupon_abc", CancellationToken.None);
 
-        await _rewardService.Received(1).CancelCouponAsync("coupon_abc", Arg.Any<CancellationToken>());
+        _jobs.Received(1).Create(Arg.Is<Job>(job => job.Type == typeof(CancelPlayReferralCouponJob)
+            && (string)job.Args[0] == "coupon_abc"), Arg.Any<IState>());
+        await _rewardService.DidNotReceive().CancelCouponAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task CancelConsumedCouponAsync_BillingProviderFailure_DoesNotThrow()
+    public async Task CancelCouponJob_ProviderFailure_ThrowsForRetry()
     {
         _rewardService.CancelCouponAsync("coupon_abc", Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("stripe down"));
 
-        var act = () => CreateConsumer().CancelConsumedCouponAsync(Guid.NewGuid(), "coupon_abc", CancellationToken.None);
+        var act = () => new CancelPlayReferralCouponJob(_rewardService).ExecuteAsync("coupon_abc", CancellationToken.None);
 
-        await act.Should().NotThrowAsync();
+        await act.Should().ThrowAsync<InvalidOperationException>();
     }
 }

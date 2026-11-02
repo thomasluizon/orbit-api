@@ -225,6 +225,35 @@ public class GooglePlayBillingServiceTests
         purchase!.CanRenew.Should().Be(addRenewableItem);
     }
 
+    [Fact]
+    public async Task Acknowledge_SendsPackageProductAndToken()
+    {
+        var handler = new RecordingHandler();
+        using var publisher = CreatePublisher(handler);
+        await CreateService(publisher).AcknowledgeAsync("orbit_pro", "purchase-token", CancellationToken.None);
+        handler.Calls.Should().Be(1);
+        handler.Method.Should().Be(HttpMethod.Post);
+        handler.Path.Should().Be("/androidpublisher/v3/applications/org.orbit.app/purchases/subscriptions/orbit_pro/tokens/purchase-token:acknowledge");
+    }
+
+    [Fact]
+    public async Task Acknowledge_ProviderFailure_ThrowsBillingProviderException()
+    {
+        using var publisher = CreatePublisher(new RecordingHandler { Status = HttpStatusCode.BadRequest });
+        var run = () => CreateService(publisher).AcknowledgeAsync("orbit_pro", "purchase-token", CancellationToken.None);
+        (await run.Should().ThrowAsync<BillingProviderException>()).Which.InnerException.Should().BeOfType<Google.GoogleApiException>();
+    }
+
+    [Fact]
+    public async Task Acknowledge_Cancelled_IsNotWrapped()
+    {
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        using var publisher = CreatePublisher(new RecordingHandler());
+        var run = () => CreateService(publisher).AcknowledgeAsync("orbit_pro", "purchase-token", cts.Token);
+        await run.Should().ThrowAsync<OperationCanceledException>();
+    }
+
     private static GooglePlayBillingService CreateService(AndroidPublisherService publisher) =>
         new(publisher, Options.Create(new GooglePlaySettings { PackageName = "org.orbit.app" }));
 

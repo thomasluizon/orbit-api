@@ -248,6 +248,19 @@ public class CreateCheckoutCommandHandlerTests
         result.Error.Should().Be(ErrorMessages.PaymentServiceUnavailable.Message);
     }
 
+    [Fact]
+    public async Task Handle_UsdYearlyCheckoutWithReferralCoupon_SendsUsdYearlyPriceAndCoupon()
+    {
+        var user = User.Create("Test", "test@example.com").Value;
+        user.SetStripeCustomerId("cus_usd");
+        user.SetReferralCoupon("REF10");
+        SetupExistingUser(user);
+        var result = await _handler.Handle(new CreateCheckoutCommand(UserId, "yearly", "US", null), CancellationToken.None);
+        result.IsSuccess.Should().BeTrue();
+        await _billingService.Received(1).CreateCheckoutSessionAsync("cus_usd", "price_yearly_usd",
+            Arg.Any<string>(), Arg.Any<string>(), UserId, "REF10", Arg.Any<CancellationToken>());
+    }
+
     private void SetupExistingUser(User user)
     {
         _userRepo.FindOneTrackedAsync(

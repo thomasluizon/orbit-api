@@ -20,5 +20,6 @@ public interface INotionConnectionService
     Task<Result<NotionAuthorizationResponse>> AuthorizeAsync(Guid userId, string redirectUri, CancellationToken ct);
     Task<Result> CompleteAsync(Guid userId, string code, string state, string redirectUri, CancellationToken ct);
     Task<NotionConnectionResponse> GetAsync(Guid userId, CancellationToken ct);
+    Task RevokeForAccountRemovalAsync(Guid userId, CancellationToken ct);
     Task<Result> DisconnectAsync(Guid userId, CancellationToken ct);
 }

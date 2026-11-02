@@ -52,9 +52,9 @@ public sealed class PushSubscriptionAccountSwitchTests : IDisposable
     [Fact]
     public async Task SameAndroidDeviceSignsInToAnotherAccount_OldAccountNoLongerListsIt()
     {
-        (await Subscribe(_firstAccount, FcmToken, PushSubscription.FcmSentinel, PushSubscription.FcmSentinel)).IsSuccess.Should().BeTrue();
+        (await Subscribe(_firstAccount, FcmToken, PushSubscription.FcmSentinel, "install-secret")).IsSuccess.Should().BeTrue();
 
-        var result = await Subscribe(_secondAccount, FcmToken, PushSubscription.FcmSentinel, PushSubscription.FcmSentinel);
+        var result = await Subscribe(_secondAccount, FcmToken, PushSubscription.FcmSentinel, "install-secret");
 
         result.IsSuccess.Should().BeTrue();
         CountFor(_firstAccount).Should().Be(0);
@@ -69,7 +69,7 @@ public sealed class PushSubscriptionAccountSwitchTests : IDisposable
             var account = round % 2 == 0 ? _firstAccount : _secondAccount;
 
             (await Subscribe(account, WebEndpoint, WebP256dh, WebAuth)).IsSuccess.Should().BeTrue();
-            (await Subscribe(account, FcmToken, PushSubscription.FcmSentinel, PushSubscription.FcmSentinel)).IsSuccess.Should().BeTrue();
+            (await Subscribe(account, FcmToken, PushSubscription.FcmSentinel, "install-secret")).IsSuccess.Should().BeTrue();
 
             CountFor(account).Should().Be(2);
             CountFor(round % 2 == 0 ? _secondAccount : _firstAccount).Should().Be(0);
@@ -83,7 +83,7 @@ public sealed class PushSubscriptionAccountSwitchTests : IDisposable
     {
         var endpoint = native ? FcmToken : WebEndpoint;
         var p256dh = native ? PushSubscription.FcmSentinel : WebP256dh;
-        var auth = native ? PushSubscription.FcmSentinel : WebAuth;
+        var auth = native ? "install-secret" : WebAuth;
         (await Subscribe(_firstAccount, endpoint, p256dh, auth)).IsSuccess.Should().BeTrue();
         var delayedRelease = new UnsubscribePushCommand(_firstAccount, endpoint, p256dh, auth);
 
@@ -110,7 +110,7 @@ public sealed class PushSubscriptionAccountSwitchTests : IDisposable
     {
         var endpoint = native ? FcmToken : WebEndpoint;
         var p256dh = native ? PushSubscription.FcmSentinel : WebP256dh;
-        var auth = native ? PushSubscription.FcmSentinel : WebAuth;
+        var auth = native ? "install-secret" : WebAuth;
         (await Subscribe(_firstAccount, endpoint, p256dh, auth)).IsSuccess.Should().BeTrue();
         await using var context = _factory.CreateContext();
         var handler = new UnsubscribePushCommandHandler(
@@ -157,9 +157,9 @@ public sealed class PushSubscriptionAccountSwitchTests : IDisposable
     [Fact]
     public async Task NewAccountSignsOutOfTheAndroidDevice_OldAccountNoLongerListsIt()
     {
-        (await Subscribe(_firstAccount, FcmToken, PushSubscription.FcmSentinel, PushSubscription.FcmSentinel)).IsSuccess.Should().BeTrue();
+        (await Subscribe(_firstAccount, FcmToken, PushSubscription.FcmSentinel, "install-secret")).IsSuccess.Should().BeTrue();
 
-        var result = await Unsubscribe(_secondAccount, FcmToken, PushSubscription.FcmSentinel, PushSubscription.FcmSentinel, releaseOtherAccount: true);
+        var result = await Unsubscribe(_secondAccount, FcmToken, PushSubscription.FcmSentinel, "install-secret", releaseOtherAccount: true);
 
         result.IsSuccess.Should().BeTrue();
         CountFor(_firstAccount).Should().Be(0);
@@ -214,8 +214,8 @@ public sealed class PushSubscriptionAccountSwitchTests : IDisposable
     public async Task DesktopAccountTransfer_AndDelayedSignOut_PreserveCurrentOwner(string transport, string? topic, string endpoint)
     {
         var deviceId = Guid.NewGuid();
-        (await Subscribe(_firstAccount, endpoint, transport, transport, topic, deviceId)).IsSuccess.Should().BeTrue();
-        (await Subscribe(_secondAccount, endpoint, transport, transport, topic, deviceId)).IsSuccess.Should().BeTrue();
+        (await Subscribe(_firstAccount, endpoint, transport, "install-secret", topic, deviceId)).IsSuccess.Should().BeTrue();
+        (await Subscribe(_secondAccount, endpoint, transport, "install-secret", topic, deviceId)).IsSuccess.Should().BeTrue();
         (await Unsubscribe(_firstAccount, endpoint, null, null)).IsSuccess.Should().BeTrue();
         CountFor(_firstAccount).Should().Be(0);
         CountFor(_secondAccount).Should().Be(1);
@@ -231,15 +231,58 @@ public sealed class PushSubscriptionAccountSwitchTests : IDisposable
         var deviceId = Guid.NewGuid();
         (await Subscribe(_firstAccount, "https://dm3p.notify.windows.com/?token=old", "wns", "wns", deviceId: deviceId)).IsSuccess.Should().BeTrue();
         const string channel = "https://dm3p.notify.windows.com/?token=new";
-        (await Subscribe(_secondAccount, channel, "wns", "wns", deviceId: deviceId)).IsSuccess.Should().BeTrue();
+        (await Subscribe(_secondAccount, channel, "wns", "install-secret", deviceId: deviceId)).IsSuccess.Should().BeTrue();
 
-        (await Subscribe(_firstAccount, channel, "wns", "wns", deviceId: deviceId)).IsSuccess.Should().BeTrue();
+        (await Subscribe(_firstAccount, channel, "wns", "install-secret", deviceId: deviceId)).IsSuccess.Should().BeTrue();
 
         CountFor(_firstAccount).Should().Be(AppConstants.MaxPushSubscriptionsPerUser);
         CountFor(_secondAccount).Should().Be(0);
         using var verification = _factory.CreateContext();
         verification.PushSubscriptions.Count(s => s.Endpoint.Contains("token=other-")).Should().Be(AppConstants.MaxPushSubscriptionsPerUser - 1);
         verification.PushSubscriptions.Any(s => s.Endpoint.EndsWith("token=old")).Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData("fcm", "device-token")]
+    [InlineData("apns", "device-token")]
+    [InlineData("wns", "https://dm3p.notify.windows.com/?token=channel")]
+    public async Task NativeLegacyRow_AnotherAccountCannotClaimOrRelease_OwnerCanRenew(string transport, string endpoint)
+    {
+        var deviceId = transport is "wns" or "apns" ? Guid.NewGuid() : (Guid?)null;
+        (await Subscribe(_firstAccount, endpoint, transport, transport, deviceId: deviceId)).IsSuccess.Should().BeTrue();
+
+        var takeover = await Subscribe(_secondAccount, endpoint, transport, transport, deviceId: deviceId);
+        var release = await Unsubscribe(_secondAccount, endpoint, transport, transport, releaseOtherAccount: true);
+
+        takeover.IsFailure.Should().BeTrue();
+        takeover.ErrorCode.Should().Be(ErrorCodes.PushEndpointOwnedByOtherUser);
+        release.IsSuccess.Should().BeTrue();
+        CountFor(_firstAccount).Should().Be(1);
+        CountFor(_secondAccount).Should().Be(0);
+        (await Subscribe(_firstAccount, endpoint, transport, transport, deviceId: deviceId)).IsSuccess.Should().BeTrue();
+        CountFor(_firstAccount).Should().Be(1);
+    }
+
+    [Theory]
+    [InlineData("fcm", "device-token")]
+    [InlineData("apns", "device-token")]
+    [InlineData("wns", "https://dm3p.notify.windows.com/?token=channel")]
+    public async Task NativeInstallSecret_OnlyMatchingSecretCanClaimOrRelease(string transport, string endpoint)
+    {
+        var deviceId = transport is "wns" or "apns" ? Guid.NewGuid() : (Guid?)null;
+        (await Subscribe(_firstAccount, endpoint, transport, "install-secret", deviceId: deviceId)).IsSuccess.Should().BeTrue();
+
+        var takeover = await Subscribe(_secondAccount, endpoint, transport, "wrong-secret", deviceId: deviceId);
+        (await Unsubscribe(_secondAccount, endpoint, transport, "wrong-secret", releaseOtherAccount: true)).IsSuccess.Should().BeTrue();
+
+        takeover.ErrorCode.Should().Be(ErrorCodes.PushEndpointOwnedByOtherUser);
+        CountFor(_firstAccount).Should().Be(1);
+        CountFor(_secondAccount).Should().Be(0);
+        (await Subscribe(_secondAccount, endpoint, transport, "install-secret", deviceId: deviceId)).IsSuccess.Should().BeTrue();
+        CountFor(_firstAccount).Should().Be(0);
+        CountFor(_secondAccount).Should().Be(1);
+        (await Unsubscribe(_firstAccount, endpoint, transport, "install-secret", releaseOtherAccount: true)).IsSuccess.Should().BeTrue();
+        CountFor(_secondAccount).Should().Be(0);
     }
 
     private async Task<Result> Subscribe(Guid userId, string endpoint, string p256dh, string auth, string? apnsTopic = null, Guid? deviceId = null)

@@ -12,7 +12,7 @@ using PortalSessionService = Stripe.BillingPortal.SessionService;
 
 namespace Orbit.Infrastructure.Tests.Services;
 
-public class StripeBillingServiceTests
+public partial class StripeBillingServiceTests
 {
     private const string SuccessUrl = "https://app.useorbit.org/profile?subscription=success";
     private const string CancelUrl = "https://app.useorbit.org/upgrade";
@@ -20,6 +20,7 @@ public class StripeBillingServiceTests
     private static readonly Guid UserId = Guid.Parse("7092bf88-d132-46df-b4ee-2dcc2197cd69");
     private readonly List<(SessionCreateOptions Options, RequestOptions Request)> _checkoutRequests = [];
     private readonly List<(PortalCreateOptions Options, RequestOptions Request)> _portalRequests = [];
+    private readonly CustomerService _customers = Substitute.For<CustomerService>();
     private readonly SubscriptionService _subscriptions = Substitute.For<SubscriptionService>();
     private readonly StripeBillingService _service;
 
@@ -41,9 +42,54 @@ public class StripeBillingServiceTests
             });
         var invoices = Substitute.For<InvoiceService>();
         _service = new StripeBillingService(
-            new StripeServiceClients(new CustomerService(), checkout, portal, _subscriptions,
+            new StripeServiceClients(_customers, checkout, portal, _subscriptions,
                 invoices, new PriceService(), new CouponService()),
             NullLogger<StripeBillingService>.Instance);
+    }
+
+    [Fact]
+    public async Task DeleteCustomerAsync_UsesStoredIdentifier()
+    {
+        await _service.DeleteCustomerAsync("cus_erased", default);
+        await _customers.Received(1).DeleteAsync("cus_erased", Arg.Any<CustomerDeleteOptions>(),
+            Arg.Any<RequestOptions>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CreateCustomerAsync_ReplacementUsesNewStableIdempotencyKey()
+    {
+        var keys = new List<string>();
+        _customers.CreateAsync(Arg.Any<CustomerCreateOptions>(), Arg.Any<RequestOptions>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                keys.Add(call.Arg<RequestOptions>().IdempotencyKey);
+                return new Customer { Id = "cus_created" };
+            });
+
+        await _service.CreateCustomerAsync("returning@example.com", "Returning", UserId, default);
+        await _service.CreateCustomerAsync("returning@example.com", "Returning", UserId, default, 1);
+        await _service.CreateCustomerAsync("returning@example.com", "Returning", UserId, default, 1);
+
+        keys.Should().HaveCount(3);
+        keys[0].Should().Be($"orbit-customer-create-{UserId}");
+        keys[1].Should().NotBe(keys[0]);
+        keys[2].Should().Be(keys[1]);
+    }
+
+    [Fact]
+    public async Task DeleteCustomerAsync_AlreadyGone_Completes()
+    {
+        _customers.DeleteAsync("cus_erased", Arg.Any<CustomerDeleteOptions>(), Arg.Any<RequestOptions>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new StripeException(System.Net.HttpStatusCode.NotFound, new StripeError(), "missing"));
+        await _service.Invoking(service => service.DeleteCustomerAsync("cus_erased", default)).Should().NotThrowAsync();
+    }
+
+    [Fact]
+    public async Task DeleteCustomerAsync_ProviderFailure_Throws()
+    {
+        _customers.DeleteAsync("cus_erased", Arg.Any<CustomerDeleteOptions>(), Arg.Any<RequestOptions>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new StripeException(System.Net.HttpStatusCode.Unauthorized, new StripeError(), "unavailable"));
+        await _service.Invoking(service => service.DeleteCustomerAsync("cus_erased", default)).Should().ThrowAsync<BillingProviderException>();
     }
 
     [Theory]
@@ -356,6 +402,69 @@ public class StripeBillingServiceTests
         await PortalKeyAsync(returnUrl: returnUrl);
 
         _portalRequests.Single().Options.ReturnUrl.Should().Be(returnUrl);
+    }
+
+    [Fact]
+    public async Task GetPriceUnitAmount_NullUnitAmount_Throws()
+    {
+        var prices = Substitute.For<PriceService>();
+        prices.GetAsync("price_missing", Arg.Any<PriceGetOptions>(), Arg.Any<RequestOptions>(), Arg.Any<CancellationToken>())
+            .Returns(new Price { Id = "price_missing", UnitAmount = null });
+        var service = new StripeBillingService(new StripeServiceClients(new CustomerService(), new SessionService(),
+            new PortalSessionService(), _subscriptions, new InvoiceService(), prices, new CouponService()),
+            NullLogger<StripeBillingService>.Instance);
+        var run = () => service.GetPriceUnitAmountAsync("price_missing", CancellationToken.None);
+        await run.Should().ThrowAsync<BillingProviderException>().WithMessage("*price_missing*");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CreateCustomer_SendsUserScopedIdempotencyKeyAndMetadata(bool fails)
+    {
+        var customers = Substitute.For<CustomerService>();
+        CustomerCreateOptions? captured = null;
+        RequestOptions? request = null;
+        customers.CreateAsync(Arg.Do<CustomerCreateOptions>(x => captured = x), Arg.Do<RequestOptions>(x => request = x), Arg.Any<CancellationToken>())
+            .Returns(_ => fails ? Task.FromException<Customer>(new StripeException("failure")) : Task.FromResult(new Customer { Id = "cus_one" }));
+        var service = new StripeBillingService(new StripeServiceClients(customers, new SessionService(), new PortalSessionService(),
+            _subscriptions, new InvoiceService(), new PriceService(), new CouponService()), NullLogger<StripeBillingService>.Instance);
+        var run = () => service.CreateCustomerAsync("user@example.com", "User", UserId, default);
+        if (fails) await run.Should().ThrowAsync<BillingProviderException>();
+        else (await run()).Should().Be("cus_one");
+        request!.IdempotencyKey.Should().Be($"orbit-customer-create-{UserId}");
+        captured!.Metadata["userId"].Should().Be(UserId.ToString());
+    }
+
+    [Fact]
+    public async Task ListInvoices_MapsNullFieldsToDefaults()
+    {
+        var invoices = Substitute.For<InvoiceService>();
+        invoices.ListAsync(Arg.Is<InvoiceListOptions>(x => x.Customer == "cus_one" && x.Limit == 7), Arg.Any<RequestOptions>(), Arg.Any<CancellationToken>())
+            .Returns(new StripeList<Invoice> { Data = [new Invoice { Id = "in_one", AmountPaid = 42 }] });
+        var service = new StripeBillingService(new StripeServiceClients(new CustomerService(), new SessionService(), new PortalSessionService(),
+            _subscriptions, invoices, new PriceService(), new CouponService()), NullLogger<StripeBillingService>.Instance);
+        var invoice = (await service.ListInvoicesAsync("cus_one", 7, default)).Should().ContainSingle().Which;
+        invoice.Currency.Should().Be("usd");
+        invoice.Status.Should().Be("unknown");
+        invoice.BillingReason.Should().Be("unknown");
+        invoice.AmountPaid.Should().Be(42);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task TryGetCouponPercentOff_SuccessOrStripeException(bool fails)
+    {
+        var coupons = Substitute.For<CouponService>();
+        coupons.GetAsync("REF10", Arg.Any<CouponGetOptions>(), Arg.Any<RequestOptions>(), Arg.Any<CancellationToken>())
+            .Returns(_ => fails ? Task.FromException<Coupon>(new StripeException("failure")) : Task.FromResult(new Coupon { PercentOff = 10 }));
+        var logger = Substitute.For<Microsoft.Extensions.Logging.ILogger<StripeBillingService>>();
+        logger.IsEnabled(Microsoft.Extensions.Logging.LogLevel.Warning).Returns(true);
+        var service = new StripeBillingService(new StripeServiceClients(new CustomerService(), new SessionService(), new PortalSessionService(),
+            _subscriptions, new InvoiceService(), new PriceService(), coupons), logger);
+        (await service.TryGetCouponPercentOffAsync("REF10", default)).Should().Be(fails ? null : 10);
+        logger.ReceivedCalls().Count(c => c.GetMethodInfo().Name == "Log").Should().Be(fails ? 1 : 0);
     }
 
     private async Task<string> CheckoutKeyAsync(string customer = "cus_test", string price = "price_test",

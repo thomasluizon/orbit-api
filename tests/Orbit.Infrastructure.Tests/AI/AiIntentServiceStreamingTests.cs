@@ -24,6 +24,30 @@ namespace Orbit.Infrastructure.Tests.AI;
 public partial class AiIntentServiceStreamingTests
 {
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SendWithToolsAsync_PrivateImageBytesReachProviderWithoutOrbitUrl(bool storedHistory)
+    {
+        using var fixture = new Services.ConversationTurnRecorderTests.Fixture();
+        await fixture.Store.RecordAsync(fixture.Capture(image: true));
+        var history = await fixture.Store.LoadHistoryAsync(fixture.User.Id, fixture.ConversationId, default);
+        history.IsSuccess.Should().BeTrue();
+        var handler = new SequenceSseHandler(ResponsesTestData.Text("Image received"));
+        var (service, _) = BuildService(handler);
+        var bytes = Services.ConversationTurnRecorderTests.Fixture.Image;
+        var request = new AiToolRequest("Describe the image", "system", [], fixture.User.Id,
+            ImageData: storedHistory ? null : bytes, ImageMimeType: storedHistory ? null : "image/png",
+            History: storedHistory ? history.Value.Messages : null);
+
+        var result = await service.SendWithToolsAsync(request);
+
+        result.IsSuccess.Should().BeTrue();
+        handler.RequestBodies.Should().ContainSingle().Which.Should()
+            .Contain($"data:image/png;base64,{Convert.ToBase64String(bytes)}")
+            .And.NotContain("/api/uploads/object/").And.NotContain("/api/chat/conversations/");
+    }
+
+    [Theory]
     [InlineData("empty", false)]
     [InlineData("empty", true)]
     [InlineData("empty_text", false)]

@@ -33,6 +33,30 @@ public partial class AstraBlockAnswerServiceTests
         _store.MarkAnsweredAsync(Arg.Any<Guid>(), UserId, Arg.Any<DateTime>(), Arg.Any<CancellationToken>()).Returns(true);
     }
 
+    [Fact]
+    public async Task Prepare_ModerationRunsOutsideTransaction()
+    {
+        var active = false;
+        _work.HasActiveTransaction.Returns(_ => active);
+        _work.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task<Result<PreparedAstraBlockAnswer>>>>(), Arg.Any<CancellationToken>())
+            .Returns(async call =>
+            {
+                active = true;
+                try { return await call.Arg<Func<CancellationToken, Task<Result<PreparedAstraBlockAnswer>>>>()(default); }
+                finally { active = false; }
+            });
+        var block = Choice();
+        var checks = 0;
+        var result = await Service.PrepareAsync(Request(block.Id, ["a"]), default, (_, _) =>
+        {
+            checks++;
+            _work.HasActiveTransaction.Should().BeFalse();
+            return Task.FromResult(Result.Success(new ModerationResult(false, false, [])));
+        });
+        result.IsSuccess.Should().BeTrue();
+        checks.Should().Be(1);
+    }
+
     private AstraBlockAnswerService Service => new(_store, _work, _quota, _executor, _users, _analytics, _featureFlags,
         Substitute.For<IPendingAgentOperationStore>(), _dates, clarifications: _clarifications);
     private IssuedAstraBlock Choice(bool multi = false, bool free = false)
