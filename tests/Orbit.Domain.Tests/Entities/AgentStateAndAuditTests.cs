@@ -81,6 +81,27 @@ public class AgentStateAndAuditTests
             .Should().BeFalse();
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    public void IsUsable_ConfirmedOperationAtOrPastExpiry_ReturnsFalse(long ticks)
+    {
+        var state = CreateState();
+        state.SetConfirmationTokenHash("hash");
+        state.IsUsable(state.CapabilityId, state.OperationFingerprint, false, state.ExpiresAtUtc.AddTicks(-1)).Should().BeTrue();
+        state.IsUsable(state.CapabilityId, state.OperationFingerprint, false, state.ExpiresAtUtc.AddTicks(ticks)).Should().BeFalse();
+        state.ConsumedAtUtc.Should().BeNull();
+    }
+
+    [Fact]
+    public void IsUsable_OtherFingerprint_ReturnsFalse()
+    {
+        var state = CreateState();
+        state.SetConfirmationTokenHash("hash");
+        state.IsUsable(state.CapabilityId, "changed", false, state.ExpiresAtUtc.AddTicks(-1)).Should().BeFalse();
+        state.ConsumedAtUtc.Should().BeNull();
+    }
+
     [Fact]
     public void AgentAuditLog_Create_TruncatesLongFields()
     {

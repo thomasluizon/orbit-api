@@ -28,15 +28,11 @@ namespace Orbit.Infrastructure.Tests.Services;
 public class AstraPickListPreviewTests
 {
     [Theory]
-    [InlineData("create_habits", false, false)]
-    [InlineData("log_habits", false, false)]
-    [InlineData("skip_habits", false, false)]
-    [InlineData("create_habits", true, false)]
-    [InlineData("log_habits", true, false)]
-    [InlineData("skip_habits", true, false)]
-    [InlineData("create_habits", false, true)]
-    [InlineData("create_habits", true, true)]
-    public async Task Answer_UsesRealPendingOperationPathAndWritesOnlyTheChosenPreview(string action, bool shadowMode, bool failPreviewFirst)
+    [InlineData("create_habits", false)]
+    [InlineData("log_habits", false)]
+    [InlineData("skip_habits", false)]
+    [InlineData("create_habits", true)]
+    public async Task Answer_UsesRealPendingOperationPathAndWritesOnlyTheChosenPreview(string action, bool failPreviewFirst)
     {
         using var factory = new SqliteOrbitDbContextFactory();
         var db = factory.Context;
@@ -89,11 +85,11 @@ public class AstraPickListPreviewTests
                 db.AppFeatureFlags.Add(AppFeatureFlag.Create(key, true, null, key));
         }
         await db.SaveChangesAsync();
-        var settings = Options.Create(new AgentPlatformSettings { ShadowModeEnabled = shadowMode });
+        var settings = Options.Create(new AgentPlatformSettings());
         var bridge = Substitute.For<IAgentStepUpAuthorizationBridge>();
         var pending = new PendingAgentOperationStore(db, settings);
         using var flagCache = new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions());
-        var policy = new AgentPolicyEvaluator(db, catalog, pending, bridge, settings, new FeatureFlagService(db, flagCache, Substitute.For<IHostEnvironment>(), new ConfigurationBuilder().Build()));
+        var policy = new AgentPolicyEvaluator(db, catalog, pending, bridge, new FeatureFlagService(db, flagCache, Substitute.For<IHostEnvironment>(), new ConfigurationBuilder().Build()));
         var previewer = new PendingOperationChangePreviewer(repo, new GenericRepository<Goal>(db),
             new GenericRepository<Tag>(db), dates, tools);
         var ownership = Substitute.For<IAgentTargetOwnershipService>();

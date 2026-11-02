@@ -8,6 +8,7 @@ using Orbit.Application.Notifications;
 using Orbit.Application.Common;
 using Orbit.Application.Habits.Services;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.BackgroundJobs;
 using Orbit.Infrastructure.Persistence;
@@ -76,7 +77,7 @@ public partial class SlipAlertSchedulerService(
                 .OrderBy(h => h.Id).Take(256).ToListAsync(ct);
             if (habits.Count == 0) break;
             var userIds = habits.Select(h => h.UserId).Distinct().ToArray();
-            var users = await db.Users.AsNoTracking().Where(u => userIds.Contains(u.Id)).ToDictionaryAsync(u => u.Id, ct);
+            var users = await LoadProUsersAsync(db, userIds, nowAtUtc, ct);
             var habitIds = habits.Select(h => h.Id).ToArray();
             var sentFloor = utcDate.AddDays(-(7 + MaxTimeZoneSkewDays));
             var sent = (await db.SentSlipAlerts.AsNoTracking()
@@ -123,6 +124,12 @@ public partial class SlipAlertSchedulerService(
             await scope.ServiceProvider.GetRequiredService<IPushNotificationService>().SendManyAsync(accepted.Select(p =>
                 new PushDelivery(p.Habit.UserId, p.Title, p.Body, NotificationUrls.Home)).ToArray(), ct);
     }
+
+    private static Task<Dictionary<Guid, User>> LoadProUsersAsync(OrbitDbContext db, Guid[] userIds,
+        DateTime nowAtUtc, CancellationToken ct) =>
+        db.Users.AsNoTracking().Where(u => userIds.Contains(u.Id) && (u.IsLifetimePro
+            || u.SubscriptionPlan == UserPlan.Pro && u.SubscriptionExpiresAtUtc > nowAtUtc
+            || u.BonusProExpiresAtUtc > nowAtUtc || u.TrialEndsAt > nowAtUtc)).ToDictionaryAsync(u => u.Id, ct);
 
     private sealed record SlipCandidate(Habit Habit, User User, SlipPattern Pattern, DateOnly WeekStart);
     private sealed record PendingSlip(Habit Habit, DateOnly WeekStart, string Title, string Body);

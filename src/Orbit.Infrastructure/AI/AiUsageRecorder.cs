@@ -64,9 +64,6 @@ public sealed partial class AiUsageRecorder(
         }
         finally
         {
-            var price = _pricing.GetValueOrDefault(model);
-            var inputCost = ComputeCostUsd(price, cachedTokens, promptTokens, 0, cacheWriteTokens);
-            var outputCost = ComputeCostUsd(price, 0, 0, completionTokens);
             var properties = new Dictionary<string, object>
             {
                 ["$ai_trace_id"] = telemetry?.TraceId ?? Guid.NewGuid().ToString("N"),
@@ -78,11 +75,8 @@ public sealed partial class AiUsageRecorder(
                 ["$ai_cache_read_input_tokens"] = cachedTokens,
                 ["$ai_latency"] = telemetry?.LatencySeconds ?? 0d,
                 ["$ai_is_error"] = telemetry?.IsError ?? false,
-                ["$ai_input_cost_usd"] = inputCost,
-                ["$ai_output_cost_usd"] = outputCost,
                 ["$ai_total_cost_usd"] = costUsd,
-                ["purpose"] = purpose,
-                ["tool_names"] = telemetry?.ToolNames.ToArray() ?? []
+                ["purpose"] = purpose
             };
             if (userId is { } id)
                 AnalyticsCapture.SafeCaptureUserEvent(analytics, logger, id, telemetry?.Plan, "$ai_generation", properties);

@@ -18,6 +18,25 @@ public class BulkCreateHabitsToolTests
 
     public BulkCreateHabitsToolTests() => _tool = new BulkCreateHabitsTool(_mediator);
 
+    [Theory]
+    [InlineData("not-a-guid")]
+    [InlineData(42)]
+    public async Task NestedMalformedParent_FailsWholeBatchBeforeAnyCommand(object parent)
+    {
+        var args = JsonSerializer.SerializeToElement(new
+        {
+            habits = new object[]
+            {
+                new { title = "Valid first" },
+                new { title = "Parent", sub_habits = new[] { new { title = "Child", parent_habit_id = parent } } }
+            }
+        });
+        var result = await _tool.ExecuteAsync(args, UserId, default);
+        result.Success.Should().BeFalse();
+        result.Error.Should().Be("parent_habit_id must contain a valid GUID.");
+        await _mediator.DidNotReceiveWithAnyArgs().Send(default!, default);
+    }
+
     [Fact]
     public async Task ExplicitOneTime_IsAcceptedByTheBatchArgumentCheck()
     {

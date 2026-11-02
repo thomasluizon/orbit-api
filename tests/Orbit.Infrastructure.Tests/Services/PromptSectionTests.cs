@@ -479,3 +479,21 @@ public class ImageInstructionsSectionTests
         act.Should().Throw<InvalidOperationException>();
     }
 }
+
+public class PromptIndexCapsTests
+{
+    [Fact]
+    public void ThreeHundredTagsAndGoals_ReportTheirCapsAndOmissions()
+    {
+        var userId = Guid.NewGuid();
+        var tags = Enumerable.Range(0, 300).Select(i => Tag.Create(userId, "Tag " + i, "#123456").Value).ToArray();
+        var goals = Enumerable.Range(0, 300).Select(i => Goal.Create(userId, "Goal " + i, 10, "times").Value).ToArray();
+        var context = new PromptContext([], false, null, tags, null, null, goals);
+        var tagPrompt = new UserTagsSection().Build(context);
+        var goalPrompt = new ActiveGoalsSection().Build(context);
+        tagPrompt.Should().Contain("has_more=true; returned=50; total=300");
+        goalPrompt.Should().Contain("has_more=true; returned=50; total=300");
+        tagPrompt.Split('\n').Count(line => line.StartsWith("- ", StringComparison.Ordinal)).Should().Be(50);
+        goalPrompt.Split('\n').Count(line => line.StartsWith("- ", StringComparison.Ordinal)).Should().Be(50);
+    }
+}

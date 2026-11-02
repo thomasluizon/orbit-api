@@ -131,6 +131,10 @@ public class RemainingHabitScheduleReaderTests
         habits.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>>(), Arg.Any<CancellationToken>())
             .Returns(call => new[] { habit }.Where(call.Arg<Expression<Func<Habit, bool>>>().Compile()).ToList());
+        habits.ProjectAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<ChatHabitCandidate>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.ArgAt<Func<IQueryable<Habit>, IQueryable<ChatHabitCandidate>>>(1)(
+                new[] { habit }.Where(call.ArgAt<Expression<Func<Habit, bool>>>(0).Compile()).AsQueryable()).ToArray());
         var users = Substitute.For<IGenericRepository<User>>();
         users.GetByIdAsync(habit.UserId, Arg.Any<CancellationToken>()).Returns(User.Create("Person", "person@example.com").Value);
         var dates = Substitute.For<IUserDateService>();

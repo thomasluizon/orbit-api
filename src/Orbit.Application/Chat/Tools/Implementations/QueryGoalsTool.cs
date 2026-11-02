@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Linq.Expressions;
 using System.Text;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
@@ -56,37 +57,44 @@ public class QueryGoalsTool(
         var limit = Math.Clamp(JsonArgumentParser.GetOptionalInt(args, "limit") ?? 50, 1, 200);
 
         var userToday = JsonArgumentParser.ParseDateOnly(args, "as_of") ?? await userDateService.GetUserTodayAsync(userId, ct);
-        var freshProgressValues = await goalProgressReadSyncer.ComputeFreshValuesAsync(userId, userToday, ct);
-
-        var goals = await goalRepository.FindAsync(
-            g => g.UserId == userId
-                && !g.IsDeleted
-                && (status.HasValue
-                    ? g.Status == status.Value
-                    : includeCompleted || g.Status == GoalStatus.Active),
-            q => q.Include(g => g.Habits),
-            ct);
-
-        var allFiltered = goals
-            .Where(g => MatchesSearch(g, search))
-            .OrderBy(g => g.Position)
-            .ThenBy(g => g.CreatedAtUtc)
-            .ThenBy(g => g.Id)
-            .ToList();
+        Expression<Func<Goal, bool>> predicate = g => g.UserId == userId && !g.IsDeleted
+            && (status.HasValue ? g.Status == status.Value : includeCompleted || g.Status == GoalStatus.Active);
         var offset = Math.Max(0, JsonArgumentParser.GetOptionalInt(args, "offset") ?? 0);
-        var filtered = allFiltered.Skip(offset).Take(limit).ToList();
+        int total;
+        List<Goal> filtered;
+        if (string.IsNullOrWhiteSpace(search))
+        {
+            total = await goalRepository.CountAsync(predicate, ct);
+            filtered = (await goalRepository.FindAsync(predicate,
+                q => OrderGoals(q).Skip(offset).Take(limit).Include(g => g.Habits), ct)).ToList();
+        }
+        else
+        {
+            var candidates = await goalRepository.FindAsync(predicate, q => OrderGoals(q), ct);
+            var matchingIds = candidates.Where(g => g.Title.Contains(search, StringComparison.OrdinalIgnoreCase)
+                || g.Description?.Contains(search, StringComparison.OrdinalIgnoreCase) == true).Select(g => g.Id).ToArray();
+            total = matchingIds.Length;
+            var pageIds = matchingIds.Skip(offset).Take(limit).ToArray();
+            filtered = pageIds.Length == 0 ? [] : (await goalRepository.FindAsync(predicate,
+                q => OrderGoals(q.Where(g => pageIds.Contains(g.Id))).Include(g => g.Habits), ct)).ToList();
+        }
+        var freshProgressValues = await goalProgressReadSyncer.ComputeFreshValuesForGoalsAsync(
+            userId, userToday, filtered.Select(goal => goal.Id).ToArray(), ct);
         foreach (var goal in filtered)
             if (freshProgressValues.TryGetValue(goal.Id, out var fresh))
                 GoalProgressSyncService.ApplyReadValue(goal, fresh);
         var card = GoalListCardBuilder.Build(filtered, userToday, includeProjections: false)
             with
-        { OfferTracking = filtered.ToDictionary(goal => goal.Id, goal => Orbit.Application.Goals.Services.GoalMetricsCalculator.GetTrackingStatus(goal, userToday)), TotalCount = allFiltered.Count, SourceRevision = ReadRevision.Hash(allFiltered.Select(g => new { g.Id, g.UpdatedAtUtc, Fresh = freshProgressValues.TryGetValue(g.Id, out var v) ? v : g.CurrentValue })) };
+        { OfferTracking = filtered.ToDictionary(goal => goal.Id, goal => Orbit.Application.Goals.Services.GoalMetricsCalculator.GetTrackingStatus(goal, userToday)), TotalCount = total, SourceRevision = ReadRevision.Hash(filtered.Select(g => new { g.Id, g.UpdatedAtUtc, Fresh = freshProgressValues.TryGetValue(g.Id, out var v) ? v : g.CurrentValue })) };
 
         if (filtered.Count == 0)
             return new ToolResult(true, EntityName: "No goals found matching the given filters.", Payload: card);
 
         return new ToolResult(true, EntityName: BuildOutput(filtered, freshProgressValues, includeDescriptions, includeLinkedHabits), Payload: card);
     }
+
+    private static IOrderedQueryable<Goal> OrderGoals(IQueryable<Goal> query) =>
+        query.OrderBy(g => g.Position).ThenBy(g => g.CreatedAtUtc).ThenBy(g => g.Id);
 
     private static GoalStatus? ParseStatus(JsonElement args)
     {
@@ -97,16 +105,6 @@ public class QueryGoalsTool(
         return Enum.TryParse<GoalStatus>(statusString, ignoreCase: true, out var status)
             ? status
             : null;
-    }
-
-    private static bool MatchesSearch(Goal goal, string? search)
-    {
-        if (string.IsNullOrWhiteSpace(search))
-            return true;
-
-        return goal.Title.Contains(search, StringComparison.OrdinalIgnoreCase)
-            || (!string.IsNullOrWhiteSpace(goal.Description)
-                && goal.Description.Contains(search, StringComparison.OrdinalIgnoreCase));
     }
 
     private static string BuildOutput(

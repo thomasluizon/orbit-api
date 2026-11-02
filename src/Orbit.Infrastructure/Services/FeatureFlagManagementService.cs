@@ -87,7 +87,7 @@ public class FeatureFlagManagementService(
     }
 
     private Task<bool> IsAdminAsync(Guid adminId, CancellationToken cancellationToken) =>
-        dbContext.Users.IgnoreQueryFilters().AnyAsync(user => user.Id == adminId && user.IsAdmin, cancellationToken);
+        dbContext.Users.IgnoreQueryFilters().AnyAsync(user => user.Id == adminId && user.IsAdmin && !user.IsDeactivated, cancellationToken);
 
     private IQueryable<AdminFeatureFlag> ReadFlags(string? key = null) => dbContext.AppFeatureFlags.AsNoTracking()
         .Where(flag => key == null || flag.Key == key).OrderBy(flag => flag.Key)

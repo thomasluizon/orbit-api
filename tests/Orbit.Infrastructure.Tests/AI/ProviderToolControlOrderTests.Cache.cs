@@ -76,7 +76,7 @@ public sealed partial class ProviderToolControlOrderTests
         var child = Habit.Create(new(HabitSchedule.Recurring, user.Id, populated ? "Rotina" : "Child", FrequencyUnit.Day, 1, new DateOnly(2026, 1, 1), ParentHabitId: parent.Id)).Value;
         var habits = populated ? new[] { parent, child } : Array.Empty<Habit>();
         var pending = Substitute.For<IPendingAgentOperationStore>();
-        pending.GetAwaiting(user.Id).Returns(populated
+        pending.GetAwaitingAsync(user.Id, Arg.Any<CancellationToken>()).Returns(populated
             ? new[] { new PendingAgentOperationExecution(Guid.NewGuid(), "habits", "create_habit", JsonSerializer.SerializeToElement(new { title = "Draft" }), AgentExecutionSurface.Chat, AgentConfirmationRequirement.FreshConfirmation) }
             : Array.Empty<PendingAgentOperationExecution>());
         var preview = Substitute.For<IPendingOperationChangePreviewer>();

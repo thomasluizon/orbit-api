@@ -45,7 +45,7 @@ public sealed class AiRequestCostEstimator(IMemoryCache cache, IOptions<AiSettin
                 foreach (var item in field.Value.EnumerateArray())
                 {
                     tokens = checked(tokens + 64 + (first && item.ValueKind == JsonValueKind.Object && item.TryGetProperty("role", out var role) && role.GetString() == "system"
-                        ? CountPrefix(item, model) : CountVariableInput(item, model)));
+                        ? CountPrefix(item, model) : CountVariableCached(item, model)));
                     first = false;
                 }
             }
@@ -64,6 +64,16 @@ public sealed class AiRequestCostEstimator(IMemoryCache cache, IOptions<AiSettin
             entry.SetSize(1).SetAbsoluteExpiration(TimeSpan.FromHours(1));
             var count = CountText(json, model);
             return checked((long)decimal.Ceiling(count * 1.25m) + 256);
+        });
+    }
+
+    private long CountVariableCached(JsonElement item, string model)
+    {
+        var digest = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(item.GetRawText())));
+        return cache.GetOrCreate($"ai-variable:{model}:{digest}", entry =>
+        {
+            entry.SetSize(1).SetAbsoluteExpiration(TimeSpan.FromHours(1));
+            return CountVariableInput(item, model);
         });
     }
 

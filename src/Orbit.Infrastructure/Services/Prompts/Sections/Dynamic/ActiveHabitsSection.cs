@@ -18,8 +18,10 @@ public class ActiveHabitsSection : IPromptSection
         sb.AppendLine();
 
         var indexedHabits = context.ActiveHabits.ToList();
+        var children = indexedHabits.ToLookup(habit => habit.ParentHabitId);
+        var byId = indexedHabits.ToDictionary(habit => habit.Id);
         var parents = indexedHabits
-            .Where(h => h.ParentHabitId is null && ShouldIncludeInIndex(h, indexedHabits, context))
+            .Where(h => h.ParentHabitId is null && ShouldIncludeInIndex(h, children, context))
             .ToList();
         var (total, general, dueToday, overdue) = ComputeHabitCounts(indexedHabits, context);
 
@@ -57,8 +59,8 @@ public class ActiveHabitsSection : IPromptSection
         var parentSuffixes = SiblingTitleDisambiguator.ComputeSuffixes(orderedParents);
         foreach (var habit in orderedParents)
         {
-            AppendHabitEntry(sb, habit, context, parentSuffixes.GetValueOrDefault(habit.Id, string.Empty));
-            AppendChildren(sb, indexedHabits, habit.Id, 1, context);
+            AppendHabitEntry(sb, habit, context, parentSuffixes.GetValueOrDefault(habit.Id, string.Empty), byId);
+            AppendChildren(sb, children, byId, habit.Id, 1, context);
         }
         sb.AppendLine();
 
@@ -83,9 +85,9 @@ public class ActiveHabitsSection : IPromptSection
         return (activeHabits.Count, general, dueToday, overdue);
     }
 
-    private static void AppendHabitEntry(StringBuilder sb, Habit habit, PromptContext context, string dupSuffix)
+    private static void AppendHabitEntry(StringBuilder sb, Habit habit, PromptContext context, string dupSuffix, IReadOnlyDictionary<Guid, Habit> byId)
     {
-        var labelStr = BuildHabitLabel(habit, context);
+        var labelStr = BuildHabitLabel(habit, context, byId);
         sb.AppendLine(CultureInfo.InvariantCulture, $"- {PromptDataSanitizer.QuoteInline(habit.Title, 100)}{dupSuffix} | {habit.Id}{labelStr}");
 
         if (habit.Goals.Count > 0)
@@ -95,7 +97,7 @@ public class ActiveHabitsSection : IPromptSection
         }
     }
 
-    private static string BuildHabitLabel(Habit habit, PromptContext context)
+    private static string BuildHabitLabel(Habit habit, PromptContext context, IReadOnlyDictionary<Guid, Habit> byId)
     {
         var labels = new List<string>();
         if (!string.IsNullOrWhiteSpace(habit.Emoji)) labels.Add($"Emoji: {habit.Emoji}");
@@ -108,15 +110,15 @@ public class ActiveHabitsSection : IPromptSection
         if (habit.IsCompleted) labels.Add("COMPLETED");
         if (habit.Schedule != HabitSchedule.General)
             labels.Add($"DueDate: {habit.NextDueDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}");
-        return (labels.Count > 0 ? $" [{string.Join(", ", labels)}]" : "") + BuildHabitRelations(habit, context);
+        return (labels.Count > 0 ? $" [{string.Join(", ", labels)}]" : "") + BuildHabitRelations(habit, byId);
     }
 
-    private static string BuildHabitRelations(Habit habit, PromptContext context)
+    private static string BuildHabitRelations(Habit habit, IReadOnlyDictionary<Guid, Habit> byId)
     {
         var labels = new List<string>();
         labels.Add($"Start date: {habit.StartDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}");
         labels.Add(habit.ParentHabitId is { } parentId
-            ? $"Parent: {PromptDataSanitizer.QuoteInline(context.ActiveHabits.FirstOrDefault(parent => parent.Id == parentId)?.Title, 100)} ({parentId})"
+            ? $"Parent: {PromptDataSanitizer.QuoteInline(byId.GetValueOrDefault(parentId)?.Title, 100)} ({parentId})"
             : "Parent: none");
         labels.Add($"Tags: {(habit.Tags.Count == 0 ? "none" : string.Join(", ", habit.Tags.OrderBy(tag => tag.Id).Select(t => $"{PromptDataSanitizer.QuoteInline(t.Name, 100)} ({t.Id})")))}");
         return $" | {string.Join(" | ", labels)}";
@@ -138,37 +140,37 @@ public class ActiveHabitsSection : IPromptSection
             ?? habit.Logs.Any(log => !log.IsDeleted
                 && log.Date == context.UserToday.Value && log.Value > 0 && log.IsSlip != true));
 
-    private static bool ShouldIncludeInIndex(Habit habit, IReadOnlyList<Habit> allHabits, PromptContext context)
+    private static bool ShouldIncludeInIndex(Habit habit, ILookup<Guid?, Habit> children, PromptContext context)
     {
         return !habit.IsCompleted
             || (habit.Schedule is HabitSchedule.OneTime or HabitSchedule.General) && IsDoneToday(habit, context)
-            || HasRelevantDescendant(allHabits, habit.Id, context);
+            || HasRelevantDescendant(children, habit.Id, context);
     }
 
-    private static bool HasRelevantDescendant(IReadOnlyList<Habit> allHabits, Guid parentId, PromptContext context)
+    private static bool HasRelevantDescendant(ILookup<Guid?, Habit> children, Guid parentId, PromptContext context)
     {
-        foreach (var child in allHabits.Where(h => h.ParentHabitId == parentId))
+        foreach (var child in children[parentId])
         {
-            if (ShouldIncludeInIndex(child, allHabits, context))
+            if (ShouldIncludeInIndex(child, children, context))
                 return true;
         }
 
         return false;
     }
 
-    private static void AppendChildren(StringBuilder sb, IReadOnlyList<Habit> allHabits, Guid parentId, int depth, PromptContext context)
+    private static void AppendChildren(StringBuilder sb, ILookup<Guid?, Habit> children, IReadOnlyDictionary<Guid, Habit> byId, Guid parentId, int depth, PromptContext context)
     {
         var indent = new string(' ', depth * 2);
-        var children = allHabits
-            .Where(h => h.ParentHabitId == parentId && ShouldIncludeInIndex(h, allHabits, context))
+        var included = children[parentId]
+            .Where(h => ShouldIncludeInIndex(h, children, context))
             .OrderBy(h => h.Position).ThenBy(h => h.Id)
             .ToList();
-        var childSuffixes = SiblingTitleDisambiguator.ComputeSuffixes(children);
-        foreach (var child in children)
+        var childSuffixes = SiblingTitleDisambiguator.ComputeSuffixes(included);
+        foreach (var child in included)
         {
-            var labelStr = BuildHabitLabel(child, context);
+            var labelStr = BuildHabitLabel(child, context, byId);
             sb.AppendLine(CultureInfo.InvariantCulture, $"{indent}- {PromptDataSanitizer.QuoteInline(child.Title, 100)}{childSuffixes.GetValueOrDefault(child.Id, string.Empty)} | {child.Id}{labelStr}");
-            AppendChildren(sb, allHabits, child.Id, depth + 1, context);
+            AppendChildren(sb, children, byId, child.Id, depth + 1, context);
         }
     }
 }
