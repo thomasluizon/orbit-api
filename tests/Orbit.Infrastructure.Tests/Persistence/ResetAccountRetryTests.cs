@@ -48,7 +48,7 @@ public class ResetAccountRetryTests
             new AccountResetRepository(context, events),
             new UnitOfWork(context, new DatabaseConnectionSettings(), events),
             dates,
-            cache);
+            cache, NSubstitute.Substitute.For<Orbit.Application.Connections.INotionConnectionService>(), NSubstitute.Substitute.For<Orbit.Domain.Interfaces.IGoogleTokenService>());
 
         var result = await handler.Handle(new ResetAccountCommand(user.Id), CancellationToken.None);
 

@@ -61,7 +61,10 @@ public class ConversationEndpointTests
         var latest = (await controller.GetLatestConversation(default)).Should().BeOfType<OkObjectResult>().Which.Value
             .Should().BeOfType<ConversationPage>().Subject;
         latest.Turns.Select(row => row.Role).Should().Equal("user", "assistant");
-        var image = (await controller.GetConversationImage(fixture.ConversationId, turn.TurnId, default)).Should().BeOfType<FileStreamResult>().Subject;
+        var imageUrl = latest.Turns.Single(row => row.TurnId == turn.TurnId && row.Role == "user").Image!.Url;
+        imageUrl.Should().Be($"/api/chat/conversations/{fixture.ConversationId}/images/{turn.TurnId}");
+        var parts = imageUrl!.Split('/');
+        var image = (await controller.GetConversationImage(Guid.Parse(parts[^3]), Guid.Parse(parts[^1]), default)).Should().BeOfType<FileStreamResult>().Subject;
         await using var imageStream = image.FileStream;
         using var bytes = new MemoryStream();
         await imageStream.CopyToAsync(bytes);

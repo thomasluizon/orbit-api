@@ -131,7 +131,7 @@ public sealed partial class DistributedRateLimitFilter(
             return [(policyName, BuildRefreshTokenPartitionKey(policyName, refreshToken))];
         }
 
-        return [(policyName, $"ip:{context.GetClientIpAddress() ?? "unknown"}")];
+        return [(policyName, $"ip:{clientIpResolver.Resolve(context).Address ?? "unknown"}")];
     }
 
     private static readonly HashSet<string> EmailPartitionedPolicies =
@@ -167,7 +167,7 @@ public sealed partial class DistributedRateLimitFilter(
             if (emailProperty.GetValue(argument) is not string rawEmail || string.IsNullOrWhiteSpace(rawEmail))
                 continue;
 
-            partitionKey = $"{policyName.ToLowerInvariant()}:email:{rawEmail.Trim().ToLowerInvariant()}";
+            partitionKey = $"{policyName.ToLowerInvariant()}:email:{Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(rawEmail.Trim().ToLowerInvariant())))}";
             return true;
         }
 

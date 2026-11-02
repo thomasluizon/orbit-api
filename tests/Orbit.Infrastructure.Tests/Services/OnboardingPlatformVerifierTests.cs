@@ -15,8 +15,7 @@ public class OnboardingPlatformVerifierTests
     private static OnboardingSecuritySettings Settings() => new()
     {
         AndroidPackageName = "org.useorbit.app",
-        AndroidCertificateDigests = ["configured-signing-digest"],
-        TurnstileHostnames = ["example.com"]
+        AndroidCertificateDigests = ["configured-signing-digest"]
     };
 
     private static TokenPayloadExternal Payload() => new()
@@ -70,7 +69,7 @@ public class OnboardingPlatformVerifierTests
         turnstile.VerifyAsync("valid-proof", Arg.Any<CancellationToken>())
             .Returns(new TurnstileVerificationResult(true, [], "example.com"));
         var verifier = new TurnstileOnboardingVerifier(turnstile,
-            Options.Create(new BotProtectionSettings { Enabled = false, SecretKey = "production-secret" }), Options.Create(Settings()));
+            Options.Create(new BotProtectionSettings { Enabled = false, SecretKey = "production-secret", AllowedHostnames = ["example.com"] }));
         (await verifier.VerifyAsync(new OnboardingAttestation(platform, "valid-proof"), "challenge", null, 0, default)).Should().NotBeNull();
         await turnstile.Received(1).VerifyAsync("valid-proof", Arg.Any<CancellationToken>());
         turnstile.VerifyAsync("valid-proof", Arg.Any<CancellationToken>())
@@ -84,7 +83,7 @@ public class OnboardingPlatformVerifierTests
         var options = Options.Create(new OnboardingSecuritySettings());
         IOnboardingAttestationVerifier[] verifiers =
         [
-            new TurnstileOnboardingVerifier(Substitute.For<ITurnstileVerificationService>(), Options.Create(new BotProtectionSettings()), options),
+            new TurnstileOnboardingVerifier(Substitute.For<ITurnstileVerificationService>(), Options.Create(new BotProtectionSettings())),
             new PlayIntegrityOnboardingVerifier(options, TimeProvider.System),
             new AppAttestOnboardingVerifier(options, TimeProvider.System)
         ];

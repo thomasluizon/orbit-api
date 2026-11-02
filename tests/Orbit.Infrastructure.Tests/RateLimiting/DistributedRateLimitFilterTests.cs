@@ -569,7 +569,7 @@ public class DistributedRateLimitFilterTests
         var retryAfter = int.Parse(http.Response.Headers.RetryAfter.ToString());
         retryAfter.Should().BeInRange(rejectIp ? 297 : 117, rejectIp ? 300 : 120);
         http.Response.Headers["X-Orbit-Request-Id"].ToString().Should().Be("req_composite");
-        await _service.Received(1).TryAcquireAsync("auth", "auth:email:a@x.com", Arg.Any<CancellationToken>());
+        await _service.Received(1).TryAcquireAsync("auth", "auth:email:478ABEC7430569163161DFEA8513B8CE89D05F559456A26E945C66E1FE55A29D", Arg.Any<CancellationToken>());
         await _service.Received(1).TryAcquireAsync("auth-ip", "ip:unknown", Arg.Any<CancellationToken>());
     }
 
@@ -592,6 +592,42 @@ public class DistributedRateLimitFilterTests
 
         await act.Should().ThrowAsync<InvalidOperationException>();
         nextCalled.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task VerifiedBff_GoogleCodeWithoutEmail_UsesSeparateVisitorBuckets()
+    {
+        using var scope = new RateLimitFilterTestScope("test-forwarding-secret");
+        var action = typeof(AuthController).GetMethod(nameof(AuthController.GoogleCodeAuth))!;
+        for (var client = 1; client <= 2; client++)
+        {
+            var context = scope.CreateContext(new { Code = "google-code" }, action);
+            context.HttpContext.Request.Headers["X-Orbit-Bff-Secret"] = "test-forwarding-secret";
+            context.HttpContext.Request.Headers["X-Orbit-Client-Ip"] = $"198.51.100.{client}";
+            await scope.ExecuteAsync(context);
+            RateLimitFilterTestScope.AssertOutcome(context, true);
+        }
+        (await scope.DbContext.DistributedRateLimitBuckets.Select(b => b.PartitionKey).ToListAsync())
+            .Should().BeEquivalentTo(["ip:198.51.100.1", "ip:198.51.100.2"]);
+    }
+
+    [Theory]
+    [InlineData("auth")]
+    [InlineData("waitlist")]
+    public async Task RejectedEmailPartition_LogsOnlyHash(string policy)
+    {
+        _logger.IsEnabled(LogLevel.Warning).Returns(true);
+        _service.TryAcquireAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(new DistributedRateLimitDecision(false, 5, 5, DateTime.UtcNow.AddMinutes(10)));
+        var filter = new DistributedRateLimitFilter(policy, _service, _authSessionService,
+            new BffClientIpResolver(Options.Create(new BffForwardingSettings())), _logger);
+        var (context, _) = CreateExecutingContext(new AuthController.SendCodeRequest("a@example.com"));
+        await filter.OnActionExecutionAsync(context, () => Task.FromResult(CreateExecutedContext(context)));
+        DistributedRateLimitFilter.TryResolveEmailPartitionKey(policy, context.ActionArguments.Values, out var key).Should().BeTrue();
+        var logs = _logger.ReceivedCalls().Where(call => call.GetMethodInfo().Name == "Log")
+            .Select(call => call.GetArguments()[2]!.ToString()).ToArray();
+        logs.Should().Contain(message => message!.Contains(key, StringComparison.Ordinal));
+        logs.Should().OnlyContain(message => !message!.Contains("a@example.com", StringComparison.Ordinal));
     }
 
     private void SetupAllowedLease(Guid userId)

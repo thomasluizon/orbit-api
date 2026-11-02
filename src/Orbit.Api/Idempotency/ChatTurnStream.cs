@@ -1,4 +1,5 @@
 using FluentValidation;
+using Orbit.Api.Controllers;
 using MediatR;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
@@ -25,7 +26,8 @@ public sealed class ChatTurnStream(
     {
         ChatErrorLocalization.SetLocale(http, command.ClientContext?.Locale);
         await new ChatTurnKeyValidator().ValidateAndThrowAsync(key, transportToken);
-        await new ProcessUserChatCommandValidator().ValidateAndThrowAsync(command, transportToken);
+        if (await ChatInputValidation.ValidateAsync(command, transportToken) is { } inputError)
+            return inputError;
         var candidate = ChatTurn.Create(command.UserId, ChatTurnIdentity.HashKey(key), ChatTurnIdentity.Fingerprint(command),
             TimeProvider.System.GetUtcNow().UtcDateTime.Add(options.Value.Timeout));
         var (turn, claimed) = await store.ClaimAsync(candidate, transportToken);

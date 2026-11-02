@@ -12,6 +12,62 @@ public class UserTests
         return result.Value;
     }
 
+    [Fact]
+    public void PrepareStripeCustomerDeletion_DetachesBillingAndPreservesRecoveryAcrossReactivation()
+    {
+        var user = CreateValidUser();
+        user.SetStripeCustomerId("cus_retired");
+        user.SetStripeSubscription("sub_retired", DateTime.UtcNow.AddDays(20));
+        user.Deactivate(DateTime.UtcNow.AddDays(-1));
+
+        user.PrepareStripeCustomerDeletion();
+        user.CancelDeactivation();
+
+        user.StripeCustomerId.Should().BeNull();
+        user.StripeSubscriptionId.Should().BeNull();
+        user.StripeRenewalStoppedByDeletion.Should().BeFalse();
+        user.StripeCustomerPendingDeletionId.Should().Be("cus_retired");
+        user.StripeCustomerGeneration.Should().Be(1);
+        user.IsPro.Should().BeFalse();
+        user.CompleteStripeCustomerDeletion("cus_retired");
+        user.StripeCustomerPendingDeletionId.Should().BeNull();
+        user.StripeCustomerGeneration.Should().Be(1);
+    }
+
+    [Theory]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    public void PrepareStripeCustomerDeletion_RequiresDeactivatedAccountAndCustomer(bool deactivated, bool hasCustomer)
+    {
+        var user = CreateValidUser();
+        if (deactivated) user.Deactivate(DateTime.UtcNow.AddDays(-1));
+        if (hasCustomer) user.SetStripeCustomerId("cus_existing");
+
+        user.Invoking(value => value.PrepareStripeCustomerDeletion()).Should().Throw<InvalidOperationException>();
+        user.StripeCustomerGeneration.Should().Be(0);
+        user.StripeCustomerPendingDeletionId.Should().BeNull();
+    }
+
+    [Fact]
+    public void PrepareStripeCustomerDeletion_CannotOverwritePendingRecovery()
+    {
+        var user = CreateValidUser();
+        user.SetStripeCustomerId("cus_first");
+        user.Deactivate(DateTime.UtcNow.AddDays(-1));
+        user.PrepareStripeCustomerDeletion();
+        user.SetStripeCustomerId("cus_second");
+
+        user.Invoking(value => value.PrepareStripeCustomerDeletion()).Should().Throw<InvalidOperationException>();
+        user.Invoking(value => value.CompleteStripeCustomerDeletion("cus_second")).Should().Throw<InvalidOperationException>();
+        user.StripeCustomerPendingDeletionId.Should().Be("cus_first");
+        user.StripeCustomerId.Should().Be("cus_second");
+        user.StripeCustomerGeneration.Should().Be(1);
+        user.CompleteStripeCustomerDeletion("cus_first");
+        user.PrepareStripeCustomerDeletion();
+        user.StripeCustomerPendingDeletionId.Should().Be("cus_second");
+        user.StripeCustomerGeneration.Should().Be(2);
+    }
+
     [Theory]
     [InlineData(false, false)]
     [InlineData(true, false)]
@@ -1142,7 +1198,7 @@ public class UserTests
     }
 
     [Fact]
-    public void Deactivate_ClearsGoogleCalendarConnection()
+    public void Deactivate_RetainsRefreshTokenForErasureAndDisablesCalendarSync()
     {
         var user = CreateValidUser();
         user.SetStripeSubscription("sub_123", DateTime.UtcNow.AddDays(30));
@@ -1153,7 +1209,7 @@ public class UserTests
 
         user.IsDeactivated.Should().BeTrue();
         user.GoogleAccessToken.Should().BeNull();
-        user.GoogleRefreshToken.Should().BeNull();
+        user.GoogleRefreshToken.Should().Be("refresh-token");
         user.GoogleCalendarAutoSyncEnabled.Should().BeFalse();
     }
 
@@ -1170,4 +1226,20 @@ public class UserTests
         user.GoogleAccessToken.Should().BeNull();
         user.GoogleRefreshToken.Should().BeNull();
     }
+    [Theory]
+    [InlineData(0, false)]
+    [InlineData(1, true)]
+    public void IsPro_UsesStrictExpiryBoundary(long ticksUntilExpiry, bool expected)
+    {
+        var clock = new ExpiryClock();
+        var user = User.Create("Owner", "expiry@example.com", clock).Value;
+        user.SetStripeSubscription("sub_boundary", clock.GetUtcNow().UtcDateTime.AddTicks(ticksUntilExpiry));
+        user.IsPro.Should().Be(expected);
+    }
+
+    private sealed class ExpiryClock : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => new(2026, 1, 1, 12, 0, 0, TimeSpan.Zero);
+    }
+
 }

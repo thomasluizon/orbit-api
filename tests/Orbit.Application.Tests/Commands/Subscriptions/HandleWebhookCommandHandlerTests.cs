@@ -122,6 +122,45 @@ public class HandleWebhookCommandHandlerTests
         await _unitOfWork.Received().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
+    [Theory]
+    [InlineData(false, false, false)]
+    [InlineData(true, false, false)]
+    [InlineData(true, true, false)]
+    [InlineData(true, true, true)]
+    public async Task Handle_CheckoutAfterCustomerRetirement_AcceptsOnlyCurrentCustomer(
+        bool deletionAcknowledged, bool hasReplacement, bool currentCustomer)
+    {
+        var user = User.Create("Returning", "returning@example.com").Value;
+        user.SetStripeCustomerId("cus_retired");
+        user.Deactivate(DateTime.UtcNow.AddDays(-1));
+        user.PrepareStripeCustomerDeletion();
+        if (deletionAcknowledged) user.CompleteStripeCustomerDeletion("cus_retired");
+        user.CancelDeactivation();
+        if (hasReplacement)
+        {
+            user.SetStripeCustomerId("cus_replacement");
+            user.SetStripeSubscription("sub_replacement", DateTime.UtcNow.AddDays(20));
+        }
+        var previousCustomer = user.StripeCustomerId;
+        var previousSubscription = user.StripeSubscriptionId;
+        _userRepo.FindOneTrackedIgnoringFiltersAsync(Arg.Any<Expression<Func<User, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.Arg<Expression<Func<User, bool>>>().Compile()(user) ? user : null);
+        _subscriptionService.GetAsync("sub_event", Arg.Any<SubscriptionGetOptions>(), Arg.Any<RequestOptions>(), Arg.Any<CancellationToken>())
+            .Returns(CreateMockSubscription("sub_event"));
+        var (json, signature) = BuildSignedEvent("checkout.session.completed", BuildCheckoutSessionJson(
+            user.Id.ToString(), "sub_event", currentCustomer ? "cus_replacement" : "cus_retired"));
+
+        var result = await _handler.Handle(new(Encoding.UTF8.GetBytes(json), signature), default);
+
+        result.IsSuccess.Should().BeTrue();
+        user.StripeCustomerId.Should().Be(previousCustomer);
+        user.StripeSubscriptionId.Should().Be(currentCustomer ? "sub_event" : previousSubscription);
+        await _subscriptionService.Received(currentCustomer ? 1 : 0).GetAsync("sub_event", Arg.Any<SubscriptionGetOptions>(),
+            Arg.Any<RequestOptions>(), Arg.Any<CancellationToken>());
+        if (!currentCustomer)
+            _analytics.DidNotReceive().CaptureUserEvent(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>());
+    }
+
     [Fact]
     public async Task Handle_CheckoutSessionCompleted_NoUserIdInMetadata_ReturnsFailureSoStripeRetries()
     {

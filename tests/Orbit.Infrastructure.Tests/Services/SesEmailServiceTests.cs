@@ -26,6 +26,21 @@ public sealed class SesEmailServiceTests
             NullLogger<SesEmailService>.Instance);
     }
 
+    [Fact]
+    public async Task SupportRequest_UsesAccountReplyToAndIncludesUserId()
+    {
+        var user = Orbit.Domain.Entities.User.Create("Account owner", "owner@example.com").Value;
+        var users = Substitute.For<Orbit.Domain.Interfaces.IGenericRepository<Orbit.Domain.Entities.User>>();
+        users.GetByIdAsync(user.Id, Arg.Any<CancellationToken>()).Returns(user);
+        var handler = new Orbit.Application.Support.Commands.SendSupportCommandHandler(_service, users);
+        var result = await handler.Handle(new(user.Id, "Impostor", "someone@example.com", "Help", "Question"), default);
+        result.IsSuccess.Should().BeTrue();
+        var request = _requests.Should().ContainSingle().Which;
+        request.ReplyToAddresses.Should().Equal(user.Email);
+        request.Content.Simple.Body.Text.Data.Should().Contain(user.Id.ToString()).And.Contain(user.Name).And.Contain(user.Email)
+            .And.NotContain("someone@example.com").And.NotContain("Impostor");
+    }
+
     [Theory]
     [InlineData("welcome", "Welcome to Orbit")]
     [InlineData("verification", "sign-in code")]

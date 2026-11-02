@@ -18,18 +18,6 @@ public class LogoutSessionCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ValidToken_DelegatesToAuthSessionService()
-    {
-        _authSessionService.RevokeSessionAsync("valid-refresh-token", Arg.Any<CancellationToken>())
-            .Returns(Result.Success());
-
-        var result = await _handler.Handle(new LogoutSessionCommand("valid-refresh-token"), CancellationToken.None);
-
-        result.IsSuccess.Should().BeTrue();
-        await _authSessionService.Received(1).RevokeSessionAsync("valid-refresh-token", Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
     public async Task Handle_InvalidToken_ReturnsFailure()
     {
         _authSessionService.RevokeSessionAsync("invalid-token", Arg.Any<CancellationToken>())

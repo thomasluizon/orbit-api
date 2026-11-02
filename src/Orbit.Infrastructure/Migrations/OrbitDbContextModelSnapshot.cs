@@ -411,6 +411,36 @@ namespace Orbit.Infrastructure.Migrations
                         },
                         new
                         {
+                            Key = "SendCodeEmailsPerIpPerDay",
+                            Description = "Daily code email limit per resolved client IP",
+                            Value = "100"
+                        },
+                        new
+                        {
+                            Key = "SendCodeEmailsPerDay",
+                            Description = "Global daily code email safety limit",
+                            Value = "10000"
+                        },
+                        new
+                        {
+                            Key = "OnboardingAttestationCallsPerHour",
+                            Description = "Global hourly onboarding challenge and enrollment limit",
+                            Value = "1000"
+                        },
+                        new
+                        {
+                            Key = "OnboardingAttestationCallsPerDay",
+                            Description = "Global daily onboarding challenge and enrollment limit",
+                            Value = "10000"
+                        },
+                        new
+                        {
+                            Key = "OnboardingEnrollAttemptsPerInstallPerHour",
+                            Description = "Hourly enrollment attempt limit per signed installation subject",
+                            Value = "3"
+                        },
+                        new
+                        {
                             Key = "OnboardingIpCallsPerHour",
                             Description = "Hourly anonymous onboarding call limit per IP address",
                             Value = "10"
@@ -2636,7 +2666,15 @@ namespace Orbit.Infrastructure.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
 
+                    b.Property<int>("StripeCustomerGeneration")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
                     b.Property<string>("StripeCustomerId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("StripeCustomerPendingDeletionId")
                         .HasColumnType("text");
 
                     b.Property<bool>("StripeRenewalStoppedByDeletion")

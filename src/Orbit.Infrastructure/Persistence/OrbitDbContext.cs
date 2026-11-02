@@ -635,6 +635,11 @@ public class OrbitDbContext : DbContext
                 AppConfig.Create("ProAiCallsPerWeek", "5500", "Weekly AI call safety budget for Pro users"),
                 AppConfig.Create("FreeAiMicroDollarsPerDay", "150000", "Daily AI safety budget for Free users in USD micro-dollars"),
                 AppConfig.Create("ProAiMicroDollarsPerWeek", "6000000", "Weekly AI safety budget for Pro users in USD micro-dollars"),
+                AppConfig.Create("SendCodeEmailsPerIpPerDay", "100", "Daily code email limit per resolved client IP"),
+                AppConfig.Create("SendCodeEmailsPerDay", "10000", "Global daily code email safety limit"),
+                AppConfig.Create("OnboardingAttestationCallsPerHour", "1000", "Global hourly onboarding challenge and enrollment limit"),
+                AppConfig.Create("OnboardingAttestationCallsPerDay", "10000", "Global daily onboarding challenge and enrollment limit"),
+                AppConfig.Create("OnboardingEnrollAttemptsPerInstallPerHour", "3", "Hourly enrollment attempt limit per signed installation subject"),
                 AppConfig.Create("OnboardingIpCallsPerHour", "10", "Hourly anonymous onboarding call limit per IP address"),
                 AppConfig.Create("OnboardingInstallCallsPerHour", "10", "Hourly anonymous onboarding call limit per verified install"),
                 AppConfig.Create("OnboardingCallsPerDay", "1000", "Global daily anonymous onboarding call limit"),
@@ -756,6 +761,8 @@ public class OrbitDbContext : DbContext
             entity.HasIndex(u => u.PublicProfileSlug).IsUnique().HasFilter("\"PublicProfileSlug\" IS NOT NULL");
 
             entity.Property(u => u.StripeCoverageExpiresAtUtc);
+            entity.Property(u => u.StripeCustomerPendingDeletionId);
+            entity.Property(u => u.StripeCustomerGeneration).HasDefaultValue(0);
             entity.Property(u => u.StripeCoverageInterval);
             entity.Property(u => u.StripeCoverageLapseReason).HasConversion<string>().HasMaxLength(32);
             entity.Property(u => u.PlayCoverageExpiresAtUtc);

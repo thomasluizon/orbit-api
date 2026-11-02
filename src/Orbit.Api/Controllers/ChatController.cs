@@ -111,6 +111,8 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
             HttpContext.TraceIdentifier, BlockAnswer: answer,
             EvalTraceRequested: evalTrace == "1");
 
+        if (await ChatInputValidation.ValidateAsync(command, cancellationToken) is { } inputError)
+            return inputError;
         var result = await mediator.Send(command, cancellationToken);
 
         return result.ToPayGateAwareResult(v => Ok(v));
@@ -166,6 +168,9 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
             answer is null ? streamEvent => WriteEventAsync(streamEvent, cancellationToken) : null,
             answer,
             EvalTraceRequested: evalTrace == "1");
+
+        if (await ChatInputValidation.ValidateAsync(command, cancellationToken) is { } inputError)
+            return inputError;
 
         if (idempotencyKey is not null || Request.Headers.ContainsKey("Idempotency-Key"))
             return await HttpContext.RequestServices.GetRequiredService<Orbit.Api.Idempotency.ChatTurnStream>()
@@ -283,9 +288,6 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
 
         ChatErrorLocalization.SetLocale(HttpContext, parsedClientContext?.Locale);
 
-        if (string.IsNullOrWhiteSpace(message) || message.Length > AppConstants.MaxChatMessageLength)
-            return ChatInputParseResult.Failed(BadRequest(ErrorMessages.MessageTooLong.Format(AppConstants.MaxChatMessageLength).ToErrorBody()));
-
         var (imageData, imageMimeType, imageError) = await ProcessImageAsync(image, cancellationToken);
         if (imageError is not null)
             return ChatInputParseResult.Failed(imageError);
@@ -348,25 +350,10 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
             if (chatHistory is null)
                 return (null, BadRequest(ErrorMessages.InvalidChatHistory.ToErrorBody()));
 
-            if (chatHistory.Count > AppConstants.MaxChatHistoryMessages)
-                return (null, BadRequest(ErrorMessages.ChatHistoryTooLarge.ToErrorBody()));
-
-            var normalizedHistory = new List<ChatHistoryMessage>(chatHistory.Count);
-
-            foreach (var item in chatHistory)
-            {
-                var normalizedRole = ChatHistoryMessage.NormalizeRole(item.Role);
-                if (normalizedRole is null ||
-                    string.IsNullOrWhiteSpace(item.Content) ||
-                    item.Content.Length > AppConstants.MaxChatHistoryMessageLength)
-                {
-                    return (null, BadRequest(ErrorMessages.InvalidChatHistory.ToErrorBody()));
-                }
-
-                normalizedHistory.Add(new ChatHistoryMessage(normalizedRole, item.Content));
-            }
-
-            return (normalizedHistory, null);
+            if (chatHistory.Any(item => item is null))
+                return (null, BadRequest(ErrorMessages.InvalidChatHistory.ToErrorBody()));
+            return (chatHistory.Select(item => new ChatHistoryMessage(
+                ChatHistoryMessage.NormalizeRole(item.Role) ?? item.Role, item.Content)).ToList(), null);
         }
         catch (JsonException ex)
         {

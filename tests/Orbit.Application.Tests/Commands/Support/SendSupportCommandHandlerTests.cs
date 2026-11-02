@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Orbit.Domain.Entities;
 using NSubstitute;
 using Orbit.Application.Common;
 using Orbit.Application.Support.Commands;
@@ -15,7 +16,9 @@ public class SendSupportCommandHandlerTests
 
     public SendSupportCommandHandlerTests()
     {
-        _handler = new SendSupportCommandHandler(_emailService);
+        var users = Substitute.For<IGenericRepository<User>>();
+        users.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(User.Create("Account owner", "owner@example.com").Value);
+        _handler = new SendSupportCommandHandler(_emailService, users);
     }
 
     [Fact]
@@ -27,7 +30,7 @@ public class SendSupportCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         await _emailService.Received(1).SendSupportEmailAsync(
-            "Alex", "test@example.com", "Bug Report", "Something is broken",
+            "Account owner", "owner@example.com", "Bug Report", Arg.Is<string>(body => body.Contains(UserId.ToString()) && body.Contains("Something is broken")),
             Arg.Any<CancellationToken>());
     }
 

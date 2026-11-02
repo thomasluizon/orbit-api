@@ -240,4 +240,17 @@ public class UpdateGoalCommandHandlerTests
 
         await act.Should().ThrowAsync<InvalidOperationException>();
     }
+    [Fact]
+    public async Task Handle_GoalOwnedByAnotherUser_ReturnsGoalNotFoundAndKeepsGoal()
+    {
+        var goal = Goal.Create(Guid.NewGuid(), "Foreign", 100, "km").Value;
+
+        _goalRepo.FindOneTrackedAsync(Arg.Any<Expression<Func<Goal, bool>>>(), Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.Arg<Expression<Func<Goal, bool>>>().Compile()(goal) ? goal : null);
+        var result = await _handler.Handle(new UpdateGoalCommand(UserId, goal.Id, "Changed", null, 10, "units", null), default);
+        result.ErrorCode.Should().Be(ErrorCodes.GoalNotFound);
+        goal.Title.Should().Be("Foreign");
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
 }

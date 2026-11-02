@@ -61,7 +61,7 @@ public class SkipHabitCommandHandler(
         var loggableWindowStart = today.AddDays(-AppConstants.MaxReadRangeDays);
 
         var habit = await repos.Habits.FindOneTrackedAsync(
-            h => h.Id == request.HabitId,
+            h => h.Id == request.HabitId && h.UserId == request.UserId,
             q => q.Include(h => h.Logs.Where(l => l.Date >= loggableWindowStart))
                   .Include(h => h.Goals).Include(h => h.Tags)
                   .AsSplitQuery(),
@@ -69,9 +69,6 @@ public class SkipHabitCommandHandler(
 
         if (habit is null)
             return Result.Failure<SkipHabitResponse>(ErrorMessages.HabitNotFound);
-
-        if (habit.UserId != request.UserId)
-            return Result.Failure<SkipHabitResponse>(ErrorMessages.HabitNotOwned);
 
         if (!await repos.Habits.TryRefreshAsync(habit, cancellationToken))
             return Result.Failure<SkipHabitResponse>(ErrorMessages.ConcurrentUpdateConflict);
@@ -100,7 +97,7 @@ public class SkipHabitCommandHandler(
         var targetDate = request.Date ?? today;
 
         var weekStartDay = await userDateService.GetUserWeekStartDayAsync(request.UserId, cancellationToken);
-        var dueDateResolution = await HabitDueDateResolutionLoader.LoadAsync(
+        var dueDateResolution = await HabitDueDateResolutionLoader.LoadAsync(request.UserId,
             repos.HabitLogs,
             [habit],
             loggableWindowStart,
@@ -166,7 +163,7 @@ public class SkipHabitCommandHandler(
 
         var today = await dates.GetUserTodayAsync(request.UserId, ct);
         var weekStart = await dates.GetUserWeekStartDayAsync(request.UserId, ct);
-        var resolution = await HabitDueDateResolutionLoader.LoadAsync(logs, [habit],
+        var resolution = await HabitDueDateResolutionLoader.LoadAsync(request.UserId, logs, [habit],
             today.AddDays(-AppConstants.MaxReadRangeDays), ct);
         return SkipHabitArgumentChecks.Check(habit, request.Date ?? today, today, weekStart,
             allowOverdue: true, dueDateResolved: resolution.Contains(habit.Id), enforceWindow: true);

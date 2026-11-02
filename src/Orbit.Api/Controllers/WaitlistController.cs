@@ -35,7 +35,9 @@ public partial class WaitlistController(
         [FromBody] JoinWaitlistRequest request,
         CancellationToken cancellationToken)
     {
-        await mediator.Send(new JoinWaitlistCommand(request.Email, request.Language), cancellationToken);
+        var result = await mediator.Send(new JoinWaitlistCommand(request.Email, request.Language), cancellationToken);
+        if (result.IsFailure)
+            return result.ToErrorResult();
 
         if (logger.IsEnabled(LogLevel.Information))
         {

@@ -7,12 +7,13 @@ namespace Orbit.Application.Habits.Services;
 internal static class HabitDueDateResolutionLoader
 {
     public static async Task<IReadOnlySet<Guid>> LoadAsync(
+        Guid userId,
         IGenericRepository<HabitLog> habitLogRepository,
         IEnumerable<Habit> habits,
         DateOnly loadedLogFrom,
         CancellationToken cancellationToken)
     {
-        var habitList = habits.ToList();
+        var habitList = habits.Where(habit => habit.UserId == userId).ToList();
         var resolvedHabitIds = habitList
             .Where(habit => IsResolvedInLoadedLogs(habit))
             .Select(habit => habit.Id)
