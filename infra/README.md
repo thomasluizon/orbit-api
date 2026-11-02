@@ -743,3 +743,121 @@ Monitor `habit_ranking_query` outcomes and `habit_ranking_block` build failures;
 HTTP 409 `HABIT_RANKING_STALE` means refresh the existing absolute query rather
 than resolve its relative period again. The exact payload and boundary policy
 are in [HabitRanking.md](../src/Orbit.Api/OpenApi/HabitRanking.md).
+
+### API release admission
+
+Release API requires successful `API Tests` and `Guards` push runs on the selected
+main SHA and their successful check runs before an image build. Staging signs in
+with a dedicated smoke account, reads the habit count, creates a throwaway general
+task and deletes it. The workflow marks `api-staging-smoke` pending before building
+and records success only after health, image and authenticated smoke checks pass.
+Production requires the latest trusted smoke status and matching staging health.
+`force_unstaged` requires `override_reason`; the summary and production deployment
+payload retain that reason. It does not bypass CI or the export gate.
+
+Configure GitHub Actions environment secrets `SMOKE_TEST_EMAIL` and
+`SMOKE_TEST_CODE` in both `staging` and `production`. On staging, provision that
+account and retain its email and six-digit code in the API's `TEST_ACCOUNTS` value
+in AWS Systems Manager Parameter Store at `/orbit/staging/api/TEST_ACCOUNTS`.
+Reseeding staging copies production, so provision the dedicated staging account
+again after a reseed if it is absent. On production, the corresponding API
+`SMOKE_TEST_EMAIL` and `SMOKE_TEST_CODE` values use the existing production smoke
+code path. Production smoke signs in and reads only; it never writes habits.
+Neither the scripts nor their diagnostics print credentials or login bodies.
+
+For migration releases, set GitHub Actions environment `production` variable
+`RENDER_PRODUCTION_POSTGRES_ID` to the production database id from Render Dashboard.
+Admission diffs migrations from the latest successful trusted production deployment
+against the selected SHA. With any migration change it creates a fresh Render export
+and waits for a new export id with a download URL before triggering the deploy.
+The deployment payload and release summary record the export id. A missing database
+id, unavailable export or missing deployment baseline blocks the release. The
+operator does not supply an unverified restore-point id. Export creation and listing
+use the Render Postgres export endpoint documented in its public OpenAPI schema.
+
+### Migration lock budget
+
+The migration lock gate inspects every compiled migration after the pinned applied
+baseline in `.github/migration-locks.json`. Existing-table indexes use concurrent
+creation with transaction suppression. Fluent index drops are rejected because the
+installed provider does not suppress their transaction; use raw `DROP INDEX
+CONCURRENTLY` with `suppressTransaction: true`. Backfills use bounded primary-key
+ranges, one SQL operation per batch with transaction suppression, so locks release
+between batches. Procedural and dynamic SQL need reviewed evidence.
+
+Add foreign keys and checks as `NOT VALID`, then validate in a separate
+transaction-suppressed operation. Suppress the add operation too, releasing its
+initial table lock before validation.
+Set a finite, nonzero `lock_timeout` of at most five seconds before altering an
+existing table. A required column needs a validated not-null check first. Type
+rewrites fail; prefer a length check added without validation. Per-migration
+exceptions name the rule, measured row count, expected lock milliseconds, review URL
+and reason in the same policy file. Raising the applied baseline is not an exception.
+
+### Production plan monitor
+
+The production infrastructure plan workflow runs daily and on manual dispatch
+from main. Its `render-operations` environment assumes
+`orbit-production-plan`, refreshes only the guarded services and API env group with
+their dependency graph, and never applies. Terraform binary plans, refresh logs and
+input files stay in a private temporary directory that is deleted on exit. JSON is
+piped into the web and production checkers; neither plans nor state are published.
+Any guarded change or drift, a different sender, or a shutdown delay other than 300
+seconds fails the job. A legitimate configuration change needs a reviewed targeted
+apply before this monitor can become green again.
+
+An operator must target `aws_iam_role.production_plan` and
+`aws_iam_role_policy.production_plan` in an apply before the workflow can assume the
+role. The state permission reads only `render/terraform.tfstate`. Provider reads are
+limited to the dependency graph's API SSM paths, upload buckets, IAM users, SES
+configuration sets, SNS topic and KMS key. Both environment API paths are needed
+because Terraform evaluates shared for-each maps. SSM `DescribeParameters` has no
+resource-level authorization; its metadata read is restricted to `us-east-2`.
+Decryption is restricted to SSM and those API parameter encryption contexts.
+`GetParametersByPath` authorizes the exact hierarchy roots configured by
+`onboarding_platform`; individual parameter reads retain their child-path scope.
+
+In GitHub Settings > Environments > `render-operations`, add secret
+`CLOUDFLARE_READ_ONLY_API_TOKEN` from Cloudflare My Profile > API Tokens with Account
+Turnstile Read for the managed account. Add secret `PRODUCTION_PLAN_TFVARS` as a JSON
+object containing the reviewed local Terraform input values, including the four
+image digest variables, the non-empty `production_postgres_ip_allow_list`,
+`web_custom_domains` and any other configured custom domains or alert recipients.
+Retain the environment's `RENDER_API_KEY`. A dispatch from main must pass with the
+read-only role and both checkers before considering the monitor operational. A pull
+request runs mock-provider Terraform tests and never receives these credentials.
+After provisioning these prerequisites and observing a successful dispatch, add
+the `push` trigger for `main` in a follow-up commit of this ticket and update its
+workflow regression test. Keep the scheduled and manual triggers.
+
+Both production image services ignore service-level `env_vars` changes. Linking
+the managed groups preserves Render service overrides instead of replacing them
+with only the Terraform group marker.
+
+### Landing content security policy
+
+Both static sites have an enforcing Terraform CSP header by default. The allowlist
+contains the same-origin assets, the environment API and Cloudflare Turnstile.
+`landing-csp.tf` hashes the emitted inline font styles and the exact existing style
+attributes, using `style-src-attr 'unsafe-hashes'` for only those attributes. It also
+lists the inline structured-data script hashes. Executable scripts in the reviewed
+landing source are bundled modules. `fixtures/landing-inline-blocks.json` records
+the source commit, public page URLs and exact bytes used to derive every hash.
+Recompute these SHA-256 sources whenever the landing's emitted inline bytes change;
+never add `unsafe-inline` to work around a mismatch.
+
+The operator first runs a targeted apply for `render_static_site.staging_landing`
+with `staging_landing_csp_report_only=true`. Read the report-only response header,
+then check the home page, waitlist section, confirmation page including
+`?status=invalid`, and 404 console. Complete Turnstile and a staging waitlist signup,
+accept and revoke consent, and check the PostHog relay and app links. With no CSP
+violations, target the same staging resource with the variable set to false and
+repeat the checks. Only then target `render_static_site.landing` in production.
+Verify the enforcing header with `curl -sI` on both sites and repeat the production
+home and waitlist console checks. Keep all five existing security headers.
+
+The worker does not open a browser or apply infrastructure. These rollout checks
+belong to the operator. For a staging rollback, target the staging resource with
+`staging_landing_csp_report_only=true`. For a production rollback, change only its
+header name to `Content-Security-Policy-Report-Only` and target the production static
+site. Landing source changes remain in the landing ticket.

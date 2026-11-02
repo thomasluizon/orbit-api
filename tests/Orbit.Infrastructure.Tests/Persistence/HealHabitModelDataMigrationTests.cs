@@ -10,7 +10,7 @@ namespace Orbit.Infrastructure.Tests.Persistence;
 public class HealHabitModelDataMigrationTests
 {
     [Fact]
-    public void Up_ClearsGeneralEndDatesWithoutChangingOtherRows()
+    public void Up_OnSqlite_ClearsGeneralEndDatesWithoutChangingOtherRows()
     {
         using var connection = new SqliteConnection("Data Source=:memory:");
         connection.Open();

@@ -52,7 +52,7 @@ process.exitCode = ${exit}
     cwd: root, encoding: "utf8", timeout: 5000,
     env: {
       ...process.env, PATH: `${directory}:${process.env.PATH}`, COMMIT_SHA: sha,
-      FORCE_UNSTAGED: String(forceUnstaged), IMAGE_DIGEST: digest, GITHUB_REPOSITORY: "thomasluizon/orbit-api",
+      FORCE_UNSTAGED: String(forceUnstaged), OVERRIDE_REASON: "", RENDER_EXPORT_ID: "", IMAGE_DIGEST: digest, GITHUB_REPOSITORY: "thomasluizon/orbit-api",
       GITHUB_OUTPUT: output, GITHUB_STEP_SUMMARY: summary, RENDER_LOG_URL: "https://dashboard.render.com/web/service/deploys/deploy",
       ...imageEnvironment,
     },
@@ -182,11 +182,14 @@ test("the selected production digest reaches the deploy, verification and deploy
     assert.notEqual(result.status, 0)
     assert.equal(result.output, "")
   }
-  const recorded = replay(t, "production", "Record deployment")
+  const recorded = replay(t, "production", "Record deployment", undefined, undefined, 0, false,
+    { OVERRIDE_REASON: "Emergency repair with staging unavailable", RENDER_EXPORT_ID: "export-proof" })
   assert.equal(recorded.status, 0, recorded.stdout + recorded.stderr)
   const body = JSON.parse(recorded.calls[0].input)
   assert.equal(body.ref, sha)
   assert.equal(body.environment, "production")
+  assert.equal(body.payload.override_reason, "Emergency repair with staging unavailable")
+  assert.equal(body.payload.render_export_id, "export-proof")
   assert.equal(body.payload.image_digest, digest)
   for (const step of ["Trigger and monitor Render deploy", "Verify API health and live commit", "Record deployment", "Summarize release"]) {
     assert.match(blocks("production").find(block => block.includes(`name: ${step}\n`)), /IMAGE_DIGEST: \$\{\{ steps.image.outputs.digest \}\}/)

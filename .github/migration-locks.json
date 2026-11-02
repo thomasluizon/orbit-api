@@ -1,0 +1,51 @@
+{
+  "baselineId": "20261101210800_PersistServerConversations",
+  "reason": "applied in production before this gate",
+  "exceptions": {
+    "20261102072521_SeedPublicEndpointAbuseQuotas": [
+      {
+        "Rule": "lock-timeout",
+        "RowCount": 26,
+        "ExpectedLockMilliseconds": 1000,
+        "EvidenceUrl": "https://github.com/thomasluizon/orbit-api/actions/runs/41427050907",
+        "Reason": "applied in production by Release API run 41427050907 before this gate; AppConfigs held 26 rows in the 2026-11-02T12:28Z export"
+      }
+    ],
+    "20261102075237_PersistPlayCouponCancellation": [
+      {
+        "Rule": "lock-timeout",
+        "RowCount": 0,
+        "ExpectedLockMilliseconds": 1000,
+        "EvidenceUrl": "https://github.com/thomasluizon/orbit-api/actions/runs/41465351944",
+        "Reason": "applied in production by Release API run 41465351944 before this gate; ProcessedPlayNotifications held 0 rows in the dpg-dasotg8473hc739a5gpg-a/2026-11-02T14:46Z export"
+      }
+    ],
+    "20261102081729_AddReminderScheduleProbes": [
+      {
+        "Rule": "batched-data",
+        "RowCount": 4499,
+        "ExpectedLockMilliseconds": 1000,
+        "EvidenceUrl": "https://github.com/thomasluizon/orbit-api/actions/runs/41465351944",
+        "Reason": "applied in production by Release API run 41465351944 before this gate; Habits held 4499 rows in the dpg-dasotg8473hc739a5gpg-a/2026-11-02T14:46Z export; ReminderScheduleProbes was created by this migration and held 0 rows when it ran"
+      }
+    ],
+    "20261102101920_PersistNotificationRecovery": [
+      {
+        "Rule": "lock-timeout",
+        "RowCount": 0,
+        "ExpectedLockMilliseconds": 1000,
+        "EvidenceUrl": "https://github.com/thomasluizon/orbit-api/actions/runs/41465351944",
+        "Reason": "applied in production by Release API run 41465351944 before this gate; ProcessedPlayNotifications held 0 rows in the dpg-dasotg8473hc739a5gpg-a/2026-11-02T14:46Z export"
+      }
+    ],
+    "20261102102120_PersistStripeCustomerErasureRecovery": [
+      {
+        "Rule": "lock-timeout",
+        "RowCount": 187,
+        "ExpectedLockMilliseconds": 1000,
+        "EvidenceUrl": "https://github.com/thomasluizon/orbit-api/actions/runs/41449803649",
+        "Reason": "applied in production by Release API run 41449803649 before this gate; Users held 187 rows in the dpg-dasotg8473hc739a5gpg-a/2026-11-02T14:46Z export"
+      }
+    ]
+  }
+}
