@@ -424,6 +424,12 @@ public class PendingAgentOperationStore(
                     patches.Add(new(row.Id, JsonSerializer.Serialize(updated)));
                 }
             }
+            if (dbContext.Database.IsRelational())
+            {
+                var saved = dbContext.SaveChanges(acceptAllChangesOnSuccess: false);
+                ConversationOutcomeWriter.Apply(dbContext, patches);
+                return saved;
+            }
             ConversationOutcomeWriter.Apply(dbContext, patches);
             return dbContext.SaveChanges(acceptAllChangesOnSuccess: false);
         });

@@ -15,13 +15,13 @@ public class AgentTargetOwnershipService(OrbitDbContext dbContext) : IAgentTarge
     {
         var ownershipChecks = new[]
         {
-            CreateCheck("habit", await AllOwnedAsync(dbContext.Habits.IgnoreQueryFilters(), userId, CollectGuids(arguments, "habit_id", "habit_ids", "parent_habit_id", "new_parent_id", "parent_id"), cancellationToken)),
-            CreateCheck("tag", await AllOwnedAsync(dbContext.Tags, userId, CollectGuids(arguments, "tag_id", "tag_ids"), cancellationToken)),
-            CreateCheck("goal", await AllOwnedAsync(dbContext.Goals.IgnoreQueryFilters(), userId, CollectGuids(arguments, "goal_id", "goal_ids"), cancellationToken)),
-            CreateCheck("notification", await AllOwnedAsync(dbContext.Notifications, userId, CollectGuids(arguments, "notification_id", "notification_ids"), cancellationToken)),
-            CreateCheck("template", await AllOwnedAsync(dbContext.ChecklistTemplates, userId, CollectGuids(arguments, "template_id"), cancellationToken)),
-            CreateCheck("api_key", await AllOwnedAsync(dbContext.ApiKeys, userId, CollectGuids(arguments, "key_id"), cancellationToken)),
-            CreateCheck("calendar_suggestion", await AllOwnedAsync(dbContext.GoogleCalendarSyncSuggestions, userId, CollectGuids(arguments, "suggestion_id"), cancellationToken))
+            CreateCheck("habit", await AllOwnedAsync(dbContext.Habits.IgnoreQueryFilters(), userId, CollectGuids(arguments, operationId, "habit_id", "habit_ids", "parent_habit_id", "new_parent_id", "parent_id"), cancellationToken)),
+            CreateCheck("tag", await AllOwnedAsync(dbContext.Tags, userId, CollectGuids(arguments, operationId, "tag_id", "tag_ids"), cancellationToken)),
+            CreateCheck("goal", await AllOwnedAsync(dbContext.Goals.IgnoreQueryFilters(), userId, CollectGuids(arguments, operationId, "goal_id", "goal_ids"), cancellationToken)),
+            CreateCheck("notification", await AllOwnedAsync(dbContext.Notifications, userId, CollectGuids(arguments, operationId, "notification_id", "notification_ids"), cancellationToken)),
+            CreateCheck("template", await AllOwnedAsync(dbContext.ChecklistTemplates, userId, CollectGuids(arguments, operationId, "template_id"), cancellationToken)),
+            CreateCheck("api_key", await AllOwnedAsync(dbContext.ApiKeys, userId, CollectGuids(arguments, operationId, "key_id"), cancellationToken)),
+            CreateCheck("calendar_suggestion", await AllOwnedAsync(dbContext.GoogleCalendarSyncSuggestions, userId, CollectGuids(arguments, operationId, "suggestion_id"), cancellationToken))
         };
 
         var failedCheck = ownershipChecks.FirstOrDefault(check => check is { HasTargets: true, IsOwned: false });
@@ -53,7 +53,7 @@ public class AgentTargetOwnershipService(OrbitDbContext dbContext) : IAgentTarge
         return new OwnershipResult(true, ownedCount == ids.Count);
     }
 
-    private static TargetIds CollectGuids(JsonElement arguments, params string[] propertyNames)
+    private static TargetIds CollectGuids(JsonElement arguments, string operationId, params string[] propertyNames)
     {
         var values = new HashSet<Guid>();
         var valid = true;
@@ -64,7 +64,7 @@ public class AgentTargetOwnershipService(OrbitDbContext dbContext) : IAgentTarge
             else
                 valid = false;
         }
-        void Walk(JsonElement node)
+        void Walk(JsonElement node, bool root = false)
         {
             if (node.ValueKind == JsonValueKind.Array)
             {
@@ -81,13 +81,16 @@ public class AgentTargetOwnershipService(OrbitDbContext dbContext) : IAgentTarge
                         if (property.Value.ValueKind != JsonValueKind.Array) valid = false;
                         else foreach (var item in property.Value.EnumerateArray()) Add(item);
                     }
-                    else Add(property.Value);
+                    else if (!(root && property.Value.ValueKind == JsonValueKind.Null
+                        && (operationId == "move_habit_parent" && property.Name == "parent_id"
+                            || operationId == "move_habit" && property.Name == "new_parent_id")))
+                        Add(property.Value);
                 }
                 else if (property.Name is "positions" or "habits" or "sub_habits" or "filter")
                     Walk(property.Value);
             }
         }
-        Walk(arguments);
+        Walk(arguments, root: true);
         return new TargetIds(values, valid);
     }
 
