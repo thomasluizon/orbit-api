@@ -3,6 +3,7 @@
 using System.ClientModel.Primitives;
 using System.Text.Json;
 using FluentAssertions;
+using Orbit.Application.Chat;
 
 namespace Orbit.Infrastructure.Tests.AI;
 
@@ -32,7 +33,7 @@ public sealed partial class ProviderToolControlOrderTests
                         output.WriteLine($"  {tool.Name}: S={tool.Size}");
                 var names = registry.GetAll().Where(tool => tool.Name != "ask").Select(tool => tool.Name);
                 if (client != "legacy") names = names.Append("ask");
-                tools.Keys.Should().BeEquivalentTo(names);
+                tools.Keys.Should().BeEquivalentTo(names.Append(PlanToolDeclaration.Name));
             }
         violations.Should().BeEmpty($"every initial and continuation catalog must have S <= {SchemaStringBudget}");
     }

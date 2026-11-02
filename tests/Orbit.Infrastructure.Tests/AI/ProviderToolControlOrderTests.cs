@@ -53,8 +53,9 @@ public sealed partial class ProviderToolControlOrderTests(ITestOutputHelper outp
             var parameters = wire.RootElement.GetProperty("parameters");
             AssertControlOrder(parameters, name, violations);
             StrictChatToolSchemaTests.AssertNoEnumWithPattern(parameters, client + "/" + phase + "/" + name);
-            var source = registry.GetTool(name) is AskTool ask
-                ? ask.GetCacheableParameterSchema() : registry.GetTool(name)!.GetParameterSchema();
+            var source = name == PlanToolDeclaration.Name
+                ? JsonSerializer.SerializeToElement(PlanToolDeclaration.Declaration).GetProperty("parameters")
+                : registry.GetTool(name) is AskTool ask ? ask.GetCacheableParameterSchema() : registry.GetTool(name)!.GetParameterSchema();
             AssertPayloadOrder(JsonSerializer.SerializeToElement(source),
                 ToolSchemaExpansion.Expand(parameters, name == "create_sub_habit" ? 4 : 5), name);
         }

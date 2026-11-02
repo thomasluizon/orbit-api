@@ -256,3 +256,15 @@ history wrapper and instructions moved into the system prompt keep their text un
 No pattern over a person's message selects tools, reroutes a tool call, triggers an
 uncalled tool or replaces an answer in this branch. Tool selection still depends on
 negotiated capabilities and the registry; compaction reads only schema structure.
+
+## Plan control declaration
+
+The provider catalogs also include `present_plan`. It is a conversation control
+declaration, separate from executable account tools in `AiToolRegistry`.
+The three `legacy/present_plan`, `composition/present_plan` and
+`offers/present_plan` entries in `inlined.json.gz` come from the SDK-serialized
+requests exported by
+`dotnet test tests/Orbit.Infrastructure.Tests --filter FullyQualifiedName~SchemaSnapshots_ExportCurrentContracts`.
+The export writes `orbit-1916-tool-schemas.json.gz` in the process temporary
+directory. Adding those three entries preserves every existing baseline entry.
+Generation uses local response fixtures and makes no paid model call.
