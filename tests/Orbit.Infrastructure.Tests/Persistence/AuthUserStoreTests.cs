@@ -139,7 +139,9 @@ public class AuthUserStoreTests
 
         await context.SaveChangesAsync();
 
-        commands.Sql.Should().ContainSingle().Which.Should().NotContain("\"Handle\"");
+        commands.Sql.Should().HaveCount(2).And.OnlyContain(sql => !sql.Contains("\"Handle\"", StringComparison.Ordinal));
+        commands.Sql.Should().ContainSingle(sql => sql.StartsWith("UPDATE \"Users\"", StringComparison.Ordinal));
+        commands.Sql.Should().ContainSingle(sql => sql.StartsWith("INSERT INTO \"UserCacheVersions\"", StringComparison.Ordinal));
         context.ChangeTracker.Clear();
         user = await context.Users.SingleAsync();
         user.Language.Should().Be("en");

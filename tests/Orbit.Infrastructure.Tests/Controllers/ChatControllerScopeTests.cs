@@ -1,4 +1,3 @@
-using System.Linq.Expressions;
 using System.Security.Claims;
 using System.Text.Encodings.Web;
 using FluentAssertions;
@@ -9,6 +8,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Caching.Memory;
 using NSubstitute;
 using Orbit.Api.Authentication;
 using Orbit.Api.Controllers;
@@ -20,6 +20,8 @@ using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
+using Orbit.Infrastructure.Configuration;
+using Orbit.Infrastructure.Services;
 
 namespace Orbit.Infrastructure.Tests.Controllers;
 
@@ -148,17 +150,16 @@ public class ChatControllerScopeTests
             var (key, rawKey) = ApiKey.Create(UserId, "Chat key", scopes,
                 isReadOnly: credential is "read_only_chat" or AgentScopes.ReadHabits,
                 oauthFamilyId: connector ? Guid.NewGuid() : null).Value;
-            var repository = Substitute.For<IGenericRepository<ApiKey>>();
-            repository.FindTrackedAsync(Arg.Any<Expression<Func<ApiKey, bool>>>(), Arg.Any<CancellationToken>())
-                .Returns([key]);
-            var payGate = Substitute.For<IPayGateService>();
-            payGate.CanReadApiKeys(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
+            var store = Substitute.For<IApiKeyAuthenticationStore>();
+            store.FindAsync(key.KeyPrefix, Arg.Any<CancellationToken>())
+                .Returns(new ApiKeyAuthenticationCandidate(key, false, true, null));
             using var services = new ServiceCollection()
                 .AddSingleton(Substitute.For<IApiKeyUsageTracker>())
-                .AddSingleton(repository)
-                .AddSingleton(payGate)
-                .AddSingleton(Substitute.For<IUnitOfWork>())
-                .AddMemoryCache()
+                .AddSingleton(store)
+                .AddSingleton<MemoryCache>(_ => new MemoryCache(new MemoryCacheOptions()))
+                .AddSingleton(Options.Create(new AuthCacheSettings()))
+                .AddSingleton<TimeProvider>(TimeProvider.System)
+                .AddSingleton<AuthValidationCache>()
                 .BuildServiceProvider();
             var options = Substitute.For<IOptionsMonitor<AuthenticationSchemeOptions>>();
             options.Get(Arg.Any<string>()).Returns(new AuthenticationSchemeOptions());
