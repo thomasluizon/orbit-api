@@ -1,4 +1,5 @@
 using Orbit.Domain.Common;
+using Orbit.Application.Chat;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
@@ -42,7 +43,9 @@ public class PayGateService(
         var consumption = await ConcurrencyRetry.ExecuteAsync(
             userRepository,
             unitOfWork,
-            token => userRepository.FindOneTrackedAsync(user => user.Id == userId, cancellationToken: token),
+            token => ChatTurnReadScope.For(userId)?.User is { IsDeactivated: false } loaded
+                ? Task.FromResult<User?>(loaded)
+                : userRepository.FindOneTrackedAsync(user => user.Id == userId, cancellationToken: token),
             user =>
             {
                 if (!unmetered && !IsProductionSmokeAccount(user.Email))

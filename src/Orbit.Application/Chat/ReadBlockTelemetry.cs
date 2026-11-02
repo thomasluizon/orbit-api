@@ -12,14 +12,17 @@ public static class ReadBlockTelemetry
     public static void Capture(IProductAnalytics analytics, ILogger logger, Guid userId,
         string eventName, ReadBlockMetadata read, string kind, string? metric = null, string outcome = "succeeded") =>
         AnalyticsCapture.SafeCaptureUserEvent(analytics, logger, userId, null, eventName,
-            new Dictionary<string, object>
-            {
-                ["kind"] = kind,
-                ["query_family"] = ReadBlockFactory.Supports(read.QueryFamily) ? read.QueryFamily : "unknown",
-                ["metric"] = metric is not null && PeriodAnalyticsCalculator.Metrics.Contains(metric) ? metric : "none",
-                ["completeness"] = read.Completeness,
-                ["outcome"] = outcome
-            });
+            Properties(read, kind, metric, outcome));
+
+    public static Dictionary<string, object> Properties(ReadBlockMetadata? read, string kind,
+        string? metric = null, string outcome = "succeeded") => new()
+        {
+            ["kind"] = kind,
+            ["query_family"] = read is not null && ReadBlockFactory.Supports(read.QueryFamily) ? read.QueryFamily : "unknown",
+            ["metric"] = metric is not null && PeriodAnalyticsCalculator.Metrics.Contains(metric) ? metric : "none",
+            ["completeness"] = read?.Completeness ?? "unknown",
+            ["outcome"] = outcome
+        };
 
     public static (ReadBlockMetadata? Read, string Kind, string? Metric) Describe(object block) => block switch
     {

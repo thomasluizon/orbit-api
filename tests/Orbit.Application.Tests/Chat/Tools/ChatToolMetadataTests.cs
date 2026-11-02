@@ -38,7 +38,7 @@ public class ChatToolMetadataTests
         var createGoalTool = new CreateGoalTool(Orbit.Tests.Shared.GoalToolCommandMediator.Create(Repo<Goal>(), unitOfWork));
         var createHabitTool = new CreateHabitTool(userDateService, Orbit.Tests.Shared.HabitToolCommandMediator.Create(Repo<Habit>(), Repo<Tag>(), Repo<Goal>(), userDateService, payGateService, unitOfWork));
         var createSubHabitTool = new CreateSubHabitTool(mediator);
-        var deleteGoalTool = new DeleteGoalTool(Repo<Goal>(), unitOfWork);
+        var deleteGoalTool = new DeleteGoalTool(mediator);
         var deleteHabitTool = new DeleteHabitTool(mediator, Repo<Habit>());
         var duplicateHabitTool = new DuplicateHabitTool(mediator, Repo<Habit>());
         var getDailySummaryTool = new GetDailySummaryTool(mediator, userDateService);

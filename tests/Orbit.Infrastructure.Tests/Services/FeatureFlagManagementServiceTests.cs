@@ -89,6 +89,15 @@ public class FeatureFlagManagementServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task DeactivatedAdmin_CannotListOrWrite()
+    {
+        _admin.Deactivate(DateTime.UtcNow.AddDays(7));
+        await _context.SaveChangesAsync();
+        (await _service.ListAsync(_admin.Id, default)).Error.Should().Be("Unknown tool: 'manage_feature_flags'");
+        (await Manage(FeatureFlagActions.Create, description: "Description")).IsFailure.Should().BeTrue();
+    }
+
+    [Fact]
     public async Task MissingAndDuplicateFlags_ReturnExplicitErrors()
     {
         (await Manage(FeatureFlagActions.EnableForEveryone)).ErrorCode.Should().Be(FeatureFlagActions.NotFound);

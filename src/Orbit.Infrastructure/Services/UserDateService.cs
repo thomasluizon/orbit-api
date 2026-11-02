@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using System.Text.Json;
 using Microsoft.Extensions.Caching.Distributed;
 using Orbit.Application.Common;
+using Orbit.Application.Chat;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 
@@ -54,6 +55,8 @@ public class UserDateService(
 
     private async Task<UserDatePreferences> GetPreferencesAsync(Guid userId, CancellationToken cancellationToken)
     {
+        if (ChatTurnReadScope.For(userId)?.User is { } turnUser)
+            return new UserDatePreferences(turnUser.TimeZone, turnUser.WeekStartDay);
         if (unitOfWork.HasActiveTransaction)
         {
             var transactionUser = await userRepository.GetByIdAsync(userId, cancellationToken);

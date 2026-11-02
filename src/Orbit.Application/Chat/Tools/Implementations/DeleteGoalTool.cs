@@ -1,12 +1,12 @@
 using System.Text.Json;
-using Orbit.Domain.Entities;
-using Orbit.Domain.Interfaces;
+using MediatR;
+using Orbit.Application.Common;
+using Orbit.Application.Goals.Commands;
 
 namespace Orbit.Application.Chat.Tools.Implementations;
 
 public class DeleteGoalTool(
-    IGenericRepository<Goal> goalRepository,
-    IUnitOfWork unitOfWork) : IAiTool, IConcurrencyRetryableTool, IArgumentCheckTool
+    IMediator mediator) : IAiTool, IConcurrencyRetryableTool, IArgumentCheckTool
 {
     public string Name => "delete_goal";
 
@@ -27,8 +27,8 @@ public class DeleteGoalTool(
     {
         if (!GoalToolHelpers.TryParseGoalId(args, out var goalId))
             return Orbit.Domain.Common.Result.Failure("Invalid goal_id.");
-        return await goalRepository.AnyAsync(g => g.Id == goalId && g.UserId == userId, ct)
-            ? Orbit.Domain.Common.Result.Success() : Orbit.Domain.Common.Result.Failure("Goal not found.");
+        var result = await ChatToolArgumentCheck.CheckCommandAsync(mediator, new DeleteGoalCommand(userId, goalId), ct);
+        return result.Success ? Orbit.Domain.Common.Result.Success() : Orbit.Domain.Common.Result.Failure(result.Error!);
     }
 
     public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
@@ -36,13 +36,10 @@ public class DeleteGoalTool(
         if (!GoalToolHelpers.TryParseGoalId(args, out var goalId))
             return GoalToolHelpers.InvalidGoalIdResult();
 
-        var goal = await GoalToolHelpers.FindGoalAsync(goalRepository, goalId, userId, ct);
-        if (goal is null)
-            return GoalToolHelpers.GoalNotFoundResult(goalId);
-
-        goal.SoftDelete();
-        await unitOfWork.SaveChangesAsync(ct);
-
-        return new ToolResult(true, EntityId: goal.Id.ToString(), EntityName: goal.Title);
+        var result = await mediator.Send(new DeleteGoalCommand(userId, goalId), ct);
+        if (result.IsFailure)
+            return result.ErrorCode == ErrorMessages.GoalNotFound.Code || result.Error == ErrorMessages.GoalNotFound.Message
+                ? GoalToolHelpers.GoalNotFoundResult(goalId) : ToolResult.FromFailure(result);
+        return new ToolResult(true, EntityId: goalId.ToString());
     }
 }

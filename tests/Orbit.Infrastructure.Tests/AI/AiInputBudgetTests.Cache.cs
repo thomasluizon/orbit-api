@@ -62,7 +62,7 @@ public partial class AiInputBudgetTests
     }
 
     [Fact]
-    public async Task CacheRequests_HistoryGrowsWithoutRewritingEarlierItems()
+    public async Task CacheRequests_HistoryGrowsInsideOneBoundedFrame()
     {
         var user = User.Create("History person", "history@example.com").Value;
         ChatHistoryMessage[] history = [new("user", "Show my progress"), new("assistant", "Here is your progress.")];
@@ -73,9 +73,15 @@ public partial class AiInputBudgetTests
         (await service.SendWithToolsAsync(first)).IsSuccess.Should().BeTrue();
         (await service.SendWithToolsAsync(next)).IsSuccess.Should().BeTrue();
         var earlier = InputItems(transport.Bodies[0]).Where(item => item.Contains("conversation_history", StringComparison.Ordinal)).ToArray();
-        earlier.Should().HaveCount(history.Length);
-        InputItems(transport.Bodies[1]).Where(item => item.Contains("conversation_history", StringComparison.Ordinal))
-            .Take(earlier.Length).Should().Equal(earlier);
+        earlier.Should().ContainSingle();
+        var later = InputItems(transport.Bodies[1]).Where(item => item.Contains("conversation_history", StringComparison.Ordinal)).Should().ContainSingle().Subject;
+        using var previousFrame = JsonDocument.Parse(earlier[0]);
+        using var nextFrame = JsonDocument.Parse(later);
+        var oldText = previousFrame.RootElement.GetProperty("content")[0].GetProperty("text").GetString()!;
+        var newText = nextFrame.RootElement.GetProperty("content")[0].GetProperty("text").GetString()!;
+        newText.Should().StartWith(oldText[..oldText.IndexOf("</conversation_history>", StringComparison.Ordinal)])
+            .And.Contain("USER: And my goals?").And.Contain("ASSISTANT: Here are your goals.");
+        StaticPrefix(transport.Bodies[1]).Should().Be(StaticPrefix(transport.Bodies[0]));
     }
 
     [Theory]

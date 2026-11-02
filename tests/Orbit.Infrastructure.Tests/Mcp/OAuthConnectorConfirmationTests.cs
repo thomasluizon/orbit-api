@@ -52,7 +52,7 @@ public class OAuthConnectorConfirmationTests : IDisposable
         _tools = new AgentTools(_catalog, Substitute.For<IAgentOperationExecutor>(), _store,
             Substitute.For<IAgentStepUpService>());
         _policy = new AgentPolicyEvaluator(_db, _catalog, _store,
-            Substitute.For<IAgentStepUpAuthorizationBridge>(), settings,
+            Substitute.For<IAgentStepUpAuthorizationBridge>(),
             new FeatureFlagService(_db, new MemoryCache(new MemoryCacheOptions()), Substitute.For<IHostEnvironment>(), new ConfigurationBuilder().Build()));
     }
 

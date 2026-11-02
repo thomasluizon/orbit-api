@@ -15,12 +15,19 @@ internal static class ModelToolPayload
             .ToDictionary(entry => entry.Path, entry => ((JsonArray)entry.Node).Count);
         var shortened = new HashSet<string>();
         var omitted = 0;
-        JsonObject Envelope() => new()
+        var envelope = new JsonObject()
         {
             ["truncated"] = true,
             ["original_length"] = json.Length,
-            ["data"] = data?.DeepClone(),
-            ["collections"] = new JsonArray(Nodes(data).Where(entry => entry.Node is JsonArray array
+            ["data"] = data,
+            ["collections"] = new JsonArray(),
+            ["shortened_fields"] = new JsonArray(),
+            ["omitted_field_count"] = omitted
+        };
+
+        while (true)
+        {
+            envelope["collections"] = new JsonArray(Nodes(data).Where(entry => entry.Node is JsonArray array
                     && originalCounts.GetValueOrDefault(entry.Path) > array.Count)
                 .Select(entry => (JsonNode)new JsonObject
                 {
@@ -28,14 +35,9 @@ internal static class ModelToolPayload
                     ["total"] = originalCounts[entry.Path],
                     ["returned"] = ((JsonArray)entry.Node).Count,
                     ["has_more"] = true
-                }).Take(20).ToArray()),
-            ["shortened_fields"] = new JsonArray(shortened.Take(20).Select(path => (JsonNode?)JsonValue.Create(path)).ToArray()),
-            ["omitted_field_count"] = omitted
-        };
-
-        while (true)
-        {
-            var envelope = Envelope();
+                }).Take(20).ToArray());
+            envelope["shortened_fields"] = new JsonArray(shortened.Take(20).Select(path => (JsonNode?)JsonValue.Create(path)).ToArray());
+            envelope["omitted_field_count"] = omitted;
             if (envelope.ToJsonString().Length <= maxLength)
                 return envelope;
             var entries = Nodes(data).ToArray();
@@ -43,7 +45,7 @@ internal static class ModelToolPayload
                 .OrderByDescending(entry => entry.Node.ToJsonString().Length).FirstOrDefault();
             if (largestArray.Node is JsonArray array)
             {
-                var retained = array.Count > 128 ? array.Count / 2 : array.Count - 1;
+                var retained = Math.Max(1, array.Count / 2);
                 while (array.Count > retained) array.RemoveAt(array.Count - 1);
                 continue;
             }
@@ -56,12 +58,23 @@ internal static class ModelToolPayload
                 var length = Math.Max(64, text.Length / 2);
                 if (char.IsHighSurrogate(text[length - 1])) length--;
                 var replacement = JsonValue.Create(text[..length]);
-                if (textNode.Parent is null) data = replacement;
+                if (ReferenceEquals(data, textNode))
+                {
+                    envelope["data"] = replacement;
+                    data = replacement;
+                }
                 else textNode.ReplaceWith(replacement);
                 shortened.Add(longestText.Path);
                 continue;
             }
-            var property = entries.Last(entry => entry.Node.Parent is JsonObject);
+            var property = entries.LastOrDefault(entry => entry.Node.Parent is JsonObject && !ReferenceEquals(entry.Node, data));
+            if (property.Node is null)
+            {
+                envelope["data"] = null;
+                envelope["collections"] = new JsonArray();
+                envelope["shortened_fields"] = new JsonArray();
+                return envelope;
+            }
             var parent = (JsonObject)property.Node.Parent!;
             parent.Remove(property.Node.GetPropertyName());
             omitted++;

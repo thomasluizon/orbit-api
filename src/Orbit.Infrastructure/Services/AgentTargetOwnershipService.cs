@@ -15,13 +15,13 @@ public class AgentTargetOwnershipService(OrbitDbContext dbContext) : IAgentTarge
     {
         var ownershipChecks = new[]
         {
-            CreateCheck("habit", await AllOwnedAsync(dbContext.Habits.IgnoreQueryFilters(), userId, CollectGuids(arguments, "habit_id", "habit_ids", "parent_habit_id", "new_parent_id"), cancellationToken)),
-            CreateCheck("tag", await AllOwnedAsync(dbContext.Tags, userId, CollectGuids(arguments, "tag_id", "tag_ids"), cancellationToken)),
-            CreateCheck("goal", await AllOwnedAsync(dbContext.Goals.IgnoreQueryFilters(), userId, CollectGuids(arguments, "goal_id", "goal_ids"), cancellationToken)),
-            CreateCheck("notification", await AllOwnedAsync(dbContext.Notifications, userId, CollectGuids(arguments, "notification_id"), cancellationToken)),
-            CreateCheck("template", await AllOwnedAsync(dbContext.ChecklistTemplates, userId, CollectGuids(arguments, "template_id"), cancellationToken)),
-            CreateCheck("api_key", await AllOwnedAsync(dbContext.ApiKeys, userId, CollectGuids(arguments, "key_id"), cancellationToken)),
-            CreateCheck("calendar_suggestion", await AllOwnedAsync(dbContext.GoogleCalendarSyncSuggestions, userId, CollectGuids(arguments, "suggestion_id"), cancellationToken))
+            CreateCheck("habit", await AllOwnedAsync(dbContext.Habits.IgnoreQueryFilters(), userId, CollectGuids(arguments, operationId, "habit_id", "habit_ids", "parent_habit_id", "new_parent_id", "parent_id"), cancellationToken)),
+            CreateCheck("tag", await AllOwnedAsync(dbContext.Tags, userId, CollectGuids(arguments, operationId, "tag_id", "tag_ids"), cancellationToken)),
+            CreateCheck("goal", await AllOwnedAsync(dbContext.Goals.IgnoreQueryFilters(), userId, CollectGuids(arguments, operationId, "goal_id", "goal_ids"), cancellationToken)),
+            CreateCheck("notification", await AllOwnedAsync(dbContext.Notifications, userId, CollectGuids(arguments, operationId, "notification_id", "notification_ids"), cancellationToken)),
+            CreateCheck("template", await AllOwnedAsync(dbContext.ChecklistTemplates, userId, CollectGuids(arguments, operationId, "template_id"), cancellationToken)),
+            CreateCheck("api_key", await AllOwnedAsync(dbContext.ApiKeys, userId, CollectGuids(arguments, operationId, "key_id"), cancellationToken)),
+            CreateCheck("calendar_suggestion", await AllOwnedAsync(dbContext.GoogleCalendarSyncSuggestions, userId, CollectGuids(arguments, operationId, "suggestion_id"), cancellationToken))
         };
 
         var failedCheck = ownershipChecks.FirstOrDefault(check => check is { HasTargets: true, IsOwned: false });
@@ -36,10 +36,13 @@ public class AgentTargetOwnershipService(OrbitDbContext dbContext) : IAgentTarge
     private static async Task<OwnershipResult> AllOwnedAsync<TEntity>(
         IQueryable<TEntity> queryable,
         Guid userId,
-        List<Guid> ids,
+        TargetIds targets,
         CancellationToken cancellationToken)
         where TEntity : class
     {
+        if (!targets.Valid)
+            return new OwnershipResult(true, false);
+        var ids = targets.Values.ToList();
         if (ids.Count == 0)
             return new OwnershipResult(false, true);
 
@@ -50,37 +53,48 @@ public class AgentTargetOwnershipService(OrbitDbContext dbContext) : IAgentTarge
         return new OwnershipResult(true, ownedCount == ids.Count);
     }
 
-    private static List<Guid> CollectGuids(JsonElement arguments, params string[] propertyNames)
+    private static TargetIds CollectGuids(JsonElement arguments, string operationId, params string[] propertyNames)
     {
         var values = new HashSet<Guid>();
-
-        foreach (var propertyName in propertyNames)
+        var valid = true;
+        void Add(JsonElement value)
         {
-            if (!arguments.TryGetProperty(propertyName, out var propertyValue))
-                continue;
-
-            if (propertyValue.ValueKind == JsonValueKind.String &&
-                Guid.TryParse(propertyValue.GetString(), out var parsedSingle))
+            if (value.ValueKind == JsonValueKind.String && Guid.TryParse(value.GetString(), out var id))
+                values.Add(id);
+            else
+                valid = false;
+        }
+        void Walk(JsonElement node, bool root = false)
+        {
+            if (node.ValueKind == JsonValueKind.Array)
             {
-                values.Add(parsedSingle);
-                continue;
+                foreach (var item in node.EnumerateArray()) Walk(item);
+                return;
             }
-
-            if (propertyValue.ValueKind != JsonValueKind.Array)
-                continue;
-
-            foreach (var item in propertyValue.EnumerateArray())
+            if (node.ValueKind != JsonValueKind.Object) return;
+            foreach (var property in node.EnumerateObject())
             {
-                if (item.ValueKind == JsonValueKind.String &&
-                    Guid.TryParse(item.GetString(), out var parsedArrayItem))
+                if (propertyNames.Contains(property.Name, StringComparer.Ordinal))
                 {
-                    values.Add(parsedArrayItem);
+                    if (property.Name.EndsWith("_ids", StringComparison.Ordinal))
+                    {
+                        if (property.Value.ValueKind != JsonValueKind.Array) valid = false;
+                        else foreach (var item in property.Value.EnumerateArray()) Add(item);
+                    }
+                    else if (!(root && property.Value.ValueKind == JsonValueKind.Null
+                        && (operationId == "move_habit_parent" && property.Name == "parent_id"
+                            || operationId == "move_habit" && property.Name == "new_parent_id")))
+                        Add(property.Value);
                 }
+                else if (property.Name is "positions" or "habits" or "sub_habits" or "filter")
+                    Walk(property.Value);
             }
         }
-
-        return values.ToList();
+        Walk(arguments, root: true);
+        return new TargetIds(values, valid);
     }
+
+    private sealed record TargetIds(HashSet<Guid> Values, bool Valid);
 
     private sealed record OwnershipCheck(string ResourceName, bool HasTargets, bool IsOwned);
     private sealed record OwnershipResult(bool HasTargets, bool IsOwned);

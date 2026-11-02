@@ -250,6 +250,30 @@ public partial class PendingAgentOperationStoreTests : IDisposable
         execution.Arguments.GetProperty("habit_id").GetString().Should().Be("habit-123");
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void TryConsumeFreshConfirmation_ExpiredOrChangedFingerprint_RefusesWithoutConsuming(bool expired)
+    {
+        using var factory = new SqliteOrbitDbContextFactory();
+        var db = factory.Context;
+        var user = User.Create("User", "user@example.com").Value;
+        db.Users.Add(user);
+        db.SaveChanges();
+        var store = new PendingAgentOperationStore(db, Options.Create(new AgentPlatformSettings()));
+        var capability = _catalogService.GetCapability(AgentCapabilityIds.HabitsDelete)!;
+        var pending = store.Create(user.Id, capability, "delete_habit", "{}", "Delete", "fingerprint", AgentExecutionSurface.Chat);
+        var confirmation = store.Confirm(user.Id, pending.Id)!;
+        if (expired)
+        {
+            typeof(PendingAgentOperationState).GetProperty(nameof(PendingAgentOperationState.ExpiresAtUtc))!.SetValue(db.PendingAgentOperations.Single(), DateTime.UtcNow.AddSeconds(-1));
+            db.SaveChanges();
+        }
+        store.TryConsumeFreshConfirmation(user.Id, capability.Id, expired ? "fingerprint" : "changed", confirmation.ConfirmationToken, false).Should().BeFalse();
+        db.ChangeTracker.Clear();
+        db.PendingAgentOperations.Single().ConsumedAtUtc.Should().BeNull();
+    }
+
     [Fact]
     public void TryConsumeFreshConfirmation_TwoReadersClaimOneTokenOnce()
     {

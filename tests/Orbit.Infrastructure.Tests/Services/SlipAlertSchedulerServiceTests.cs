@@ -229,6 +229,27 @@ public class SlipAlertSchedulerServiceTests
     }
 
     [Fact]
+    public async Task CheckAndSendAlerts_LapsedAccount_SkipsAiAndPushWhileProReceivesAlert()
+    {
+        await using var db = CreateInMemoryDbContext();
+        var push = Substitute.For<IPushNotificationService>();
+        var messages = Substitute.For<ISlipAlertMessageService>();
+        messages.GenerateMessageAsync(Arg.Any<string>(), Arg.Any<DayOfWeek>(), Arg.Any<int?>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success<(string Title, string Body)>(("Title", "Body")));
+        var (pro, _) = SeedInWindowSlipHabit(db, "Pro", "pro@example.com", "Pro habit");
+        var (lapsed, _) = SeedInWindowSlipHabit(db, "Lapsed", "lapsed@example.com", "Lapsed habit");
+        pro.GrantLifetimePro();
+        lapsed.StartTrial(DateTime.UtcNow.AddDays(-30));
+        await db.SaveChangesAsync();
+        await CreateService(db, push, messages, 1440).CheckAndSendAlerts(default);
+        await messages.Received(1).GenerateMessageAsync("Pro habit", Arg.Any<DayOfWeek>(), Arg.Any<int?>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await messages.DidNotReceive().GenerateMessageAsync("Lapsed habit", Arg.Any<DayOfWeek>(), Arg.Any<int?>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await push.Received(1).SendToUserAsync(pro.Id, "Title", "Body", "/", Arg.Any<CancellationToken>());
+        await push.DidNotReceive().SendToUserAsync(lapsed.Id, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+        (await db.SentSlipAlerts.CountAsync()).Should().Be(1);
+    }
+
+    [Fact]
     public async Task CheckAndSendAlerts_SkipsOnly_SendsNothing()
     {
         await using var dbContext = CreateInMemoryDbContext();

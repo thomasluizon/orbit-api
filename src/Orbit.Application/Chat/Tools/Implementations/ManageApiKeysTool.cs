@@ -114,7 +114,7 @@ public class ManageApiKeysTool(IMediator mediator) : IPreparedIntentTool
         if (string.IsNullOrWhiteSpace(value))
             return true;
 
-        if (!DateTime.TryParse(
+        if (!value.Contains('T') || !DateTime.TryParse(
             value,
             CultureInfo.InvariantCulture,
             DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal,
