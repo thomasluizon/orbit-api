@@ -302,8 +302,18 @@ its job lease is held; separate job names can run concurrently.
 Apply the additive `DurableJobHeartbeats` migration before starting the recurring
 registrar. Startup migration failures or recurring registration failures stop startup.
 A heartbeat write failure logs a warning and leaves the successful job result intact.
-Job staleness does not fail Render's `/health` probe. The staging pinger targets only
-staging and does not deliver production owner alerts.
+Job staleness does not fail Render's `/health` probe.
+
+The `orbit-production-health` Lambda polls both production reports every minute.
+Its `Orbit/ProductionHealth` metrics have separate `Endpoint` dimensions for
+`/health` and `/health/jobs`. CloudWatch alarms after two consecutive failing
+minutes, including missing measurements, and sends alarm and recovery notices to
+the existing production operations SNS topic `orbit-ses-dead-letter-alerts`.
+The confirmed email subscription delivers to `contact@useorbit.org`. Redirects,
+timeouts and non-success responses count as failures. The monitor runs outside
+Render and remains active when the API is unavailable. Its Terraform resources
+live in `production-health.tf`; its dependency-free handler is
+`workers/production-health.mjs`. The staging pinger remains independent.
 
 ### Startup migrations and long migrations
 
