@@ -10,6 +10,31 @@ namespace Orbit.Infrastructure.Tests.Persistence;
 
 public class RollingMigrationGateTests
 {
+    [Fact]
+    public void ConcurrentIndexReplay_DropAndRecreateNeedsNoDeploymentBarrier()
+    {
+        var builder = new MigrationBuilder("Npgsql.EntityFrameworkCore.PostgreSQL");
+        builder.Sql("DROP INDEX CONCURRENTLY IF EXISTS \"IX_Habits_Recovery\";", suppressTransaction: true);
+        builder.Sql("CREATE INDEX CONCURRENTLY IF NOT EXISTS \"IX_Habits_Recovery\" ON \"Habits\" (\"Id\");", suppressTransaction: true);
+
+        RollingMigrationGate.Check("expand", builder.Operations).Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData("DROP INDEX CONCURRENTLY IF EXISTS \"IX_Habits_Recovery\"; DROP TABLE \"Habits\";", "IX_Habits_Recovery")]
+    [InlineData("DROP INDEX CONCURRENTLY IF EXISTS \"IX_Habits_Recovery\" CASCADE;", "IX_Habits_Recovery")]
+    [InlineData("DROP INDEX CONCURRENTLY IF EXISTS \"IX_Habits_Recovery\";", "IX_Other")]
+    [InlineData("DROP INDEX CONCURRENTLY \"IX_Habits_Recovery\";", "IX_Habits_Recovery")]
+    [InlineData("DROP INDEX IF EXISTS \"IX_Habits_Recovery\";", "IX_Habits_Recovery")]
+    public void ConcurrentIndexReplay_DoesNotExemptUnrelatedOrDestructiveSql(string drop, string recreate)
+    {
+        var builder = new MigrationBuilder("Npgsql.EntityFrameworkCore.PostgreSQL");
+        builder.Sql(drop, suppressTransaction: true);
+        builder.Sql($"CREATE INDEX CONCURRENTLY IF NOT EXISTS \"{recreate}\" ON \"Habits\" (\"Id\");", suppressTransaction: true);
+
+        RollingMigrationGate.Check("expand", builder.Operations).Should().NotBeEmpty();
+    }
+
     private const string HistoricalId = "20260823203026_DailyAiQuotaByLocalDate";
     private const string ExpandCommit = "a1c666f1eac4c6544cb2a896345fd1a69cbe88fa";
     private const string DeployedCommit = "7472203c7450bdd914c68282fefa905d9b432653";

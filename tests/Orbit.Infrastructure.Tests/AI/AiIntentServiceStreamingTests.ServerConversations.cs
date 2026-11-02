@@ -183,11 +183,12 @@ public partial class AiIntentServiceStreamingTests
         var input = request.RootElement.GetProperty("input").EnumerateArray().ToArray();
         input[0].GetRawText().Should().Contain("static prompt");
         input[1].GetRawText().Should().Contain("account context");
-        input[2].GetRawText().Should().Contain("cria essa tarefa unica");
+        input[2].GetRawText().Should().Contain("cria essa tarefa unica")
+            .And.Contain("2026-12-31").And.Contain(proposal.Id.ToString()).And.Contain(outcome);
         input[3].GetRawText().Should().Contain("input_image").And.Contain("data:image/png;base64,");
-        input[4].GetRawText().Should().Contain("2026-12-31").And.Contain(proposal.Id.ToString()).And.Contain(outcome);
-        input[5].GetRawText().Should().Contain("dynamic context");
-        input[6].GetRawText().Should().Contain("ta criando na data certa?");
+        input[4].GetRawText().Should().Contain("dynamic context");
+        input[5].GetRawText().Should().Contain("ta criando na data certa?");
+        input.Count(item => item.GetRawText().Contains("<conversation_history>", StringComparison.Ordinal)).Should().Be(1);
         request.RootElement.GetRawText().Should().NotContain("forged client history").And.NotContain("previous_response_id");
         request.RootElement.GetProperty("store").GetBoolean().Should().BeFalse();
         (await fixture.Db.ConversationTurns.CountAsync()).Should().Be(4);
@@ -229,7 +230,7 @@ public partial class AiIntentServiceStreamingTests
         user.SetTimeZone("America/Sao_Paulo");
         db.SaveChanges();
         var flags = Substitute.For<IFeatureFlagService>();
-        flags.GetEnabledKeysForUserAsync(user.Id, Arg.Any<CancellationToken>()).Returns(enabled ? new[] { FeatureFlagKeys.AstraConversationRecording } : []);
+        flags.GetEnabledKeysForUserAsync(user.Id, Arg.Any<CancellationToken>(), Arg.Any<bool>()).Returns(enabled ? new[] { FeatureFlagKeys.AstraConversationRecording } : []);
         flags.ResolveForUser(user.Id).Returns(db.AppFeatureFlags.Select(flag => new ResolvedFeatureFlag(flag.Key, true, flag.PlanRequirement)).ToArray());
         var dates = Substitute.For<IUserDateService>();
         dates.GetUserTodayAsync(user.Id, Arg.Any<CancellationToken>()).Returns(new DateOnly(2026, 11, 1));
@@ -249,8 +250,7 @@ public partial class AiIntentServiceStreamingTests
         var ownership = Substitute.For<IAgentTargetOwnershipService>();
         ownership.GetDenialReasonAsync(Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<JsonElement>(), Arg.Any<CancellationToken>()).Returns((string?)null);
         var blocks = new ReadBlockFactory(dates, Substitute.For<IReadQueryTokenService>(), new GenericRepository<User>(db));
-        var executor = new AgentOperationExecutor(catalog, new AgentPolicyEvaluator(db, catalog, pending, stepUp,
-            Options.Create(new AgentPlatformSettings()), flags), Substitute.For<IAgentAuditService>(), ownership, stepUp,
+        var executor = new AgentOperationExecutor(catalog, new AgentPolicyEvaluator(db, catalog, pending, stepUp, flags), Substitute.For<IAgentAuditService>(), ownership, stepUp,
             registry, previewer, pending, work, NullLogger<AgentOperationExecutor>.Instance, blocks);
         var services = new ServiceCollection().AddSingleton<IAgentOperationExecutor>(executor)
             .AddSingleton<IPendingClarificationStore>(Substitute.For<IPendingClarificationStore>()).BuildServiceProvider();

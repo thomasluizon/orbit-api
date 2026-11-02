@@ -11,6 +11,22 @@ namespace Orbit.Infrastructure.Tests.AI;
 
 public partial class AiIntentServiceStreamingTests
 {
+    [Fact]
+    public void TwoHundredItems_AreTrimmedWithinTheRequestedBound()
+    {
+        var source = JsonSerializer.Serialize(new { items = Enumerable.Range(0, 200).Select(i => new { id = i, title = "Item " + i, description = new string('x', 200) }), totalCount = 200 });
+        var fitted = Orbit.Infrastructure.Services.ModelToolPayload.Fit(source, 2000);
+        fitted.ToJsonString().Length.Should().BeLessThanOrEqualTo(2000);
+        using var json = JsonDocument.Parse(fitted.ToJsonString());
+        var items = json.RootElement.GetProperty("data").GetProperty("items");
+        items.GetArrayLength().Should().BeInRange(1, 199);
+        items[0].GetProperty("id").GetInt32().Should().Be(0);
+        var collection = json.RootElement.GetProperty("collections")[0];
+        collection.GetProperty("total").GetInt32().Should().Be(200);
+        collection.GetProperty("returned").GetInt32().Should().Be(items.GetArrayLength());
+        collection.GetProperty("has_more").GetBoolean().Should().BeTrue();
+    }
+
     [Theory]
     [InlineData("query_habits")]
     [InlineData("query_goals")]

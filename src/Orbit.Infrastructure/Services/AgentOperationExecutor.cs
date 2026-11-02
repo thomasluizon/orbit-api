@@ -240,9 +240,7 @@ public partial class AgentOperationExecutor(
                 AgentOperationStatus.Denied,
                 execution.Summary,
                 RedactArguments(execution.Arguments),
-                Error: policyDecision.Reason,
-                ShadowPolicyDecision: policyDecision.ShadowStatus,
-                ShadowReason: policyDecision.ShadowReason));
+                Error: policyDecision.Reason));
 
         return DeniedResponse(execution, execution.Summary, policyDecision.Reason, policyDecision.Reason ?? "denied");
     }
@@ -261,9 +259,7 @@ public partial class AgentOperationExecutor(
                 AgentOperationStatus.PendingConfirmation,
                 execution.Summary,
                 RedactArguments(execution.Arguments),
-                Error: policyDecision.Reason,
-                ShadowPolicyDecision: policyDecision.ShadowStatus,
-                ShadowReason: policyDecision.ShadowReason));
+                Error: policyDecision.Reason));
 
         var pending = policyDecision.PendingOperation;
         if (pending is not null && execution.Request.Surface == AgentExecutionSurface.Chat
@@ -540,13 +536,11 @@ public partial class AgentOperationExecutor(
                 execution.Request,
                 execution.Capability.Id,
                 execution.Capability.RiskClass,
-                AgentPolicyDecisionStatus.Allowed,
+                policyDecision?.Status ?? AgentPolicyDecisionStatus.Denied,
                 AgentOperationStatus.Failed,
                 execution.Summary,
                 RedactArguments(execution.Arguments),
-                Error: error,
-                ShadowPolicyDecision: policyDecision?.ShadowStatus,
-                ShadowReason: policyDecision?.ShadowReason));
+                Error: error));
 
     private async Task<ToolResult> ExecuteToolWithConcurrencyRetryAsync(
         IAiTool tool,
@@ -587,11 +581,15 @@ public partial class AgentOperationExecutor(
         else
             outcomeStatus = isPayGateDenial ? AgentOperationStatus.Denied : AgentOperationStatus.Failed;
 
-        if (!result.Success)
+        if (!result.Success && result.Payload is not BulkCreateResult)
             LogToolOutcomeFailed(logger, execution.Operation.Id, result.ErrorCode ?? "tool_rejected", execution.Request.CorrelationId);
-        if (result.Payload is BulkCreateResult bulk)
-            foreach (var item in bulk.Results.Where(item => item.Status == BulkItemStatus.Failed))
-                LogBulkItemFailed(logger, execution.Operation.Id, item.Index, item.ErrorCode ?? "item_rejected", execution.Request.CorrelationId);
+        if (result.Payload is BulkCreateResult bulk && bulk.Results.Count(item => item.Status == BulkItemStatus.Failed) is > 0 and var failed)
+        {
+            var reasons = string.Join(", ", bulk.Results.Where(item => item.Status == BulkItemStatus.Failed)
+                .GroupBy(item => item.ErrorCode ?? "item_rejected").OrderBy(group => group.Key, StringComparer.Ordinal)
+                .Take(10).Select(group => $"{group.Key}:{group.Count()}"));
+            LogBulkItemFailed(logger, execution.Operation.Id, failed, reasons, execution.Request.CorrelationId);
+        }
 
         await TryAuditAsync(
             new AuditContext(
@@ -604,9 +602,7 @@ public partial class AgentOperationExecutor(
                 RedactArguments(execution.Arguments),
                 result.EntityId,
                 result.EntityName,
-                result.Error,
-                policyDecision.ShadowStatus,
-                policyDecision.ShadowReason));
+                result.Error));
 
         var response = AgentOperationResponseFactory.ToolOutcome(
             execution.Operation.Id,
@@ -698,9 +694,7 @@ public partial class AgentOperationExecutor(
                 context.TargetId,
                 context.TargetName,
                 context.RedactedArguments,
-                context.Error,
-                context.ShadowPolicyDecision,
-                context.ShadowReason), auditTimeout.Token);
+                context.Error), auditTimeout.Token);
         }
         catch (Exception ex)
         {
@@ -720,8 +714,8 @@ public partial class AgentOperationExecutor(
     [LoggerMessage(EventId = 3, Level = LogLevel.Warning, Message = "Agent operation {OperationId} rejected with {ReasonCode} (correlation {CorrelationId})")]
     private static partial void LogToolOutcomeFailed(ILogger logger, string operationId, string reasonCode, string? correlationId);
 
-    [LoggerMessage(EventId = 4, Level = LogLevel.Warning, Message = "Agent operation {OperationId} item {ItemIndex} failed with {ReasonCode} (correlation {CorrelationId})")]
-    private static partial void LogBulkItemFailed(ILogger logger, string operationId, int itemIndex, string reasonCode, string? correlationId);
+    [LoggerMessage(EventId = 4, Level = LogLevel.Warning, Message = "Agent operation {OperationId} had {FailedCount} failed items; reasons {ReasonCounts} (correlation {CorrelationId})")]
+    private static partial void LogBulkItemFailed(ILogger logger, string operationId, int failedCount, string reasonCounts, string? correlationId);
 
     private sealed class OperationPolicyState
     {
@@ -746,7 +740,5 @@ public partial class AgentOperationExecutor(
         string? RedactedArguments,
         string? TargetId = null,
         string? TargetName = null,
-        string? Error = null,
-        AgentPolicyDecisionStatus? ShadowPolicyDecision = null,
-        string? ShadowReason = null);
+        string? Error = null);
 }

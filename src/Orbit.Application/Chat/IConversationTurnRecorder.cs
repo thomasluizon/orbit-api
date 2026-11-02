@@ -35,4 +35,5 @@ public sealed record ConversationTurnCapture(
     bool ExistingConversation = false,
     IReadOnlyList<AiToolCallResult>? ToolResults = null,
     byte[]? ImageData = null,
-    string? ImageMimeType = null);
+    string? ImageMimeType = null,
+    IReadOnlyList<string>? EnabledFeatureFlags = null);

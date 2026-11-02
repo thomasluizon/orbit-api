@@ -389,9 +389,7 @@ public static partial class WebApplicationExtensions
                     AgentPolicyDecisionStatus.ConfirmationRequired,
                     AgentOperationStatus.PendingConfirmation,
                     decision.Reason,
-                    body,
-                    decision.ShadowStatus,
-                    decision.ShadowReason),
+                    body),
                 toolCall.RequestId,
                 decision.Reason ?? "confirmation_required",
                 decision.PendingOperation?.Id);
@@ -409,9 +407,7 @@ public static partial class WebApplicationExtensions
                     AgentPolicyDecisionStatus.Denied,
                     AgentOperationStatus.Denied,
                     decision.Reason,
-                    body,
-                    decision.ShadowStatus,
-                    decision.ShadowReason),
+                    body),
                 toolCall.RequestId,
                 decision.Reason ?? "policy_denied",
                 null);
@@ -428,9 +424,7 @@ public static partial class WebApplicationExtensions
                 AgentPolicyDecisionStatus.Allowed,
                 AgentOperationStatus.Succeeded,
                 null,
-                body,
-                decision.ShadowStatus,
-                decision.ShadowReason));
+                body));
     }
 
     private static McpServices ResolveMcpServices(HttpContext context)
@@ -694,9 +688,7 @@ public static partial class WebApplicationExtensions
                 context.TraceIdentifier,
                 $"{auditContext.SourceName} requested via MCP",
                 RedactedArguments: redactedArguments,
-                Error: auditContext.Error,
-                ShadowPolicyDecision: auditContext.ShadowPolicyDecision,
-                ShadowReason: auditContext.ShadowReason), cancellationToken);
+                Error: auditContext.Error), cancellationToken);
         }
         catch (Exception ex)
         {
@@ -740,7 +732,5 @@ public static partial class WebApplicationExtensions
         AgentPolicyDecisionStatus PolicyDecision,
         AgentOperationStatus OutcomeStatus,
         string? Error,
-        string RawBody,
-        AgentPolicyDecisionStatus? ShadowPolicyDecision = null,
-        string? ShadowReason = null);
+        string RawBody);
 }

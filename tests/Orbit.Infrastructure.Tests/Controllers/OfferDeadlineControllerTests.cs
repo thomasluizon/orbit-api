@@ -154,8 +154,7 @@ public sealed partial class OfferDeadlineControllerTests
             db.Goals.Add(goal);
             db.SaveChanges();
             pending = new PendingAgentOperationStore(db, Options.Create(new AgentPlatformSettings()));
-            policy = new AgentPolicyEvaluator(db, catalog, pending, Substitute.For<IAgentStepUpAuthorizationBridge>(),
-                Options.Create(new AgentPlatformSettings()), Substitute.For<IFeatureFlagService>());
+            policy = new AgentPolicyEvaluator(db, catalog, pending, Substitute.For<IAgentStepUpAuthorizationBridge>(), Substitute.For<IFeatureFlagService>());
         }
         var ownership = Substitute.For<IAgentTargetOwnershipService>();
         ownership.GetDenialReasonAsync(Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<JsonElement>(), Arg.Any<CancellationToken>())

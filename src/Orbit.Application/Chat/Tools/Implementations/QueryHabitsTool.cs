@@ -74,19 +74,19 @@ public class QueryHabitsTool(
     internal async Task<Orbit.Domain.Common.Result<(DateOnly Today, IReadOnlyList<Habit> Habits)>> ReadRestartSetAsync(
         Guid userId, CancellationToken ct)
     {
-        var user = await userRepository.GetByIdAsync(userId, ct);
+        var user = ChatTurnReadScope.For(userId)?.User ?? await userRepository.GetByIdAsync(userId, ct);
         if (user is null)
             return Orbit.Domain.Common.Result.Failure<(DateOnly, IReadOnlyList<Habit>)>(ErrorMessages.UserNotFound);
         var today = await userDateService.GetUserTodayAsync(userId, ct);
         var query = await QueryHabitsAsync(userId,
             new HabitFilters(false, null, null, null, false, today, true, null, null),
-            today, user.WeekStartDay, false, ct);
+            today, user.WeekStartDay, ct, useTurnSnapshot: false);
         return Orbit.Domain.Common.Result.Success((today, query.Habits));
     }
 
     public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
     {
-        var user = await userRepository.GetByIdAsync(userId, ct);
+        var user = ChatTurnReadScope.For(userId)?.User ?? await userRepository.GetByIdAsync(userId, ct);
         if (user is null)
             return new ToolResult(false, Error: ErrorMessages.UserNotFound.Message);
 
@@ -99,47 +99,24 @@ public class QueryHabitsTool(
         if (args.TryGetProperty("limit", out var limitEl) && limitEl.ValueKind == JsonValueKind.Number)
             limit = Math.Clamp(limitEl.GetInt32(), 1, 200);
 
-        var query = await QueryHabitsAsync(userId, filters, today, user.WeekStartDay, includeMetrics, ct);
+        var query = await QueryHabitsAsync(userId, filters, today, user.WeekStartDay, ct);
         var allHabits = query.Habits;
-        var parentIds = allHabits.Where(h => h.ParentHabitId.HasValue).Select(h => h.ParentHabitId!.Value).Distinct().ToArray();
-        var parentTitles = allHabits.ToDictionary(h => h.Id, h => h.Title);
-        var missingParentIds = parentIds.Where(id => !parentTitles.ContainsKey(id)).ToArray();
+        var parentTitles = (ChatTurnReadScope.For(userId)?.Habits ?? allHabits).ToDictionary(h => h.Id, h => h.Title);
+        var missingParentIds = allHabits.Where(h => h.ParentHabitId.HasValue && !parentTitles.ContainsKey(h.ParentHabitId.Value))
+            .Select(h => h.ParentHabitId!.Value).Distinct().ToArray();
         if (missingParentIds.Length > 0)
             foreach (var parent in await habitRepository.FindAsync(h => h.UserId == userId && missingParentIds.Contains(h.Id), ct))
                 parentTitles[parent.Id] = parent.Title;
         var returnedIds = allHabits.Select(habit => habit.Id).ToHashSet();
-
-        var results = allHabits
-            .Where(h => h.ParentHabitId is null
-                || !returnedIds.Contains(h.ParentHabitId.Value))
-            .OrderBy(h => h.Position)
-            .Take(limit)
-            .ToList();
-
-        string output;
+        var children = allHabits.ToLookup(habit => habit.ParentHabitId);
         var rows = new List<HabitListCardItem>();
         foreach (var root in allHabits.Where(h => h.ParentHabitId is null || !returnedIds.Contains(h.ParentHabitId.Value))
             .OrderBy(h => h.Position).ThenBy(h => h.Id))
-            AppendReadRows(root, 0, rows, allHabits, query.Schedule, today, includeSubs, parentTitles);
-        var offset = Math.Max(0, JsonArgumentParser.GetOptionalInt(args, "offset") ?? 0);
-        List<HabitListCardItem> page;
-        if (!string.IsNullOrWhiteSpace(filters.Search) && rows.Count > 0)
-        {
-            var orderedPage = await HabitSearchQuery.ReadPageAsync(habitRepository, userId,
-                rows.Select(row => Guid.Parse(row.Id)).ToArray(), offset, limit, ct);
-            var rowsById = rows.ToDictionary(row => Guid.Parse(row.Id));
-            page = orderedPage.Select(habit => rowsById[habit.Id]).ToList();
-            var habitsById = allHabits.ToDictionary(habit => habit.Id);
-            output = BuildOutput(orderedPage.Select(habit => habitsById[habit.Id]).ToList(), allHabits,
-                today, user.WeekStartDay, includeMetrics, false, query.Schedule, parentTitles);
-        }
-        else
-        {
-            page = rows.Skip(offset).Take(limit).ToList();
-            output = results.Count == 0 && query.Schedule is null
-                ? "No habits found matching the given filters."
-                : BuildOutput(results, allHabits, today, user.WeekStartDay, includeMetrics, includeSubs, query.Schedule, parentTitles);
-        }
+            AppendReadRows(root, 0, rows, children, query.Schedule, today, includeSubs, parentTitles);
+        var (page, pageHabits) = await ReadPageAsync(args, userId, rows, filters.Search, today, includeMetrics, limit, ct);
+        var output = pageHabits.Count == 0 && query.Schedule is null
+            ? "No habits found matching the given filters."
+            : BuildOutput(pageHabits, today, user.WeekStartDay, includeMetrics, query.Schedule, parentTitles);
         return new ToolResult(true, EntityName: output,
             Payload: new HabitListCard(query.Schedule is null ? "all" : query.Schedule.Date == today ? "today" : "date",
                 page,
@@ -157,6 +134,30 @@ public class QueryHabitsTool(
             });
     }
 
+    private async Task<(List<HabitListCardItem> Rows, List<Habit> Habits)> ReadPageAsync(
+        JsonElement args, Guid userId, List<HabitListCardItem> rows, string? search, DateOnly today,
+        bool includeMetrics, int limit, CancellationToken ct)
+    {
+        var offset = Math.Max(0, JsonArgumentParser.GetOptionalInt(args, "offset") ?? 0);
+        var page = rows.Skip(offset).Take(limit).ToList();
+        if (!string.IsNullOrWhiteSpace(search) && rows.Count > 0)
+        {
+            var ordered = await HabitSearchQuery.ReadPageAsync(habitRepository, userId,
+                rows.Select(row => Guid.Parse(row.Id)).ToArray(), offset, limit, ct);
+            var rowsById = rows.ToDictionary(row => Guid.Parse(row.Id));
+            page = ordered.Select(habit => rowsById[habit.Id]).ToList();
+        }
+        var pageIds = page.Select(row => Guid.Parse(row.Id)).ToArray();
+        var hydrated = pageIds.Length == 0 ? Array.Empty<Habit>() : await habitRepository.FindAsync(
+            habit => habit.UserId == userId && pageIds.Contains(habit.Id),
+            q => IncludeCandidates(q.OrderBy(habit => habit.Id).Take(limit), today, includeMetrics), ct);
+        var hydratedById = hydrated.ToDictionary(habit => habit.Id);
+        page = page.Select(row => hydratedById.TryGetValue(Guid.Parse(row.Id), out var habit)
+            ? row with { Emoji = habit.Emoji, Tags = habit.Tags.Select(tag => new HabitTagItem(tag.Id, tag.Name, tag.Color)).ToList() } : row).ToList();
+        var pageHabits = pageIds.Where(hydratedById.ContainsKey).Select(id => hydratedById[id]).ToList();
+        return (page, pageHabits);
+    }
+
     private static HabitSelectionCandidates? BuildSelection(JsonElement args, string? search, int total,
         IReadOnlyList<HabitListCardItem> page)
     {
@@ -169,7 +170,7 @@ public class QueryHabitsTool(
     }
 
     private static void AppendReadRows(Habit habit, int depth, List<HabitListCardItem> rows,
-        IReadOnlyList<Habit> habits, ScheduleContext? schedule, DateOnly today, bool includeSubs, IReadOnlyDictionary<Guid, string> parentTitles)
+        ILookup<Guid?, Habit> children, ScheduleContext? schedule, DateOnly today, bool includeSubs, IReadOnlyDictionary<Guid, string> parentTitles)
     {
         var status = schedule is not null
             ? schedule.Facts.SkippedIds.Contains(habit.Id) ? HabitListCardBuilder.StatusNone
@@ -185,8 +186,8 @@ public class QueryHabitsTool(
             habit.Tags.Select(t => new HabitTagItem(t.Id, t.Name, t.Color)).ToList(),
             schedule is null ? null : schedule.Facts.SkippedIds.Contains(habit.Id)));
         if (includeSubs)
-            foreach (var child in habits.Where(item => item.ParentHabitId == habit.Id).OrderBy(item => item.Position))
-                AppendReadRows(child, depth + 1, rows, habits, schedule, today, true, parentTitles);
+            foreach (var child in children[habit.Id].OrderBy(item => item.Position).ThenBy(item => item.Id))
+                AppendReadRows(child, depth + 1, rows, children, schedule, today, true, parentTitles);
     }
 
     private static HabitFilters ParseFilters(JsonElement args, DateOnly today)
@@ -250,24 +251,21 @@ public class QueryHabitsTool(
         HabitFilters f,
         DateOnly today,
         int weekStartDay,
-        bool includeMetrics,
-        CancellationToken ct)
+        CancellationToken ct, bool useTurnSnapshot = true)
     {
         var normalizedSearch = NormalizeSearchValue(f.Search);
         var normalizedTag = NormalizeSearchValue(f.Tag);
 
-        var deferMetrics = includeMetrics && (normalizedSearch is not null || normalizedTag is not null);
-        var habits = await LoadCandidatesAsync(userId, f, today, includeMetrics, deferMetrics, ct);
-
-        habits = habits.Where(habit => normalizedSearch is null || HabitNameMatcher.Matches(habit.Title, normalizedSearch))
-            .Where(habit => normalizedTag is null || habit.Tags.Any(tag => HabitNameMatcher.Matches(tag.Name, normalizedTag)))
-            .ToList();
-
-        if (deferMetrics && habits.Count > 0)
+        var habits = await LoadCandidatesAsync(userId, f, today, ct, useTurnSnapshot);
+        habits = habits.Where(habit => normalizedSearch is null || HabitNameMatcher.Matches(habit.Title, normalizedSearch)).ToList();
+        if (normalizedTag is not null && habits.Count > 0)
         {
             var ids = habits.Select(habit => habit.Id).ToArray();
-            habits = await habitRepository.FindAsync(habit => habit.UserId == userId && ids.Contains(habit.Id),
-                query => query.Include(habit => habit.Tags).Include(habit => habit.Goals).Include(habit => habit.Logs).AsSplitQuery(), ct);
+            var tags = await habitRepository.ProjectAsync(habit => habit.UserId == userId && ids.Contains(habit.Id),
+                q => q.Select(habit => new HabitTagNames(habit.Id, habit.Tags.Select(tag => tag.Name).ToArray())), ct);
+            var matched = tags.Where(item => item.Names.Any(name => HabitNameMatcher.Matches(name, normalizedTag)))
+                .Select(item => item.Id).ToHashSet();
+            habits = habits.Where(habit => matched.Contains(habit.Id)).ToList();
         }
 
         if (f.Date is DateOnly date)
@@ -287,29 +285,31 @@ public class QueryHabitsTool(
             .ToList(), null);
     }
 
+    public sealed record HabitTagNames(Guid Id, string[] Names);
+
     private async Task<IReadOnlyList<Habit>> LoadCandidatesAsync(Guid userId, HabitFilters f,
-        DateOnly today, bool includeMetrics, bool deferMetrics, CancellationToken ct)
+        DateOnly today, CancellationToken ct, bool useTurnSnapshot)
     {
-        return await habitRepository.FindAsync(
-            h => h.UserId == userId
-                && (f.IsGeneral == null || (h.Schedule == HabitSchedule.General) == f.IsGeneral.Value)
+        async Task<IReadOnlyList<Habit>> LoadAsync()
+        {
+            var candidates = await habitRepository.ProjectAsync(habit => habit.UserId == userId,
+                q => ChatHabitCandidate.Select(q, today, false), ct);
+            return candidates.Select(candidate => candidate.ToHabit(userId)).ToArray();
+        }
+        var scope = useTurnSnapshot ? ChatTurnReadScope.For(userId) : null;
+        var habits = scope is null ? await LoadAsync() : await scope.ReadHabitsAsync(habitRepository, today, false, ct);
+        return habits.Where(h => (f.IsGeneral == null || (h.Schedule == HabitSchedule.General) == f.IsGeneral.Value)
                 && (f.IsBadHabit == null || h.IsBadHabit == f.IsBadHabit.Value)
                 && (!f.FrequencyOneTime || h.Schedule == HabitSchedule.OneTime || h.Schedule == HabitSchedule.General)
                 && (f.Frequency == null || h.FrequencyUnit == f.Frequency.Value)
-                && (!f.Date.HasValue || h.Schedule != HabitSchedule.General),
-            q => IncludeCandidates(q, today, includeMetrics, deferMetrics),
-            ct);
+                && (!f.Date.HasValue || h.Schedule != HabitSchedule.General)).ToArray();
     }
 
-    private static IQueryable<Habit> IncludeCandidates(IQueryable<Habit> query, DateOnly today,
-        bool includeMetrics, bool deferMetrics)
+    private static IQueryable<Habit> IncludeCandidates(IQueryable<Habit> query, DateOnly today, bool includeMetrics)
     {
         var withRelations = query.Include(h => h.Tags).Include(h => h.Goals).AsSplitQuery();
-        if (deferMetrics)
-            return withRelations;
-        if (includeMetrics)
-            return withRelations.Include(h => h.Logs);
-        return withRelations.Include(h => h.Logs.Where(l => !l.IsDeleted && l.Date == today && l.Value > 0));
+        var from = includeMetrics ? HabitMetricsCalculator.GetStreakLogCutoff(today) : today;
+        return withRelations.Include(h => h.Logs.Where(l => !l.IsDeleted && l.Date >= from && l.Date <= today));
     }
 
     private static string? NormalizeSearchValue(string? value)
@@ -322,21 +322,21 @@ public class QueryHabitsTool(
 
     private static string BuildOutput(
         List<Habit> results,
-        IReadOnlyList<Habit> allHabits,
         DateOnly today,
         int weekStartDay,
         bool includeMetrics,
-        bool includeSubs,
         ScheduleContext? schedule,
         IReadOnlyDictionary<Guid, string> parentTitles)
     {
         var sb = new StringBuilder();
-        sb.AppendLine(CultureInfo.InvariantCulture, $"Found {results.Count} habit(s):");
+        var ids = results.Select(habit => habit.Id).ToHashSet();
+        var roots = results.Where(habit => habit.ParentHabitId is null || !ids.Contains(habit.ParentHabitId.Value)).ToArray();
+        sb.AppendLine(CultureInfo.InvariantCulture, $"Found {roots.Length} habit(s):");
         if (schedule is not null)
         {
-            var done = results.Count(habit => schedule.Facts.DoneTodayIds.Contains(habit.Id));
-            var skipped = results.Count(habit => schedule.Facts.SkippedIds.Contains(habit.Id));
-            sb.AppendLine(CultureInfo.InvariantCulture, $"Returned schedule for {schedule.Date:yyyy-MM-dd}: {done} done, {results.Count - done - skipped} remaining, {skipped} skipped (top-level entries).");
+            var done = roots.Count(habit => schedule.Facts.DoneTodayIds.Contains(habit.Id));
+            var skipped = roots.Count(habit => schedule.Facts.SkippedIds.Contains(habit.Id));
+            sb.AppendLine(CultureInfo.InvariantCulture, $"Returned schedule for {schedule.Date:yyyy-MM-dd}: {done} done, {roots.Length - done - skipped} remaining, {skipped} skipped (top-level entries).");
         }
         if (results.Count == 0)
             sb.AppendLine("No habits found matching the given filters.");
@@ -353,8 +353,6 @@ public class QueryHabitsTool(
                 suffixes.GetValueOrDefault(habit.Id, string.Empty),
                 schedule, parentTitles));
 
-            if (includeSubs)
-                AppendChildren(sb, allHabits, habit.Id, new OutputContext(today, weekStartDay, includeMetrics, schedule, parentTitles), 1);
         }
 
         return sb.ToString();
@@ -446,22 +444,4 @@ public class QueryHabitsTool(
             : $"Every {habit.FrequencyQuantity} {unitName}s";
     }
 
-    private sealed record OutputContext(DateOnly Today, int WeekStartDay, bool IncludeMetrics, ScheduleContext? Schedule, IReadOnlyDictionary<Guid, string> ParentTitles);
-
-    private static void AppendChildren(StringBuilder sb, IReadOnlyList<Habit> allHabits, Guid parentId, OutputContext context, int depth)
-    {
-        var indent = new string(' ', depth * 2);
-        var children = allHabits
-            .Where(h => h.ParentHabitId == parentId)
-            .OrderBy(h => h.Position)
-            .ToList();
-        var childSuffixes = SiblingTitleDisambiguator.ComputeSuffixes(children);
-
-        foreach (var child in children)
-        {
-            sb.AppendLine(indent + BuildHabitLine(child, context.Today, context.WeekStartDay, context.IncludeMetrics,
-                childSuffixes.GetValueOrDefault(child.Id, string.Empty), context.Schedule, context.ParentTitles));
-            AppendChildren(sb, allHabits, child.Id, context, depth + 1);
-        }
-    }
 }

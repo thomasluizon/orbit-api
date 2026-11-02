@@ -61,6 +61,7 @@ public interface IPendingAgentOperationStore
     bool IsAwaitingConfirmation(Guid userId, Guid pendingOperationId);
     IReadOnlyList<PendingHabitCreation> GetPendingHabitCreations(Guid userId);
     IReadOnlyList<PendingAgentOperationExecution> GetAwaiting(Guid userId);
+    Task<IReadOnlyList<PendingAgentOperationExecution>> GetAwaitingAsync(Guid userId, CancellationToken cancellationToken = default);
     bool SupersedeHabitCreation(Guid userId, string title, Guid? parentHabitId);
     bool Revise(Guid userId, Guid pendingOperationId, string expectedFingerprint,
         string argumentsJson, string operationFingerprint, string previewFingerprint);

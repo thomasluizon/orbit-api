@@ -117,6 +117,7 @@ resource "cloudflare_turnstile_widget" "orbit" {
     "app-staging.useorbit.org",
     "api.useorbit.org",
     "api-staging.useorbit.org",
+    "orbit-landing-staging.onrender.com",
     "useorbit.org",
     "www.useorbit.org",
   ]

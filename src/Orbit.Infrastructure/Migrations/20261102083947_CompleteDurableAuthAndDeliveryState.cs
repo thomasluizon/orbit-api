@@ -43,24 +43,42 @@ public partial class CompleteDurableAuthAndDeliveryState : Migration
             );
             """);
         migrationBuilder.Sql("""
+            DROP INDEX CONCURRENTLY IF EXISTS "IX_SentReminders_PushSentAtUtc_SentAtUtc";
+            """, suppressTransaction: true);
+        migrationBuilder.Sql("""
             CREATE INDEX CONCURRENTLY IF NOT EXISTS "IX_SentReminders_PushSentAtUtc_SentAtUtc"
                 ON "SentReminders" ("PushSentAtUtc", "SentAtUtc");
+            """, suppressTransaction: true);
+        migrationBuilder.Sql("""
+            DROP INDEX CONCURRENTLY IF EXISTS "IX_MarketingDeliveries_BroadcastId_RecipientId";
             """, suppressTransaction: true);
         migrationBuilder.Sql("""
             CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS "IX_MarketingDeliveries_BroadcastId_RecipientId"
                 ON "MarketingDeliveries" ("BroadcastId", "RecipientId");
             """, suppressTransaction: true);
         migrationBuilder.Sql("""
+            DROP INDEX CONCURRENTLY IF EXISTS "IX_MarketingDeliveries_SentAtUtc_NotBeforeAtUtc";
+            """, suppressTransaction: true);
+        migrationBuilder.Sql("""
             CREATE INDEX CONCURRENTLY IF NOT EXISTS "IX_MarketingDeliveries_SentAtUtc_NotBeforeAtUtc"
                 ON "MarketingDeliveries" ("SentAtUtc", "NotBeforeAtUtc");
+            """, suppressTransaction: true);
+        migrationBuilder.Sql("""
+            DROP INDEX CONCURRENTLY IF EXISTS "IX_PendingCouponCancellations_CouponId";
             """, suppressTransaction: true);
         migrationBuilder.Sql("""
             CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS "IX_PendingCouponCancellations_CouponId"
                 ON "PendingCouponCancellations" ("CouponId");
             """, suppressTransaction: true);
         migrationBuilder.Sql("""
+            DROP INDEX CONCURRENTLY IF EXISTS "IX_PendingCouponCancellations_NextAttemptAtUtc";
+            """, suppressTransaction: true);
+        migrationBuilder.Sql("""
             CREATE INDEX CONCURRENTLY IF NOT EXISTS "IX_PendingCouponCancellations_NextAttemptAtUtc"
                 ON "PendingCouponCancellations" ("NextAttemptAtUtc");
+            """, suppressTransaction: true);
+        migrationBuilder.Sql("""
+            DROP INDEX CONCURRENTLY IF EXISTS "IX_DistributedRateLimitBuckets_PolicyName_WindowEndsAtUtc";
             """, suppressTransaction: true);
         migrationBuilder.Sql("""
             CREATE INDEX CONCURRENTLY IF NOT EXISTS "IX_DistributedRateLimitBuckets_PolicyName_WindowEndsAtUtc"

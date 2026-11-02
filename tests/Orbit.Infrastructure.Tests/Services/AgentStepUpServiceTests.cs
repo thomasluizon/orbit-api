@@ -84,6 +84,22 @@ public class AgentStepUpServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task VerifyChallenge_AfterStepUpMaxAttemptsWrongCodes_RejectsTheCorrectCode()
+    {
+        var capability = _catalogService.GetCapability(AgentCapabilityIds.ApiKeysManage)!;
+        var pending = _pendingOperationStore.Create(_userId, capability, "manage_api_keys", "{}", "Create key", "fingerprint", AgentExecutionSurface.Chat);
+        var issued = await _stepUpService.IssueChallengeAsync(_userId, pending.Id, "en", default);
+        var code = _emailService.LastVerificationCode!;
+        var wrong = code == "000000" ? "111111" : "000000";
+        var limit = new AgentPlatformSettings().StepUpMaxAttempts;
+        for (var i = 0; i < limit; i++)
+            (await _stepUpService.VerifyChallengeAsync(_userId, pending.Id, issued.Value.ChallengeId, wrong, default)).IsFailure.Should().BeTrue();
+        (await _stepUpService.VerifyChallengeAsync(_userId, pending.Id, issued.Value.ChallengeId, code, default)).IsFailure.Should().BeTrue();
+        _dbContext.AgentStepUpChallenges.Single().AttemptCount.Should().Be(limit);
+        _dbContext.PendingAgentOperations.Single().StepUpSatisfiedAtUtc.Should().BeNull();
+    }
+
+    [Fact]
     public async Task VerifyChallenge_WithInvalidCode_Fails()
     {
         var capability = _catalogService.GetCapability(AgentCapabilityIds.ApiKeysManage)!;

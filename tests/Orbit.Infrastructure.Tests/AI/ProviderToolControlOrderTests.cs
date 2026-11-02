@@ -52,6 +52,7 @@ public sealed partial class ProviderToolControlOrderTests(ITestOutputHelper outp
             using var wire = JsonDocument.Parse(ModelReaderWriter.Write(tool).ToString());
             var parameters = wire.RootElement.GetProperty("parameters");
             AssertControlOrder(parameters, name, violations);
+            StrictChatToolSchemaTests.AssertNoEnumWithPattern(parameters, client + "/" + phase + "/" + name);
             var source = registry.GetTool(name) is AskTool ask
                 ? ask.GetCacheableParameterSchema() : registry.GetTool(name)!.GetParameterSchema();
             AssertPayloadOrder(JsonSerializer.SerializeToElement(source),
@@ -82,7 +83,7 @@ public sealed partial class ProviderToolControlOrderTests(ITestOutputHelper outp
         var prompts = Substitute.For<ISystemPromptBuilder>();
         var catalog = Substitute.For<IAgentCatalogService>();
         var pending = Substitute.For<IPendingAgentOperationStore>();
-        pending.GetAwaiting(Arg.Any<Guid>()).Returns(Array.Empty<PendingAgentOperationExecution>());
+        pending.GetAwaitingAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Array.Empty<PendingAgentOperationExecution>());
         var quota = Substitute.For<IPayGateService>();
         quota.TryConsumeAiMessage(Arg.Any<Guid>(), Arg.Any<IUnitOfWork>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
         var execution = new ChatExecutionDependencies(Substitute.For<IUserDateService>(), null!, quota,

@@ -24,13 +24,14 @@ public static class CrisisSupportGuard
     [
         "hurt myself", "harm myself", "self harm", "self-harm", "kill myself",
         "end my life", "take my life", "want to die", "don't want to live",
-        "suicide", "suicidal"
+        "suicide", "suicidal", "killing myself", "don't want to be alive", "end it all"
     ];
 
     private static readonly string[] PortuguesePhrases =
     [
         "me machucar", "me ferir", "me matar", "tirar minha vida",
         "acabar com minha vida", "quero morrer", "nao quero viver",
+        "nao quero mais viver", "nao quero mais estar aqui", "acabar com a minha vida",
         "suicidio", "suicida", "automutilacao"
     ];
 
@@ -41,9 +42,9 @@ public static class CrisisSupportGuard
 
         var normalized = Normalize(message);
         var locales = CrisisLocales.None;
-        if (EnglishPhrases.Any(phrase => normalized.Contains(phrase, StringComparison.Ordinal)))
+        if (EnglishPhrases.Any(phrase => ContainsPhrase(normalized, phrase)))
             locales |= CrisisLocales.English;
-        if (PortuguesePhrases.Any(phrase => normalized.Contains(phrase, StringComparison.Ordinal)))
+        if (PortuguesePhrases.Any(phrase => ContainsPhrase(normalized, phrase)))
             locales |= CrisisLocales.Portuguese;
         return locales;
     }
@@ -91,6 +92,19 @@ public static class CrisisSupportGuard
 
     private static bool ContainsResource(string text, string resource) =>
         text.Contains(resource, StringComparison.OrdinalIgnoreCase);
+
+    private static bool ContainsPhrase(string text, string phrase)
+    {
+        var start = 0;
+        while ((start = text.IndexOf(phrase, start, StringComparison.Ordinal)) >= 0)
+        {
+            var end = start + phrase.Length;
+            if (phrase != "suicida" || !text.AsSpan(start).StartsWith("suicidal", StringComparison.Ordinal))
+                return true;
+            start = end;
+        }
+        return false;
+    }
 
     private static string Normalize(string text)
     {

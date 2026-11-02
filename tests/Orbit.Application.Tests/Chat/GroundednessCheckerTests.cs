@@ -4,6 +4,7 @@ using FluentAssertions;
 using NSubstitute;
 using Orbit.Application.Chat.Commands;
 using Orbit.Application.Chat.Grounding;
+using Orbit.Application.Chat;
 using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -62,6 +63,21 @@ public class GroundednessCheckerTests
 
         GroundednessChecker.Check("O prazo é 4 de abril de 2026.", facts)
             .Should().ContainSingle().Which.Kind.Should().Be("Date");
+    }
+
+    [Fact]
+    public void FiveHundredNames_MatchTheRegexBoundaryRulesOnTheReplyCorpus()
+    {
+        var names = Enumerable.Range(0, 500).Select(i => "Atividade " + i).Concat(["Yoga", "Yoga matinal", "Café", "💪 treino"]).ToArray();
+        var index = new GroundingNameIndex(names);
+        foreach (var reply in new[] { "Atividade 4 e Atividade 499.", "Yoga matinal e café.", "yogas e ATIVIDADE 40x", "💪 treino; Yoga", "No known names." })
+        {
+            var normalized = GroundingTokens.NormalizeName(reply);
+            var expected = names.Select(GroundingTokens.NormalizeName).Where(name => System.Text.RegularExpressions.Regex.IsMatch(
+                normalized, $@"(?<![\p{{L}}\p{{N}}]){System.Text.RegularExpressions.Regex.Escape(name)}(?![\p{{L}}\p{{N}}])"));
+            GroundednessChecker.Check(reply, TurnFactSet.Empty, nameIndex: index).Where(value => value.Kind == "EntityName")
+                .Select(value => value.Claim).Should().BeEquivalentTo(expected);
+        }
     }
 
     [Fact]
@@ -124,6 +140,9 @@ public class GroundednessCheckerTests
         habits.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
                 Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>())
             .Returns(new List<Habit> { habit }.AsReadOnly());
+        habits.ProjectAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Any<Func<IQueryable<Habit>, IQueryable<ChatHabitCandidate>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.ArgAt<Func<IQueryable<Habit>, IQueryable<ChatHabitCandidate>>>(1)(new[] { habit }.AsQueryable()).ToArray());
         var users = Substitute.For<IGenericRepository<User>>();
         users.GetByIdAsync(userId, Arg.Any<CancellationToken>()).Returns(User.Create("Alex", "alex@example.com").Value);
         var dates = Substitute.For<IUserDateService>();

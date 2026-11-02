@@ -1,4 +1,3 @@
-using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Routing;
 using Orbit.Api.Extensions;
 using Orbit.Application.Common;
@@ -39,9 +38,8 @@ public sealed partial class MinimumVersionMiddleware(
             var userAgent = context.Request.Headers.UserAgent.ToString();
             if (userAgent.Length > 200)
                 userAgent = userAgent[..200];
-            var authentication = await context.AuthenticateAsync();
             LogUpgradeRequired(logger, clientVersion, minimumVersion, requestId,
-                $"{context.Request.Method} {path}", userAgent, authentication.Succeeded);
+                $"{context.Request.Method} {path}", userAgent);
         }
 
         context.Response.StatusCode = StatusCodes.Status426UpgradeRequired;
@@ -86,7 +84,7 @@ public sealed partial class MinimumVersionMiddleware(
             .ToArray();
     }
 
-    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Upgrade required: client version {ClientVersion} is below floor {MinVersion}. RequestId={RequestId} Request={Request} UserAgent={UserAgent} Authenticated={Authenticated}")]
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Upgrade required: client version {ClientVersion} is below floor {MinVersion}. RequestId={RequestId} Request={Request} UserAgent={UserAgent}")]
     private static partial void LogUpgradeRequired(ILogger logger, string clientVersion, string minVersion, string requestId,
-        string request, string userAgent, bool authenticated);
+        string request, string userAgent);
 }

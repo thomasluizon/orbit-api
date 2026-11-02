@@ -1,4 +1,5 @@
 using System.Globalization;
+using Orbit.Application.Chat;
 using System.Text;
 using Orbit.Domain.Entities;
 using Orbit.Infrastructure.Services.Prompts;
@@ -26,12 +27,14 @@ public class ActiveGoalsSection : IPromptSection
         sb.AppendLine();
         sb.AppendLine("### Active Goals:");
 
-        foreach (var goal in goals.OrderBy(g => g.Position).ThenBy(goal => goal.Id))
+        foreach (var goal in goals.OrderBy(g => g.Position).ThenBy(goal => goal.Id).Take(ChatTurnLimits.MaxPromptGoals))
         {
             AppendGoalEntry(sb, goal);
         }
 
         sb.AppendLine();
+        if (goals.Count > ChatTurnLimits.MaxPromptGoals)
+            sb.AppendLine(CultureInfo.InvariantCulture, $"has_more=true; returned={ChatTurnLimits.MaxPromptGoals}; total={goals.Count}");
         sb.AppendLine("When user mentions an existing goal -> find its ID from the list above. Call query_goals for current-turn facts before naming goals in a read answer.");
         sb.AppendLine("Use update_goal for goal title/description/target/deadline changes, update_goal_status to complete or abandon goals, update_goal_progress for progress changes, delete_goal to delete goals, and link_habits_to_goal to connect habits.");
         return sb.ToString();

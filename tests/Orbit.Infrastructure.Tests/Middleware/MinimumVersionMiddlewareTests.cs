@@ -213,20 +213,20 @@ public class MinimumVersionMiddlewareTests
         entry.Fields.Should().Contain("ClientVersion", "1.0.0").And.Contain("MinVersion", "1.3.91")
             .And.Contain("RequestId", "request-1902")
             .And.Contain("Request", routed ? "GET /api/habits/{id}" : "GET /api/habits")
-            .And.Contain("UserAgent", new string('a', Math.Min(userAgentLength, 200)))
-            .And.Contain("Authenticated", true);
+            .And.Contain("UserAgent", new string('a', Math.Min(userAgentLength, 200)));
+        entry.Fields.Should().NotContainKey("Authenticated");
         var logged = entry.Message + JsonSerializer.Serialize(entry.Fields);
         foreach (var secret in new[] { "private-token", "private@example.org", "date=x", "private-body", "private-habit-id" })
             logged.Should().NotContain(secret);
         entry.Level.Should().Be(LogLevel.Information);
         entry.EventId.Id.Should().Be(1);
-        await authentication.Received(1).AuthenticateAsync(context, null);
+        await authentication.DidNotReceive().AuthenticateAsync(context, null);
     }
 
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task InvokeAsync_RejectedVersion_LogsUnauthenticatedForMissingOrInvalidCredentials(bool invalid)
+    public async Task InvokeAsync_RejectedVersion_DoesNotAuthenticateMissingOrInvalidCredentials(bool invalid)
     {
         var context = BuildContext("1.0.0");
         if (invalid)
@@ -242,9 +242,9 @@ public class MinimumVersionMiddlewareTests
         await InvokeMiddleware(context, BuildConfigService("1.3.91"), logger);
 
         context.Response.StatusCode.Should().Be(StatusCodes.Status426UpgradeRequired);
-        logger.Entries.Should().ContainSingle().Subject.Fields.Should().Contain("Authenticated", false);
+        logger.Entries.Should().ContainSingle().Subject.Fields.Should().NotContainKey("Authenticated");
         logger.Entries[0].Message.Should().NotContain("invalid-token");
-        await authentication.Received(1).AuthenticateAsync(context, null);
+        await authentication.DidNotReceive().AuthenticateAsync(context, null);
     }
 
     [Fact]

@@ -46,7 +46,8 @@ public sealed class AiRequestCostEstimatorTests(ITestOutputHelper output)
             (await estimator.EstimateMicroDollarsAsync(request.GetRawText(), default)).Should().Be(reserved);
             output.WriteLine($"{Path.GetFileName(file)}: provider {providerTokens} input tokens, local bound {estimatedTokens}, reservation {reserved} microdollars");
         }
-        cache.Count.Should().BeLessThan(9, "identical prefixes share cached counts");
+        cache.Keys.OfType<string>().Count(key => key.StartsWith("ai-reservation:", StringComparison.Ordinal))
+            .Should().BeLessThan(9, "identical prefixes share cached counts independently of cached variable items");
     }
 
     [Fact]

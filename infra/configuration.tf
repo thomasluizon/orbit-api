@@ -185,6 +185,21 @@ resource "aws_ssm_parameter" "bff_forwarding_secret" {
   value = each.value.result
 }
 
+resource "random_password" "smoke_bypass_secret" {
+  for_each = toset(["production", "staging"])
+
+  length  = 64
+  special = false
+}
+
+resource "aws_ssm_parameter" "smoke_bypass_secret" {
+  for_each = random_password.smoke_bypass_secret
+
+  name  = "/orbit/${each.key}/api/BotProtection__SmokeBypassSecret"
+  type  = "SecureString"
+  value = each.value.result
+}
+
 resource "render_env_group" "production_api" {
   name = "orbit-production-api"
   env_vars = merge(
@@ -197,6 +212,8 @@ resource "render_env_group" "production_api" {
       Storage__S3__SecretAccessKey = { value = aws_ssm_parameter.uploads_secret_access_key["production"].value }
     },
     { BotProtection__SecretKey = { value = aws_ssm_parameter.turnstile_secret["production"].value } },
+    { BotProtection__SiteKey = { value = cloudflare_turnstile_widget.orbit.sitekey } },
+    { BotProtection__SmokeBypassSecret = { value = aws_ssm_parameter.smoke_bypass_secret["production"].value } },
     { for key, value in local.onboarding_api_values["production"] : key => { value = value } },
     { for key, value in local.bot_protection_api_values["production"] : key => { value = value } },
     { OnboardingSecurity__SigningSecret = { value = aws_ssm_parameter.onboarding_signing_secret_production.value } },
@@ -218,6 +235,8 @@ resource "render_env_group" "staging_api" {
       Storage__S3__SecretAccessKey = { value = aws_ssm_parameter.uploads_secret_access_key["staging"].value }
     },
     { BotProtection__SecretKey = { value = aws_ssm_parameter.turnstile_secret["staging"].value } },
+    { BotProtection__SiteKey = { value = cloudflare_turnstile_widget.orbit.sitekey } },
+    { BotProtection__SmokeBypassSecret = { value = aws_ssm_parameter.smoke_bypass_secret["staging"].value } },
     { for key, value in local.onboarding_api_values["staging"] : key => { value = value } },
     { for key, value in local.bot_protection_api_values["staging"] : key => { value = value } },
     { OnboardingSecurity__SigningSecret = { value = aws_ssm_parameter.onboarding_signing_secret_staging.value } },

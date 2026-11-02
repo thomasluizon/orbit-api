@@ -1,4 +1,6 @@
 using System.Reflection;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
@@ -35,6 +37,12 @@ public sealed partial class RequireBotProtectionFilter(
             return;
         }
 
+        if (HasSmokeBypass(context))
+        {
+            await next();
+            return;
+        }
+
         var token = GetStringProperty(context.ActionArguments.Values, "TurnstileToken");
         if (string.IsNullOrWhiteSpace(token) || token.Length > 2048)
         {
@@ -60,6 +68,19 @@ public sealed partial class RequireBotProtectionFilter(
         }
 
         await next();
+    }
+
+    private bool HasSmokeBypass(ActionExecutingContext context)
+    {
+        var secret = options.Value.SmokeBypassSecret;
+        var header = context.HttpContext.Request.Headers["X-Orbit-Smoke-Bypass"];
+        var smokeEmail = Environment.GetEnvironmentVariable("SMOKE_TEST_EMAIL");
+        var email = GetStringProperty(context.ActionArguments.Values, "Email");
+        return !string.IsNullOrWhiteSpace(secret) && header.Count == 1
+            && !string.IsNullOrWhiteSpace(smokeEmail)
+            && string.Equals(email?.Trim(), smokeEmail.Trim(), StringComparison.OrdinalIgnoreCase)
+            && CryptographicOperations.FixedTimeEquals(
+                Encoding.UTF8.GetBytes(secret), Encoding.UTF8.GetBytes(header[0] ?? ""));
     }
 
     private void Reject(ActionExecutingContext context)

@@ -110,6 +110,7 @@ public sealed class CheckChatCommandQueryHandler(IServiceProvider services) : IR
     private async Task<Result?> CheckGoalAsync(object command, CancellationToken ct) => command switch
     {
         CreateGoalCommand create => await CheckGoalCreationAsync(create, ct),
+        DeleteGoalCommand delete => await ExistsAsync<Goal>(g => g.Id == delete.GoalId && g.UserId == delete.UserId && !g.IsDeleted, ct),
         LinkHabitsToGoalCommand link => (await ExistsAsync<Goal>(g => g.Id == link.GoalId && g.UserId == link.UserId, ct)) is { IsFailure: true } failure
             ? failure : await CheckHabitIdsAsync(link.UserId, link.HabitIds, ct),
         ReorderGoalsCommand reorder => await CheckGoalPositionsAsync(reorder, ct),

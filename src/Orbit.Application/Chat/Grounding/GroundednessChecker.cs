@@ -9,7 +9,7 @@ public static partial class GroundednessChecker
 {
     public static IReadOnlyList<GroundingViolation> Check(
         string? text, TurnFactSet facts, IEnumerable<string>? knownEntityNames = null, string? language = null,
-        string? userMessage = null)
+        string? userMessage = null, GroundingNameIndex? nameIndex = null)
     {
         if (string.IsNullOrWhiteSpace(text))
             return [];
@@ -26,18 +26,12 @@ public static partial class GroundednessChecker
         }
 
         var normalizedText = GroundingTokens.NormalizeName(text);
-        var candidates = (knownEntityNames ?? [])
-            .Concat(GroundingTokens.QuotedNames().Matches(text).Select(match => match.Groups[1].Value))
+        nameIndex ??= new GroundingNameIndex(knownEntityNames ?? []);
+        var quotedNames = GroundingTokens.QuotedNames().Matches(text).Select(match => match.Groups[1].Value)
             .Concat(NamedEntityPattern().Matches(text).Select(match => match.Groups[1].Value.Trim()));
-        foreach (var name in candidates.Where(name => !string.IsNullOrWhiteSpace(name)))
-        {
-            var normalized = GroundingTokens.NormalizeName(name);
-            if (Regex.IsMatch(normalizedText, $@"(?<![\p{{L}}\p{{N}}]){Regex.Escape(normalized)}(?![\p{{L}}\p{{N}}])", RegexOptions.None, TimeSpan.FromSeconds(1))
-                && !allowed.Contains(("EntityName", normalized)))
-            {
-                violations.Add(new GroundingViolation("EntityName", normalized));
-            }
-        }
+        foreach (var name in nameIndex.FindIn(normalizedText).Concat(new GroundingNameIndex(quotedNames).FindIn(normalizedText)))
+            if (!allowed.Contains(("EntityName", name)))
+                violations.Add(new GroundingViolation("EntityName", name));
         return violations.ToArray();
     }
 

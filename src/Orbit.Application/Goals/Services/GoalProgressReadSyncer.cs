@@ -8,6 +8,8 @@ namespace Orbit.Application.Goals.Services;
 
 public interface IGoalProgressReadSyncer
 {
+    Task<IReadOnlyDictionary<Guid, int>> ComputeFreshValuesForGoalsAsync(Guid userId, DateOnly userToday,
+        IReadOnlyCollection<Guid> goalIds, CancellationToken cancellationToken);
     Task<IReadOnlyDictionary<Guid, int>> ComputeFreshValuesAsync(Guid userId, DateOnly userToday, CancellationToken cancellationToken);
 }
 
@@ -15,12 +17,22 @@ public class GoalProgressReadSyncer(
     IGenericRepository<Goal> goalRepository,
     IUserDateService userDateService) : IGoalProgressReadSyncer
 {
-    public async Task<IReadOnlyDictionary<Guid, int>> ComputeFreshValuesAsync(
-        Guid userId, DateOnly userToday, CancellationToken cancellationToken)
+    public Task<IReadOnlyDictionary<Guid, int>> ComputeFreshValuesAsync(
+        Guid userId, DateOnly userToday, CancellationToken cancellationToken) => ComputeAsync(userId, userToday, null, cancellationToken);
+
+    public Task<IReadOnlyDictionary<Guid, int>> ComputeFreshValuesForGoalsAsync(Guid userId, DateOnly userToday,
+        IReadOnlyCollection<Guid> goalIds, CancellationToken cancellationToken) =>
+        goalIds.Count == 0 ? Task.FromResult<IReadOnlyDictionary<Guid, int>>(new Dictionary<Guid, int>())
+            : ComputeAsync(userId, userToday, goalIds, cancellationToken);
+
+    private async Task<IReadOnlyDictionary<Guid, int>> ComputeAsync(Guid userId, DateOnly userToday,
+        IReadOnlyCollection<Guid>? requestedGoals, CancellationToken cancellationToken)
     {
+        var restrict = requestedGoals is not null;
+        var requestedIds = requestedGoals?.ToArray() ?? [];
         var weekStartDay = await userDateService.GetUserWeekStartDayAsync(userId, cancellationToken);
         var candidates = await goalRepository.FindAsync(
-            g => g.UserId == userId
+            g => g.UserId == userId && (!restrict || requestedIds.Contains(g.Id))
                  && g.Status == GoalStatus.Active
                  && (g.Type == GoalType.Streak || g.Habits.Any()),
             cancellationToken);

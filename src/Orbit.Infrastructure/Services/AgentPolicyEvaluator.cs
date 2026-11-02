@@ -1,10 +1,9 @@
 using Orbit.Application.FeatureFlags;
+using Orbit.Application.Common;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
-using Orbit.Infrastructure.Configuration;
 using Orbit.Infrastructure.Persistence;
 
 namespace Orbit.Infrastructure.Services;
@@ -14,34 +13,13 @@ public class AgentPolicyEvaluator(
     IAgentCatalogService catalogService,
     IPendingAgentOperationStore pendingOperationStore,
     IAgentStepUpAuthorizationBridge stepUpAuthorizationBridge,
-    IOptions<AgentPlatformSettings> settings,
     IFeatureFlagService featureFlagService) : IAgentPolicyEvaluator
 {
-    private readonly AgentPlatformSettings _settings = settings.Value;
-
     private static bool MissingSuggestionScope(AgentPolicyEvaluationContext context) => context.SourceName == "suggest_habits"
         && context.AuthMethod is AgentAuthMethod.ApiKey or AgentAuthMethod.OAuth
         && !context.GrantedScopes.Contains(AgentScopes.ReadGoals, StringComparer.OrdinalIgnoreCase);
 
     public async Task<AgentPolicyDecision> EvaluateAsync(AgentPolicyEvaluationContext context)
-    {
-        if (context.PreviewOnly)
-            return await EvaluateInternalAsync(context, createPendingOperations: true);
-        var evaluated = await EvaluateInternalAsync(context, createPendingOperations: !_settings.ShadowModeEnabled);
-        if (!_settings.ShadowModeEnabled)
-            return evaluated;
-
-        return new AgentPolicyDecision(
-            AgentPolicyDecisionStatus.Allowed,
-            evaluated.Capability,
-            ShadowStatus: evaluated.Status,
-            ShadowReason: evaluated.Reason,
-            ConsumedConfirmation: evaluated.ConsumedConfirmation);
-    }
-
-    private async Task<AgentPolicyDecision> EvaluateInternalAsync(
-        AgentPolicyEvaluationContext context,
-        bool createPendingOperations)
     {
         var declared = catalogService.GetCapability(context.CapabilityId);
         if (declared is null)
@@ -62,7 +40,7 @@ public class AgentPolicyEvaluator(
         if (accessDecision is not null)
             return accessDecision;
 
-        return await EvaluateConfirmationRequirementAsync(context, capability, createPendingOperations);
+        return await EvaluateConfirmationRequirementAsync(context, capability);
     }
 
     private User? GetUser(Guid userId)
@@ -84,7 +62,12 @@ public class AgentPolicyEvaluator(
             return new AgentPolicyDecision(AgentPolicyDecisionStatus.Denied, capability, "account_deactivated");
         }
 
-        if (!UserMeetsPlanRequirement(user, capability.PlanRequirement))
+        var gamification = capability.Id is AgentCapabilityIds.GamificationRead
+            or AgentCapabilityIds.GamificationRepair or AgentCapabilityIds.GamificationRepairGap;
+        var meetsPlan = gamification
+            ? GamificationAccess.IsUnlocked(user, featureFlagService.ResolveForUser(user.Id).Where(flag => flag.Enabled).Select(flag => flag.Key))
+            : UserMeetsPlanRequirement(user, capability.PlanRequirement);
+        if (!meetsPlan)
         {
             return new AgentPolicyDecision(
                 AgentPolicyDecisionStatus.Denied,
@@ -123,8 +106,7 @@ public class AgentPolicyEvaluator(
 
     private async Task<AgentPolicyDecision> EvaluateConfirmationRequirementAsync(
         AgentPolicyEvaluationContext context,
-        AgentCapability capability,
-        bool createPendingOperations)
+        AgentCapability capability)
     {
         if (capability.ConfirmationRequirement is not (AgentConfirmationRequirement.FreshConfirmation or AgentConfirmationRequirement.StepUp))
             return new AgentPolicyDecision(AgentPolicyDecisionStatus.Allowed, capability);
@@ -140,9 +122,6 @@ public class AgentPolicyEvaluator(
         }
 
         var reason = requireStepUp ? "step_up_required" : "confirmation_required";
-        if (!createPendingOperations)
-            return new AgentPolicyDecision(AgentPolicyDecisionStatus.ConfirmationRequired, capability, reason);
-
         var pendingOperation = pendingOperationStore.Create(
             context.UserId,
             capability,

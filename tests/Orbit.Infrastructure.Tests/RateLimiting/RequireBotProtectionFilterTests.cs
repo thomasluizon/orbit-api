@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.Mvc.Controllers;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using NSubstitute;
@@ -295,6 +296,90 @@ public class RequireBotProtectionFilterTests
             Environment.SetEnvironmentVariable("ASPNETCORE_ENVIRONMENT", oldEnvironment);
             Environment.SetEnvironmentVariable("SMOKE_TEST_EMAIL", oldEmail);
             Environment.SetEnvironmentVariable("SMOKE_TEST_CODE", oldCode);
+        }
+    }
+
+    [Theory]
+    [InlineData(nameof(AuthController.SendCode))]
+    [InlineData(nameof(AuthController.VerifyCode))]
+    [InlineData(nameof(AuthController.SendCodeOperation))]
+    [InlineData(nameof(AuthController.VerifyCodeOperation))]
+    public async Task SmokeBypass_MatchingSecretAndConfiguredEmail_RunsWithoutToken(string action)
+    {
+        await WithSmokeEmail("person@example.com", async () =>
+        {
+            var context = CreateContext(RequestFor(action, null));
+            context.HttpContext.Request.Headers["X-Orbit-Smoke-Bypass"] = "smoke-secret";
+            var ran = false;
+
+            await SmokeFilter("smoke-secret").OnActionExecutionAsync(context, () =>
+            {
+                ran = true;
+                return Task.FromResult(Executed(context));
+            });
+
+            ran.Should().BeTrue();
+            context.Result.Should().BeNull();
+            await _verifier.DidNotReceiveWithAnyArgs().VerifyAsync(default!, default);
+        });
+    }
+
+    [Theory]
+    [InlineData(null, "smoke-secret", "person@example.com")]
+    [InlineData("wrong-secret", "smoke-secret", "person@example.com")]
+    [InlineData("smoke-secret", "", "person@example.com")]
+    [InlineData("smoke-secret", "smoke-secret", "other@example.com")]
+    [InlineData("smoke-secret", "smoke-secret", null)]
+    public async Task SmokeBypass_WithoutBothConditions_StillVerifies(string? header, string secret, string? smokeEmail)
+    {
+        await WithSmokeEmail(smokeEmail, async () =>
+        {
+            _verifier.VerifyAsync("valid", Arg.Any<CancellationToken>())
+                .Returns(new TurnstileVerificationResult(true, [], "app.useorbit.org"));
+            var context = CreateContext(new AuthController.SendCodeRequest("person@example.com", TurnstileToken: "valid"));
+            if (header is not null)
+                context.HttpContext.Request.Headers["X-Orbit-Smoke-Bypass"] = header;
+            var ran = false;
+
+            await SmokeFilter(secret).OnActionExecutionAsync(context, () =>
+            {
+                ran = true;
+                return Task.FromResult(Executed(context));
+            });
+
+            ran.Should().BeTrue();
+            await _verifier.Received(1).VerifyAsync("valid", Arg.Any<CancellationToken>());
+
+            var missing = CreateContext(new AuthController.SendCodeRequest("person@example.com"));
+            if (header is not null)
+                missing.HttpContext.Request.Headers["X-Orbit-Smoke-Bypass"] = header;
+            await SmokeFilter(secret).OnActionExecutionAsync(missing, () => Task.FromResult(Executed(missing)));
+            missing.Result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(400);
+        });
+    }
+
+    private RequireBotProtectionFilter SmokeFilter(string secret)
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["BotProtection:Enabled"] = "true",
+            ["BotProtection:SmokeBypassSecret"] = secret,
+            ["BotProtection:AllowedHostnames:0"] = "app.useorbit.org"
+        }).Build();
+        return new(Options.Create(configuration.GetSection("BotProtection").Get<BotProtectionSettings>()!), _verifier, _logger);
+    }
+
+    private static async Task WithSmokeEmail(string? email, Func<Task> operation)
+    {
+        var previous = Environment.GetEnvironmentVariable("SMOKE_TEST_EMAIL");
+        try
+        {
+            Environment.SetEnvironmentVariable("SMOKE_TEST_EMAIL", email);
+            await operation();
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("SMOKE_TEST_EMAIL", previous);
         }
     }
 

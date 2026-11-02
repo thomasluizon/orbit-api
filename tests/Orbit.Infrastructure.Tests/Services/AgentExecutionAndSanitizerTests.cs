@@ -1,3 +1,5 @@
+using System.Security.Claims;
+using Orbit.Api.Mcp.Tools;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using System.Text.Json;
@@ -20,6 +22,7 @@ using Orbit.Application.Chat;
 using Orbit.Application.Chat.Tools;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 using Orbit.Infrastructure.Configuration;
@@ -240,6 +243,95 @@ public partial class AgentExecutionAndSanitizerTests
         response.PolicyDenial!.Reason.Should().Be("target_not_owned:delete_habit:habit");
     }
 
+    [Theory]
+    [InlineData("parent_id", "habit")]
+    [InlineData("notification_ids", "notification")]
+    [InlineData("positions_habit", "habit")]
+    [InlineData("positions_goal", "goal")]
+    [InlineData("nested_parent", "habit")]
+    [InlineData("filter_ids", "habit")]
+    public async Task NestedForeignTarget_IsDeniedAndAuditedBeforeTheToolRuns(string field, string resource)
+    {
+        using var services = CreateAuditServices();
+        using var scope = services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
+        var foreign = Guid.NewGuid().ToString();
+        var json = field switch
+        {
+            "parent_id" => $$$"""{"parent_id":"{{{foreign}}}"}""",
+            "notification_ids" => $$$"""{"notification_ids":["{{{foreign}}}"]}""",
+            "positions_habit" => $$$"""{"positions":[{"habit_id":"{{{foreign}}}"}]}""",
+            "positions_goal" => $$$"""{"positions":[{"goal_id":"{{{foreign}}}"}]}""",
+            "filter_ids" => $$$"""{"filter":{"habit_ids":["{{{foreign}}}"]}}""",
+            _ => $$$"""{"habits":[{"sub_habits":[{"parent_habit_id":"{{{foreign}}}"}]}]}"""
+        };
+        var catalog = Substitute.For<IAgentCatalogService>();
+        var capability = CreateCapability(AgentCapabilityIds.HabitsWrite, AgentScopes.WriteHabits, AgentRiskClass.Low, AgentConfirmationRequirement.None, true);
+        var operation = CreateOperation("operation", capability.Id, true, true, AgentConfirmationRequirement.None, AgentRiskClass.Low);
+        catalog.GetOperation(operation.Id).Returns(operation);
+        catalog.GetCapability(capability.Id).Returns(capability);
+        var invoked = false;
+        var tool = new StubTool(operation.Id, (_, _, _) => { invoked = true; return Task.FromResult(new ToolResult(true)); });
+        var executor = CreateExecutor(catalog, ownershipService: new AgentTargetOwnershipService(db),
+            auditService: scope.ServiceProvider.GetRequiredService<IAgentAuditService>(), toolRegistry: new AiToolRegistry([tool]));
+        var result = await executor.ExecuteAsync(new(UserId, operation.Id, Parse(json), AgentExecutionSurface.Chat, AgentAuthMethod.Jwt));
+        result.Operation.Status.Should().Be(AgentOperationStatus.Denied);
+        result.PolicyDenial!.Reason.Should().Be($"target_not_owned:operation:{resource}");
+        invoked.Should().BeFalse();
+        var audit = await db.AgentAuditLogs.SingleAsync();
+        audit.Error.Should().Be($"target_not_owned:operation:{resource}");
+        audit.OutcomeStatus.Should().Be(AgentOperationStatus.Denied);
+    }
+
+    [Theory]
+    [InlineData("move_habit_parent", "parent_id", "null", true)]
+    [InlineData("move_habit", "new_parent_id", "null", true)]
+    [InlineData("move_habit_parent", "parent_id", "\"not-a-guid\"", false)]
+    [InlineData("move_habit", "new_parent_id", "\"not-a-guid\"", false)]
+    [InlineData("move_habit_parent", "parent_id", "\"11111111-1111-1111-1111-111111111111\"", false)]
+    [InlineData("move_habit", "new_parent_id", "\"11111111-1111-1111-1111-111111111111\"", false)]
+    [InlineData("move_habit_parent", "habit_id", "null", false)]
+    public async Task GenericGateway_NullParentIsAllowedButInvalidTargetsAreDenied(
+        string operationId, string field, string value, bool allowed)
+    {
+        using var services = CreateAuditServices();
+        using var scope = services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
+        var habit = Habit.Create(new(HabitSchedule.Recurring, UserId, "Read", Orbit.Domain.Enums.FrequencyUnit.Day, 1,
+            new DateOnly(2026, 4, 3))).Value;
+        db.Habits.Add(habit);
+        await db.SaveChangesAsync();
+        var args = JsonSerializer.SerializeToNode(new { habit_id = habit.Id })!.AsObject();
+        args[field] = System.Text.Json.Nodes.JsonNode.Parse(value);
+        var catalog = Substitute.For<IAgentCatalogService>();
+        var capability = CreateCapability(AgentCapabilityIds.HabitsWrite, AgentScopes.WriteHabits,
+            AgentRiskClass.Low, AgentConfirmationRequirement.None, true);
+        catalog.GetOperation(operationId).Returns(CreateOperation(operationId, capability.Id, true, true,
+            AgentConfirmationRequirement.None, AgentRiskClass.Low));
+        catalog.GetCapability(capability.Id).Returns(capability);
+        var policy = Substitute.For<IAgentPolicyEvaluator>();
+        policy.EvaluateAsync(Arg.Any<AgentPolicyEvaluationContext>()).Returns(new AgentPolicyDecision(AgentPolicyDecisionStatus.Allowed, capability));
+        var invoked = false;
+        var tool = new StubTool(operationId, (arguments, _, _) =>
+        {
+            arguments.GetProperty(field).ValueKind.Should().Be(JsonValueKind.Null);
+            invoked = true;
+            return Task.FromResult(new ToolResult(true));
+        });
+        var executor = CreateExecutor(catalog, policyEvaluator: policy,
+            ownershipService: new AgentTargetOwnershipService(db),
+            auditService: scope.ServiceProvider.GetRequiredService<IAgentAuditService>(), toolRegistry: new AiToolRegistry([tool]));
+        var gateway = new AgentTools(catalog, executor, Substitute.For<IPendingAgentOperationStore>(), Substitute.For<IAgentStepUpService>());
+        var caller = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, UserId.ToString())], "Bearer"));
+
+        var result = await gateway.ExecuteAgentOperation(caller, operationId, JsonSerializer.SerializeToElement(args));
+
+        invoked.Should().Be(allowed);
+        result.Operation.Status.Should().Be(allowed ? AgentOperationStatus.Succeeded : AgentOperationStatus.Denied);
+        if (!allowed)
+            result.PolicyDenial!.Reason.Should().Be($"target_not_owned:{operationId}:habit");
+    }
+
     [Fact]
     public async Task AgentOperationExecutor_PropagatesPolicyDenial()
     {
@@ -326,7 +418,7 @@ public partial class AgentExecutionAndSanitizerTests
         var settings = Options.Create(new AgentPlatformSettings());
         var pendingStore = new PendingAgentOperationStore(dbContext, settings);
         using var flagCache = new MemoryCache(new MemoryCacheOptions());
-        var policy = new AgentPolicyEvaluator(dbContext, catalog, pendingStore, stepUpBridge, settings,
+        var policy = new AgentPolicyEvaluator(dbContext, catalog, pendingStore, stepUpBridge,
             new FeatureFlagService(dbContext, flagCache, Substitute.For<IHostEnvironment>(), new ConfigurationBuilder().Build()));
         var arguments = Parse("""{"habit_id":"123"}""");
         var pending = pendingStore.Create(user.Id, capability, operation.Id, arguments.GetRawText(),
@@ -845,8 +937,9 @@ public partial class AgentExecutionAndSanitizerTests
         await audit.Received(1).RecordAsync(Arg.Is<AgentAuditEntry>(entry =>
             entry.OutcomeStatus == AgentOperationStatus.Failed &&
             entry.Error == (policyThrows ? "policy_failed" : "tool_failed") &&
-            entry.ShadowPolicyDecision == (policyThrows ? null : AgentPolicyDecisionStatus.Denied) &&
-            entry.ShadowReason == (policyThrows ? null : "missing_scope:write_habits")), Arg.Any<CancellationToken>());
+            entry.PolicyDecision == (policyThrows ? AgentPolicyDecisionStatus.Denied : AgentPolicyDecisionStatus.Allowed) &&
+            entry.ShadowPolicyDecision == null &&
+            entry.ShadowReason == null), Arg.Any<CancellationToken>());
     }
 
     [Theory]
@@ -950,8 +1043,9 @@ public partial class AgentExecutionAndSanitizerTests
         await audit.Received(1).RecordAsync(Arg.Is<AgentAuditEntry>(entry =>
             entry.OutcomeStatus == AgentOperationStatus.Failed &&
             entry.Error == (policyThrowsOnRetry ? "policy_failed_on_retry" : "tool_failed_on_retry") &&
-            entry.ShadowPolicyDecision == (policyThrowsOnRetry ? null : AgentPolicyDecisionStatus.Allowed) &&
-            entry.ShadowReason == (policyThrowsOnRetry ? null : "retry_evaluation")), Arg.Any<CancellationToken>());
+            entry.PolicyDecision == (policyThrowsOnRetry ? AgentPolicyDecisionStatus.Denied : AgentPolicyDecisionStatus.Allowed) &&
+            entry.ShadowPolicyDecision == null &&
+            entry.ShadowReason == null), Arg.Any<CancellationToken>());
     }
 
     private static AgentOperationExecutor CreateExecutor(
