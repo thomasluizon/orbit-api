@@ -80,7 +80,7 @@ public class QueryHabitsTool(
         var today = await userDateService.GetUserTodayAsync(userId, ct);
         var query = await QueryHabitsAsync(userId,
             new HabitFilters(false, null, null, null, false, today, true, null, null),
-            today, user.WeekStartDay, false, ct, useTurnSnapshot: false);
+            today, user.WeekStartDay, ct, useTurnSnapshot: false);
         return Orbit.Domain.Common.Result.Success((today, query.Habits));
     }
 
@@ -99,7 +99,7 @@ public class QueryHabitsTool(
         if (args.TryGetProperty("limit", out var limitEl) && limitEl.ValueKind == JsonValueKind.Number)
             limit = Math.Clamp(limitEl.GetInt32(), 1, 200);
 
-        var query = await QueryHabitsAsync(userId, filters, today, user.WeekStartDay, includeMetrics, ct);
+        var query = await QueryHabitsAsync(userId, filters, today, user.WeekStartDay, ct);
         var allHabits = query.Habits;
         var parentTitles = (ChatTurnReadScope.For(userId)?.Habits ?? allHabits).ToDictionary(h => h.Id, h => h.Title);
         var missingParentIds = allHabits.Where(h => h.ParentHabitId.HasValue && !parentTitles.ContainsKey(h.ParentHabitId.Value))
@@ -251,7 +251,6 @@ public class QueryHabitsTool(
         HabitFilters f,
         DateOnly today,
         int weekStartDay,
-        bool includeMetrics,
         CancellationToken ct, bool useTurnSnapshot = true)
     {
         var normalizedSearch = NormalizeSearchValue(f.Search);
