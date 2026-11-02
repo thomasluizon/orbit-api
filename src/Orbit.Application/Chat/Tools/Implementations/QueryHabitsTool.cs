@@ -23,7 +23,7 @@ public class QueryHabitsTool(
     public string Description =>
         "Read habits, schedules, metrics and checklists before answering; indexes do not ground replies. For compound requests for habits and goals, pair with query_goals. A daily summary does not replace this listing. "
         + "For unstructured previews, resolve existing IDs and stored titles here, without calendar, habit-month, profile or analytics reads. "
-        + "For completion or skip state, use date with is_completed=null to include done, remaining and skipped. Still call skip_habit or bulk_skip_habits for a requested skip, even when isSkippedOnDate=true. "
+        + "For completion or skip state, use date with is_completed=null to include done, remaining and skipped. Still call skip_habit or bulk_skip_habits for a requested skip, even when isSkippedOnDate is true. "
         + "Use an explicit habit ID supplied by the person directly in the matching write tool; no selection lookup or ask is needed. "
         + "For record selection or unclear targets, set for_selection=true and orbit_read_complete=false, then ask with returned candidates, even one. Requery only missing or partial candidates; selection never authorizes writes. "
         + "For restart, set for_selection=false and orbit_read_complete=false, then prepare the complete bulk_reschedule_habits preview; no selection question.";
