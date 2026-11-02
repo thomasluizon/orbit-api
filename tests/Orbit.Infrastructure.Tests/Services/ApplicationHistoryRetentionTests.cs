@@ -100,6 +100,36 @@ public sealed class ApplicationHistoryRetentionTests
             .Should().OnlyContain(window => window <= 30);
     }
 
+    [Fact]
+    public async Task AiBudgetRetention_ExtendedWeeklyAllowance_KeepsCallsStillCountedByBudget()
+    {
+        using var factory = new SqliteOrbitDbContextFactory();
+        var db = factory.Context;
+        var user = User.Create("Budget", "budget@example.com").Value;
+        user.GrantLifetimePro();
+        user.SetWeekStartDay(1).IsSuccess.Should().BeTrue();
+        var start = new DateOnly(2030, 6, 3);
+        user.IncrementAiMessageCount(start);
+        user.SetWeekStartDay(0).IsSuccess.Should().BeTrue();
+        var today = DateOnly.FromDateTime(NowAtUtc);
+        var active = AiAllowancePeriod.ActiveFor(today, true, user.WeekStartDay, user.AiMessagesWeekStart);
+        var callDate = start.AddDays(1);
+        today.DayNumber.Should().BeLessThan(active.End.DayNumber);
+        callDate.DayNumber.Should().BeGreaterThanOrEqualTo(active.Start.DayNumber);
+        var call = AiBudgetCall.Reserve(user.Id, callDate, 100);
+        db.AddRange(user, call);
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        await ApplicationHistoryRetention.PurgeAsync(db, new ConfigurationBuilder().Build(), new Clock(), default);
+
+        (await db.AiBudgetCalls.Where(row => row.UserId == user.Id && row.LocalDate >= active.Start && row.LocalDate < active.End)
+            .SumAsync(row => row.ChargedMicroDollars)).Should().Be(100);
+
+        await ApplicationHistoryRetention.PurgeAsync(db, new ConfigurationBuilder().Build(), new Clock(3), default);
+        (await db.AiBudgetCalls.AnyAsync(row => row.Id == call.Id)).Should().BeFalse();
+    }
+
     private static Task<bool> ExistsAsync(DbContext db, Entity row) => row switch
     {
         Notification => db.Set<Notification>().AnyAsync(item => item.Id == row.Id),
@@ -154,5 +184,5 @@ public sealed class ApplicationHistoryRetentionTests
     }
 
     private static void Set(Entity row, string property, DateTime atUtc) => row.GetType().GetProperty(property)!.SetValue(row, atUtc);
-    private sealed class Clock : TimeProvider { public override DateTimeOffset GetUtcNow() => new(NowAtUtc); }
+    private sealed class Clock(int offsetDays = 0) : TimeProvider { public override DateTimeOffset GetUtcNow() => new(NowAtUtc.AddDays(offsetDays)); }
 }

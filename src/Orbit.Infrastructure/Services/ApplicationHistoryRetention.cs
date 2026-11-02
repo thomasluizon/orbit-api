@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Orbit.Infrastructure.Persistence;
+using Orbit.Domain.Common;
 
 namespace Orbit.Infrastructure.Services;
 
@@ -20,7 +21,12 @@ internal static class ApplicationHistoryRetention
             if (days > 0) deleted += await BatchedDelete.ExecuteAsync(query(days), cancellationToken, batchSize);
         }
         await Purge("Notifications", 90, days => db.Notifications.IgnoreQueryFilters().Where(row => row.CreatedAtUtc < nowAtUtc.AddDays(-days)));
-        await Purge("AiBudgetCalls", 8, days => db.AiBudgetCalls.Where(row => row.LocalDate < today.AddDays(-days)));
+        var earliestUserToday = today.AddDays(-1);
+        await Purge("AiBudgetCalls", 8, days => db.AiBudgetCalls.Where(row => row.LocalDate < today.AddDays(-days)
+            && !db.Users.Any(user => user.Id == row.UserId && user.AiMessagesWeekStart.HasValue
+                && row.LocalDate >= user.AiMessagesWeekStart.Value
+                && row.LocalDate < user.AiMessagesWeekStart.Value.AddDays(AiAllowancePeriod.MaximumProPeriodDays)
+                && user.AiMessagesWeekStart.Value.AddDays(AiAllowancePeriod.MaximumProPeriodDays) > earliestUserToday)));
         await Purge("PendingAgentOperations", 7, days => db.PendingAgentOperations.Where(row => row.ExpiresAtUtc < nowAtUtc.AddDays(-days)));
         await Purge("Sessions", 30, days => db.UserSessionRefreshTokens.Where(row => db.UserSessions.Any(session => session.Id == row.UserSessionId
             && (session.ExpiresAtUtc < nowAtUtc.AddDays(-days) || session.RevokedAtUtc < nowAtUtc.AddDays(-days)))));

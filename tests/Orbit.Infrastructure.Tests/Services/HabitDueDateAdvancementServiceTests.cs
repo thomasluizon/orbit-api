@@ -385,6 +385,40 @@ public class HabitDueDateAdvancementServiceTests
         reloaded.NextDueDate.Should().Be(new DateOnly(2026, 11, 1));
     }
 
+    [Theory]
+    [InlineData("UTC", "2026-11-02T01:30:00Z", "2026-11-01", "2026-11-02")]
+    [InlineData("Pacific/Kiritimati", "2026-11-02T20:30:00Z", "2026-11-02", "2026-11-03")]
+    [InlineData("America/Sao_Paulo", "2026-11-02T01:30:00Z", "2026-11-01", "2026-11-01")]
+    public async Task AdvanceStaleDueDates_RecentDueDates_EastAndWestBoundariesAreExact(string zone, string now,
+        string due, string expected)
+    {
+        var databaseName = $"RecentLocalToday_{Guid.NewGuid()}";
+        var clock = new BoundaryClock(DateTimeOffset.Parse(now, System.Globalization.CultureInfo.InvariantCulture));
+        using var provider = new ServiceCollection()
+            .AddDbContext<OrbitDbContext>(options => options.UseInMemoryDatabase(databaseName))
+            .AddSingleton<TimeProvider>(clock).AddSingleton<IConfiguration>(new ConfigurationBuilder().Build())
+            .AddLogging().AddSingleton<HabitDueDateAdvancementService>().BuildServiceProvider();
+        Guid habitId;
+        using (var scope = provider.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
+            var user = User.Create("Boundary", "boundary@example.com").Value;
+            user.SetTimeZone(zone).IsSuccess.Should().BeTrue();
+            var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, user.Id, "Daily", FrequencyUnit.Day, 1,
+                DateOnly.Parse(due, System.Globalization.CultureInfo.InvariantCulture), IsBadHabit: true)).Value;
+            habitId = habit.Id;
+            db.AddRange(user, habit);
+            await db.SaveChangesAsync();
+        }
+        await provider.GetRequiredService<HabitDueDateAdvancementService>().RunAsync(default);
+        using var read = provider.CreateScope();
+        var stored = await read.ServiceProvider.GetRequiredService<OrbitDbContext>().Habits.AsNoTracking().SingleAsync(habit => habit.Id == habitId);
+        stored.NextDueDate.Should().Be(DateOnly.Parse(expected, System.Globalization.CultureInfo.InvariantCulture));
+    }
+
+    private sealed class BoundaryClock(DateTimeOffset now) : TimeProvider
+    { public override DateTimeOffset GetUtcNow() => now; }
+
     private sealed class TodayClock : TimeProvider
     {
         public override DateTimeOffset GetUtcNow() => new(2026, 11, 2, 12, 0, 0, TimeSpan.Zero);
@@ -436,11 +470,11 @@ public class HabitDueDateAdvancementServiceTests
     }
 
     [Fact]
-    public void QueryFilter_ConservativeCutoff_IsYesterdayUtc()
+    public void QueryFilter_ConservativeCutoff_IsTomorrowUtc()
     {
         var cutoff = HabitDueDateAdvancementService.ConservativeCutoffUtc(TimeProvider.System);
 
-        cutoff.Should().Be(DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-1));
+        cutoff.Should().Be(DateOnly.FromDateTime(DateTime.UtcNow).AddDays(1));
     }
 
     [Fact]

@@ -99,4 +99,29 @@ public class HangfireRecurringJobRegistrarTests
         await start.Should().ThrowAsync<InvalidOperationException>().WithMessage("registration failed");
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Startup_DisabledSchedulesAreRemovedAndEnabledSchedulesKept(bool periodCloseEnabled)
+    {
+        using var database = new Orbit.Infrastructure.Tests.Persistence.SqliteOrbitDbContextFactory();
+        using var provider = new ServiceCollection().AddScoped(_ => database.CreateContext()).BuildServiceProvider();
+        var manager = NSubstitute.Substitute.For<Hangfire.IRecurringJobManager>();
+        var reminder = NSubstitute.Substitute.For<IScheduledJob>();
+        NSubstitute.SubstituteExtensions.Returns(reminder.Name, "reminder-scheduler");
+        NSubstitute.SubstituteExtensions.Returns(reminder.CronExpression, "* * * * *");
+        var periodClose = NSubstitute.Substitute.For<IScheduledJob>();
+        NSubstitute.SubstituteExtensions.Returns(periodClose.Name, "period-close-notification");
+        NSubstitute.SubstituteExtensions.Returns(periodClose.CronExpression, "*/30 * * * *");
+        IScheduledJob[] jobs = periodCloseEnabled ? [reminder, periodClose] : [reminder];
+        var registrar = new HangfireRecurringJobRegistrar(manager, jobs,
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<HangfireRecurringJobRegistrar>.Instance,
+            BackgroundServiceHealthCheckTests.Create(provider, null, jobs));
+
+        await registrar.StartAsync(default);
+
+        NSubstitute.SubstituteExtensions.Received(manager, periodCloseEnabled ? 0 : 1).RemoveIfExists("period-close-notification");
+        NSubstitute.SubstituteExtensions.DidNotReceive(manager).RemoveIfExists("reminder-scheduler");
+    }
+
 }

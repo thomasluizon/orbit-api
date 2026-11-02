@@ -297,7 +297,9 @@ fields. `/health/jobs` checks the enabled recurring jobs against shared
 without a successful tick becomes stale after its expected interval. Registration
 on another instance preserves that first registration time. A successful occurrence
 records its heartbeat after its work completes. A concurrent occurrence skips when
-its job lease is held; separate job names can run concurrently.
+its job lease is held; separate job names can run concurrently. Startup removes known
+disabled schedules from Hangfire so operational switches also clear persisted cron
+registrations.
 
 Apply the additive `DurableJobHeartbeats` migration before starting the recurring
 registrar. Startup migration failures or recurring registration failures stop startup.
@@ -325,7 +327,9 @@ and is capped at eight. The proactive engine processes four accounts concurrentl
 with `BackgroundServices:ProactiveUserTimeoutSeconds` per account. It loads rule data
 once per page, computes old standard-goal completion totals in SQL, and queues pushes
 after saving each account. Calendar claims precede network calls to preserve dedupe;
-Google token refresh runs without a transaction or user row lock.
+Google token refresh runs without a transaction or user row lock. Due-date scans
+prefetch dates before the following UTC date, then apply each user's local date guard;
+recently stale habits in eastern timezones remain candidates.
 
 The XP startup backfill saves `XpAwardLogBackfillCursor` after each 200-user page.
 A failed page is retried after the last completed page, and existing XP audit rows
@@ -358,7 +362,11 @@ The daily `sync-cleanup` occurrence purges application history using the configu
 commits at most `BackgroundServices:CleanupBatchSize` rows, defaulting to 5,000.
 A window of zero disables that table's age purge. `SessionsDays` controls both
 sessions and their refresh tokens; an active session keeps its tokens. OAuth state
-expiry runs here instead of on sign-in requests. Soft-delete cleanup keeps its
+expiry runs here instead of on sign-in requests. AI budget rows inside a stored
+allowance period survive the age purge until that period can no longer be active.
+Changing week start from Monday to Sunday can extend that period to thirteen days;
+the guard also carries a timezone margin so a western user's active budget survives.
+The eight-day setting still applies outside that state. Soft-delete cleanup keeps its
 sync-window margin and updates completion watermarks in one set-based statement.
 
 Proactive history keeps recent rows and at most three older ended items per user

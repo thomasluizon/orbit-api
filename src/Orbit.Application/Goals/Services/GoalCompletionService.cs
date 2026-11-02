@@ -61,6 +61,9 @@ public sealed class GoalCompletionService(
         var weekStartDay = preferences?.WeekStartDay ?? await userDateService.GetUserWeekStartDayAsync(userId, cancellationToken);
 
         var candidateIds = goalIds.Distinct().ToList();
+        if (passiveSync)
+            return candidateIds.Count == 0 ? [] : await SyncDerivedBatchAsync(userId, candidateIds, userToday,
+                weekStartDay, true, preferences?.TimeZone, cancellationToken);
         return await unitOfWork.ExecuteInTransactionAsync<IReadOnlyList<GoalCompletionUpdate>>(async transactionToken =>
         {
             await unitOfWork.AcquireUserRowLockAsync(userId, transactionToken);
@@ -191,6 +194,7 @@ public sealed class GoalCompletionService(
     {
         return unitOfWork.ExecuteInTransactionAsync<IReadOnlyList<GoalCompletionUpdate>>(async transactionToken =>
         {
+            await unitOfWork.AcquireUserRowLockAsync(userId, transactionToken);
             var snapshotById = snapshots.ToDictionary(snapshot => snapshot.GoalId);
             var goalIds = snapshotById.Keys.ToList();
             var goals = await goalRepository.FindTrackedAsync(
@@ -231,6 +235,7 @@ public sealed class GoalCompletionService(
     {
         return unitOfWork.ExecuteInTransactionAsync<GoalCompletionUpdate?>(async transactionToken =>
         {
+            await unitOfWork.AcquireUserRowLockAsync(userId, transactionToken);
             var goal = await goalRepository.FindOneTrackedAsync(
                 candidate => candidate.Id == snapshot.GoalId && candidate.UserId == userId,
                 snapshot.Type == GoalType.Standard ? query => query.Include(candidate => candidate.Habits) : null,

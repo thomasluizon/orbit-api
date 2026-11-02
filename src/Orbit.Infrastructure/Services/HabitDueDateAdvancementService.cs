@@ -57,7 +57,7 @@ public partial class HabitDueDateAdvancementService(
     }
 
     internal static DateOnly ConservativeCutoffUtc(TimeProvider clock) =>
-        DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime.AddDays(-1));
+        DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime.AddDays(1));
 
     internal static Expression<Func<Habit, bool>> StaleBadHabitFilter(DateOnly cutoff) =>
         h => !h.IsCompleted

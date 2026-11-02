@@ -20,6 +20,9 @@ public sealed partial class HangfireRecurringJobRegistrar(
     {
         await health.RegisterAsync(cancellationToken);
         recurringJobManager.RemoveIfExists("conversation-retention");
+        var enabledNames = jobs.Select(job => job.Name).ToHashSet(StringComparer.Ordinal);
+        foreach (var disabledName in Orbit.Infrastructure.Services.BackgroundServiceHealthCheck.ExpectedIntervals.Keys.Except(enabledNames))
+            recurringJobManager.RemoveIfExists(disabledName);
         foreach (var job in jobs)
         {
             recurringJobManager.AddOrUpdate<ScheduledJobRunner>(
