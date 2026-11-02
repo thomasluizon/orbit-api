@@ -540,23 +540,31 @@ public class LogHabitCommandHandlerTests
         result.Error.Should().Be(ErrorMessages.HabitNotFound.Message);
     }
 
-    [Fact]
-    public async Task Handle_WrongUser_ReturnsFailure()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Handle_WrongUser_ReturnsFailure(bool unlog)
     {
         var otherUserId = Guid.NewGuid();
         var habit = CreateTestHabit(otherUserId);
+        if (unlog) habit.Log(Today);
+        var originalLogIds = habit.Logs.Select(log => log.Id).ToArray();
         _habitRepo.FindOneTrackedAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
             Arg.Any<CancellationToken>())
-            .Returns(habit);
+            .Returns(call => call.Arg<Expression<Func<Habit, bool>>>().Compile()(habit) ? habit : null);
 
         var command = new LogHabitCommand(UserId, habit.Id);
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
+        habit.IsDeleted.Should().BeFalse();
+        habit.Logs.Select(log => log.Id).Should().Equal(originalLogIds);
+        habit.Logs.Should().OnlyContain(log => !log.IsDeleted);
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be(ErrorMessages.HabitNotOwned.Message);
+        result.Error.Should().Be(ErrorMessages.HabitNotFound.Message);
     }
 
     [Fact]

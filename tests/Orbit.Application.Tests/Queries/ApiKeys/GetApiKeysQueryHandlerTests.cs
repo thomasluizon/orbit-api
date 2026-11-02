@@ -147,17 +147,20 @@ public class GetApiKeysQueryHandlerTests
         var (key1, _) = ApiKey.Create(UserId, "First Key").Value;
         var (key2, _) = ApiKey.Create(UserId, "Second Key").Value;
 
+        var (foreign, _) = ApiKey.Create(Guid.NewGuid(), "Foreign").Value;
+        typeof(ApiKey).GetProperty(nameof(ApiKey.CreatedAtUtc))!.SetValue(key1, DateTime.UtcNow.AddDays(-1));
+        typeof(ApiKey).GetProperty(nameof(ApiKey.CreatedAtUtc))!.SetValue(key2, DateTime.UtcNow);
         _apiKeyRepo.FindAsync(
             Arg.Any<Expression<Func<ApiKey, bool>>>(),
             Arg.Any<CancellationToken>())
-            .Returns(new List<ApiKey> { key1, key2 });
+            .Returns(call => new[] { key1, foreign, key2 }.Where(call.Arg<Expression<Func<ApiKey, bool>>>().Compile()).ToList());
 
         var query = new GetApiKeysQuery(UserId);
 
         var result = await _handler.Handle(query, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.Should().HaveCount(2);
+        result.Value.Select(k => k.Id).Should().Equal(key2.Id, key1.Id);
         result.Value.Should().AllSatisfy(k => k.KeyPrefix.Should().StartWith("orb_"));
     }
 

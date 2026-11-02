@@ -409,10 +409,6 @@ public static partial class ServiceCollectionExtensions
             builder.Configuration.GetSection(BffForwardingSettings.SectionName));
         builder.Services.AddScoped<BffClientIpResolver>();
         builder.Services.AddScoped<IDistributedRateLimitService, DistributedRateLimitService>();
-        builder.Services.AddRateLimiter(options =>
-        {
-            options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-        });
 
         return builder;
     }

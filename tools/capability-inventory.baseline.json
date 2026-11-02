@@ -5137,17 +5137,7 @@
         "name": "send_support_request",
         "parameters": [
           {
-            "name": "email",
-            "type": "string",
-            "required": true
-          },
-          {
             "name": "message",
-            "type": "string",
-            "required": true
-          },
-          {
-            "name": "name",
             "type": "string",
             "required": true
           },
@@ -7790,17 +7780,7 @@
         "name": "send_support_request",
         "parameters": [
           {
-            "name": "email",
-            "type": "string",
-            "required": true
-          },
-          {
             "name": "message",
-            "type": "string",
-            "required": true
-          },
-          {
-            "name": "name",
             "type": "string",
             "required": true
           },

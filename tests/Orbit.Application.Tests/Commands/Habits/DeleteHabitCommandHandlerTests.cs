@@ -45,7 +45,7 @@ public class DeleteHabitCommandHandlerTests
     public async Task Handle_ValidCommand_RemovesHabit()
     {
         var habit = CreateTestHabit();
-        _habitRepo.GetByIdAsync(habit.Id, Arg.Any<CancellationToken>())
+        _habitRepo.FindOneTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>())
             .Returns(habit);
         _habitRepo.FindTrackedAsync(
                 Arg.Any<Expression<Func<Habit, bool>>>(),
@@ -65,7 +65,7 @@ public class DeleteHabitCommandHandlerTests
     [Fact]
     public async Task Handle_HabitNotFound_ReturnsFailure()
     {
-        _habitRepo.GetByIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+        _habitRepo.FindOneTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>())
             .Returns((Habit?)null);
 
         var command = new DeleteHabitCommand(UserId, Guid.NewGuid());
@@ -82,16 +82,18 @@ public class DeleteHabitCommandHandlerTests
     {
         var otherUserId = Guid.NewGuid();
         var habit = CreateTestHabit(otherUserId);
-        _habitRepo.GetByIdAsync(habit.Id, Arg.Any<CancellationToken>())
-            .Returns(habit);
+        _habitRepo.FindOneTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.Arg<Expression<Func<Habit, bool>>>().Compile()(habit) ? habit : null);
 
         var command = new DeleteHabitCommand(UserId, habit.Id);
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
-        result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be(ErrorMessages.NoPermission.Message);
         habit.IsDeleted.Should().BeFalse();
+        habit.Logs.Should().BeEmpty();
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Be(ErrorMessages.HabitNotFound.Message);
     }
 
     [Fact]
@@ -103,7 +105,7 @@ public class DeleteHabitCommandHandlerTests
         var grandchild = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Grandchild", FrequencyUnit.Day, 1, DueDate: Today, ParentHabitId: child.Id)).Value;
 
-        _habitRepo.GetByIdAsync(parent.Id, Arg.Any<CancellationToken>()).Returns(parent);
+        _habitRepo.FindOneTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>()).Returns(parent);
         _habitRepo.FindTrackedAsync(
                 Arg.Any<Expression<Func<Habit, bool>>>(),
                 Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>>(),
@@ -128,7 +130,7 @@ public class DeleteHabitCommandHandlerTests
         goal.AddHabit(habit);
         goal.SyncStandardProgress(3).IsSuccess.Should().BeTrue();
         var updatedBeforeDelete = goal.UpdatedAtUtc;
-        _habitRepo.GetByIdAsync(habit.Id, Arg.Any<CancellationToken>()).Returns(habit);
+        _habitRepo.FindOneTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>()).Returns(habit);
         _habitRepo.FindTrackedAsync(
                 Arg.Any<Expression<Func<Habit, bool>>>(),
                 Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>>(),
@@ -154,7 +156,7 @@ public class DeleteHabitCommandHandlerTests
         goal.AddHabit(habit);
         goal.SyncStandardProgress(2).IsSuccess.Should().BeTrue();
         var completedAtUtc = goal.CompletedAtUtc;
-        _habitRepo.GetByIdAsync(habit.Id, Arg.Any<CancellationToken>()).Returns(habit);
+        _habitRepo.FindOneTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>()).Returns(habit);
         _habitRepo.FindTrackedAsync(
                 Arg.Any<Expression<Func<Habit, bool>>>(),
                 Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>>(),

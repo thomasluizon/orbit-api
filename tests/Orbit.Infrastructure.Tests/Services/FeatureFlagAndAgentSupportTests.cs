@@ -292,4 +292,69 @@ public class FeatureFlagAndAgentSupportTests : IDisposable
     {
         return JsonDocument.Parse(json).RootElement.Clone();
     }
+    [Theory]
+    [InlineData("free", false, true)]
+    [InlineData("Free", false, true)]
+    [InlineData(" PRO ", false, false)]
+    [InlineData("Pro", false, false)]
+    [InlineData(" PRO ", true, true)]
+    [InlineData("Pro", true, true)]
+    public async Task PlanRequirement_Normalizes(string requirement, bool pro, bool enabled)
+    {
+        var user = User.Create("Owner", "plan@example.com").Value;
+        user.StartTrial(DateTime.UtcNow.AddDays(-1));
+        if (pro) user.SetStripeSubscription("sub_plan", DateTime.UtcNow.AddDays(1));
+        _dbContext.Users.Add(user);
+        _dbContext.AppFeatureFlags.Add(AppFeatureFlag.Create("plan-test", true, requirement, "Plan"));
+        await _dbContext.SaveChangesAsync();
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        var service = new FeatureFlagService(_dbContext, cache, Substitute.For<IHostEnvironment>(), new ConfigurationBuilder().Build());
+        service.ResolveForUser(user.Id).Single(f => f.Key == "plan-test").Enabled.Should().Be(enabled);
+        (await service.ResolveForUserAsync(user.Id)).Single(f => f.Key == "plan-test").Enabled.Should().Be(enabled);
+    }
+
+    [Fact]
+    public async Task ResolveForUser_MissingUser_ReturnsEmpty()
+    {
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        var service = new FeatureFlagService(_dbContext, cache, Substitute.For<IHostEnvironment>(), new ConfigurationBuilder().Build());
+        service.ResolveForUser(Guid.NewGuid()).Should().BeEmpty();
+        (await service.ResolveForUserAsync(Guid.NewGuid())).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task FlagCache_DirectRowChange_InvisibleUntilInvalidateOrTtl()
+    {
+        var user = User.Create("Owner", "cache@example.com").Value;
+        var flag = AppFeatureFlag.Create("cache-test", true, null, "Cache");
+        _dbContext.Users.Add(user);
+        _dbContext.AppFeatureFlags.Add(flag);
+        await _dbContext.SaveChangesAsync();
+        var clock = new CacheClock();
+        using var cacheA = new MemoryCache(new MemoryCacheOptions { Clock = clock });
+        using var cacheB = new MemoryCache(new MemoryCacheOptions { Clock = clock });
+        var environment = Substitute.For<IHostEnvironment>();
+        var configuration = new ConfigurationBuilder().Build();
+        var first = new FeatureFlagService(_dbContext, cacheA, environment, configuration);
+        var second = new FeatureFlagService(_dbContext, cacheB, environment, configuration);
+        first.ResolveForUser(user.Id).Single().Enabled.Should().BeTrue();
+        (await second.ResolveForUserAsync(user.Id)).Single().Enabled.Should().BeTrue();
+        typeof(AppFeatureFlag).GetProperty(nameof(AppFeatureFlag.Enabled))!.SetValue(flag, false);
+        await _dbContext.SaveChangesAsync();
+        first.ResolveForUser(user.Id).Single().Enabled.Should().BeTrue();
+        (await second.ResolveForUserAsync(user.Id)).Single().Enabled.Should().BeTrue();
+        first.Invalidate();
+        first.ResolveForUser(user.Id).Single().Enabled.Should().BeFalse();
+        (await second.ResolveForUserAsync(user.Id)).Single().Enabled.Should().BeTrue();
+        clock.UtcNow += TimeSpan.FromSeconds(29);
+        (await second.ResolveForUserAsync(user.Id)).Single().Enabled.Should().BeTrue();
+        clock.UtcNow += TimeSpan.FromSeconds(1);
+        (await second.ResolveForUserAsync(user.Id)).Single().Enabled.Should().BeFalse();
+    }
+
+    private sealed class CacheClock : Microsoft.Extensions.Internal.ISystemClock
+    {
+        public DateTimeOffset UtcNow { get; set; } = DateTimeOffset.UtcNow;
+    }
+
 }

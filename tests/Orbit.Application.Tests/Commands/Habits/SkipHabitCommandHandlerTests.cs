@@ -186,15 +186,19 @@ public class SkipHabitCommandHandlerTests
         var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             otherUserId, "Someone else's habit", FrequencyUnit.Day, 1,
             DueDate: Today)).Value;
-        SetupHabitFound(habit);
+        _habitRepo.FindOneTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.Arg<Expression<Func<Habit, bool>>>().Compile()(habit) ? habit : null);
 
         var command = new SkipHabitCommand(UserId, habit.Id);
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
+        habit.IsDeleted.Should().BeFalse();
+        habit.Logs.Should().BeEmpty();
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be(ErrorMessages.HabitNotOwned.Message);
-        result.ErrorCode.Should().Be(ErrorCodes.HabitNotOwned);
+        result.Error.Should().Be(ErrorMessages.HabitNotFound.Message);
+        result.ErrorCode.Should().Be(ErrorCodes.HabitNotFound);
     }
 
     [Fact]
