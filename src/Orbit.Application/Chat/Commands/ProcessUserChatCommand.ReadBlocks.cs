@@ -87,6 +87,7 @@ public partial class ProcessUserChatCommandHandler
         foreach (var block in blocks)
         {
             var (read, kind, metric) = ReadBlockTelemetry.Describe(block);
+            if (kind == "unknown") continue;
             var properties = ReadBlockTelemetry.Properties(read, kind, metric);
             properties["platform"] = request.ClientContext?.Platform ?? "unknown";
             properties["part_count"] = cards.Parts?.Count ?? 0;
