@@ -12,7 +12,7 @@ using Orbit.Infrastructure.Persistence;
 namespace Orbit.Infrastructure.Migrations
 {
     [DbContext(typeof(OrbitDbContext))]
-    [Migration("20261102071227_ReleaseSafetyAppConfig")]
+    [Migration("20261102123402_ReleaseSafetyAppConfig")]
     partial class ReleaseSafetyAppConfig
     {
         /// <inheritdoc />
@@ -409,6 +409,36 @@ namespace Orbit.Infrastructure.Migrations
                             Key = "ProAiMicroDollarsPerWeek",
                             Description = "Weekly AI safety budget for Pro users in USD micro-dollars",
                             Value = "6000000"
+                        },
+                        new
+                        {
+                            Key = "SendCodeEmailsPerIpPerDay",
+                            Description = "Daily code email limit per resolved client IP",
+                            Value = "100"
+                        },
+                        new
+                        {
+                            Key = "SendCodeEmailsPerDay",
+                            Description = "Global daily code email safety limit",
+                            Value = "10000"
+                        },
+                        new
+                        {
+                            Key = "OnboardingAttestationCallsPerHour",
+                            Description = "Global hourly onboarding challenge and enrollment limit",
+                            Value = "1000"
+                        },
+                        new
+                        {
+                            Key = "OnboardingAttestationCallsPerDay",
+                            Description = "Global daily onboarding challenge and enrollment limit",
+                            Value = "10000"
+                        },
+                        new
+                        {
+                            Key = "OnboardingEnrollAttemptsPerInstallPerHour",
+                            Description = "Hourly enrollment attempt limit per signed installation subject",
+                            Value = "3"
                         },
                         new
                         {

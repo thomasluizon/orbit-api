@@ -110,11 +110,20 @@ public class MigrationLockGateTests
     }
 
     [Fact]
+    public void ReleaseSafetyConfigSeedFollowsAppliedQuotaSeedWithoutLockExceptions()
+    {
+        var migration = new ReleaseSafetyAppConfig();
+        var id = migration.GetType().GetCustomAttribute<MigrationAttribute>()!.Id;
+        var appliedId = typeof(SeedPublicEndpointAbuseQuotas).GetCustomAttribute<MigrationAttribute>()!.Id;
+        string.CompareOrdinal(id, appliedId).Should().BePositive("the unapplied seed must follow the applied production migration");
+        ReadPolicy().Exceptions.Should().NotContainKey(id);
+        MigrationLockGate.Check(id, migration.UpOperations, Policy).Should().BeEmpty();
+    }
+
+    [Fact]
     public void EveryMigrationAfterTheAppliedBaselineMeetsLockRules()
     {
-        var root = new DirectoryInfo(AppContext.BaseDirectory);
-        while (root is not null && !File.Exists(Path.Combine(root.FullName, "Orbit.slnx"))) root = root.Parent;
-        var policy = JsonSerializer.Deserialize<MigrationLockPolicy>(File.ReadAllText(Path.Combine(root!.FullName, ".github/migration-locks.json")), new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
+        var policy = ReadPolicy();
         policy.BaselineId.Should().Be(Policy.BaselineId, "raising the applied baseline must not exempt new migrations");
         policy.Reason.Should().Be("applied in production before this gate");
         var migrations = typeof(CompleteGeneralTasks).Assembly.GetTypes().Where(type => typeof(Migration).IsAssignableFrom(type) && !type.IsAbstract);
@@ -125,5 +134,12 @@ public class MigrationLockGateTests
             return MigrationLockGate.Check(type.GetCustomAttribute<MigrationAttribute>()!.Id, migration.UpOperations, policy);
         });
         failures.Should().BeEmpty();
+    }
+
+    private static MigrationLockPolicy ReadPolicy()
+    {
+        var root = new DirectoryInfo(AppContext.BaseDirectory);
+        while (root is not null && !File.Exists(Path.Combine(root.FullName, "Orbit.slnx"))) root = root.Parent;
+        return JsonSerializer.Deserialize<MigrationLockPolicy>(File.ReadAllText(Path.Combine(root!.FullName, ".github/migration-locks.json")), new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
     }
 }
