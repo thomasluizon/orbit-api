@@ -24,6 +24,10 @@ on:
         type: boolean
         required: false
         default: false
+      override_reason:
+        description: Written reason for bypassing staging admission
+        type: string
+        required: false
 
 permissions:
   contents: read
@@ -36,6 +40,9 @@ concurrency:
 jobs:
   prepare:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
     outputs:
       sha: ${{ steps.commit.outputs.sha }}
     steps:
@@ -46,8 +53,14 @@ jobs:
           RELEASE_BRANCH: ${{ inputs.branch }}
           RELEASE_SHA: ${{ inputs.sha }}
           DISPATCH_SHA: ${{ github.sha }}
+          FORCE_UNSTAGED: ${{ inputs.force_unstaged }}
+          OVERRIDE_REASON: ${{ inputs.override_reason }}
         run: |
           set -euo pipefail
+          if [ "$FORCE_UNSTAGED" = true ] && [ -z "${OVERRIDE_REASON//[[:space:]]/}" ]; then
+            echo '::error::force_unstaged requires a non-empty override_reason'
+            exit 1
+          fi
           if [ "$GITHUB_REF" != 'refs/heads/main' ]; then
             echo '::error::Dispatch the release workflow from main'
             exit 1
@@ -94,6 +107,23 @@ jobs:
           fi
           echo "sha=$RELEASE_SHA" >> "$GITHUB_OUTPUT"
 
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Require green release CI
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMMIT_SHA: ${{ steps.commit.outputs.sha }}
+          FORCE_UNSTAGED: ${{ inputs.force_unstaged }}
+          OVERRIDE_REASON: ${{ inputs.override_reason }}
+        run: node .github/scripts/release-admission.mjs ci
+
   production:
     if: inputs.environment == 'production'
     needs: prepare
@@ -102,6 +132,7 @@ jobs:
     permissions:
       contents: read
       deployments: write
+      statuses: read
       packages: write
     timeout-minutes: 170
     env:
@@ -113,13 +144,20 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.sha }}
+          fetch-depth: 0
           persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
 
       - name: Require healthy staging commit
         env:
           FORCE_UNSTAGED: ${{ inputs.force_unstaged }}
+          OVERRIDE_REASON: ${{ inputs.override_reason }}
         run: |
           set -euo pipefail
+          node .github/scripts/release-admission.mjs smoke
           {
             echo '## Production staging admission'
             echo "Selected SHA: $COMMIT_SHA"
@@ -241,6 +279,12 @@ jobs:
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
           echo "Selected ghcr.io/thomasluizon/orbit-api@$digest for $COMMIT_SHA" >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Require production migration export
+        id: backup
+        env:
+          RENDER_PRODUCTION_POSTGRES_ID: ${{ vars.RENDER_PRODUCTION_POSTGRES_ID }}
+        run: node .github/scripts/release-admission.mjs export
+
       - name: Trigger and monitor Render deploy
         id: render
         env:
@@ -321,14 +365,23 @@ jobs:
             exit 1
           fi
 
+      - name: Run production read-only authenticated smoke
+        env:
+          SMOKE_TEST_EMAIL: ${{ secrets.SMOKE_TEST_EMAIL }}
+          SMOKE_TEST_CODE: ${{ secrets.SMOKE_TEST_CODE }}
+        run: node tools/release-smoke.mjs https://api.useorbit.org
+
       - name: Record deployment
         env:
           IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
           RENDER_LOG_URL: ${{ steps.render.outputs.log_url }}
+          OVERRIDE_REASON: ${{ inputs.override_reason }}
+          RENDER_EXPORT_ID: ${{ steps.backup.outputs.render_export_id }}
         run: |
           set -euo pipefail
           deployment=$(jq -cn --arg ref "$COMMIT_SHA" --arg digest "$IMAGE_DIGEST" \
-            '{ref: $ref, environment: "production", auto_merge: false, required_contexts: [], payload: {image_digest: $digest}}')
+            --arg reason "$OVERRIDE_REASON" --arg export_id "$RENDER_EXPORT_ID" \
+            '{ref: $ref, environment: "production", auto_merge: false, required_contexts: [], payload: {image_digest: $digest, override_reason: $reason, render_export_id: $export_id}}')
           deployment_id=$(gh api --method POST "repos/$GITHUB_REPOSITORY/deployments" \
             --input - --jq '.id' <<< "$deployment")
           status=$(jq -cn --arg log_url "$RENDER_LOG_URL" \
@@ -355,6 +408,7 @@ jobs:
     permissions:
       contents: read
       deployments: write
+      statuses: write
       packages: write
     timeout-minutes: 170
     env:
@@ -374,6 +428,12 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
           path: release-source
+
+      - name: Mark staging smoke pending
+        run: >-
+          gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$COMMIT_SHA"
+          -f state=pending -f context=api-staging-smoke
+          -f description='Staging authenticated smoke has not passed this release'
 
       - name: Verify image source
         env:
@@ -504,6 +564,24 @@ jobs:
             echo "::error::Render now serves $live_commit, not the released image digest $IMAGE_DIGEST"
             exit 1
           fi
+
+      - name: Run staging authenticated smoke
+        id: smoke
+        env:
+          SMOKE_TEST_EMAIL: ${{ secrets.SMOKE_TEST_EMAIL }}
+          SMOKE_TEST_CODE: ${{ secrets.SMOKE_TEST_CODE }}
+        run: node tools/release-smoke.mjs https://api-staging.useorbit.org --write
+
+      - name: Record staging smoke result
+        if: always()
+        env:
+          SMOKE_OUTCOME: ${{ steps.smoke.outcome }}
+        run: |
+          state=failure
+          if [ "$SMOKE_OUTCOME" = success ]; then state=success; fi
+          gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$COMMIT_SHA" \
+            -f state="$state" -f context=api-staging-smoke \
+            -f description='Staging authenticated read and throwaway habit smoke'
 
       - name: Record deployment
         env:

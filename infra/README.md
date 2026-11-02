@@ -631,3 +631,34 @@ Monitor `habit_ranking_query` outcomes and `habit_ranking_block` build failures;
 HTTP 409 `HABIT_RANKING_STALE` means refresh the existing absolute query rather
 than resolve its relative period again. The exact payload and boundary policy
 are in [HabitRanking.md](../src/Orbit.Api/OpenApi/HabitRanking.md).
+
+### API release admission
+
+Release API requires successful `API Tests` and `Guards` push runs on the selected
+main SHA and their successful check runs before an image build. Staging signs in
+with a dedicated smoke account, reads the habit count, creates a throwaway general
+task and deletes it. The workflow marks `api-staging-smoke` pending before building
+and records success only after health, image and authenticated smoke checks pass.
+Production requires the latest trusted smoke status and matching staging health.
+`force_unstaged` requires `override_reason`; the summary and production deployment
+payload retain that reason. It does not bypass CI or the export gate.
+
+Configure GitHub Actions environment secrets `SMOKE_TEST_EMAIL` and
+`SMOKE_TEST_CODE` in both `staging` and `production`. On staging, provision that
+account and retain its email and six-digit code in the API's `TEST_ACCOUNTS` value
+in AWS Systems Manager Parameter Store at `/orbit/staging/api/TEST_ACCOUNTS`.
+Reseeding staging copies production, so provision the dedicated staging account
+again after a reseed if it is absent. On production, the corresponding API
+`SMOKE_TEST_EMAIL` and `SMOKE_TEST_CODE` values use the existing production smoke
+code path. Production smoke signs in and reads only; it never writes habits.
+Neither the scripts nor their diagnostics print credentials or login bodies.
+
+For migration releases, set GitHub Actions environment `production` variable
+`RENDER_PRODUCTION_POSTGRES_ID` to the production database id from Render Dashboard.
+Admission diffs migrations from the latest successful trusted production deployment
+against the selected SHA. With any migration change it creates a fresh Render export
+and waits for a new export id with a download URL before triggering the deploy.
+The deployment payload and release summary record the export id. A missing database
+id, unavailable export or missing deployment baseline blocks the release. The
+operator does not supply an unverified restore-point id. Export creation and listing
+use the Render Postgres export endpoint documented in its public OpenAPI schema.

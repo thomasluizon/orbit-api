@@ -207,6 +207,9 @@ jobs:
       - name: The allowlist checker's own coverage
         run: node --test tools/__tests__/*.test.mjs
 
+      - name: API release admission tests
+        run: node --test .github/scripts/release-admission.test.mjs
+
       - name: OpenAPI publication guard tests
         run: python3 -m unittest discover -s .github/scripts -p 'test_openapi_artifacts.py'
 
