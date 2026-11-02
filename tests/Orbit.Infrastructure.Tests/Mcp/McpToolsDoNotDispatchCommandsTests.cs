@@ -18,14 +18,7 @@ public partial class McpToolsDoNotDispatchCommandsTests
     public void McpTools_DoNotDispatchCommandsThroughMediator()
     {
         var toolsDirectory = LocateMcpToolsDirectory();
-        var offenders = new List<string>();
-
-        foreach (var file in Directory.EnumerateFiles(toolsDirectory, "*.cs", SearchOption.AllDirectories))
-        {
-            var source = File.ReadAllText(file);
-            if (CommandDispatchPattern().IsMatch(source))
-                offenders.Add(Path.GetRelativePath(toolsDirectory, file));
-        }
+        var offenders = FindCommandDispatches(toolsDirectory);
 
         offenders.Should().BeEmpty(
             "MCP tools must route mutations through McpExecutorBridge; dispatching a *Command via " +
@@ -34,10 +27,30 @@ public partial class McpToolsDoNotDispatchCommandsTests
     }
 
     [Theory]
-    [InlineData("sender.Send(\n new FooCommand(value));")]
-    [InlineData("mediator.Send(\n new FooCommand(value));")]
-    public void Guard_DetectsCommandDispatchAcrossLinesAndSenderNames(string source) =>
-        CommandDispatchPattern().IsMatch(source).Should().BeTrue();
+    [InlineData("sender.Send(\n new FooCommand(value));", false)]
+    [InlineData("mediator.Send(\n new FooCommand(value));", false)]
+    [InlineData("sender.Send(\n new FooCommand(value));", true)]
+    [InlineData("mediator.Send(\n new FooCommand(value));", true)]
+    public void Guard_DetectsCommandDispatchAcrossLinesAndSenderNames(string source, bool nested)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "orbit-mcp-guard-" + Guid.NewGuid().ToString("N"));
+        var directory = nested ? Path.Combine(root, "Nested") : root;
+        Directory.CreateDirectory(directory);
+        try
+        {
+            File.WriteAllText(Path.Combine(directory, "Tool.cs"), source);
+            FindCommandDispatches(root).Should().ContainSingle();
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    private static string[] FindCommandDispatches(string directory) =>
+        Directory.EnumerateFiles(directory, "*.cs", SearchOption.AllDirectories)
+            .Where(file => CommandDispatchPattern().IsMatch(File.ReadAllText(file)))
+            .Select(file => Path.GetRelativePath(directory, file)).ToArray();
 
     private static string LocateMcpToolsDirectory()
     {

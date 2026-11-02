@@ -155,6 +155,16 @@ public class OAuthCimdControllerTests : IDisposable
     }
 
     [Fact]
+    public async Task Token_MetadataDoesNotListIssuedRedirect_RejectsBeforeMint()
+    {
+        _handler.Body = _handler.Body.Replace(RedirectUri, "https://claude.ai/unlisted");
+        var code = _store.CreateCode(UserId, Challenge(), RedirectUri, ClientId);
+        Error(await _controller.Token("authorization_code", code, Verifier, RedirectUri, default, client_id: ClientId))
+            .Should().Be("invalid_redirect_uri");
+        _minted.Should().BeNull();
+    }
+
+    [Fact]
     public async Task MetadataRedirectOutsideServerAllowlist_IsRejected()
     {
         _handler.Body = _handler.Body.Replace(RedirectUri, "https://claude.ai/unlisted");

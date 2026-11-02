@@ -41,12 +41,12 @@ public partial class OAuthClientSecurityTests : IDisposable
     [Theory]
     [InlineData(RedirectUri)]
     [InlineData("https://claude.ai/anything")]
-    public async Task Authorize_UnknownClient_FailsClosed()
+    public async Task Authorize_UnknownClient_FailsClosed(string redirectUri)
     {
         var result = await _controller.Authorize(new OAuthController.AuthorizeRequest
         {
             ClientId = "x",
-            RedirectUri = RedirectUri,
+            RedirectUri = redirectUri,
             State = "state",
             ResponseType = "code",
             CodeChallenge = "challenge",

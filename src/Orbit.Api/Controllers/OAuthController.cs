@@ -406,6 +406,9 @@ public partial class OAuthController(
         var entry = authStore.ExchangeCode(code, code_verifier, redirect_uri);
         if (entry is null || !string.Equals(entry.ClientId, client_id, StringComparison.Ordinal))
             return BadRequest(new { error = "invalid_grant", error_description = "Invalid, expired, or already used authorization code" });
+        var redirectClient = await ValidateClientAsync(client_id, redirect_uri, ct);
+        if (redirectClient.Error is not null)
+            return BadRequest(new { error = redirectClient.Error });
 
         try
         {
