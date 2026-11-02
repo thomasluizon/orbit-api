@@ -1539,6 +1539,10 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("DeliveredAtUtc");
+
+                    b.HasIndex("RecipientId");
+
                     b.HasIndex("BroadcastId", "RecipientId")
                         .IsUnique();
 

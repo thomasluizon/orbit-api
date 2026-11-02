@@ -359,6 +359,14 @@ and sends only to recipients without one, including after cancellation or a rest
 Checkpoint writes finish independently of the page's cancellation token. SES delivery
 and the checkpoint are separate operations: a process loss after provider acceptance
 but before the checkpoint commits can still repeat that individual send.
+`BackgroundServices:Retention:MarketingBroadcastDeliveriesDays` retains successful
+delivery checkpoints for 31 days by default, covering the thirty-day failed-job
+retry window and a daily cleanup interval. Every page carries the same UTC expiry,
+thirty days after the broadcast was queued. Expired pages stop before reading
+checkpoints or sending, so an old manual retry cannot replay emails after cleanup.
+The retention window must be at least 31 days or zero to disable the purge.
+Account erasure removes the user's checkpoints in the erasure transaction. Account
+reset keeps them so a pending broadcast retry still skips delivered recipients.
 Waitlist confirmation is also queued and no longer waits on SES in the request.
 
 ### Application history retention
@@ -387,9 +395,12 @@ conversation turns contain the rendered content.
 The `ScheduledJobIndexes` migration builds indexes concurrently outside migration
 transactions. Before releasing it, create its new indexes on staging, inspect
 `EXPLAIN` for active-goal and stale-due-date scans, and compare user-scoped habit
-plans before dropping `IX_Habits_UserId`. The migration's idempotent index creation
-accepts those prebuilt indexes and replaces invalid indexes left by interrupted
-concurrent builds before retrying each creation. Take a database export before enabling the first
+plans before dropping `IX_Habits_UserId`. Each index is dropped concurrently before
+being recreated concurrently, including valid prebuilt indexes. This repairs invalid
+indexes left by interrupted builds using plain SQL statements outside transactions.
+A five-second lock timeout bounds waits in both migration directions. Existing
+application indexes remain available while the new job indexes are rebuilt.
+Take a database export before enabling the first
 retention sweep; it can remove a backlog.
 
 ### Startup migrations and long migrations

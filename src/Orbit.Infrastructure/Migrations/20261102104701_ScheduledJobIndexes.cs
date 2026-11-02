@@ -8,6 +8,7 @@ public partial class ScheduledJobIndexes : Migration
 {
     protected override void Up(MigrationBuilder migrationBuilder)
     {
+        migrationBuilder.Sql("SET lock_timeout = '5s';", suppressTransaction: true);
         CreateIndex(migrationBuilder, "IX_UserSessions_ExpiresAtUtc", """CREATE INDEX CONCURRENTLY IF NOT EXISTS "IX_UserSessions_ExpiresAtUtc" ON "UserSessions" ("ExpiresAtUtc");""");
         CreateIndex(migrationBuilder, "IX_UserSessions_RevokedAtUtc", """CREATE INDEX CONCURRENTLY IF NOT EXISTS "IX_UserSessions_RevokedAtUtc" ON "UserSessions" ("RevokedAtUtc");""");
         CreateIndex(migrationBuilder, "IX_Users_AiMessagesLocalDate", """CREATE INDEX CONCURRENTLY IF NOT EXISTS "IX_Users_AiMessagesLocalDate" ON "Users" ("AiMessagesLocalDate") WHERE "AiMessagesUsedToday" > 0;""");
@@ -35,24 +36,18 @@ public partial class ScheduledJobIndexes : Migration
         CreateIndex(migrationBuilder, "IX_AiBudgetCalls_LocalDate", """CREATE INDEX CONCURRENTLY IF NOT EXISTS "IX_AiBudgetCalls_LocalDate" ON "AiBudgetCalls" ("LocalDate");""");
         CreateIndex(migrationBuilder, "IX_AgentAuditLogs_CreatedAtUtc", """CREATE INDEX CONCURRENTLY IF NOT EXISTS "IX_AgentAuditLogs_CreatedAtUtc" ON "AgentAuditLogs" ("CreatedAtUtc");""");
         migrationBuilder.Sql("""DROP INDEX CONCURRENTLY IF EXISTS "IX_Habits_UserId";""", suppressTransaction: true);
+        migrationBuilder.Sql("RESET lock_timeout;", suppressTransaction: true);
     }
 
     private static void CreateIndex(MigrationBuilder migrationBuilder, string name, string sql)
     {
-        migrationBuilder.Sql($"""
-            DO $$
-            BEGIN
-                IF EXISTS (SELECT 1 FROM pg_catalog.pg_index
-                    WHERE indexrelid = to_regclass('"{name}"') AND NOT indisvalid) THEN
-                    EXECUTE 'DROP INDEX IF EXISTS "{name}"';
-                END IF;
-            END $$;
-            """, suppressTransaction: true);
+        migrationBuilder.Sql($"""DROP INDEX CONCURRENTLY IF EXISTS "{name}";""", suppressTransaction: true);
         migrationBuilder.Sql(sql, suppressTransaction: true);
     }
 
     protected override void Down(MigrationBuilder migrationBuilder)
     {
+        migrationBuilder.Sql("SET lock_timeout = '5s';", suppressTransaction: true);
         CreateIndex(migrationBuilder, "IX_Habits_UserId", """CREATE INDEX CONCURRENTLY IF NOT EXISTS "IX_Habits_UserId" ON "Habits" ("UserId");""");
         migrationBuilder.Sql("""DROP INDEX CONCURRENTLY IF EXISTS "IX_AgentAuditLogs_CreatedAtUtc";""", suppressTransaction: true);
         migrationBuilder.Sql("""DROP INDEX CONCURRENTLY IF EXISTS "IX_AiBudgetCalls_LocalDate";""", suppressTransaction: true);
@@ -80,5 +75,6 @@ public partial class ScheduledJobIndexes : Migration
         migrationBuilder.Sql("""DROP INDEX CONCURRENTLY IF EXISTS "IX_Users_AiMessagesLocalDate";""", suppressTransaction: true);
         migrationBuilder.Sql("""DROP INDEX CONCURRENTLY IF EXISTS "IX_UserSessions_RevokedAtUtc";""", suppressTransaction: true);
         migrationBuilder.Sql("""DROP INDEX CONCURRENTLY IF EXISTS "IX_UserSessions_ExpiresAtUtc";""", suppressTransaction: true);
+        migrationBuilder.Sql("RESET lock_timeout;", suppressTransaction: true);
     }
 }

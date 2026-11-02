@@ -122,6 +122,8 @@ public class OrbitDbContext : DbContext
         modelBuilder.Entity<MarketingBroadcastDelivery>(entity =>
         {
             entity.HasKey(delivery => delivery.Id);
+            entity.HasIndex(delivery => delivery.DeliveredAtUtc);
+            entity.HasIndex(delivery => delivery.RecipientId);
             entity.HasIndex(delivery => new { delivery.BroadcastId, delivery.RecipientId }).IsUnique();
         });
         ConfigureHabitEntity(modelBuilder, isPostgres, encConverter, nullableEncConverter);

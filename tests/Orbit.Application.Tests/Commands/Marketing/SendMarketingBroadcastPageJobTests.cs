@@ -13,6 +13,36 @@ public sealed class SendMarketingBroadcastPageJobTests
 {
     private static SendMarketingBroadcastCommand Content => new("Subject", "Assunto", "<p>Body</p>", "<p>Corpo</p>", null);
 
+    private static DateTime ExpiresAtUtc => DateTime.UtcNow.AddDays(30);
+
+    [Theory]
+    [InlineData(0, false)]
+    [InlineData(-1, false)]
+    [InlineData(1, true)]
+    public async Task Execute_RetryDeadlineBoundsDeliveryAfterCheckpointsExpire(int secondsUntilExpiry, bool sends)
+    {
+        var clock = new BroadcastClock();
+        var email = Substitute.For<IEmailService>();
+        var tokens = Substitute.For<IMarketingUnsubscribeTokenService>();
+        tokens.CreateToken(Arg.Any<Guid>()).Returns("signed");
+        var deliveries = CreateStore();
+        var job = new SendMarketingBroadcastPageJob(email, tokens, Options.Create(new MarketingSettings()), clock, deliveries);
+        MarketingRecipient[] page = [new(Guid.NewGuid(), "recipient@example.com", "en")];
+
+        await job.ExecuteAsync(Guid.NewGuid(), 0, Content, page,
+            clock.GetUtcNow().UtcDateTime.AddSeconds(secondsUntilExpiry), default);
+
+        await email.Received(sends ? 1 : 0).SendMarketingEmailAsync("recipient@example.com", Arg.Any<string>(), Arg.Any<string>(),
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+        if (!sends)
+            await deliveries.DidNotReceiveWithAnyArgs().GetDeliveredRecipientIdsAsync(default, default!, default);
+    }
+
+    private sealed class BroadcastClock : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => new(2030, 6, 15, 12, 0, 0, TimeSpan.Zero);
+    }
+
     [Fact]
     public async Task Execute_BlockedProvider_BoundsParallelismAndRetriesOnlyFailedRecipients()
     {
@@ -40,7 +70,7 @@ public sealed class SendMarketingBroadcastPageJobTests
         var job = new SendMarketingBroadcastPageJob(email, tokens, Options.Create(new MarketingSettings { BroadcastParallelism = 3 }), TimeProvider.System, deliveries);
         MarketingRecipient[] page = [new(Guid.NewGuid(), "fail@example.com", "en"), new(Guid.NewGuid(), "second@example.com", "en"), new(Guid.NewGuid(), "third@example.com", "pt-BR")];
         var broadcastId = Guid.NewGuid();
-        var run = job.ExecuteAsync(broadcastId, 1, Content, page, default);
+        var run = job.ExecuteAsync(broadcastId, 1, Content, page, ExpiresAtUtc, default);
         try { await reached.Task.WaitAsync(TimeSpan.FromSeconds(10)); }
         finally { release.SetResult(); }
         var finish = () => run;
@@ -50,7 +80,7 @@ public sealed class SendMarketingBroadcastPageJobTests
         email.ClearReceivedCalls();
         email.SendMarketingEmailAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
         job = new SendMarketingBroadcastPageJob(email, tokens, Options.Create(new MarketingSettings { BroadcastParallelism = 3 }), TimeProvider.System, deliveries);
-        await job.ExecuteAsync(broadcastId, 1, Content, page, default);
+        await job.ExecuteAsync(broadcastId, 1, Content, page, ExpiresAtUtc, default);
         await email.Received(1).SendMarketingEmailAsync("fail@example.com", Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
         await email.Received(1).SendMarketingEmailAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
@@ -76,14 +106,14 @@ public sealed class SendMarketingBroadcastPageJobTests
         var broadcastId = Guid.NewGuid();
         MarketingRecipient[] page = [new(Guid.NewGuid(), "first@example.com", "en"), new(Guid.NewGuid(), "second@example.com", "en"), new(Guid.NewGuid(), "third@example.com", "en")];
 
-        var interrupted = () => job.ExecuteAsync(broadcastId, 0, Content, page, cancellation.Token);
+        var interrupted = () => job.ExecuteAsync(broadcastId, 0, Content, page, ExpiresAtUtc, cancellation.Token);
         await interrupted.Should().ThrowAsync<OperationCanceledException>();
         email.ClearReceivedCalls();
         email.SendMarketingEmailAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
 
         job = new SendMarketingBroadcastPageJob(email, Substitute.For<IMarketingUnsubscribeTokenService>(),
             Options.Create(new MarketingSettings { BroadcastParallelism = 1 }), TimeProvider.System, deliveries);
-        await job.ExecuteAsync(broadcastId, 0, Content, page, default);
+        await job.ExecuteAsync(broadcastId, 0, Content, page, ExpiresAtUtc, default);
 
         await email.DidNotReceive().SendMarketingEmailAsync("first@example.com", Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
         await email.Received(2).SendMarketingEmailAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
@@ -94,9 +124,9 @@ public sealed class SendMarketingBroadcastPageJobTests
     {
         var email = Substitute.For<IEmailService>();
         var job = new SendMarketingBroadcastPageJob(email, Substitute.For<IMarketingUnsubscribeTokenService>(), Options.Create(new MarketingSettings()), TimeProvider.System, CreateStore());
-        var invalid = () => job.ExecuteAsync(Guid.Empty, 0, Content, [], default);
+        var invalid = () => job.ExecuteAsync(Guid.Empty, 0, Content, [], ExpiresAtUtc, default);
         await invalid.Should().ThrowAsync<ArgumentException>();
-        var canceled = () => job.ExecuteAsync(Guid.NewGuid(), 0, Content, [new(Guid.NewGuid(), "a@example.com", "en")], new CancellationToken(true));
+        var canceled = () => job.ExecuteAsync(Guid.NewGuid(), 0, Content, [new(Guid.NewGuid(), "a@example.com", "en")], ExpiresAtUtc, new CancellationToken(true));
         await canceled.Should().ThrowAsync<OperationCanceledException>();
         await email.DidNotReceiveWithAnyArgs().SendMarketingEmailAsync(default!, default!, default!, default!, default!, default);
     }

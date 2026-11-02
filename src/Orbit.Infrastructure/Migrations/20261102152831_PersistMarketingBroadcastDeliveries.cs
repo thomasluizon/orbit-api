@@ -30,11 +30,22 @@ namespace Orbit.Infrastructure.Migrations
                 table: "MarketingBroadcastDeliveries",
                 columns: new[] { "BroadcastId", "RecipientId" },
                 unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_MarketingBroadcastDeliveries_DeliveredAtUtc",
+                table: "MarketingBroadcastDeliveries",
+                column: "DeliveredAtUtc");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_MarketingBroadcastDeliveries_RecipientId",
+                table: "MarketingBroadcastDeliveries",
+                column: "RecipientId");
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.Sql("SET LOCAL lock_timeout = '5s';");
             migrationBuilder.DropTable(
                 name: "MarketingBroadcastDeliveries");
         }

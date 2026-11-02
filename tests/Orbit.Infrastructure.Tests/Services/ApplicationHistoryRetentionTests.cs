@@ -20,6 +20,28 @@ public sealed class ApplicationHistoryRetentionTests
     private static readonly DateTime NowAtUtc = new(2030, 6, 15, 12, 0, 0, DateTimeKind.Utc);
 
     [Theory]
+    [InlineData(-1)]
+    [InlineData(1)]
+    [InlineData(30)]
+    public async Task MarketingDeliveries_WindowShorterThanRetryDeadline_IsRejectedBeforePurging(int days)
+    {
+        using var factory = new SqliteOrbitDbContextFactory();
+        var db = factory.Context;
+        var receipt = MarketingBroadcastDelivery.Create(Guid.NewGuid(), Guid.NewGuid(), NowAtUtc.AddDays(-32));
+        db.Add(receipt);
+        await db.SaveChangesAsync();
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["BackgroundServices:Retention:MarketingBroadcastDeliveriesDays"] = days.ToString()
+        }).Build();
+
+        var purge = () => ApplicationHistoryRetention.PurgeAsync(db, configuration, new Clock(), default);
+
+        await purge.Should().ThrowAsync<ArgumentOutOfRangeException>();
+        (await db.MarketingBroadcastDeliveries.AnyAsync(row => row.Id == receipt.Id)).Should().BeTrue();
+    }
+
+    [Theory]
     [InlineData("Notifications", 90)]
     [InlineData("AiBudgetCalls", 8)]
     [InlineData("PendingAgentOperations", 7)]
@@ -31,6 +53,7 @@ public sealed class ApplicationHistoryRetentionTests
     [InlineData("DesktopHandoffs", 1)]
     [InlineData("ProactiveItems", 30)]
     [InlineData("ProactiveCalendar", 30)]
+    [InlineData("MarketingBroadcastDeliveries", 31)]
     public async Task Purge_OnlyRowsOutsideWindowAreDeleted_AndZeroDisables(string name, int days)
     {
         foreach (var enabled in new[] { false, true })
@@ -179,6 +202,7 @@ public sealed class ApplicationHistoryRetentionTests
 
     private static Task<bool> ExistsAsync(DbContext db, Entity row) => row switch
     {
+        MarketingBroadcastDelivery => db.Set<MarketingBroadcastDelivery>().AnyAsync(item => item.Id == row.Id),
         Notification => db.Set<Notification>().AnyAsync(item => item.Id == row.Id),
         AiBudgetCall => db.Set<AiBudgetCall>().AnyAsync(item => item.Id == row.Id),
         PendingAgentOperationState => db.Set<PendingAgentOperationState>().AnyAsync(item => item.Id == row.Id),
@@ -197,6 +221,7 @@ public sealed class ApplicationHistoryRetentionTests
     {
         Entity row = name switch
         {
+            "MarketingBroadcastDeliveries" => MarketingBroadcastDelivery.Create(Guid.NewGuid(), userId, atUtc),
             "Notifications" => Notification.Create(userId, "Title", "Body", "/"),
             "AiBudgetCalls" => AiBudgetCall.Reserve(userId, DateOnly.FromDateTime(atUtc), 1),
             "PendingAgentOperations" => PendingAgentOperationState.Create(new()

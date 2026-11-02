@@ -12,15 +12,21 @@ public sealed record MarketingRecipient(Guid UserId, string Email, string Langua
 public sealed class SendMarketingBroadcastPageJob(IEmailService email, IMarketingUnsubscribeTokenService tokens,
     IOptions<MarketingSettings> options, TimeProvider clock, IMarketingBroadcastDeliveryStore deliveries)
 {
+    public const int RetryWindowDays = 30;
+
     [Queue("marketing")]
     [DisableConcurrentExecution(600)]
     public async Task ExecuteAsync(Guid broadcastId, int pageNumber, SendMarketingBroadcastCommand content,
-        MarketingRecipient[] recipients, CancellationToken cancellationToken)
+        MarketingRecipient[] recipients, DateTime expiresAtUtc, CancellationToken cancellationToken)
     {
         if (broadcastId == Guid.Empty) throw new ArgumentException("Broadcast is required.", nameof(broadcastId));
         ArgumentOutOfRangeException.ThrowIfNegative(pageNumber);
         if (recipients.Length > 500) throw new ArgumentException("A broadcast page contains at most 500 recipients.", nameof(recipients));
         if (recipients.Any(recipient => recipient.UserId == Guid.Empty)) throw new ArgumentException("Recipient is required.", nameof(recipients));
+        if (expiresAtUtc.Kind != DateTimeKind.Utc || expiresAtUtc == default)
+            throw new ArgumentException("Broadcast expiry must be a UTC instant.", nameof(expiresAtUtc));
+        cancellationToken.ThrowIfCancellationRequested();
+        if (clock.GetUtcNow().UtcDateTime >= expiresAtUtc) return;
         var delivered = await deliveries.GetDeliveredRecipientIdsAsync(broadcastId, recipients.Select(recipient => recipient.UserId).ToArray(), cancellationToken);
         var settings = options.Value;
         var delay = TimeSpan.FromMilliseconds(Math.Max(settings.SendDelayMilliseconds, 1000d / Math.Clamp(settings.MaxSendsPerSecond, 1, 14)));
@@ -29,11 +35,13 @@ public sealed class SendMarketingBroadcastPageJob(IEmailService email, IMarketin
         await Parallel.ForEachAsync(recipients.DistinctBy(recipient => recipient.UserId).Where(recipient => !delivered.Contains(recipient.UserId)), new ParallelOptions
         { MaxDegreeOfParallelism = Math.Clamp(settings.BroadcastParallelism, 1, 4), CancellationToken = cancellationToken }, async (recipient, token) =>
         {
+            if (clock.GetUtcNow().UtcDateTime >= expiresAtUtc) return;
             await pacing.WaitAsync(token);
             try { await Task.Delay(delay, clock, token); }
             finally { pacing.Release(); }
             try
             {
+                if (clock.GetUtcNow().UtcDateTime >= expiresAtUtc) return;
                 var portuguese = LocaleHelper.IsPortuguese(recipient.Language);
                 var url = $"{settings.ApiBaseUrl.TrimEnd('/')}/api/marketing/unsubscribe?token={Uri.EscapeDataString(tokens.CreateToken(recipient.UserId))}&lang={(portuguese ? "pt" : "en")}";
                 await email.SendMarketingEmailAsync(recipient.Email, portuguese ? content.SubjectPt : content.SubjectEn,

@@ -22,7 +22,8 @@ public partial class SendMarketingBroadcastCommandHandler(
     IBackgroundJobClient backgroundJobClient,
     IMarketingUnsubscribeTokenService unsubscribeTokenService,
     IOptions<MarketingSettings> marketingSettings,
-    ILogger<SendMarketingBroadcastCommandHandler> logger)
+    ILogger<SendMarketingBroadcastCommandHandler> logger,
+    TimeProvider clock)
     : IRequestHandler<SendMarketingBroadcastCommand, Result<MarketingBroadcastResult>>
 {
     private readonly MarketingSettings _settings = marketingSettings.Value;
@@ -40,6 +41,7 @@ public partial class SendMarketingBroadcastCommandHandler(
 
         var pageSize = Math.Clamp(_settings.BroadcastPageSize, 1, 500);
         var broadcastId = Guid.NewGuid();
+        var expiresAtUtc = clock.GetUtcNow().UtcDateTime.AddDays(SendMarketingBroadcastPageJob.RetryWindowDays);
         var pending = new List<MarketingRecipient>(pageSize);
         var pageNumber = 0;
         var total = 0;
@@ -49,7 +51,7 @@ public partial class SendMarketingBroadcastCommandHandler(
             var page = pending.ToArray();
             var number = pageNumber++;
             backgroundJobClient.Enqueue<SendMarketingBroadcastPageJob>(job => job.ExecuteAsync(
-                broadcastId, number, request, page, CancellationToken.None));
+                broadcastId, number, request, page, expiresAtUtc, CancellationToken.None));
             pending.Clear();
         }
         void Add(MarketingRecipient recipient)

@@ -108,6 +108,10 @@ public class AccountDeletionServiceDbTests : IDisposable
         var otherUserId = Guid.NewGuid();
         SeedDeactivatedUser(userId, "owned@example.com", DateTime.UtcNow.AddDays(-1));
         SeedUser(otherUserId, "other-owned@example.com");
+        var broadcastId = Guid.NewGuid();
+        _dbContext.MarketingBroadcastDeliveries.AddRange(
+            MarketingBroadcastDelivery.Create(broadcastId, userId, DateTime.UtcNow),
+            MarketingBroadcastDelivery.Create(broadcastId, otherUserId, DateTime.UtcNow));
         _dbContext.Tags.Add(Tag.Create(userId, "Fitness", "#ff0000").Value);
         _dbContext.ProcessedRequests.Add(ProcessedRequest.Create(userId, "mutation-key-1", "LogHabitCommand", 0));
         AccountRemovalRows.Seed(_dbContext, userId);
@@ -123,6 +127,8 @@ public class AccountDeletionServiceDbTests : IDisposable
         await _service.RunAsync(CancellationToken.None);
         await AccountRemovalRows.AssertAsync(_dbContext, userId, 0, 0, true);
         await AccountRemovalRows.AssertAsync(_dbContext, otherUserId, 1, 1, true);
+
+        (await _dbContext.MarketingBroadcastDeliveries.Select(row => row.RecipientId).ToListAsync()).Should().Equal(otherUserId);
 
         (await _dbContext.Users.AnyAsync(u => u.Id == userId)).Should().BeFalse();
         (await _dbContext.Tags.IgnoreQueryFilters().AnyAsync(t => t.UserId == userId)).Should().BeFalse();

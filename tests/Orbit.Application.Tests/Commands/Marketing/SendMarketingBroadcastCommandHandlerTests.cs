@@ -30,6 +30,7 @@ public class SendMarketingBroadcastCommandHandlerTests
     private User[] _audience = [];
     private MarketingContact[] _contacts = [];
     private readonly MarketingSettings _settings = new() { ApiBaseUrl = "https://api.useorbit.org", SendDelayMilliseconds = 0 };
+    private readonly BroadcastClock _clock = new();
 
     public SendMarketingBroadcastCommandHandlerTests()
     {
@@ -50,7 +51,7 @@ public class SendMarketingBroadcastCommandHandlerTests
 
         _handler = new SendMarketingBroadcastCommandHandler(
             _userRepo, _contactRepo, _backgroundJobClient, _tokenService, Options.Create(_settings),
-            NullLogger<SendMarketingBroadcastCommandHandler>.Instance);
+            NullLogger<SendMarketingBroadcastCommandHandler>.Instance, _clock);
     }
 
     private static SendMarketingBroadcastCommand Command(string? testEmail = null) =>
@@ -63,10 +64,10 @@ public class SendMarketingBroadcastCommandHandlerTests
     {
         email.MarketingSends.Should().BeEmpty();
         foreach (var queued in _pages.Where(job => job.Type == typeof(SendMarketingBroadcastPageJob)))
-            await new SendMarketingBroadcastPageJob(email, _tokenService, Options.Create(_settings), TimeProvider.System,
+            await new SendMarketingBroadcastPageJob(email, _tokenService, Options.Create(_settings), _clock,
                 Substitute.For<IMarketingBroadcastDeliveryStore>())
                 .ExecuteAsync((Guid)queued.Args[0], (int)queued.Args[1], (SendMarketingBroadcastCommand)queued.Args[2],
-                    (MarketingRecipient[])queued.Args[3], default);
+                    (MarketingRecipient[])queued.Args[3], (DateTime)queued.Args[4], default);
         email.MarketingSends.Should().HaveCount(expected);
     }
 
@@ -163,7 +164,7 @@ public class SendMarketingBroadcastCommandHandlerTests
         var handler = new SendMarketingBroadcastCommandHandler(
             _userRepo, _contactRepo, _backgroundJobClient, _tokenService,
             Options.Create(new MarketingSettings { ApiBaseUrl = "https://api.useorbit.org", SendDelayMilliseconds = 0 }),
-            logger);
+            logger, _clock);
 
         var command = new SendMarketingBroadcastCommand(
             "EN Subject", "PT Assunto", "<p>EN body</p>", "<p>PT corpo</p>", "preview-pii@example.com");
@@ -244,6 +245,12 @@ public class SendMarketingBroadcastCommandHandlerTests
         _emailService.MarketingSends.Should().BeEmpty();
         _pages.Select(job => ((MarketingRecipient[])job.Args[3]).Length).Should().Equal(500, 500, 200);
         _pages.Select(job => (Guid)job.Args[0]).Distinct().Should().ContainSingle();
+        _pages.Select(job => (DateTime)job.Args[4]).Should().OnlyContain(deadline => deadline == _clock.GetUtcNow().UtcDateTime.AddDays(30));
+    }
+
+    private sealed class BroadcastClock : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => new(2030, 6, 15, 12, 0, 0, TimeSpan.Zero);
     }
 
     private sealed class CollectingLogger<T> : ILogger<T>
