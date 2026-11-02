@@ -141,12 +141,15 @@ public partial class HandleWebhookCommandHandler(
         if (user is null || subscriptionId is null)
             return false;
 
-        var subscription = session.Subscription is { Items.Data.Count: > 0 } expanded
-            ? expanded : await FetchSubscriptionAsync(subscriptionId, ct);
+        var customerId = session.CustomerId ?? session.Customer?.Id;
+        if (!CanLinkCheckoutCustomer(user, customerId))
+            return false;
+
+        var subscription = await ReadCheckoutSubscriptionAsync(session, subscriptionId, ct);
         var interval = GetSubscriptionInterval(subscription);
         var periodEnd = GetPeriodEnd(subscription, interval);
 
-        user.SetStripeCustomerId(session.CustomerId ?? session.Customer?.Id ?? "");
+        user.SetStripeCustomerId(customerId ?? "");
         user.SetStripeSubscription(subscriptionId, periodEnd, interval, stripeEvent.Created);
 
         if (!string.IsNullOrEmpty(user.ReferralCouponId))
@@ -160,6 +163,15 @@ public partial class HandleWebhookCommandHandler(
         AnalyticsCapture.SafeCaptureUserEvent(productAnalytics, logger, user, "subscription_started");
         return true;
     }
+
+    private static bool CanLinkCheckoutCustomer(User user, string? customerId) =>
+        user.StripeCustomerGeneration == 0
+        || !string.IsNullOrWhiteSpace(customerId) && user.StripeCustomerId == customerId;
+
+    private Task<Subscription> ReadCheckoutSubscriptionAsync(Session session, string subscriptionId, CancellationToken ct) =>
+        session.Subscription is { Items.Data.Count: > 0 } expanded
+            ? Task.FromResult(expanded)
+            : FetchSubscriptionAsync(subscriptionId, ct);
 
     private async Task<bool> HandleInvoicePaid(Event stripeEvent, CancellationToken ct)
     {

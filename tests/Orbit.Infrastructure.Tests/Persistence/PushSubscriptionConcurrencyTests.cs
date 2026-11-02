@@ -157,7 +157,7 @@ public sealed class PushSubscriptionConcurrencyTests : IDisposable
 
     private SubscribePushCommand Command(Guid userId, string endpoint, string transport) =>
         new(userId, endpoint, transport == "web" ? _webKey : transport,
-            transport == "web" ? _webAuth : transport,
+            transport == "web" ? _webAuth : "install-secret",
             transport == "apns" ? "org.useorbit.desktop" : null,
             transport == "web" ? null : _device);
 

@@ -73,4 +73,17 @@ public class RestoreGoalCommandHandlerTests
         result.ErrorCode.Should().Be(ErrorCodes.GoalNotFound);
     }
 
+    [Fact]
+    public async Task Handle_GoalOwnedByAnotherUser_ReturnsGoalNotFoundAndKeepsGoal()
+    {
+        var goal = Goal.Create(Guid.NewGuid(), "Foreign", 100, "km").Value;
+        goal.SoftDelete();
+        _goalRepo.FindTrackedIgnoringFiltersAsync(Arg.Any<Expression<Func<Goal, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => new[] { goal }.Where(call.Arg<Expression<Func<Goal, bool>>>().Compile()).ToList());
+        var result = await _handler.Handle(new RestoreGoalCommand(UserId, goal.Id), default);
+        result.ErrorCode.Should().Be(ErrorCodes.GoalNotFound);
+        goal.IsDeleted.Should().BeTrue();
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
 }

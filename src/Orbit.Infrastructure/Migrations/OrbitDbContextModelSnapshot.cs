@@ -2691,7 +2691,15 @@ namespace Orbit.Infrastructure.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
 
+                    b.Property<int>("StripeCustomerGeneration")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
                     b.Property<string>("StripeCustomerId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("StripeCustomerPendingDeletionId")
                         .HasColumnType("text");
 
                     b.Property<bool>("StripeRenewalStoppedByDeletion")

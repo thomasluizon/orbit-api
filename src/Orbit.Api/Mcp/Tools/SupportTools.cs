@@ -10,16 +10,12 @@ public class SupportTools(McpExecutorBridge executorBridge)
     [McpServerTool(Name = "send_support_request"), Description("Send a support request on behalf of the user.")]
     public async Task<string> SendSupportRequest(
         ClaimsPrincipal user,
-        [Description("Sender name")] string name,
-        [Description("Sender email address")] string email,
         [Description("Support request subject")] string subject,
         [Description("Support request message body")] string message,
         CancellationToken cancellationToken = default)
     {
         var result = await executorBridge.ExecuteAsync(user, "send_support_request", new
         {
-            name,
-            email,
             subject,
             message
         }, confirmationToken: null, cancellationToken);

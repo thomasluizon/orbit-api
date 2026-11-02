@@ -59,6 +59,24 @@ public class IdempotencyBehaviorDbTests : IDisposable
     }
 
     [Fact]
+    public async Task Idempotency_SameKeyOtherUser_RunsHandlerForThatUser()
+    {
+        var other = User.Create("Other", "other-idempotency@example.com").Value;
+        _dbContext.Users.Add(other);
+        await _dbContext.SaveChangesAsync();
+        var ownerBehavior = new IdempotencyBehavior<FakeRequest, string>(
+            new StubIdempotencyContext(true, _userId, "shared"), _store, _unitOfWork);
+        var otherBehavior = new IdempotencyBehavior<FakeRequest, string>(
+            new StubIdempotencyContext(true, other.Id, "shared"), _store, _unitOfWork);
+        (await ownerBehavior.Handle(new(), CountingHandler("owner-response"), default)).Should().Be("owner-response");
+        (await otherBehavior.Handle(new(), CountingHandler("other-response"), default)).Should().Be("other-response");
+        (await ownerBehavior.Handle(new(), CountingHandler("unexpected replay"), default)).Should().Be("owner-response");
+        (await otherBehavior.Handle(new(), CountingHandler("unexpected replay"), default)).Should().Be("other-response");
+        _handlerCalls.Should().Be(2);
+        (await _dbContext.ProcessedRequests.CountAsync()).Should().Be(2);
+    }
+
+    [Fact]
     public async Task Handle_NewKey_ExecutesHandlerOnceAndStoresResponse()
     {
         var behavior = CreateBehavior<FakeRequest, string>();

@@ -83,7 +83,7 @@ public class FoundingAchievementResetRaceTests
             accountResetRepository,
             unitOfWork,
             userDateService,
-            new MemoryCache(new MemoryCacheOptions()));
+            new MemoryCache(new MemoryCacheOptions()), NSubstitute.Substitute.For<Orbit.Application.Connections.INotionConnectionService>(), NSubstitute.Substitute.For<Orbit.Domain.Interfaces.IGoogleTokenService>());
 
         var reconciliationTask = gamificationService.ReconcileFoundingAchievementsAsync(userId);
         await evidenceSelected.Task.WaitAsync(TimeSpan.FromSeconds(5));

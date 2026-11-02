@@ -14,12 +14,10 @@ public class SendSupportRequestTool(IMediator mediator) : IAiTool, IArgumentChec
         type = JsonSchemaTypes.Object,
         properties = new
         {
-            name = new { type = JsonSchemaTypes.String },
-            email = new { type = JsonSchemaTypes.String },
             subject = new { type = JsonSchemaTypes.String },
             message = new { type = JsonSchemaTypes.String }
         },
-        required = new[] { "name", "email", "subject", "message" }
+        required = new[] { "subject", "message" }
     };
 
     public Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct) =>
@@ -30,20 +28,16 @@ public class SendSupportRequestTool(IMediator mediator) : IAiTool, IArgumentChec
 
     private async Task<ToolResult> ExecuteCoreAsync(JsonElement args, Guid userId, CancellationToken ct, bool checkOnly)
     {
-        var name = JsonArgumentParser.GetOptionalString(args, "name");
-        var email = JsonArgumentParser.GetOptionalString(args, "email");
         var subject = JsonArgumentParser.GetOptionalString(args, "subject");
         var message = JsonArgumentParser.GetOptionalString(args, "message");
 
-        if (string.IsNullOrWhiteSpace(name) ||
-            string.IsNullOrWhiteSpace(email) ||
-            string.IsNullOrWhiteSpace(subject) ||
+        if (string.IsNullOrWhiteSpace(subject) ||
             string.IsNullOrWhiteSpace(message))
         {
-            return new ToolResult(false, Error: "name, email, subject, and message are required.");
+            return new ToolResult(false, Error: "subject and message are required.");
         }
 
-        var command = new SendSupportCommand(userId, name, email, subject, message);
+        var command = new SendSupportCommand(userId, "", "", subject, message);
         if (checkOnly)
             return await ChatToolArgumentCheck.CheckCommandAsync(mediator, command, ct);
 

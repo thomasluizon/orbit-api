@@ -15,7 +15,7 @@ public sealed class DismissConversationOffersCommandValidator : AbstractValidato
         RuleFor(x => x.UserId).NotEmpty();
         RuleFor(x => x.ConversationId).NotEmpty();
         RuleFor(x => x.OfferKeys).NotNull().Must(keys => keys is { Count: > 0 and <= 100 });
-        RuleForEach(x => x.OfferKeys).NotEmpty().MaximumLength(200).Must(key => key is not null && !key.Any(char.IsControl));
+        RuleForEach(x => x.OfferKeys).Must((command, key) => Orbit.Domain.Entities.ConversationOffer.Create(command.UserId, command.ConversationId, key).IsSuccess);
     }
 }
 

@@ -20,6 +20,7 @@ public partial class StripeBillingServiceTests
     private static readonly Guid UserId = Guid.Parse("7092bf88-d132-46df-b4ee-2dcc2197cd69");
     private readonly List<(SessionCreateOptions Options, RequestOptions Request)> _checkoutRequests = [];
     private readonly List<(PortalCreateOptions Options, RequestOptions Request)> _portalRequests = [];
+    private readonly CustomerService _customers = Substitute.For<CustomerService>();
     private readonly SubscriptionService _subscriptions = Substitute.For<SubscriptionService>();
     private readonly StripeBillingService _service;
 
@@ -41,9 +42,54 @@ public partial class StripeBillingServiceTests
             });
         var invoices = Substitute.For<InvoiceService>();
         _service = new StripeBillingService(
-            new StripeServiceClients(new CustomerService(), checkout, portal, _subscriptions,
+            new StripeServiceClients(_customers, checkout, portal, _subscriptions,
                 invoices, new PriceService(), new CouponService()),
             NullLogger<StripeBillingService>.Instance);
+    }
+
+    [Fact]
+    public async Task DeleteCustomerAsync_UsesStoredIdentifier()
+    {
+        await _service.DeleteCustomerAsync("cus_erased", default);
+        await _customers.Received(1).DeleteAsync("cus_erased", Arg.Any<CustomerDeleteOptions>(),
+            Arg.Any<RequestOptions>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CreateCustomerAsync_ReplacementUsesNewStableIdempotencyKey()
+    {
+        var keys = new List<string>();
+        _customers.CreateAsync(Arg.Any<CustomerCreateOptions>(), Arg.Any<RequestOptions>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                keys.Add(call.Arg<RequestOptions>().IdempotencyKey);
+                return new Customer { Id = "cus_created" };
+            });
+
+        await _service.CreateCustomerAsync("returning@example.com", "Returning", UserId, default);
+        await _service.CreateCustomerAsync("returning@example.com", "Returning", UserId, default, 1);
+        await _service.CreateCustomerAsync("returning@example.com", "Returning", UserId, default, 1);
+
+        keys.Should().HaveCount(3);
+        keys[0].Should().Be($"orbit-customer-create-{UserId}");
+        keys[1].Should().NotBe(keys[0]);
+        keys[2].Should().Be(keys[1]);
+    }
+
+    [Fact]
+    public async Task DeleteCustomerAsync_AlreadyGone_Completes()
+    {
+        _customers.DeleteAsync("cus_erased", Arg.Any<CustomerDeleteOptions>(), Arg.Any<RequestOptions>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new StripeException(System.Net.HttpStatusCode.NotFound, new StripeError(), "missing"));
+        await _service.Invoking(service => service.DeleteCustomerAsync("cus_erased", default)).Should().NotThrowAsync();
+    }
+
+    [Fact]
+    public async Task DeleteCustomerAsync_ProviderFailure_Throws()
+    {
+        _customers.DeleteAsync("cus_erased", Arg.Any<CustomerDeleteOptions>(), Arg.Any<RequestOptions>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new StripeException(System.Net.HttpStatusCode.Unauthorized, new StripeError(), "unavailable"));
+        await _service.Invoking(service => service.DeleteCustomerAsync("cus_erased", default)).Should().ThrowAsync<BillingProviderException>();
     }
 
     [Theory]

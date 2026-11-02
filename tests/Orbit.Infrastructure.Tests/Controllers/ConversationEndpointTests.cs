@@ -61,7 +61,11 @@ public class ConversationEndpointTests
         var latest = (await controller.GetLatestConversation(default)).Should().BeOfType<OkObjectResult>().Which.Value
             .Should().BeOfType<ConversationPage>().Subject;
         latest.Turns.Select(row => row.Role).Should().Equal("user", "assistant");
-        var image = (await controller.GetConversationImage(fixture.ConversationId, turn.TurnId, default)).Should().BeOfType<FileContentResult>().Subject;
+        var imageUrl = latest.Turns.Single(row => row.TurnId == turn.TurnId && row.Role == "user").Image!.Url;
+        imageUrl.Should().Be($"/api/chat/conversations/{fixture.ConversationId}/images/{turn.TurnId}");
+        var parts = imageUrl!.Split('/');
+        var image = (await controller.GetConversationImage(Guid.Parse(parts[^3]), Guid.Parse(parts[^1]), default))
+            .Should().BeOfType<FileContentResult>().Subject;
         image.FileContents.Should().Equal(ConversationTurnRecorderTests.Fixture.Image);
         controller.Response.Headers.CacheControl.ToString().Should().Be("private, no-store");
         var foreign = Controller(mediator, Guid.NewGuid());
