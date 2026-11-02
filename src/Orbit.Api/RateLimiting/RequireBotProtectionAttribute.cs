@@ -29,7 +29,7 @@ public sealed partial class RequireBotProtectionFilter(
 {
     public async Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
     {
-        if (!options.Value.Enabled || IsProductionSmokeAccount(context.ActionArguments.Values))
+        if (!options.Value.Enabled)
         {
             await next();
             return;
@@ -45,7 +45,7 @@ public sealed partial class RequireBotProtectionFilter(
         try
         {
             var result = await verifier.VerifyAsync(token, context.HttpContext.RequestAborted);
-            if (!result.Success)
+            if (!result.Success || !options.Value.AllowsHostname(result.Hostname))
             {
                 Reject(context);
                 return;
@@ -70,19 +70,6 @@ public sealed partial class RequireBotProtectionFilter(
 
     private static ObjectResult ErrorResult(ActionExecutingContext context, string error, int statusCode)
         => new(new { error, requestId = context.HttpContext.GetRequestId() }) { StatusCode = statusCode };
-
-    private static bool IsProductionSmokeAccount(IEnumerable<object?> arguments)
-    {
-        var smokeEmail = Environment.GetEnvironmentVariable("SMOKE_TEST_EMAIL");
-        var smokeCode = Environment.GetEnvironmentVariable("SMOKE_TEST_CODE");
-        if (string.IsNullOrWhiteSpace(smokeEmail) || string.IsNullOrWhiteSpace(smokeCode)
-            || smokeCode.Length != 6 || !smokeCode.All(char.IsDigit)
-            || !string.Equals(Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT"), "Production", StringComparison.OrdinalIgnoreCase))
-            return false;
-
-        var email = GetStringProperty(arguments, "Email");
-        return string.Equals(email?.Trim(), smokeEmail.Trim(), StringComparison.OrdinalIgnoreCase);
-    }
 
     private static string? GetStringProperty(IEnumerable<object?> arguments, string name)
     {

@@ -28,12 +28,18 @@ public class HandlePlayNotificationCommandHandlerTests
     private readonly IPlayReferralCouponConsumer _referralConsumer = Substitute.For<IPlayReferralCouponConsumer>();
     private readonly IGenericRepository<ProcessedPlayNotification> _processedRepo = Substitute.For<IGenericRepository<ProcessedPlayNotification>>();
     private readonly HandlePlayNotificationCommandHandler _handler;
+    private ProcessedPlayNotification? _claim;
 
     private static readonly IOptions<GooglePlaySettings> Settings = Options.Create(
         new GooglePlaySettings { PackageName = "org.useorbit.app", ProductId = "orbit_pro", MonthlyBasePlanId = "monthly", YearlyBasePlanId = "yearly" });
 
     public HandlePlayNotificationCommandHandlerTests()
     {
+        _processedRepo.AddAsync(Arg.Any<ProcessedPlayNotification>(), Arg.Any<CancellationToken>())
+            .Returns(call => { _claim = call.Arg<ProcessedPlayNotification>(); return Task.CompletedTask; });
+        _processedRepo.FindOneTrackedAsync(Arg.Any<Expression<Func<ProcessedPlayNotification, bool>>>(),
+            Arg.Any<Func<IQueryable<ProcessedPlayNotification>, IQueryable<ProcessedPlayNotification>>?>(), Arg.Any<CancellationToken>())
+            .Returns(_ => _claim);
         _unitOfWork.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task<bool>>>(), Arg.Any<CancellationToken>())
             .Returns(call => call.Arg<Func<CancellationToken, Task<bool>>>()(call.Arg<CancellationToken>()));
         _unitOfWork.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task<User?>>>(), Arg.Any<CancellationToken>())
@@ -394,7 +400,7 @@ public class HandlePlayNotificationCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_UserNotFound_ReturnsSuccessWithoutSaving()
+    public async Task Handle_UserNotFound_CompletesClaimWithoutChangingUser()
     {
         StubUser(null);
         StubVerify(new PlaySubscriptionState(true, DateTime.UtcNow.AddMonths(1), SubscriptionInterval.Monthly, true, "orbit_pro", null, null));
@@ -402,7 +408,7 @@ public class HandlePlayNotificationCommandHandlerTests
         var result = await _handler.Handle(new HandlePlayNotificationCommand(BuildPushBody(4, "tok_unknown", "orbit_pro")), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(2).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -437,19 +443,20 @@ public class HandlePlayNotificationCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_NullState_ReturnsSuccessWithoutSaving()
+    public async Task Handle_NullState_CompletesClaimWithoutChangingUser()
     {
         StubVerify(null);
 
         var result = await _handler.Handle(new HandlePlayNotificationCommand(BuildPushBody(2, "tok_renew", "orbit_pro")), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(2).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]
     public async Task Handle_DuplicateMessageId_SkipsProcessingWithoutVerifying()
     {
+        _claim = ProcessedPlayNotification.Create("1");
         _processedRepo.AnyAsync(
             Arg.Any<Expression<Func<ProcessedPlayNotification, bool>>>(),
             Arg.Any<CancellationToken>())
@@ -487,12 +494,15 @@ public class HandlePlayNotificationCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         user.IsPro.Should().BeTrue();
-        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(2).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]
     public async Task Handle_ConcurrentDuplicate_SaveConflictButAlreadyRecorded_ReturnsSuccess()
     {
+        _processedRepo.FindOneTrackedAsync(Arg.Any<Expression<Func<ProcessedPlayNotification, bool>>>(),
+            Arg.Any<Func<IQueryable<ProcessedPlayNotification>, IQueryable<ProcessedPlayNotification>>?>(), Arg.Any<CancellationToken>())
+            .Returns(ProcessedPlayNotification.Create("1"));
         var user = User.Create("Alex", "test@example.com").Value;
         StubUser(user);
         StubVerify(new PlaySubscriptionState(true, DateTime.UtcNow.AddMonths(1), SubscriptionInterval.Monthly, true, "orbit_pro", null, null));
@@ -634,9 +644,9 @@ public class HandlePlayNotificationCommandHandlerTests
         _unitOfWork.Received(1).ResetTracking();
     }
     [Fact]
-    public async Task Handle_OverlappingMessage_ClaimsBeforeGoogleAndVerifiesOnceOutsideTransaction()
+    public async Task Handle_OverlappingMessage_OriginalFails_DuplicateRemainsRetryable()
     {
-        var ledger = false;
+        ProcessedPlayNotification? ledger = null;
         var active = false;
         var gate = new SemaphoreSlim(1, 1);
         var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -650,17 +660,25 @@ public class HandlePlayNotificationCommandHandlerTests
                 try { return await call.Arg<Func<CancellationToken, Task<bool>>>()(default); }
                 finally { active = false; gate.Release(); }
             });
-        _processedRepo.AnyAsync(Arg.Any<Expression<Func<ProcessedPlayNotification, bool>>>(), Arg.Any<CancellationToken>()).Returns(_ => ledger);
+        _processedRepo.AnyAsync(Arg.Any<Expression<Func<ProcessedPlayNotification, bool>>>(), Arg.Any<CancellationToken>()).Returns(_ => ledger is not null);
+        _processedRepo.FindOneTrackedAsync(Arg.Any<Expression<Func<ProcessedPlayNotification, bool>>>(),
+            Arg.Any<Func<IQueryable<ProcessedPlayNotification>, IQueryable<ProcessedPlayNotification>>?>(), Arg.Any<CancellationToken>()).Returns(_ => ledger);
         _processedRepo.AddAsync(Arg.Any<ProcessedPlayNotification>(), Arg.Any<CancellationToken>())
-            .Returns(_ => { ledger = true; return Task.CompletedTask; });
+            .Returns(call => { ledger = call.Arg<ProcessedPlayNotification>(); return Task.CompletedTask; });
         _playBilling.VerifyAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(async _ =>
             {
                 _unitOfWork.HasActiveTransaction.Should().BeFalse();
-                ledger.Should().BeTrue();
+                ledger.Should().NotBeNull();
                 started.TrySetResult();
                 await release.Task;
-                return (PlaySubscriptionState?)null;
+                return await Task.FromException<PlaySubscriptionState?>(new BillingProviderException("provider unavailable"));
+            });
+        _processedRepo.DeleteAsync(Arg.Any<Expression<Func<ProcessedPlayNotification, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                if (ledger is not null && call.Arg<Expression<Func<ProcessedPlayNotification, bool>>>().Compile()(ledger)) ledger = null;
+                return 1;
             });
         var command = new HandlePlayNotificationCommand(BuildPushBody(2, "tok", "orbit_pro"));
         var first = _handler.Handle(command, default);
@@ -668,11 +686,21 @@ public class HandlePlayNotificationCommandHandlerTests
         {
             await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
             await Task.Delay(100);
-            (await _handler.Handle(command, default)).IsSuccess.Should().BeTrue();
+            (await _handler.Handle(command, default)).IsFailure.Should().BeTrue();
             first.IsCompleted.Should().BeFalse();
         }
-        finally { release.TrySetResult(); await first; }
+        finally { release.TrySetResult(); }
+        (await first).IsFailure.Should().BeTrue();
+        ledger.Should().BeNull();
         await _playBilling.Received(1).VerifyAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+        var user = User.Create("Alex", "redelivery@example.com").Value;
+        StubUser(user);
+        StubVerify(new PlaySubscriptionState(true, DateTime.UtcNow.AddMonths(1), SubscriptionInterval.Monthly,
+            true, "orbit_pro", null, null));
+        (await _handler.Handle(command, default)).IsSuccess.Should().BeTrue();
+        user.PlayPurchaseToken.Should().Be("tok");
+        ledger!.ProcessingLeaseId.Should().BeNull();
+        await _playBilling.Received(2).VerifyAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -700,6 +728,80 @@ public class HandlePlayNotificationCommandHandlerTests
         (await _handler.Handle(command, default)).IsSuccess.Should().BeTrue();
         stored.ConsumedCouponId.Should().BeNull();
         await _playBilling.Received(1).VerifyAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_InterruptedAfterClaimCommit_ExpiredLeaseIsReclaimedAndApplied()
+    {
+        var abandoned = ProcessedPlayNotification.Claim("1", DateTime.UtcNow.AddMinutes(-10), TimeSpan.FromMinutes(2));
+        _processedRepo.AnyAsync(Arg.Any<Expression<Func<ProcessedPlayNotification, bool>>>(), Arg.Any<CancellationToken>()).Returns(true);
+        _processedRepo.FindOneTrackedAsync(Arg.Any<Expression<Func<ProcessedPlayNotification, bool>>>(),
+            Arg.Any<Func<IQueryable<ProcessedPlayNotification>, IQueryable<ProcessedPlayNotification>>?>(), Arg.Any<CancellationToken>())
+            .Returns(abandoned);
+        var user = User.Create("Alex", "interrupted@example.com").Value;
+        StubUser(user);
+        StubVerify(new PlaySubscriptionState(true, DateTime.UtcNow.AddMonths(1), SubscriptionInterval.Monthly, true, "orbit_pro", null, null));
+        var command = new HandlePlayNotificationCommand(BuildPushBody(2, "tok_renew", "orbit_pro"));
+
+        (await _handler.Handle(command, default)).IsSuccess.Should().BeTrue();
+
+        user.PlayPurchaseToken.Should().Be("tok_renew");
+        abandoned.ProcessingLeaseId.Should().BeNull();
+        abandoned.ProcessingLeaseExpiresAtUtc.Should().BeNull();
+        await _playBilling.Received(1).VerifyAsync("orbit_pro", "tok_renew", Arg.Any<CancellationToken>());
+        (await _handler.Handle(command, default)).IsSuccess.Should().BeTrue();
+        await _playBilling.Received(1).VerifyAsync("orbit_pro", "tok_renew", Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_LeaseReplacedWhileVerifying_CannotApplyStateOrDeleteNewOwner()
+    {
+        var user = User.Create("Alex", "fenced@example.com").Value;
+        StubUser(user);
+        _playBilling.VerifyAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                _claim!.TryReclaim(DateTime.UtcNow.AddMinutes(3), TimeSpan.FromMinutes(2)).Should().BeTrue();
+                return new PlaySubscriptionState(true, DateTime.UtcNow.AddMonths(1), SubscriptionInterval.Monthly,
+                    true, "orbit_pro", null, null);
+            });
+        var command = new HandlePlayNotificationCommand(BuildPushBody(2, "tok_renew", "orbit_pro"));
+        (await _handler.Handle(command, default)).IsFailure.Should().BeTrue();
+        user.PlayPurchaseToken.Should().BeNull();
+        _claim!.ProcessingLeaseId.Should().NotBeNull();
+        await _processedRepo.Received(1).DeleteAsync(
+            Arg.Is<Expression<Func<ProcessedPlayNotification, bool>>>(predicate => !predicate.Compile()(_claim)),
+            CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task Handle_CompletionSavedAtomicallyWithSubscriptionState()
+    {
+        var user = User.Create("Alex", "atomic@example.com").Value;
+        StubUser(user);
+        StubVerify(new PlaySubscriptionState(true, DateTime.UtcNow.AddMonths(1), SubscriptionInterval.Monthly, true, "orbit_pro", null, null));
+        var active = false;
+        var completionSaves = 0;
+        _unitOfWork.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task<User?>>>(), Arg.Any<CancellationToken>())
+            .Returns(async call =>
+            {
+                active = true;
+                try { return await call.Arg<Func<CancellationToken, Task<User?>>>()(default); }
+                finally { active = false; }
+            });
+        _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>()).Returns(_ =>
+        {
+            if (_claim!.ProcessingLeaseId is null)
+            {
+                active.Should().BeTrue();
+                user.PlayPurchaseToken.Should().Be("tok_renew");
+                completionSaves++;
+            }
+            return 1;
+        });
+        (await _handler.Handle(new HandlePlayNotificationCommand(BuildPushBody(2, "tok_renew", "orbit_pro")), default))
+            .IsSuccess.Should().BeTrue();
+        completionSaves.Should().Be(1);
     }
 
     private sealed class UniqueViolation : System.Data.Common.DbException

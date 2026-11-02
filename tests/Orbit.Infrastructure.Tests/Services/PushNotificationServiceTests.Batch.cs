@@ -158,25 +158,204 @@ public sealed partial class PushNotificationServiceTests
     public async Task FcmHttpHandler_ConcurrencyOne_SerializesSdkRequests()
     {
         var wire = new ConcurrentPushHandler();
-        using var http = new HttpClient(new FcmDeliveryHttpClientFactory.BoundedHandler(wire,
-            new PushDeliverySettings { Concurrency = 1 }));
+        using var http = new FcmDeliveryHttpClientFactory(new PushDeliverySettings { Concurrency = 1 }, wire)
+            .CreateHttpClient(new Google.Apis.Http.CreateHttpClientArgs());
+        http.Timeout.Should().Be(Timeout.InfiniteTimeSpan);
         var responses = await Task.WhenAll(Enumerable.Range(0, 30).Select(_ => http.GetAsync("https://fcm.googleapis.com/test")));
         foreach (var response in responses) response.Dispose();
         wire.Peak.Should().Be(1);
         wire.Calls.Should().Be(30);
     }
 
+    [Fact]
+    public async Task Fcm_FullSdkBatch_QueuedRecipientsGetTheirOwnAttemptBudget()
+    {
+        for (var i = 0; i < 500; i++)
+            _dbContext.PushSubscriptions.Add(PushSubscription.Create(_userId, $"token-{i}", "fcm", "auth").Value);
+        await _dbContext.SaveChangesAsync();
+        var wire = new ConcurrentPushHandler { Latency = TimeSpan.FromMilliseconds(30) };
+        var settings = new PushDeliverySettings { Concurrency = 8, AttemptTimeoutSeconds = 1 };
+        var app = FirebaseApp.Create(new AppOptions
+        {
+            Credential = GoogleCredential.FromAccessToken("test-access-token"),
+            ProjectId = "test-project",
+            HttpClientFactory = new FcmDeliveryHttpClientFactory(settings, wire)
+        });
+        try
+        {
+            using var service = new PushNotificationService(_dbContext, Options.Create(_vapidSettings), NullLogger<PushNotificationService>.Instance,
+                new HttpClient(), Substitute.For<IApnsPushSender>(), Substitute.For<IWnsPushSender>(), Options.Create(settings));
+            (await service.TrySendToUserAsync(_userId, "Title", "Body")).Should().BeTrue();
+            wire.Calls.Should().Be(500);
+            wire.Completed.Should().Be(500);
+            wire.Peak.Should().BeLessThanOrEqualTo(8);
+            (await _dbContext.PushSubscriptions.CountAsync()).Should().Be(500);
+        }
+        finally { app.Delete(); }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Fcm_BoundedSdkRequests_TimeoutKeepsHealthyRecipientAndCallerCancellationPropagates(bool cancelCaller)
+    {
+        _dbContext.PushSubscriptions.AddRange(
+            PushSubscription.Create(_userId, "hang", "fcm", "auth").Value,
+            PushSubscription.Create(_userId, "live", "fcm", "auth").Value);
+        await _dbContext.SaveChangesAsync();
+        var wire = new BlockingFcmHandler();
+        var settings = new PushDeliverySettings { Concurrency = 1, AttemptTimeoutSeconds = 1 };
+        var app = FirebaseApp.Create(new AppOptions
+        {
+            Credential = GoogleCredential.FromAccessToken("test-access-token"),
+            ProjectId = "test-project",
+            HttpClientFactory = new FcmDeliveryHttpClientFactory(settings, wire)
+        });
+        try
+        {
+            using var cancellation = new CancellationTokenSource();
+            using var service = new PushNotificationService(_dbContext, Options.Create(_vapidSettings), NullLogger<PushNotificationService>.Instance,
+                new HttpClient(), Substitute.For<IApnsPushSender>(), Substitute.For<IWnsPushSender>(), Options.Create(settings));
+            var send = service.TrySendToUserAsync(_userId, "Title", "Body", cancellationToken: cancellation.Token);
+            await wire.Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            if (cancelCaller)
+            {
+                cancellation.Cancel();
+                var observe = async () => await send;
+                await observe.Should().ThrowAsync<OperationCanceledException>();
+            }
+            else
+            {
+                (await send).Should().BeTrue();
+                wire.LiveDeliveries.Should().Be(1);
+            }
+            wire.HangingAttempts.Should().Be(1);
+            (await _dbContext.PushSubscriptions.CountAsync()).Should().Be(2);
+        }
+        finally { app.Delete(); }
+    }
+
+    [Fact]
+    public async Task Fcm_ResponseBodyStalls_ActiveAttemptDeadlineStillApplies()
+    {
+        _dbContext.PushSubscriptions.Add(PushSubscription.Create(_userId, "body-stalls", "fcm", "auth").Value);
+        await _dbContext.SaveChangesAsync();
+        var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new SlowFcmContent()
+        });
+        var settings = new PushDeliverySettings { Concurrency = 1, AttemptTimeoutSeconds = 1 };
+        var app = FirebaseApp.Create(new AppOptions
+        {
+            Credential = GoogleCredential.FromAccessToken("test-access-token"),
+            ProjectId = "test-project",
+            HttpClientFactory = new FcmDeliveryHttpClientFactory(settings, handler)
+        });
+        try
+        {
+            using var service = new PushNotificationService(_dbContext, Options.Create(_vapidSettings), NullLogger<PushNotificationService>.Instance,
+                new HttpClient(), Substitute.For<IApnsPushSender>(), Substitute.For<IWnsPushSender>(), Options.Create(settings));
+            (await service.TrySendToUserAsync(_userId, "Title", "Body")).Should().BeFalse();
+            handler.CallCount.Should().Be(1);
+            (await _dbContext.PushSubscriptions.CountAsync()).Should().Be(1);
+        }
+        finally { app.Delete(); }
+    }
+
+    [Fact]
+    public async Task Fcm_FallbackQueuedBehindAnotherBatch_GetsItsOwnActiveAttemptBudget()
+    {
+        using var factory = new SqliteOrbitDbContextFactory();
+        var db = factory.Context;
+        var batchUser = User.Create("Batch", "batch-budget@example.com").Value;
+        var fallbackUser = User.Create("Fallback", "fallback-budget@example.com").Value;
+        db.Users.AddRange(batchUser, fallbackUser);
+        for (var i = 0; i < 5; i++)
+            db.PushSubscriptions.Add(PushSubscription.Create(batchUser.Id, $"batch-{i}", "fcm", "auth").Value);
+        db.PushSubscriptions.Add(PushSubscription.Create(fallbackUser.Id, "fallback", "fcm", "auth").Value);
+        await db.SaveChangesAsync();
+        using var fallbackDb = factory.CreateContext();
+        var wire = new ConcurrentPushHandler { Latency = TimeSpan.FromMilliseconds(300) };
+        var settings = new PushDeliverySettings { Concurrency = 1, AttemptTimeoutSeconds = 1 };
+        var app = FirebaseApp.Create(new AppOptions
+        {
+            Credential = GoogleCredential.FromAccessToken("test-access-token"),
+            ProjectId = "test-project",
+            HttpClientFactory = new FcmDeliveryHttpClientFactory(settings, wire)
+        });
+        try
+        {
+            using var normal = new ObservingPushService(db, _vapidSettings, new HttpClient(), settings);
+            using var fallback = new ObservingPushService(fallbackDb, _vapidSettings, new HttpClient(), settings) { FailBatch = true };
+            var batch = normal.TrySendToUserAsync(batchUser.Id, "Title", "Body");
+            await wire.Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            var retried = fallback.TrySendToUserAsync(fallbackUser.Id, "Title", "Body");
+            (await batch).Should().BeTrue();
+            (await retried).Should().BeTrue();
+            wire.Calls.Should().Be(6);
+            wire.Completed.Should().Be(6);
+            wire.Peak.Should().Be(1);
+        }
+        finally { app.Delete(); }
+    }
+
+    private sealed class SlowFcmContent : HttpContent
+    {
+        protected override Task SerializeToStreamAsync(Stream stream, TransportContext? context) =>
+            SerializeToStreamAsync(stream, context, CancellationToken.None);
+
+        protected override async Task SerializeToStreamAsync(Stream stream, TransportContext? context, CancellationToken cancellationToken)
+        {
+            await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);
+            await stream.WriteAsync(System.Text.Encoding.UTF8.GetBytes("""{"name":"projects/test-project/messages/one"}"""), cancellationToken);
+        }
+
+        protected override bool TryComputeLength(out long length)
+        {
+            length = 0;
+            return false;
+        }
+    }
+
+    private sealed class BlockingFcmHandler : HttpMessageHandler
+    {
+        internal TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        internal int HangingAttempts;
+        internal int LiveDeliveries;
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            using var body = JsonDocument.Parse(await request.Content!.ReadAsStringAsync(cancellationToken));
+            if (body.RootElement.GetProperty("message").GetProperty("token").GetString() == "hang")
+            {
+                Interlocked.Increment(ref HangingAttempts);
+                Started.TrySetResult();
+                await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            }
+            Interlocked.Increment(ref LiveDeliveries);
+            return FcmSuccess();
+        }
+    }
+
     private sealed class ConcurrentPushHandler : HttpMessageHandler
     {
         internal int Peak;
         internal int Calls;
+        internal int Completed;
+        internal TimeSpan Latency = TimeSpan.FromMilliseconds(10);
+        internal TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private int _active;
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             var active = Interlocked.Increment(ref _active);
             Peak = Math.Max(Peak, active);
             Interlocked.Increment(ref Calls);
-            try { await Task.Delay(10, cancellationToken); return FcmSuccess(); }
+            Started.TrySetResult();
+            try
+            {
+                await Task.Delay(Latency, cancellationToken);
+                Interlocked.Increment(ref Completed);
+                return FcmSuccess();
+            }
             finally { Interlocked.Decrement(ref _active); }
         }
     }
@@ -203,9 +382,9 @@ public sealed partial class PushNotificationServiceTests
         }))
     };
 
-    private sealed class ObservingPushService(OrbitDbContext db, VapidSettings vapid, HttpClient http)
+    private sealed class ObservingPushService(OrbitDbContext db, VapidSettings vapid, HttpClient http, PushDeliverySettings? delivery = null)
         : PushNotificationService(db, Options.Create(vapid), NullLogger<PushNotificationService>.Instance, http,
-            Substitute.For<IApnsPushSender>(), Substitute.For<IWnsPushSender>())
+            Substitute.For<IApnsPushSender>(), Substitute.For<IWnsPushSender>(), Options.Create(delivery ?? new()))
     {
         internal List<int> Chunks { get; } = [];
         internal bool FailBatch { get; init; }

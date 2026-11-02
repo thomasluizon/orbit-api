@@ -24,9 +24,12 @@ public partial class HandlePlayNotificationCommandHandler(
     IPlayReferralCouponConsumer referralCouponConsumer,
     IGenericRepository<ProcessedPlayNotification> processedNotificationRepository,
     IOptions<GooglePlaySettings> playSettings,
-    ILogger<HandlePlayNotificationCommandHandler> logger) : IRequestHandler<HandlePlayNotificationCommand, Result>
+    ILogger<HandlePlayNotificationCommandHandler> logger,
+    TimeProvider? timeProvider = null) : IRequestHandler<HandlePlayNotificationCommand, Result>
 {
     private readonly GooglePlaySettings _settings = playSettings.Value;
+    private readonly TimeProvider _clock = timeProvider ?? TimeProvider.System;
+    private static readonly TimeSpan ClaimLeaseDuration = TimeSpan.FromMinutes(2);
 
     public async Task<Result> Handle(HandlePlayNotificationCommand request, CancellationToken cancellationToken)
     {
@@ -49,32 +52,48 @@ public partial class HandlePlayNotificationCommandHandler(
 
         var messageId = decoded!.MessageId;
         if (string.IsNullOrEmpty(messageId)) return Result.Success();
-        var claimRow = await ClaimAsync(messageId, cancellationToken);
+        var claim = await ClaimAsync(messageId, cancellationToken);
+        if (claim.InProgress) return Result.Failure(ErrorMessages.PlayNotificationVerificationFailed);
+        var claimRow = claim.Row;
         if (claimRow is null) return Result.Success();
+        var leaseId = claimRow.ProcessingLeaseId
+            ?? throw new InvalidOperationException("The Play notification claim has no processing lease.");
         var stateCommitted = false;
 
         try
         {
-            var state = await playBilling.VerifyAsync(notification.SubscriptionId, notification.PurchaseToken, cancellationToken);
-            if (state is null) return Result.Success();
+            using var processing = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            processing.CancelAfter(TimeSpan.FromSeconds(90));
+            var state = await playBilling.VerifyAsync(notification.SubscriptionId, notification.PurchaseToken, processing.Token);
             var outcome = await unitOfWork.ExecuteInTransactionAsync(async token =>
             {
-                var user = await ResolveNotificationUserAsync(notification, state, token);
-                if (user is null) return (User?)null;
-                await unitOfWork.AcquireUserRowLockAsync(user.Id, token);
-                await userRepository.ReloadAsync(user, token);
-                var couponId = ApplySubscriptionState(user, state, notification.PurchaseToken,
-                    notification.NotificationType, state.GrantsOrbitPro(_settings));
-                if (!string.IsNullOrEmpty(couponId))
+                await unitOfWork.AcquireAdvisoryLockAsync($"play-notification:{messageId}", token);
+                var current = await processedNotificationRepository.FindOneTrackedAsync(p => p.MessageId == messageId,
+                    cancellationToken: token);
+                if (current is null) throw new BillingProviderException("The Play notification processing lease was released.");
+                await processedNotificationRepository.ReloadAsync(current, token);
+                if (current.ProcessingLeaseId != leaseId)
+                    throw new BillingProviderException("The Play notification processing lease was replaced.");
+                claimRow = current;
+                var user = state is null ? null : await ResolveNotificationUserAsync(notification, state, token);
+                if (user is not null && state is not null)
                 {
-                    claimRow.RecordConsumedCoupon(user.Id, couponId);
-                    processedNotificationRepository.Update(claimRow);
+                    await unitOfWork.AcquireUserRowLockAsync(user.Id, token);
+                    await userRepository.ReloadAsync(user, token);
+                    var couponId = ApplySubscriptionState(user, state, notification.PurchaseToken,
+                        notification.NotificationType, state.GrantsOrbitPro(_settings));
+                    if (!string.IsNullOrEmpty(couponId))
+                    {
+                        claimRow.RecordConsumedCoupon(user.Id, couponId);
+                        processedNotificationRepository.Update(claimRow);
+                    }
                 }
+                claimRow.Complete(leaseId, _clock.GetUtcNow().UtcDateTime);
                 await unitOfWork.SaveChangesAsync(token);
                 return user;
-            }, cancellationToken);
+            }, processing.Token);
             stateCommitted = true;
-            if (outcome is { } updatedUser)
+            if (outcome is { } updatedUser && state is not null)
             {
                 await QueueCouponAsync(claimRow, cancellationToken);
                 LogNotificationProcessed(logger, notification.NotificationType, updatedUser.Id, state.GrantsOrbitPro(_settings));
@@ -83,29 +102,45 @@ public partial class HandlePlayNotificationCommandHandler(
         }
         catch (BillingProviderException ex)
         {
-            if (!stateCommitted) await ReleaseClaimAsync(messageId);
+            if (!stateCommitted) await ReleaseClaimAsync(messageId, leaseId);
             LogVerifyFailed(logger, ex, notification.NotificationType);
             return Result.Failure(ErrorMessages.PlayNotificationVerificationFailed);
         }
         catch
         {
-            if (!stateCommitted) await ReleaseClaimAsync(messageId);
+            if (!stateCommitted) await ReleaseClaimAsync(messageId, leaseId);
             throw;
         }
     }
 
-    private async Task<ProcessedPlayNotification?> ClaimAsync(string messageId, CancellationToken cancellationToken)
+    private async Task<(ProcessedPlayNotification? Row, bool InProgress)> ClaimAsync(string messageId, CancellationToken cancellationToken)
     {
         ProcessedPlayNotification? claimRow = null;
         var claimed = false;
+        var inProgress = false;
         try
         {
             claimed = await unitOfWork.ExecuteInTransactionAsync(async token =>
             {
                 await unitOfWork.AcquireAdvisoryLockAsync($"play-notification:{messageId}", token);
-                if (await processedNotificationRepository.AnyAsync(p => p.MessageId == messageId, token)) return false;
-                claimRow = ProcessedPlayNotification.Create(messageId);
-                await processedNotificationRepository.AddAsync(claimRow, token);
+                if (await processedNotificationRepository.AnyAsync(p => p.MessageId == messageId, token))
+                {
+                    claimRow = await processedNotificationRepository.FindOneTrackedAsync(p => p.MessageId == messageId,
+                        cancellationToken: token);
+                    if (claimRow is null) throw new InvalidOperationException("The Play notification claim disappeared.");
+                    await processedNotificationRepository.ReloadAsync(claimRow, token);
+                    if (claimRow.ProcessingLeaseId is null) return false;
+                    if (!claimRow.TryReclaim(_clock.GetUtcNow().UtcDateTime, ClaimLeaseDuration))
+                    {
+                        inProgress = true;
+                        return false;
+                    }
+                }
+                else
+                {
+                    claimRow = ProcessedPlayNotification.Claim(messageId, _clock.GetUtcNow().UtcDateTime, ClaimLeaseDuration);
+                    await processedNotificationRepository.AddAsync(claimRow, token);
+                }
                 await unitOfWork.SaveChangesAsync(token);
                 return true;
             }, cancellationToken);
@@ -115,12 +150,14 @@ public partial class HandlePlayNotificationCommandHandler(
             unitOfWork.ResetTracking();
             if (!await processedNotificationRepository.AnyAsync(p => p.MessageId == messageId, cancellationToken)) throw;
         }
-        if (claimed) return claimRow ?? throw new InvalidOperationException("Play notification claim was not recorded.");
+        if (claimed) return (claimRow ?? throw new InvalidOperationException("Play notification claim was not recorded."), false);
+        if (inProgress) return (null, true);
         var existing = await processedNotificationRepository.FindOneTrackedAsync(p => p.MessageId == messageId,
             cancellationToken: cancellationToken);
+        if (existing?.ProcessingLeaseId is not null) return (null, true);
         await QueueCouponAsync(existing, cancellationToken);
         LogDuplicateNotification(logger, messageId);
-        return null;
+        return (null, false);
     }
 
     private async Task QueueCouponAsync(ProcessedPlayNotification? claim, CancellationToken ct)
@@ -131,10 +168,10 @@ public partial class HandlePlayNotificationCommandHandler(
         await unitOfWork.SaveChangesAsync(ct);
     }
 
-    private async Task ReleaseClaimAsync(string messageId)
+    private async Task ReleaseClaimAsync(string messageId, Guid leaseId)
     {
         unitOfWork.ResetTracking();
-        await processedNotificationRepository.DeleteAsync(p => p.MessageId == messageId, CancellationToken.None);
+        await processedNotificationRepository.DeleteAsync(p => p.MessageId == messageId && p.ProcessingLeaseId == leaseId, CancellationToken.None);
     }
 
     private async Task<User?> ResolveNotificationUserAsync(

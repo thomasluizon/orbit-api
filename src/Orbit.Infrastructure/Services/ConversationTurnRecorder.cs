@@ -196,16 +196,25 @@ public sealed class ConversationTurnRecorder(
         {
             await work.AcquireUserRowLockAsync(userId, token);
             var query = db.ConversationTurns.Where(row => row.UserId == userId && row.ConversationId == conversationId);
-            if (!await query.AnyAsync(token)) return false;
+            var cleanup = await db.ConversationObjectCleanups.SingleOrDefaultAsync(
+                row => row.UserId == userId && row.ConversationId == conversationId, token);
+            if (!await query.AnyAsync(token)) return cleanup is not null;
+            if (cleanup is null)
+                db.ConversationObjectCleanups.Add(ConversationObjectCleanup.Create(userId, conversationId));
             var turnIds = query.Select(row => row.TurnId);
             await db.ChatTurns.Where(row => row.UserId == userId && turnIds.Contains(row.Id)).ExecuteDeleteAsync(token);
             await query.ExecuteDeleteAsync(token);
             await db.ConversationOffers.Where(row => row.UserId == userId && row.ConversationId == conversationId).ExecuteDeleteAsync(token);
             await db.PendingAgentOperations.Where(row => row.UserId == userId && row.ConversationId == conversationId).ExecuteDeleteAsync(token);
+            await work.SaveChangesAsync(token);
             return true;
         }, cancellationToken);
         if (deleted)
+        {
             await storage.DeleteConversationObjectsAsync(userId, conversationId, CancellationToken.None);
+            await db.ConversationObjectCleanups.Where(row => row.UserId == userId && row.ConversationId == conversationId)
+                .ExecuteDeleteAsync(CancellationToken.None);
+        }
         return deleted;
     }
 }

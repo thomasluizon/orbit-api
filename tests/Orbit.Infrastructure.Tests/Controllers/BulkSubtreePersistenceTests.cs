@@ -203,7 +203,7 @@ public class BulkSubtreePersistenceTests
 
     [Theory]
     [InlineData(1)]
-    [InlineData(30)]
+    [InlineData(AppConstants.MaxSubHabits)]
     public async Task DescendantCount_DoesNotIncreaseHabitOrTagSelects(int siblings)
     {
         var counter = new CountingDbCommandInterceptor();
@@ -214,6 +214,7 @@ public class BulkSubtreePersistenceTests
 
         var result = await fixture.Handler().Handle(new(fixture.UserId, [tree]), CancellationToken.None);
 
+        result.IsSuccess.Should().BeTrue();
         result.Value.AppliedCount.Should().Be(1);
         counter.SelectCommandCount.Should().Be(2);
         using var readback = fixture.Database.CreateContext();

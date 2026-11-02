@@ -409,6 +409,36 @@ namespace Orbit.Infrastructure.Migrations
                         },
                         new
                         {
+                            Key = "SendCodeEmailsPerIpPerDay",
+                            Description = "Daily code email limit per resolved client IP",
+                            Value = "100"
+                        },
+                        new
+                        {
+                            Key = "SendCodeEmailsPerDay",
+                            Description = "Global daily code email safety limit",
+                            Value = "10000"
+                        },
+                        new
+                        {
+                            Key = "OnboardingAttestationCallsPerHour",
+                            Description = "Global hourly onboarding challenge and enrollment limit",
+                            Value = "1000"
+                        },
+                        new
+                        {
+                            Key = "OnboardingAttestationCallsPerDay",
+                            Description = "Global daily onboarding challenge and enrollment limit",
+                            Value = "10000"
+                        },
+                        new
+                        {
+                            Key = "OnboardingEnrollAttemptsPerInstallPerHour",
+                            Description = "Hourly enrollment attempt limit per signed installation subject",
+                            Value = "3"
+                        },
+                        new
+                        {
                             Key = "OnboardingIpCallsPerHour",
                             Description = "Hourly anonymous onboarding call limit per IP address",
                             Value = "10"
@@ -765,6 +795,26 @@ namespace Orbit.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("ContentBlocks");
+                });
+
+            modelBuilder.Entity("Orbit.Domain.Entities.ConversationObjectCleanup", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ConversationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "ConversationId")
+                        .IsUnique();
+
+                    b.ToTable("ConversationObjectCleanups");
                 });
 
             modelBuilder.Entity("Orbit.Domain.Entities.ConversationOffer", b =>
@@ -2037,6 +2087,12 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.Property<DateTime>("ProcessedAtUtc")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("ProcessingLeaseExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ProcessingLeaseId")
+                        .HasColumnType("uuid");
 
                     b.HasKey("Id");
 

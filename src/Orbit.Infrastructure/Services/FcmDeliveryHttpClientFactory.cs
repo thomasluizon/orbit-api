@@ -1,12 +1,24 @@
+using Google.Apis.Core;
 using Google.Apis.Http;
 using Orbit.Infrastructure.Configuration;
 
 namespace Orbit.Infrastructure.Services;
 
-public sealed class FcmDeliveryHttpClientFactory(PushDeliverySettings settings) : Google.Apis.Http.HttpClientFactory
+public sealed class FcmDeliveryHttpClientFactory(PushDeliverySettings settings)
+    : Google.Apis.Http.HttpClientFactory
 {
-    protected override HttpMessageHandler CreateHandler(CreateHttpClientArgs args) =>
-        new BoundedHandler(base.CreateHandler(args), settings);
+    private readonly HttpMessageHandler? _transport;
+
+    internal FcmDeliveryHttpClientFactory(PushDeliverySettings settings, HttpMessageHandler transport) : this(settings)
+    {
+        _transport = transport;
+    }
+
+    protected override HttpMessageHandler CreateHandler(CreateHttpClientArgs args)
+    {
+        args.Initializers.Add(new HttpTimeoutInitializer(Timeout.InfiniteTimeSpan));
+        return new BoundedHandler(_transport ?? base.CreateHandler(args), settings);
+    }
 
     internal sealed class BoundedHandler(HttpMessageHandler inner, PushDeliverySettings settings) : DelegatingHandler(inner)
     {
@@ -19,7 +31,18 @@ public sealed class FcmDeliveryHttpClientFactory(PushDeliverySettings settings) 
             {
                 using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
                 deadline.CancelAfter(TimeSpan.FromSeconds(Math.Clamp(settings.AttemptTimeoutSeconds, 1, 10)));
-                return await base.SendAsync(request, deadline.Token);
+                var response = await base.SendAsync(request, deadline.Token);
+                try
+                {
+                    await response.Content.LoadIntoBufferAsync(deadline.Token);
+                    deadline.Token.ThrowIfCancellationRequested();
+                    return response;
+                }
+                catch
+                {
+                    response.Dispose();
+                    throw;
+                }
             }
             finally { _gate.Release(); }
         }

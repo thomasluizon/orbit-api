@@ -29,7 +29,7 @@ namespace Orbit.Infrastructure.Migrations
                         onDelete: ReferentialAction.Cascade);
                 });
             migrationBuilder.Sql("""
-                CREATE OR REPLACE FUNCTION orbit_bump_reminder_schedule_probe() RETURNS trigger AS $$
+                CREATE FUNCTION orbit_bump_reminder_schedule_probe() RETURNS trigger AS $$
                 DECLARE owner_id uuid;
                 BEGIN
                     IF TG_OP = 'INSERT' THEN
@@ -55,7 +55,6 @@ namespace Orbit.Infrastructure.Migrations
                     RETURN NULL;
                 END;
                 $$ LANGUAGE plpgsql;
-                DROP TRIGGER IF EXISTS "TR_Habits_ReminderScheduleProbe" ON "Habits";
                 CREATE TRIGGER "TR_Habits_ReminderScheduleProbe" AFTER INSERT OR UPDATE OR DELETE ON "Habits"
                 FOR EACH ROW EXECUTE FUNCTION orbit_bump_reminder_schedule_probe();
                 INSERT INTO "ReminderScheduleProbes" ("UserId", "Version")

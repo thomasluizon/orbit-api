@@ -1,0 +1,18 @@
+{
+  "sourceHashes": {
+    "infra/onboarding.tf": "D9DE878E6F35F149E3990E2820E8CA61EF8B411FD9067E0A08DD818C290A4791",
+    "infra/cloudflare.tf": "1BC17165C197E28369AF8CB15E07CDD7AED7A7CC61ED26DD99D0B3FAB017514B"
+  },
+  "environments": {
+    "production": {
+      "BotProtection__AllowedHostnames__0": "api.useorbit.org",
+      "BotProtection__AllowedHostnames__1": "app.useorbit.org",
+      "BotProtection__AllowedHostnames__2": "useorbit.org",
+      "BotProtection__AllowedHostnames__3": "www.useorbit.org"
+    },
+    "staging": {
+      "BotProtection__AllowedHostnames__0": "api-staging.useorbit.org",
+      "BotProtection__AllowedHostnames__1": "app-staging.useorbit.org"
+    }
+  }
+}

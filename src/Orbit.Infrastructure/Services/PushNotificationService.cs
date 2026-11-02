@@ -155,12 +155,10 @@ public partial class PushNotificationService(
         var delivered = 0;
         foreach (var chunk in sends.Chunk(500))
         {
-            using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            deadline.CancelAfter(AttemptTimeout);
             try
             {
                 var response = await SendFcmBatchAsync(chunk.Select(s => CreateFcmMessage(s.Subscription.Endpoint,
-                    s.Delivery.Title, s.Delivery.Body, s.Delivery.Url, s.Delivery.Data)).ToList(), deadline.Token);
+                    s.Delivery.Title, s.Delivery.Body, s.Delivery.Url, s.Delivery.Data)).ToList(), ct);
                 ct.ThrowIfCancellationRequested();
                 for (var i = 0; i < response.Responses.Count; i++)
                 {
@@ -170,22 +168,16 @@ public partial class PushNotificationService(
                 }
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
-            catch (OperationCanceledException ex)
-            {
-                LogFcmPushFailed(logger, ex, "batch timeout");
-            }
             catch (Exception ex)
             {
                 LogFcmPushFailed(logger, ex, "batch");
                 await Parallel.ForEachAsync(chunk,
                     new ParallelOptions { MaxDegreeOfParallelism = DeliveryConcurrency, CancellationToken = ct }, async (send, token) =>
                 {
-                    using var attempt = CancellationTokenSource.CreateLinkedTokenSource(token);
-                    attempt.CancelAfter(AttemptTimeout);
                     try
                     {
                         var d = send.Delivery;
-                        await messaging.SendAsync(CreateFcmMessage(send.Subscription.Endpoint, d.Title, d.Body, d.Url, d.Data), attempt.Token);
+                        await messaging.SendAsync(CreateFcmMessage(send.Subscription.Endpoint, d.Title, d.Body, d.Url, d.Data), token);
                         Interlocked.Exchange(ref delivered, 1);
                     }
                     catch (Exception failure) when (!token.IsCancellationRequested)
