@@ -47,7 +47,7 @@ function replay(source, env = {}, cwd = root) {
 
 const selectionEnv = {
   GITHUB_REF: "refs/heads/main", RELEASE_ENVIRONMENT: "staging", RELEASE_BRANCH: "main",
-  RELEASE_SHA: healthy.commit, DISPATCH_SHA: otherSha,
+  RELEASE_SHA: healthy.commit, DISPATCH_SHA: otherSha, FORCE_UNSTAGED: "false", OVERRIDE_REASON: "",
 }
 
 test("prepare checks out the dispatch selection with history, never the moving branch", () => {
@@ -127,7 +127,7 @@ test("a moved branch keeps the planned ancestor and rejects an unrelated commit 
   }
 })
 
-function stagingGate(body, { force = "false", transport = false, raw } = {}) {
+function stagingGate(body, { force = "false", reason = "", smoke = "success", transport = false, raw } = {}) {
   const production = job("production")
   const gate = step(production, "Require healthy staging commit")
   assert.ok(production.indexOf(gate) < production.indexOf("      - name: Trigger and monitor Render deploy"))
@@ -135,6 +135,11 @@ function stagingGate(body, { force = "false", transport = false, raw } = {}) {
   const directory = mkdtempSync(join(tmpdir(), "orbit-release-staging-"))
   const calls = join(directory, "calls")
   writeFileSync(calls, "")
+  writeFileSync(join(directory, "gh"), `#!${process.execPath}
+const args = process.argv.slice(2)
+if (args[0] !== "api" || !args[1].endsWith("/statuses?per_page=100&page=1")) process.exit(99)
+process.stdout.write(JSON.stringify([{context: "api-staging-smoke", state: ${JSON.stringify(smoke)}, creator: {login: "github-actions[bot]"}}]))
+`, { mode: 0o755 })
   writeFileSync(join(directory, "curl"), `#!${process.execPath}
 const fs = require("node:fs")
 fs.appendFileSync(${JSON.stringify(calls)}, JSON.stringify(process.argv.slice(2)) + "\\n")
@@ -144,6 +149,7 @@ process.exitCode = ${transport ? 22 : 0}
   try {
     const result = replay(script(gate), {
       PATH: `${directory}:${process.env.PATH}`, COMMIT_SHA: healthy.commit, FORCE_UNSTAGED: force,
+      OVERRIDE_REASON: reason, GITHUB_REPOSITORY: "thomasluizon/orbit-api",
     })
     return { ...result, calls: readFileSync(calls, "utf8") }
   } finally {
@@ -173,11 +179,12 @@ test("production admits only the exact Healthy commit served by staging", () => 
 
 test("an explicit staging override is recorded and can release while staging is unavailable", () => {
   assert.match(workflow, /force_unstaged:\n[\s\S]*?type: boolean\n[\s\S]*?default: false/)
-  const result = stagingGate(null, { force: "true", transport: true })
+  const result = stagingGate(null, { force: "true", reason: "Staging unavailable during emergency repair", transport: true })
   assert.equal(result.status, 0, result.stdout + result.stderr)
   assert.match(result.summary, /force_unstaged: true/)
   assert.match(result.summary, new RegExp(healthy.commit))
   assert.match(result.stdout, /::notice::/)
+  assert.match(result.summary, /Staging unavailable during emergency repair/)
 })
 
 test("both deployments, verifiers and summaries use the prepared SHA", () => {
@@ -228,4 +235,12 @@ test("staging builds the verified source checkout and carries its SHA into the i
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
+})
+
+test("production staging admission requires smoke status and a written override reason", () => {
+  assert.notEqual(stagingGate(healthy, { smoke: "pending" }).status, 0)
+  assert.notEqual(stagingGate(healthy, { smoke: "failure" }).status, 0)
+  assert.notEqual(stagingGate(null, { force: "true", reason: " " }).status, 0)
+  const selection = script(step(job("prepare"), "Validate release selection"))
+  assert.notEqual(replay(selection, { ...selectionEnv, FORCE_UNSTAGED: "true", OVERRIDE_REASON: "" }).status, 0)
 })
