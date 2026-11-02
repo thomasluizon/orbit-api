@@ -4,6 +4,10 @@ namespace Orbit.Application.Common;
 
 public static class AppConstants
 {
+    public const int StreakLogWindowDays = 1100;
+    public const int TotalCompletionWindowDays = 2750;
+    public const int MetricsLogWindowDays = 2 * StreakLogWindowDays;
+
     public const int MaxSubHabits = 20;
     public const int MaxHabitTitleLength = 200;
     public const int MaxHabitDescriptionLength = 10000;
@@ -13,7 +17,7 @@ public static class AppConstants
     public const int MaxTagsPerHabit = 5;
     public const int DailySummaryHistoryDays = 14;
 
-    public const int MaxRangeDays = 366;
+    public const int MaxReadRangeDays = 366;
     public const int MaxInstanceHorizonDays = 90;
     public const int HabitLogsLookbackDays = 365;
     public const int MaxHabitLogsReturned = 1000;
@@ -64,9 +68,9 @@ public static class AppConstants
     public const int MaxConcurrentChatRequestsPerUser = 1;
     public const long MaxAudioBytes = 26_214_400;
     public const int MaxAiToolResultTextLength = 12_000;
-    public const int MaxCalendarRangeDays = Orbit.Domain.Models.HabitCalendarWindow.MaxRangeDays;
+    public const int MaxCalendarRangeDays = Orbit.Domain.Models.HabitCalendarWindow.MaxCalendarWindowDays;
     public const int MaxSelectedCalendars = 50;
-    public const int MaxPageSize = 200;
+    public const int MaxQueryPageSize = 200;
     public const int MaxStreakFreezesPerMonth = 3;
     public const int MaxStreakFreezesAccumulated = 3;
     public const int StreakDaysPerFreeze = 7;

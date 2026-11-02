@@ -70,7 +70,7 @@ public class GetDailySummaryQueryHandler(
         {
             var schedule = await mediator.Send(new GetHabitScheduleQuery(request.UserId,
                 request.DateFrom, request.DateTo, IncludeOverdue: true, Page: page,
-                PageSize: AppConstants.MaxPageSize), cancellationToken);
+                PageSize: AppConstants.MaxQueryPageSize), cancellationToken);
             if (schedule.IsFailure)
                 return schedule.PropagateError<DailySummaryResponse>();
             scheduleItems.AddRange(schedule.Value.Items);
@@ -215,7 +215,7 @@ public class GetDailySummaryQueryHandler(
 
                 if (latest >= habit.NextDueDate)
                 {
-                    var earliest = latest.AddDays(-Math.Min(AppConstants.MaxRangeDays - 1, latest.DayNumber));
+                    var earliest = latest.AddDays(-Math.Min(AppConstants.MaxReadRangeDays - 1, latest.DayNumber));
                     var from = habit.NextDueDate > earliest ? habit.NextDueDate : earliest;
                     windows.AddRange(HabitScheduleService.GetScheduledDates(habit, from, latest, weekStartDay)
                         .Select(date => new HabitSummaryLogWindow(habit.Id, date, date)));

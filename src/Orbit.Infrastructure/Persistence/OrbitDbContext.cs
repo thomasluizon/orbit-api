@@ -1,3 +1,4 @@
+using Orbit.Application.Common;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
@@ -413,6 +414,7 @@ public class OrbitDbContext : DbContext
     {
         modelBuilder.Entity<AiUsageDaily>(entity =>
         {
+            entity.HasIndex(u => u.UserId);
             entity.HasIndex(u => new { u.Date, u.Model, u.Purpose, u.UserId })
                 .IsUnique()
                 .AreNullsDistinct(false);
@@ -614,10 +616,10 @@ public class OrbitDbContext : DbContext
             entity.Property(c => c.Description).HasMaxLength(500);
 
             entity.HasData(
-                AppConfig.Create("MaxHabitDepth", "5", "Maximum nesting depth for sub-habits"),
+                AppConfig.Create("MaxHabitDepth", AppConstants.MaxHabitDepth.ToString(System.Globalization.CultureInfo.InvariantCulture), "Maximum nesting depth for sub-habits"),
                 AppConfig.Create("MaxTagsPerHabit", "5", "Maximum number of tags per habit"),
                 AppConfig.Create("ReferralRewardDays", "10", "Days of Pro added per successful referral"),
-                AppConfig.Create("MaxReferrals", "10", "Maximum successful referrals per user"),
+                AppConfig.Create("MaxReferrals", AppConstants.DefaultMaxReferrals.ToString(System.Globalization.CultureInfo.InvariantCulture), "Maximum successful referrals per user"),
                 AppConfig.Create("MinSupportedVersion", "1.3.11", "Minimum supported client app version; clients below this receive HTTP 426"),
                 AppConfig.Create("ProAiMessagesPerWeek", "250", "Weekly AI message limit for Pro users"),
                 AppConfig.Create("FreeAiCallsPerDay", "110", "Daily AI call safety budget for Free users"),
@@ -827,6 +829,9 @@ public class OrbitDbContext : DbContext
     {
         modelBuilder.Entity<Habit>(entity =>
         {
+            entity.HasIndex(h => new { h.ReminderEnabled, h.IsCompleted })
+                .HasDatabaseName("IX_Habits_Reminder")
+                .HasFilter("\"ReminderEnabled\" AND NOT \"IsCompleted\"");
             entity.HasIndex(h => h.UserId);
             entity.HasIndex(h => new { h.UserId, h.IsDeleted });
             entity.HasIndex(h => new { h.UserId, h.UpdatedAtUtc });

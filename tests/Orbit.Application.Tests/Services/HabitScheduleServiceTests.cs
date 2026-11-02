@@ -41,8 +41,8 @@ public class HabitScheduleServiceTests
 
         var dates = HabitScheduleService.GetScheduledDates(habit, Anchor, Anchor.AddDays(732));
 
-        dates.Should().HaveCount(AppConstants.MaxRangeDays + 1);
-        dates[^1].Should().Be(Anchor.AddDays(AppConstants.MaxRangeDays));
+        dates.Should().HaveCount(AppConstants.MaxReadRangeDays + 1);
+        dates[^1].Should().Be(Anchor.AddDays(AppConstants.MaxReadRangeDays));
     }
 
     private static Habit CreateHabit(

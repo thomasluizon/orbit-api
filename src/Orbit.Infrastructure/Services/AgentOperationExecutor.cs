@@ -24,7 +24,6 @@ public partial class AgentOperationExecutor(
     IUnitOfWork unitOfWork,
     ILogger<AgentOperationExecutor> logger, ReadBlockFactory? readBlocks = null) : IAgentOperationExecutor, Orbit.Application.Chat.Commands.IAgentMutationRunner
 {
-    private const int MaxToolConcurrencyAttempts = 3;
     private const string UnknownOperationCapabilityId = "unknown";
     private static readonly JsonElement EmptyArguments = JsonDocument.Parse("{}").RootElement.Clone();
 
@@ -558,20 +557,8 @@ public partial class AgentOperationExecutor(
         if (tool is not IConcurrencyRetryableTool)
             return await tool.ExecuteAsync(execution.Arguments, execution.Request.UserId, cancellationToken);
 
-        var attempt = 1;
-        while (true)
-        {
-            try
-            {
-                return await tool.ExecuteAsync(execution.Arguments, execution.Request.UserId, cancellationToken);
-            }
-            catch (DbUpdateConcurrencyException) when (attempt < MaxToolConcurrencyAttempts)
-            {
-                unitOfWork.ResetTracking();
-            }
-
-            attempt++;
-        }
+        return await ConcurrencyRetry.RunAsync(unitOfWork,
+            ct => tool.ExecuteAsync(execution.Arguments, execution.Request.UserId, ct), cancellationToken);
     }
 
     private async Task<AgentExecuteOperationResponse> BuildToolOutcomeResponseAsync(

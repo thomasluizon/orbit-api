@@ -61,8 +61,8 @@ public static class HabitScheduleService
         int weekStartDay = 1,
         DateOnly? recurrenceAnchor = null)
     {
-        if (to.DayNumber - from.DayNumber > AppConstants.MaxRangeDays)
-            to = from.AddDays(AppConstants.MaxRangeDays);
+        if (to.DayNumber - from.DayNumber > AppConstants.MaxReadRangeDays)
+            to = from.AddDays(AppConstants.MaxReadRangeDays);
 
         var dates = new List<DateOnly>();
         var current = from;
@@ -118,7 +118,7 @@ public static class HabitScheduleService
             var sliceFrom = effectiveFrom;
             while (sliceFrom <= to)
             {
-                var sliceTo = sliceFrom.AddDays(Math.Min(AppConstants.MaxRangeDays, to.DayNumber - sliceFrom.DayNumber));
+                var sliceTo = sliceFrom.AddDays(Math.Min(AppConstants.MaxReadRangeDays, to.DayNumber - sliceFrom.DayNumber));
                 foreach (var date in GetStreakScheduledDates(habit, sliceFrom, sliceTo, habitStart, weekStartDay))
                     union.Add(date);
                 if (sliceTo == to)
@@ -236,8 +236,8 @@ public static class HabitScheduleService
 
         if (effectiveTo < effectiveFrom)
             return [];
-        if (effectiveTo.DayNumber - effectiveFrom.DayNumber > AppConstants.MaxRangeDays)
-            effectiveTo = effectiveFrom.AddDays(AppConstants.MaxRangeDays);
+        if (effectiveTo.DayNumber - effectiveFrom.DayNumber > AppConstants.MaxReadRangeDays)
+            effectiveTo = effectiveFrom.AddDays(AppConstants.MaxReadRangeDays);
 
         var dates = new List<DateOnly>();
         for (var current = effectiveFrom; current <= effectiveTo; current = current.AddDays(1))
@@ -316,8 +316,8 @@ public static class HabitScheduleService
         DateOnly habitCreationDate,
         int weekStartDay)
     {
-        if (to.DayNumber - from.DayNumber > AppConstants.MaxRangeDays)
-            to = from.AddDays(AppConstants.MaxRangeDays);
+        if (to.DayNumber - from.DayNumber > AppConstants.MaxReadRangeDays)
+            to = from.AddDays(AppConstants.MaxReadRangeDays);
 
         var dates = new List<DateOnly>();
         for (var current = from; current <= to; current = current.AddDays(1))
@@ -356,7 +356,7 @@ public static class HabitScheduleService
 
         var earliestOccurrence = habit.NextDueDate;
         var boundedStart = latestOccurrence.AddDays(-Math.Min(
-            AppConstants.MaxRangeDays - 1,
+            AppConstants.MaxReadRangeDays - 1,
             latestOccurrence.DayNumber));
         if (earliestOccurrence < boundedStart)
             earliestOccurrence = boundedStart;

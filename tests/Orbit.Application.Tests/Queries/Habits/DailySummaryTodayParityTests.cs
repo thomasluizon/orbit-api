@@ -17,7 +17,7 @@ public class DailySummaryTodayParityTests
     [Theory]
     [InlineData(false, 0)]
     [InlineData(true, 0)]
-    [InlineData(false, AppConstants.MaxPageSize)]
+    [InlineData(false, AppConstants.MaxQueryPageSize)]
     public async Task Summary_UsesHojeRowsAndCompletionState(bool nestedCompletion, int extraRemainingCount)
     {
         var day = new DateOnly(2026, 10, 25);
@@ -68,12 +68,12 @@ public class DailySummaryTodayParityTests
         dates.GetUserWeekStartDayAsync(userId, Arg.Any<CancellationToken>()).Returns(1);
         var schedule = new GetHabitScheduleQueryHandler(repo, reader, Substitute.For<IHabitSchedulePageLoader>(),
             dates, Substitute.For<IUnitOfWork>(), repeatReminderReader: Substitute.For<IRepeatReminderReader>());
-        var hoje = await schedule.Handle(new(userId, day, day, IncludeOverdue: true, PageSize: AppConstants.MaxPageSize), default);
+        var hoje = await schedule.Handle(new(userId, day, day, IncludeOverdue: true, PageSize: AppConstants.MaxQueryPageSize), default);
         var hojeItems = hoje.Value.Items.ToList();
         for (var page = 2; page <= hoje.Value.TotalPages; page++)
         {
             var nextPage = await schedule.Handle(new(userId, day, day, IncludeOverdue: true,
-                Page: page, PageSize: AppConstants.MaxPageSize), default);
+                Page: page, PageSize: AppConstants.MaxQueryPageSize), default);
             hojeItems.AddRange(nextPage.Value.Items);
         }
         var users = Substitute.For<IGenericRepository<User>>();

@@ -65,7 +65,7 @@ public partial class BulkLogHabitsCommandHandler(
         var dueDateResolution = await HabitDueDateResolutionLoader.LoadAsync(
             habitLogRepository,
             habitMap.Values,
-            today.AddDays(-AppConstants.MaxRangeDays),
+            today.AddDays(-AppConstants.MaxReadRangeDays),
             cancellationToken);
 
         /** A completion log and its due-date advance are both inputs a streak repair reads. */

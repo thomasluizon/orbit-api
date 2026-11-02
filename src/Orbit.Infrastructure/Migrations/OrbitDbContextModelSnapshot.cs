@@ -256,6 +256,8 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("UserId");
+
                     b.HasIndex("Date", "Model", "Purpose", "UserId")
                         .IsUnique();
 
@@ -1266,6 +1268,10 @@ namespace Orbit.Infrastructure.Migrations
                     b.HasIndex("ParentHabitId");
 
                     b.HasIndex("UserId");
+
+                    b.HasIndex("ReminderEnabled", "IsCompleted")
+                        .HasDatabaseName("IX_Habits_Reminder")
+                        .HasFilter("\"ReminderEnabled\" AND NOT \"IsCompleted\"");
 
                     b.HasIndex("UserId", "GoogleEventId")
                         .IsUnique()

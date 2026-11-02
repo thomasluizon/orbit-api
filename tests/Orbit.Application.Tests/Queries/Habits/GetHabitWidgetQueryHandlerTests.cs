@@ -120,8 +120,8 @@ public class GetHabitWidgetQueryHandlerTests
     {
         var habit = CreateHabit(
             "Long overdue",
-            Today.AddDays(-AppConstants.MaxRangeDays - 1),
-            AppConstants.MaxRangeDays + 34);
+            Today.AddDays(-AppConstants.MaxReadRangeDays - 1),
+            AppConstants.MaxReadRangeDays + 34);
         SetupHabits(habit);
         var scheduleLogReader = Substitute.For<IHabitScheduleLogReader>();
         scheduleLogReader.ReadDaysAsync(

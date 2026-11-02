@@ -23,7 +23,6 @@ public class AchievementProgressService(
     IGenericRepository<Goal> goalRepository,
     IUserDateService userDateService) : IAchievementProgressService
 {
-    private const int TotalCompletionWindowDays = 2750;
     private const int InitialStreakWindowDays = 64;
     private const int TimeOfDayWindowDays = 90;
     private const int EarlyBeforeHour = 7;
@@ -44,7 +43,7 @@ public class AchievementProgressService(
         var maxCurrentStreak = await LoadMaxCurrentStreakAsync(
             goodHabits, earnedIds, today, user.WeekStartDay, userTimeZone, cancellationToken);
 
-        var totalCompletionCutoff = today.AddDays(-TotalCompletionWindowDays);
+        var totalCompletionCutoff = today.AddDays(-AppConstants.TotalCompletionWindowDays);
         var totalCompletions = habitIds.Count == 0
             ? 0
             : await habitLogRepository.CountAsync(
@@ -98,7 +97,7 @@ public class AchievementProgressService(
             {
                 var metrics = HabitMetricsCalculator.CalculateProjected(
                     habit, logsByHabit[habit.Id], today, weekStartDay, userTimeZone, out var logStart);
-                if (windowDays < GamificationService.StreakLogWindowDays && logStart < cutoff)
+                if (windowDays < AppConstants.StreakLogWindowDays && logStart < cutoff)
                     continuingHabits.Add(habit);
                 else
                     maxCurrentStreak = Math.Max(maxCurrentStreak, metrics.CurrentStreak);
@@ -106,7 +105,7 @@ public class AchievementProgressService(
 
             pendingHabits = continuingHabits;
             previousCutoff = cutoff;
-            windowDays = Math.Min(windowDays * 2, GamificationService.StreakLogWindowDays);
+            windowDays = Math.Min(windowDays * 2, AppConstants.StreakLogWindowDays);
         }
 
         return maxCurrentStreak;

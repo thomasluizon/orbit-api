@@ -45,7 +45,8 @@ public class GetHabitScheduleQueryValidatorTests
         var query = ValidQuery() with
         {
             DateFrom = new DateOnly(2025, 1, 1),
-            DateTo = new DateOnly(2026, 1, 3)        };
+            DateTo = new DateOnly(2026, 1, 3)
+        };
 
         var result = _validator.TestValidate(query);
 
@@ -98,7 +99,7 @@ public class GetHabitScheduleQueryValidatorTests
     [Fact]
     public void Validate_PageSizeAboveMax_ReportsInclusiveBetweenFailureWithConfiguredMax()
     {
-        var overMax = AppConstants.MaxPageSize + 1;
+        var overMax = AppConstants.MaxQueryPageSize + 1;
         var query = ValidQuery() with { PageSize = overMax };
 
         var result = _validator.TestValidate(query);
@@ -125,7 +126,7 @@ public class GetHabitScheduleQueryValidatorTests
     [Fact]
     public void Validate_PageSizeAtMax_NoError()
     {
-        var query = ValidQuery() with { PageSize = AppConstants.MaxPageSize };
+        var query = ValidQuery() with { PageSize = AppConstants.MaxQueryPageSize };
 
         var result = _validator.TestValidate(query);
 

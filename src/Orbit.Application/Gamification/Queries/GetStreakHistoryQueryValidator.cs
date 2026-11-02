@@ -12,7 +12,7 @@ public class GetStreakHistoryQueryValidator : AbstractValidator<GetStreakHistory
             .WithCopy(ValidationErrorCodes.DateRangeOrder);
 
         RuleFor(x => x)
-            .Must(x => x.DateTo.DayNumber - x.DateFrom.DayNumber <= AppConstants.MaxRangeDays)
+            .Must(x => x.DateTo.DayNumber - x.DateFrom.DayNumber <= AppConstants.MaxReadRangeDays)
             .WithCopy(ValidationErrorCodes.DateRangeLimit);
     }
 }

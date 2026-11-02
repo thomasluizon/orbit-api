@@ -9,6 +9,6 @@ public class GetGoalsQueryValidator : AbstractValidator<GetGoalsQuery>
     public GetGoalsQueryValidator()
     {
         RuleFor(x => x.Page).GreaterThanOrEqualTo(1);
-        RuleFor(x => x.PageSize).InclusiveBetween(1, AppConstants.MaxPageSize);
+        RuleFor(x => x.PageSize).InclusiveBetween(1, AppConstants.MaxQueryPageSize);
     }
 }

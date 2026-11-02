@@ -15,6 +15,13 @@ public class UpdateTagCommandValidatorTests
         Color: "#FF5733");
 
     [Fact]
+    public void Validate_NameAtLimit_HasNoError()
+    {
+        var command = ValidCommand() with { Name = new string('a', Orbit.Application.Common.AppConstants.MaxTagNameLength) };
+        _validator.TestValidate(command).ShouldNotHaveValidationErrorFor(x => x.Name);
+    }
+
+    [Fact]
     public void Validate_ValidInput_NoErrors()
     {
         var command = ValidCommand();

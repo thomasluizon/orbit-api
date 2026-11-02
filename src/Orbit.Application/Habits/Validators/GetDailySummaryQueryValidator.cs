@@ -13,7 +13,7 @@ public class GetDailySummaryQueryValidator : AbstractValidator<GetDailySummaryQu
             .WithCopy(ValidationErrorCodes.DateRangeOrderLower);
 
         RuleFor(q => q)
-            .Must(q => q.DateTo.DayNumber - q.DateFrom.DayNumber <= AppConstants.MaxRangeDays)
+            .Must(q => q.DateTo.DayNumber - q.DateFrom.DayNumber <= AppConstants.MaxReadRangeDays)
             .WithCopy(ValidationErrorCodes.DateRangeLimitShort)
             .When(q => q.DateTo >= q.DateFrom);
     }
