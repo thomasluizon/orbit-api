@@ -39,7 +39,7 @@ public class OAuthRefreshRaceTests
         db.AddRange(user, key);
         await db.SaveChangesAsync();
         var store = new OAuthAuthorizationStore(new OAuthStateStore(db, TimeProvider.System), TimeProvider.System);
-        var refresh = store.CreateRefreshToken(new(user.Id, key.Id, "client"));
+        var refresh = store.CreateRefreshToken(new(user.Id, key.Id, "https://claude.ai/oauth/mcp-oauth-client-metadata"));
         var repository = new GenericRepository<ApiKey>(db);
         var interleaved = Substitute.For<IGenericRepository<ApiKey>>();
         interleaved.GetByIdAsync(key.Id, Arg.Any<CancellationToken>()).Returns(call => repository.GetByIdAsync(key.Id, call.Arg<CancellationToken>()));
@@ -52,7 +52,7 @@ public class OAuthRefreshRaceTests
                 {
                     var winnerStore = new OAuthAuthorizationStore(new OAuthStateStore(revokeDb, TimeProvider.System), TimeProvider.System);
                     var winner = Controller(winnerStore, new GenericRepository<ApiKey>(revokeDb), new UnitOfWork(revokeDb, new DatabaseConnectionSettings()));
-                    (await winner.Token("refresh_token", null, null, null, default, refresh, client_id: "client")).Should().BeOfType<OkObjectResult>();
+                    (await winner.Token("refresh_token", null, null, null, default, refresh, client_id: "https://claude.ai/oauth/mcp-oauth-client-metadata")).Should().BeOfType<OkObjectResult>();
                     return tracked;
                 }
                 var payGate = Substitute.For<IPayGateService>();
@@ -70,7 +70,7 @@ public class OAuthRefreshRaceTests
         interleaved.AddAsync(Arg.Any<ApiKey>(), Arg.Any<CancellationToken>()).Returns(call => repository.AddAsync(call.Arg<ApiKey>(), call.Arg<CancellationToken>()));
         var controller = Controller(store, interleaved, new UnitOfWork(db, new DatabaseConnectionSettings()));
 
-        var result = await controller.Token("refresh_token", null, null, null, default, refresh, client_id: "client");
+        var result = await controller.Token("refresh_token", null, null, null, default, refresh, client_id: "https://claude.ai/oauth/mcp-oauth-client-metadata");
 
         result.Should().BeOfType<BadRequestObjectResult>();
         using var verify = database.CreateContext();
@@ -88,22 +88,22 @@ public class OAuthRefreshRaceTests
         db.AddRange(user, first, unrelated);
         await db.SaveChangesAsync();
         var store = new OAuthAuthorizationStore(new OAuthStateStore(db, TimeProvider.System), TimeProvider.System);
-        var original = store.CreateRefreshToken(new(user.Id, first.Id, "client"));
-        var other = store.CreateRefreshToken(new(user.Id, unrelated.Id, "other-client"));
+        var original = store.CreateRefreshToken(new(user.Id, first.Id, "https://claude.ai/oauth/mcp-oauth-client-metadata"));
+        var other = store.CreateRefreshToken(new(user.Id, unrelated.Id, OAuthTestClient.ClientId));
         var controller = Controller(store, new GenericRepository<ApiKey>(db), new UnitOfWork(db, new DatabaseConnectionSettings()));
-        var rotated = (OkObjectResult)await controller.Token("refresh_token", null, null, null, default, original, client_id: "client");
+        var rotated = (OkObjectResult)await controller.Token("refresh_token", null, null, null, default, original, client_id: "https://claude.ai/oauth/mcp-oauth-client-metadata");
         var successor = JsonSerializer.SerializeToElement(rotated.Value).GetProperty("refresh_token").GetString()!;
 
-        (await controller.Token("refresh_token", null, null, null, default, "unknown", client_id: "client")).Should().BeOfType<BadRequestObjectResult>();
+        (await controller.Token("refresh_token", null, null, null, default, "unknown", client_id: "https://claude.ai/oauth/mcp-oauth-client-metadata")).Should().BeOfType<BadRequestObjectResult>();
         db.ApiKeys.AsNoTracking().Count(key => !key.IsRevoked).Should().Be(2);
-        (await controller.Token("refresh_token", null, null, null, default, original, client_id: "client")).Should().BeOfType<BadRequestObjectResult>();
+        (await controller.Token("refresh_token", null, null, null, default, original, client_id: "https://claude.ai/oauth/mcp-oauth-client-metadata")).Should().BeOfType<BadRequestObjectResult>();
         db.ApiKeys.AsNoTracking().Where(key => !key.IsRevoked).Select(key => key.Id).Should().Equal(unrelated.Id);
-        (await controller.Token("refresh_token", null, null, null, default, successor, client_id: "client")).Should().BeOfType<BadRequestObjectResult>();
-        (await controller.Token("refresh_token", null, null, null, default, other, client_id: "other-client")).Should().BeOfType<OkObjectResult>();
+        (await controller.Token("refresh_token", null, null, null, default, successor, client_id: "https://claude.ai/oauth/mcp-oauth-client-metadata")).Should().BeOfType<BadRequestObjectResult>();
+        (await controller.Token("refresh_token", null, null, null, default, other, client_id: OAuthTestClient.ClientId)).Should().BeOfType<OkObjectResult>();
     }
 
     private static OAuthController Controller(OAuthAuthorizationStore store, IGenericRepository<ApiKey> keys, IUnitOfWork work) =>
         new(Substitute.For<IMediator>(), store, keys, work, Options.Create(new GoogleSettings()),
-            new ConfigurationBuilder().Build(), NullLogger<OAuthController>.Instance, Substitute.For<IOAuthClientMetadataService>())
+            new ConfigurationBuilder().Build(), NullLogger<OAuthController>.Instance, OAuthTestClient.Metadata(), Substitute.For<IGenericRepository<OAuthClient>>())
         { ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() } };
 }

@@ -224,7 +224,7 @@ public partial class OAuthPostgresRetryTests
     private static OAuthController RefreshController(OrbitDbContext db) =>
         new(Substitute.For<IMediator>(), new OAuthAuthorizationStore(new OAuthStateStore(db, TimeProvider.System), TimeProvider.System),
             new GenericRepository<ApiKey>(db), new UnitOfWork(db, new DatabaseConnectionSettings()),
-            Options.Create(new GoogleSettings()), new ConfigurationBuilder().Build(), NullLogger<OAuthController>.Instance, Substitute.For<IOAuthClientMetadataService>())
+            Options.Create(new GoogleSettings()), new ConfigurationBuilder().Build(), NullLogger<OAuthController>.Instance, Substitute.For<IOAuthClientMetadataService>(), new GenericRepository<OAuthClient>(db))
         { ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() } };
 
     private sealed class LostAcknowledgement : DbTransactionInterceptor

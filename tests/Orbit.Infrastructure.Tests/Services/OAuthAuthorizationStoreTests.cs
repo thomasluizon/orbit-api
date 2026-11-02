@@ -247,9 +247,9 @@ public class OAuthAuthorizationStoreTests : IDisposable
     public void TryCreateGoogleRequest_RefusesOnceTheCapIsReached()
     {
         for (var i = 0; i < OAuthAuthorizationStore.MaxPendingGoogleRequests; i++)
-            CreatePending(_store).Should().NotBeNull();
+            CreatePending(_store, $"ip-{i / 20}").Should().NotBeNull();
 
-        CreatePending(_store).Should().BeNull();
+        CreatePending(_store, "overflow").Should().BeNull();
     }
 
     [Fact]
@@ -259,9 +259,9 @@ public class OAuthAuthorizationStoreTests : IDisposable
         var store = new OAuthAuthorizationStore(new OAuthStateStore(_oauthDb.Context, time), time);
         var first = CreatePending(store);
         for (var i = 1; i < OAuthAuthorizationStore.MaxPendingGoogleRequests; i++)
-            CreatePending(store).Should().NotBeNull();
+            CreatePending(store, $"ip-{i / 20}").Should().NotBeNull();
 
-        CreatePending(store).Should().BeNull();
+        CreatePending(store, "overflow").Should().BeNull();
 
         time.Advance(TimeSpan.FromMinutes(6));
 
@@ -269,9 +269,9 @@ public class OAuthAuthorizationStoreTests : IDisposable
         store.ConsumeGoogleRequest(first!.GoogleState).Should().BeNull();
     }
 
-    private static GoogleAuthorizationRequest? CreatePending(OAuthAuthorizationStore store) =>
+    private static GoogleAuthorizationRequest? CreatePending(OAuthAuthorizationStore store, string clientIp = "unknown") =>
         store.TryCreateGoogleRequest("client", "https://claude.ai/callback", "client-state",
-            "mcp-challenge", null, "https://api.useorbit.org/oauth/google/callback", "en");
+            "mcp-challenge", null, "https://api.useorbit.org/oauth/google/callback", "en", clientIp: clientIp);
 
     private sealed class MutableTimeProvider : TimeProvider
     {

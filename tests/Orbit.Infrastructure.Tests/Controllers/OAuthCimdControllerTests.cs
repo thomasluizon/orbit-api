@@ -56,13 +56,15 @@ public class OAuthCimdControllerTests : IDisposable
             .Returns(call => call.Arg<Func<CancellationToken, Task<IActionResult>>>()(default));
         work.ExecuteReplayableInTransactionAsync(Arg.Any<Func<CancellationToken, Task<IActionResult>>>(), Arg.Any<CancellationToken>())
             .Returns(call => call.Arg<Func<CancellationToken, Task<IActionResult>>>()(default));
+        work.SaveChangesAsync(Arg.Any<CancellationToken>()).Returns(call => _db.Context.SaveChangesAsync(call.Arg<CancellationToken>()));
         _keys.AddAsync(Arg.Do<ApiKey>(key => _minted = key), Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
         _controller = new OAuthController(_mediator, _store, _keys, work,
             Options.Create(new GoogleSettings { ClientId = "google-client", AllowedRedirectUris = ["https://api.useorbit.org/oauth/google/callback"] }),
-            new ConfigurationBuilder().Build(), NullLogger<OAuthController>.Instance, metadata)
+            new ConfigurationBuilder().Build(), NullLogger<OAuthController>.Instance, metadata, new GenericRepository<OAuthClient>(_db.Context))
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
         };
+        OAuthTestClient.Bind(_controller.HttpContext, "state");
         _controller.Request.Scheme = "https";
         _controller.Request.Host = new HostString("api.useorbit.org");
         var login = Result.Success(new LoginResponse(UserId, "login-token", "Alex", "alex@example.com"));
@@ -78,11 +80,11 @@ public class OAuthCimdControllerTests : IDisposable
         var clientId = ClientId;
         if (dcr)
         {
-            var registered = _controller.Register(JsonSerializer.SerializeToElement(new
+            var registered = (await _controller.Register(JsonSerializer.SerializeToElement(new
             {
                 client_name = "Claude",
                 redirect_uris = new[] { RedirectUri }
-            })).Should().BeOfType<ObjectResult>().Subject;
+            }))).Should().BeOfType<ObjectResult>().Subject;
             registered.StatusCode.Should().Be(201);
             clientId = JsonSerializer.SerializeToElement(registered.Value).GetProperty("client_id").GetString()!;
         }
@@ -104,7 +106,7 @@ public class OAuthCimdControllerTests : IDisposable
         _keys.FindOneTrackedAsync(Arg.Any<Expression<Func<ApiKey, bool>>>(),
             Arg.Any<Func<IQueryable<ApiKey>, IQueryable<ApiKey>>?>(), Arg.Any<CancellationToken>()).Returns(old);
         Error(await _controller.Token("refresh_token", null, null, null, default, refresh, "another-client"))
-            .Should().Be("invalid_grant");
+            .Should().Be("invalid_client");
         (await _controller.Token("refresh_token", null, null, null, default, refresh, clientId)).Should().BeOfType<OkObjectResult>();
         _minted!.OAuthClientId.Should().Be(clientId);
         _minted.OAuthFamilyId.Should().Be(old.OAuthFamilyId);
@@ -136,7 +138,7 @@ public class OAuthCimdControllerTests : IDisposable
     {
         var code = _store.CreateCode(UserId, Challenge(), RedirectUri, ClientId);
         Error(await _controller.Token("authorization_code", code, Verifier, RedirectUri, default, client_id: clientId))
-            .Should().Be("invalid_grant");
+            .Should().Be("invalid_client");
         _minted.Should().BeNull();
     }
 
@@ -144,9 +146,9 @@ public class OAuthCimdControllerTests : IDisposable
     public async Task SignInEntryPoints_RejectUnlistedRedirectBeforeAuthentication()
     {
         const string unlisted = "https://claude.ai/unlisted";
-        Error(await Authorize(ClientId, unlisted)).Should().Be("invalid_request");
-        Error(await Verify(ClientId, unlisted)).Should().Be("invalid_request");
-        Error(await _controller.GoogleStart(ClientId, unlisted, "state", Challenge(), "S256")).Should().Be("invalid_request");
+        Error(await Authorize(ClientId, unlisted)).Should().Be("invalid_redirect_uri");
+        Error(await Verify(ClientId, unlisted)).Should().Be("invalid_redirect_uri");
+        Error(await _controller.GoogleStart(ClientId, unlisted, "state", Challenge(), "S256")).Should().Be("invalid_redirect_uri");
         await _mediator.DidNotReceive().Send(Arg.Any<VerifyCodeCommand>(), Arg.Any<CancellationToken>());
         _db.Context.OAuthStates.Should().BeEmpty();
     }

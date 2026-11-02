@@ -67,12 +67,6 @@
         "reason": "The since guard measures the elapsed MaxSyncWindow against the UTC sync cursor; it does not choose a calendar day. SyncChangesV2Response.ServerTimestamp is the UTC synchronization cursor used for subsequent incremental reads."
       }
     },
-    "src/Orbit.Api/OAuth/OAuthAuthorizationStore.cs": {
-      "ORBIT0004": {
-        "count": 3,
-        "reason": "CreateCode stamps AuthorizationEntry.CreatedAt for the authorization code TTL, independently of the user timezone. ExchangeCode compares elapsed time since AuthorizationEntry.CreatedAt with CodeExpiry before accepting a code. Cleanup evicts authorization codes whose CreatedAt instant precedes the CodeExpiry cutoff."
-      }
-    },
     "src/Orbit.Api/RateLimiting/DistributedRateLimitAttribute.cs": {
       "S107": {
         "count": 1,

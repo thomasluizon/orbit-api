@@ -28,7 +28,7 @@ public class OAuthAppleControllerTests
     private readonly IOAuthStateStore _states = Substitute.For<IOAuthStateStore>();
     private readonly OAuthAuthorizationStore _store;
     private readonly OAuthController _controller;
-    private readonly IOAuthClientMetadataService _metadata = Substitute.For<IOAuthClientMetadataService>();
+    private readonly IOAuthClientMetadataService _metadata = OAuthTestClient.Metadata();
     private readonly AppleAuthorizationFlow _flow;
     private readonly Dictionary<(string Key, string Kind), string> _entries = [];
     private const string Redirect = "https://claude.ai/api/mcp/auth_callback";
@@ -65,7 +65,7 @@ public class OAuthAppleControllerTests
         }), TimeProvider.System);
         _store = new(_states, TimeProvider.System);
         _controller = new(Substitute.For<IMediator>(), _store, Substitute.For<IGenericRepository<ApiKey>>(), work,
-            Options.Create(new GoogleSettings()), new ConfigurationBuilder().Build(), NullLogger<OAuthController>.Instance, _metadata)
+            Options.Create(new GoogleSettings()), new ConfigurationBuilder().Build(), NullLogger<OAuthController>.Instance, _metadata, Substitute.For<IGenericRepository<OAuthClient>>())
         { ControllerContext = new() { HttpContext = new DefaultHttpContext() } };
     }
 
@@ -93,15 +93,14 @@ public class OAuthAppleControllerTests
         _metadata.GetAsync(clientId, Arg.Any<CancellationToken>())
             .Returns(OAuthClientMetadata.Create(clientId, "Claude", [Redirect], "none").Value);
         var result = await _controller.AppleStart(_flow, clientId, "https://claude.ai/unlisted", "state", "challenge", "S256");
-        JsonSerializer.SerializeToElement(result.Should().BeOfType<BadRequestObjectResult>().Subject.Value)
-            .GetProperty("error").GetString().Should().Be("invalid_request");
+        result.Should().BeOfType<BadRequestResult>();
         _entries.Should().BeEmpty();
     }
 
     [Fact]
     public async Task StartAndCallback_PreserveConsentContextAndRejectReplay()
     {
-        var start = (RedirectResult)(await _controller.AppleStart(_flow, "client", Redirect, "client-state", "challenge", "S256", "nonce", AgentScopes.ReadHabits));
+        var start = (RedirectResult)(await _controller.AppleStart(_flow, "https://claude.ai/oauth/mcp-oauth-client-metadata", Redirect, "client-state", "challenge", "S256", "nonce", AgentScopes.ReadHabits));
         var state = System.Web.HttpUtility.ParseQueryString(new Uri(start.Url).Query)["state"]!;
         var result = await _controller.AppleCallback(_flow, new() { State = state, Code = "code" }, default);
         ((StatusCodeResult)result).StatusCode.Should().Be(StatusCodes.Status303SeeOther);
@@ -110,7 +109,7 @@ public class OAuthAppleControllerTests
         var ticket = location.Split('=')[1];
         var consent = _store.ConsumePendingConsent(ticket)!.Entry;
         consent.UserId.Should().NotBeEmpty();
-        consent.ClientId.Should().Be("client");
+        consent.ClientId.Should().Be("https://claude.ai/oauth/mcp-oauth-client-metadata");
         consent.RedirectUri.Should().Be(Redirect);
         consent.CodeChallenge.Should().Be("challenge");
         consent.State.Should().Be("client-state");
@@ -122,10 +121,10 @@ public class OAuthAppleControllerTests
 
     [Theory]
     [InlineData("", Redirect, "state", "challenge", "S256")]
-    [InlineData("client", "https://attacker.example.com/callback", "state", "challenge", "S256")]
-    [InlineData("client", Redirect, "", "challenge", "S256")]
-    [InlineData("client", Redirect, "state", "", "S256")]
-    [InlineData("client", Redirect, "state", "challenge", "plain")]
+    [InlineData("https://claude.ai/oauth/mcp-oauth-client-metadata", "https://attacker.example.com/callback", "state", "challenge", "S256")]
+    [InlineData("https://claude.ai/oauth/mcp-oauth-client-metadata", Redirect, "", "challenge", "S256")]
+    [InlineData("https://claude.ai/oauth/mcp-oauth-client-metadata", Redirect, "state", "", "S256")]
+    [InlineData("https://claude.ai/oauth/mcp-oauth-client-metadata", Redirect, "state", "challenge", "plain")]
     public async Task Start_InvalidAuthorizationRequest_Rejects(string client, string redirect, string state, string challenge, string method)
     {
         (await _controller.AppleStart(_flow, client, redirect, state, challenge, method)).Should().BeOfType<BadRequestResult>();
@@ -135,10 +134,10 @@ public class OAuthAppleControllerTests
     [Fact]
     public async Task Start_InvalidScopeOrDisabledProvider_Rejects()
     {
-        (await _controller.AppleStart(_flow, "client", Redirect, "state", "challenge", "S256", scope: "unsupported"))
+        (await _controller.AppleStart(_flow, "https://claude.ai/oauth/mcp-oauth-client-metadata", Redirect, "state", "challenge", "S256", scope: "unsupported"))
             .Should().BeOfType<BadRequestObjectResult>();
         _apple.IsConfigured.Returns(false);
-        ((StatusCodeResult)(await _controller.AppleStart(_flow, "client", Redirect, "state", "challenge", "S256")))
+        ((StatusCodeResult)(await _controller.AppleStart(_flow, "https://claude.ai/oauth/mcp-oauth-client-metadata", Redirect, "state", "challenge", "S256")))
             .StatusCode.Should().Be(StatusCodes.Status503ServiceUnavailable);
     }
 
@@ -166,11 +165,11 @@ public class OAuthAppleControllerTests
     [InlineData("redirect")]
     public async Task Callback_InvalidStoredConsent_Rejects(string failure)
     {
-        var start = (RedirectResult)(await _controller.AppleStart(_flow, "client", Redirect, "state", "challenge", "S256"));
+        var start = (RedirectResult)(await _controller.AppleStart(_flow, "https://claude.ai/oauth/mcp-oauth-client-metadata", Redirect, "state", "challenge", "S256"));
         var state = System.Web.HttpUtility.ParseQueryString(new Uri(start.Url).Query)["state"]!;
         var key = (state, "apple-authorization");
         var request = JsonSerializer.Deserialize<AppleAuthorizationRequest>(_entries[key])!;
-        var context = failure == "null" ? "null" : JsonSerializer.Serialize(new ConsentEntry(Guid.Empty, "challenge", "https://attacker.example.com/callback", "client", "state", null, "en", []));
+        var context = failure == "null" ? "null" : JsonSerializer.Serialize(new ConsentEntry(Guid.Empty, "challenge", "https://attacker.example.com/callback", "https://claude.ai/oauth/mcp-oauth-client-metadata", "state", null, "en", [], ClientName: "Claude"));
         _entries[key] = JsonSerializer.Serialize(request with { McpContext = context });
         (await _controller.AppleCallback(_flow, new() { State = state, Code = "code" }, default)).Should().BeOfType<UnauthorizedResult>();
     }

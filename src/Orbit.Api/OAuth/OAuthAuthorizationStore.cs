@@ -8,10 +8,11 @@ namespace Orbit.Api.OAuth;
 public sealed class OAuthAuthorizationStore(IOAuthStateStore states, TimeProvider timeProvider)
 {
     private static readonly TimeSpan CodeExpiry = TimeSpan.FromMinutes(5);
+    internal const int MaxPendingGoogleRequestsPerIp = 20;
     internal const int MaxPendingGoogleRequests = 1_000;
 
     public GoogleAuthorizationRequest? TryCreateGoogleRequest(string clientId, string redirectUri, string clientState,
-        string codeChallenge, string? nonce, string googleRedirectUri, string language, IReadOnlyList<string>? scopes = null)
+        string codeChallenge, string? nonce, string googleRedirectUri, string language, IReadOnlyList<string>? scopes = null, string clientIp = "unknown")
     {
         Cleanup();
         var verifier = NewSecret();
@@ -19,7 +20,7 @@ public sealed class OAuthAuthorizationStore(IOAuthStateStore states, TimeProvide
         var request = new GoogleAuthorizationRequest(NewSecret(), clientId, redirectUri, clientState,
             codeChallenge, nonce, googleRedirectUri, language, verifier, challenge, timeProvider.GetUtcNow(), scopes);
         return states.Put(request.GoogleState, "google", JsonSerializer.Serialize(request),
-            timeProvider.GetUtcNow().UtcDateTime.Add(CodeExpiry), MaxPendingGoogleRequests) ? request : null;
+            timeProvider.GetUtcNow().UtcDateTime.Add(CodeExpiry), MaxPendingGoogleRequests, Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(clientIp))), MaxPendingGoogleRequestsPerIp) ? request : null;
     }
 
     public GoogleAuthorizationRequest? ConsumeGoogleRequest(string state) =>
@@ -30,9 +31,7 @@ public sealed class OAuthAuthorizationStore(IOAuthStateStore states, TimeProvide
     {
         Cleanup();
         var code = NewSecret();
-#pragma warning disable ORBIT0004 // CreateCode stamps AuthorizationEntry.CreatedAt for the authorization code TTL, independently of the user timezone. https://github.com/thomasluizon/orbit-tickets/issues/230
-        var entry = new AuthorizationEntry(userId, codeChallenge, redirectUri, clientId, nonce, DateTime.UtcNow, scopes, isReadOnly);
-#pragma warning restore ORBIT0004
+        var entry = new AuthorizationEntry(userId, codeChallenge, redirectUri, clientId, nonce, timeProvider.GetUtcNow().UtcDateTime, scopes, isReadOnly);
         states.Put(code, "code", JsonSerializer.Serialize(entry), timeProvider.GetUtcNow().UtcDateTime.Add(CodeExpiry));
         return code;
     }
@@ -42,9 +41,7 @@ public sealed class OAuthAuthorizationStore(IOAuthStateStore states, TimeProvide
         var entry = Deserialize<AuthorizationEntry>(states.Take(code, "code", timeProvider.GetUtcNow().UtcDateTime));
         if (entry is null)
             return null;
-#pragma warning disable ORBIT0004 // ExchangeCode compares elapsed time since AuthorizationEntry.CreatedAt with CodeExpiry before accepting a code. https://github.com/thomasluizon/orbit-tickets/issues/230
-        if (DateTime.UtcNow - entry.CreatedAt > CodeExpiry)
-#pragma warning restore ORBIT0004
+        if (timeProvider.GetUtcNow().UtcDateTime - entry.CreatedAt > CodeExpiry)
             return null;
         return entry.RedirectUri == redirectUri && CryptographicOperations.FixedTimeEquals(
             Encoding.ASCII.GetBytes(Challenge(codeVerifier)), Encoding.ASCII.GetBytes(entry.CodeChallenge)) ? entry : null;
@@ -94,9 +91,7 @@ public sealed class OAuthAuthorizationStore(IOAuthStateStore states, TimeProvide
 
     private void Cleanup()
     {
-#pragma warning disable ORBIT0004 // Cleanup evicts authorization codes whose CreatedAt instant precedes the CodeExpiry cutoff. https://github.com/thomasluizon/orbit-tickets/issues/230
-        states.RemoveExpired(DateTime.UtcNow);
-#pragma warning restore ORBIT0004
+        states.RemoveExpired(timeProvider.GetUtcNow().UtcDateTime);
     }
 
     private static T? Deserialize<T>(string? payload) => payload is null ? default : JsonSerializer.Deserialize<T>(payload);

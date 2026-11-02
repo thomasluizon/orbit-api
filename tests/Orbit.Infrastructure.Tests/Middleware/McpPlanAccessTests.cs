@@ -1,3 +1,4 @@
+using Orbit.Infrastructure.Tests.Controllers;
 using System.Linq.Expressions;
 using System.Security.Claims;
 using System.Security.Cryptography;
@@ -188,20 +189,21 @@ public class McpPlanAccessTests
             .Returns(Result.Success(new LoginResponse(user.Id, "login-token", user.Name, user.Email)));
         var controller = new OAuthController(mediator, store, keys, unitOfWork,
             Options.Create(new GoogleSettings()), new ConfigurationBuilder().Build(),
-            NullLogger<OAuthController>.Instance, Substitute.For<IOAuthClientMetadataService>());
+            NullLogger<OAuthController>.Instance, OAuthTestClient.Metadata(), Substitute.For<IGenericRepository<OAuthClient>>());
         controller.ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() };
+        OAuthTestClient.Bind(controller.HttpContext, "client-state");
         const string verifier = "mcp-client-code-verifier";
-        const string redirectUri = "https://claude.ai/callback";
+        const string redirectUri = "https://claude.ai/api/mcp/auth_callback";
         var challenge = WebEncoders.Base64UrlEncode(SHA256.HashData(Encoding.ASCII.GetBytes(verifier)));
         var login = await controller.VerifyCode(new OAuthController.VerifyCodeRequest(
-            user.Email, "123456", "client-state", challenge, redirectUri, "mcp-client"), CancellationToken.None);
+            user.Email, "123456", "client-state", challenge, redirectUri, "https://claude.ai/oauth/mcp-oauth-client-metadata"), CancellationToken.None);
         var redirect = JsonSerializer.SerializeToElement(login.Should().BeOfType<OkObjectResult>().Subject.Value)
             .GetProperty("redirectUrl").GetString()!;
         var ticket = QueryHelpers.ParseQuery(new Uri("https://api.useorbit.org" + redirect).Query)["ticket"].ToString();
         redirect = ((RedirectResult)controller.GrantConsent(ticket, "requested")).Url;
         var code = QueryHelpers.ParseQuery(new Uri(redirect).Query)["code"].ToString();
 
-        var result = await controller.Token("authorization_code", code, verifier, redirectUri, CancellationToken.None, client_id: "mcp-client");
+        var result = await controller.Token("authorization_code", code, verifier, redirectUri, CancellationToken.None, client_id: "https://claude.ai/oauth/mcp-oauth-client-metadata");
 
         var response = JsonSerializer.SerializeToElement(result.Should().BeOfType<OkObjectResult>().Subject.Value);
         response.GetProperty("token_type").GetString().Should().Be("Bearer");

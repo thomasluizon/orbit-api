@@ -68,7 +68,7 @@ public partial class AuthControllerTests
     [Fact]
     public async Task AppleCallback_RedirectsWithSeeOtherAndNoCookieDependency()
     {
-        const string destination = "https://app.example.com/auth-callback?provider=apple&handoff=opaque&state=client-state";
+        const string destination = "https://app.example.com/auth-callback#provider=apple&handoff=opaque&state=client-state";
         _mediator.Send(Arg.Any<CompleteAppleCallbackCommand>(), Arg.Any<CancellationToken>()).Returns(Result.Success(destination));
         var result = await _controller.AppleCallback(new() { State = "state", Code = "code" }, default);
         ((StatusCodeResult)result).StatusCode.Should().Be(StatusCodes.Status303SeeOther);
