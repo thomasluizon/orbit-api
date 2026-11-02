@@ -82,6 +82,78 @@ public class DurableDeliveryRecoveryTests
         (await factory.Context.MarketingDeliveries.AsNoTracking().SingleAsync()).SentAtUtc.Should().NotBeNull();
     }
 
+    [PostgresFact]
+    public Task BroadcastRetry_InNewScopes_SendsOnlyPendingRecipients_AndKeepsBroadcastsIndependent()
+        => PostgresTestDatabase.WithDatabase(async database =>
+        {
+            var users = new[] { "delivered", "failed" }.Select(name =>
+            {
+                var user = User.Create(name, $"{name}@example.com").Value;
+                user.SetMarketingConsent(true);
+                return user;
+            }).ToArray();
+            database.Users.AddRange(users);
+            await database.SaveChangesAsync();
+            var queued = new List<Job>();
+            var client = Substitute.For<IBackgroundJobClient>();
+            client.Create(Arg.Do<Job>(job => queued.Add(job)), Arg.Any<IState>()).Returns("101");
+            var emails = Substitute.For<IEmailService>();
+            emails.SendMarketingEmailAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+                .Returns(call => call.ArgAt<string>(0) == "failed@example.com"
+                    ? Task.FromException(new InvalidOperationException("SES unavailable")) : Task.CompletedTask);
+            var tokens = Substitute.For<IMarketingUnsubscribeTokenService>();
+            var settings = Options.Create(new MarketingSettings { SendDelayMilliseconds = 0 });
+            OrbitDbContext NewContext() => new(new DbContextOptionsBuilder<OrbitDbContext>()
+                .UseNpgsql(database.Database.GetConnectionString(), options => options.EnableRetryOnFailure()).Options);
+            async Task Broadcast()
+            {
+                await using var db = NewContext();
+                var handler = new SendMarketingBroadcastCommandHandler(new GenericRepository<User>(db),
+                    new GenericRepository<MarketingContact>(db), client, tokens, new GenericRepository<MarketingDelivery>(db),
+                    new UnitOfWork(db, new DatabaseConnectionSettings()), settings,
+                    NullLogger<SendMarketingBroadcastCommandHandler>.Instance, TimeProvider.System);
+                (await handler.Handle(new("Subject", "Assunto", "Body", "Corpo", null), default))
+                    .Value.RecipientCount.Should().Be(2);
+            }
+            async Task Deliver(Job queuedJob)
+            {
+                queuedJob.Type.Should().Be(typeof(SendMarketingEmailJob));
+                queuedJob.Method.Name.Should().Be(nameof(SendMarketingEmailJob.ExecuteRecipientAsync));
+                await using var db = NewContext();
+                await new SendMarketingEmailJob(emails, new GenericRepository<MarketingDelivery>(db),
+                    new UnitOfWork(db, new DatabaseConnectionSettings()), tokens, settings)
+                    .ExecuteRecipientAsync((Guid)queuedJob.Args[0], (Guid)queuedJob.Args[1],
+                        (string)queuedJob.Args[2], (string)queuedJob.Args[3]);
+            }
+
+            await Broadcast();
+            queued.Should().HaveCount(2);
+            foreach (var job in queued)
+            {
+                if ((string)job.Args[2] == "failed@example.com")
+                    await FluentActions.Invoking(() => Deliver(job)).Should().ThrowAsync<InvalidOperationException>();
+                else
+                    await Deliver(job);
+            }
+            (await database.MarketingDeliveries.CountAsync(row => row.SentAtUtc != null)).Should().Be(1);
+            emails.ClearReceivedCalls();
+            emails.SendMarketingEmailAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+                .Returns(Task.CompletedTask);
+
+            await Task.WhenAll(queued.SelectMany(job => new[] { Deliver(job), Deliver(job) }));
+
+            await emails.Received(1).SendMarketingEmailAsync("failed@example.com", Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+            await emails.DidNotReceive().SendMarketingEmailAsync("delivered@example.com", Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+            (await database.MarketingDeliveries.CountAsync(row => row.SentAtUtc != null)).Should().Be(2);
+            await Broadcast();
+            queued.Should().HaveCount(4);
+            foreach (var job in queued.Skip(2)) await Deliver(job);
+            (await database.MarketingDeliveries.CountAsync(row => row.SentAtUtc != null)).Should().Be(4);
+            (await database.MarketingDeliveries.Select(row => row.BroadcastId).Distinct().CountAsync()).Should().Be(2);
+        });
+
     [Fact]
     public async Task SendFailure_LeavesTheRecipientPendingAndARecoveryTickQueuesIt()
     {

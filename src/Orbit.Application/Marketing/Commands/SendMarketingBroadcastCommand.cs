@@ -53,9 +53,9 @@ public partial class SendMarketingBroadcastCommandHandler(
             unitOfWork.ResetTracking();
             pending.Clear();
         }
-        async Task Add(MarketingRecipient recipient)
+        async Task Add(Guid recipientId, string email, string language)
         {
-            pending.Add(MarketingDelivery.Create(broadcastId, recipient.UserId, recipient.Email, recipient.Language,
+            pending.Add(MarketingDelivery.Create(broadcastId, recipientId, email, language,
                 request.SubjectEn, request.SubjectPt, request.BodyHtmlEn, request.BodyHtmlPt,
                 nowAtUtc.AddMilliseconds((long)total * Math.Max(0, _settings.SendDelayMilliseconds))));
             total++;
@@ -76,7 +76,7 @@ public partial class SendMarketingBroadcastCommandHandler(
                 && (contact.UnsubscribedAtUtc != null || contact.SuppressedAtUtc != null), cancellationToken))
                 .Select(contact => contact.Email).ToHashSet(StringComparer.Ordinal);
             foreach (var user in users.Where(user => !blocked.Contains(user.Email.Trim().ToLowerInvariant())))
-                await Add(new MarketingRecipient(user.Id, user.Email, user.Language ?? "en"));
+                await Add(user.Id, user.Email, user.Language ?? "en");
             if (users.Count < pageSize) break;
         }
         cursor = null;
@@ -92,7 +92,7 @@ public partial class SendMarketingBroadcastCommandHandler(
             var userEmails = (await userRepository.FindIgnoringFiltersAsync(user => emails.Contains(user.Email.ToLower()),
                 cancellationToken: cancellationToken)).Select(user => user.Email.Trim().ToLowerInvariant()).ToHashSet(StringComparer.Ordinal);
             foreach (var contact in contacts.Where(contact => !userEmails.Contains(contact.Email)))
-                await Add(new MarketingRecipient(contact.Id, contact.Email, contact.Language));
+                await Add(contact.Id, contact.Email, contact.Language);
             if (contacts.Count < pageSize) break;
         }
         await Flush();

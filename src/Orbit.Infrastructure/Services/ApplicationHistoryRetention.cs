@@ -1,6 +1,5 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
-using Orbit.Application.Marketing.Jobs;
 using Orbit.Infrastructure.Persistence;
 using Orbit.Domain.Common;
 
@@ -11,9 +10,8 @@ internal static class ApplicationHistoryRetention
     internal static async Task<int> PurgeAsync(OrbitDbContext db, IConfiguration configuration, TimeProvider clock,
         CancellationToken cancellationToken)
     {
-        var deliveryDays = configuration.GetValue("BackgroundServices:Retention:MarketingBroadcastDeliveriesDays", SendMarketingBroadcastPageJob.RetryWindowDays + 1);
-        if (deliveryDays != 0)
-            ArgumentOutOfRangeException.ThrowIfLessThan(deliveryDays, SendMarketingBroadcastPageJob.RetryWindowDays + 1);
+        var deliveryDays = configuration.GetValue("BackgroundServices:Retention:MarketingDeliveriesDays", 31);
+        ArgumentOutOfRangeException.ThrowIfNegative(deliveryDays);
         var nowAtUtc = clock.GetUtcNow().UtcDateTime;
         var today = DateOnly.FromDateTime(nowAtUtc);
         var deleted = 0;
@@ -60,7 +58,7 @@ internal static class ApplicationHistoryRetention
                     || (newer.EndedAtUtc == row.EndedAtUtc && (newer.CreatedAtUtc > row.CreatedAtUtc || (newer.CreatedAtUtc == row.CreatedAtUtc && newer.Id.CompareTo(row.Id) > 0))))) >= Orbit.Domain.Models.ProactiveRules.IgnoredItemsBeforeRest));
         await Purge("ProactiveCalendar", 30, days => db.ProactiveCalendarDays.Where(row => row.LocalDate < today.AddDays(-days)));
         if (deliveryDays > 0)
-            deleted += await BatchedDelete.ExecuteAsync(db.MarketingBroadcastDeliveries.Where(row => row.DeliveredAtUtc < nowAtUtc.AddDays(-deliveryDays)), cancellationToken, batchSize);
+            deleted += await BatchedDelete.ExecuteAsync(db.MarketingDeliveries.Where(row => row.SentAtUtc < nowAtUtc.AddDays(-deliveryDays)), cancellationToken, batchSize);
         deleted += await BatchedDelete.ExecuteAsync(db.OAuthStates.Where(row => row.ExpiresAtUtc <= nowAtUtc), cancellationToken, batchSize);
         return deleted;
     }

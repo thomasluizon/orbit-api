@@ -48,6 +48,19 @@ public class AccountDeletionServiceTests
             user.SetStripeSubscription("sub_paid", DateTime.UtcNow.AddDays(20));
         user.Deactivate(DateTime.UtcNow.AddDays(-overdueDays));
         factory.Context.Users.Add(user);
+        var unrelatedDelivery = MarketingDelivery.Create(Guid.NewGuid(), Guid.NewGuid(), "other@example.com", "en",
+            "Subject", "Assunto", "Body", "Corpo", DateTime.UtcNow.AddDays(-1));
+        var deliveries = new[] { false, true }.Select(sent =>
+        {
+            var delivery = MarketingDelivery.Create(Guid.NewGuid(), user.Id, user.Email, "en",
+                "Subject", "Assunto", "Body", "Corpo", DateTime.UtcNow.AddDays(-1));
+            if (sent) delivery.MarkSent(DateTime.UtcNow);
+            return delivery;
+        }).ToArray();
+        var waitlistDelivery = MarketingDelivery.Create(Guid.NewGuid(), Guid.NewGuid(), user.Email.ToUpperInvariant(), "en",
+            "Subject", "Assunto", "Body", "Corpo", DateTime.UtcNow.AddDays(-1));
+        factory.Context.AddRange(deliveries);
+        factory.Context.AddRange(unrelatedDelivery, waitlistDelivery);
         await factory.Context.SaveChangesAsync();
         var stripe = Substitute.For<IBillingService>();
         var playBilling = Substitute.For<IPlayBillingService>();
@@ -109,6 +122,9 @@ public class AccountDeletionServiceTests
         using var afterRemoval = factory.CreateContext();
         var retained = failure && overdueDays < 7 || storageFailures == 3;
         (await afterRemoval.Users.IgnoreQueryFilters().AnyAsync(u => u.Id == user.Id)).Should().Be(retained);
+        (await afterRemoval.MarketingDeliveries.CountAsync(row => row.RecipientId == user.Id)).Should().Be(retained ? 2 : 0);
+        (await afterRemoval.MarketingDeliveries.AnyAsync(row => row.Id == waitlistDelivery.Id)).Should().Be(retained);
+        (await afterRemoval.MarketingDeliveries.AnyAsync(row => row.Id == unrelatedDelivery.Id)).Should().BeTrue();
         objects.Attempts.Should().Be(retained && storageFailures == 0 ? 0 : Math.Min(storageFailures + 1, 3));
         objects.Keys.Should().HaveCount(retained ? 1 : 0);
         await reset.Received(retained ? 0 : 1).DeleteAllUserDataAsync(user.Id, Arg.Any<CancellationToken>());

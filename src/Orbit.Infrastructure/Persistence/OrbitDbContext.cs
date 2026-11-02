@@ -42,7 +42,6 @@ public class OrbitDbContext : DbContext
     public DbSet<EmailChallenge> EmailChallenges => Set<EmailChallenge>();
     public DbSet<User> Users => Set<User>();
     public DbSet<MarketingContact> MarketingContacts => Set<MarketingContact>();
-    public DbSet<MarketingBroadcastDelivery> MarketingBroadcastDeliveries => Set<MarketingBroadcastDelivery>();
     public DbSet<Habit> Habits => Set<Habit>();
     public DbSet<HabitSkipUndo> HabitSkipUndos => Set<HabitSkipUndo>();
     public DbSet<HabitLog> HabitLogs => Set<HabitLog>();
@@ -150,13 +149,6 @@ public class OrbitDbContext : DbContext
             entity.Property(row => row.CouponId).HasMaxLength(255);
         });
         ConfigureMarketingContactEntity(modelBuilder);
-        modelBuilder.Entity<MarketingBroadcastDelivery>(entity =>
-        {
-            entity.HasKey(delivery => delivery.Id);
-            entity.HasIndex(delivery => delivery.DeliveredAtUtc);
-            entity.HasIndex(delivery => delivery.RecipientId);
-            entity.HasIndex(delivery => new { delivery.BroadcastId, delivery.RecipientId }).IsUnique();
-        });
         ConfigureHabitEntity(modelBuilder, isPostgres, encConverter, nullableEncConverter);
 
         if (isPostgres)
