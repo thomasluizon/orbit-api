@@ -1,7 +1,12 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Routing;
+using Microsoft.AspNetCore.Routing.Patterns;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Orbit.Application.Uploads.Common;
 using OrbitServiceCollectionExtensions = Orbit.Api.Extensions.ServiceCollectionExtensions;
@@ -53,6 +58,49 @@ public class RequestSizeLimitTests
             http.Request.Body.Should().BeSameAs(body);
             body.Position.Should().BeLessThanOrEqualTo(1048577);
         }
+    }
+
+    [Theory]
+    [InlineData(true, true)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(false, false)]
+    public async Task RouteLimit_LogsOnlyTheServerRouteForAnUntrustedPath(bool routed, bool declared)
+    {
+        var http = new DefaultHttpContext();
+        http.Request.Path = (routed ? "/api/provider/" : "/mcp/") + "attacker\r\nforged-warning\u0085\u2028\u2029";
+        var body = new MemoryStream(new byte[1048577]);
+        http.Request.Body = body;
+        if (declared) http.Request.ContentLength = body.Length;
+        if (routed)
+            http.SetEndpoint(new RouteEndpoint(_ => Task.CompletedTask,
+                RoutePatternFactory.Parse("/api/provider/{id}"), 0,
+                new EndpointMetadataCollection(new RequestSizeLimitAttribute(1048576)), "Provider"));
+        var logger = new CapturingLogger();
+        var middleware = new Orbit.Api.Middleware.RouteBodyLimitMiddleware(
+            context => context.Request.Body.CopyToAsync(Stream.Null), logger);
+
+        await middleware.InvokeAsync(http);
+
+        http.Response.StatusCode.Should().Be(StatusCodes.Status413PayloadTooLarge);
+        http.Request.Body.Should().BeSameAs(body);
+        var entry = logger.Entries.Should().ContainSingle().Subject;
+        entry.Level.Should().Be(LogLevel.Warning);
+        entry.Fields["Route"].Should().Be(routed ? "/api/provider/{id}" : "/mcp");
+        entry.Fields["DeclaredLength"].Should().Be(declared ? body.Length : null);
+        entry.Fields["Limit"].Should().Be(1048576L);
+        entry.Message.Should().NotContainAny("attacker", "forged-warning", "\r", "\n", "\u0085", "\u2028", "\u2029");
+    }
+
+    private sealed class CapturingLogger : ILogger<Orbit.Api.Middleware.RouteBodyLimitMiddleware>
+    {
+        public List<(LogLevel Level, string Message, Dictionary<string, object?> Fields)> Entries { get; } = [];
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(LogLevel logLevel) => true;
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
+            Func<TState, Exception?, string> formatter) =>
+            Entries.Add((logLevel, formatter(state, exception), state is IEnumerable<KeyValuePair<string, object?>> fields
+                ? fields.ToDictionary() : throw new InvalidOperationException("Expected structured log fields.")));
     }
 
     private const long ExpectedMaxRequestBodyBytes = 10 * 1024 * 1024;

@@ -29,8 +29,11 @@ public sealed class RouteBodyLimitMiddleware(RequestDelegate next, ILogger<Route
         }
         catch (BadHttpRequestException exception) when (exception.StatusCode == StatusCodes.Status413PayloadTooLarge && !context.Response.HasStarted)
         {
+            var route = context.GetEndpoint() is RouteEndpoint endpoint
+                ? endpoint.RoutePattern.RawText
+                : context.Request.Path.StartsWithSegments("/mcp") ? "/mcp" : "(unmatched)";
             logger.LogWarning("Request body rejected. Route={Route} DeclaredLength={DeclaredLength} Limit={Limit}",
-                context.Request.Path, context.Request.ContentLength, limit);
+                route, context.Request.ContentLength, limit);
             context.Response.StatusCode = StatusCodes.Status413PayloadTooLarge;
         }
         finally

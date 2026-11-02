@@ -11,6 +11,13 @@ namespace Orbit.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.Sql("""
+                SELECT set_config('orbit.bounded_reads_statement_timeout', current_setting('statement_timeout'), true),
+                    set_config('orbit.bounded_reads_lock_timeout', current_setting('lock_timeout'), true);
+                SET LOCAL lock_timeout = '1s';
+                SET LOCAL statement_timeout = '5s';
+                """);
+
             migrationBuilder.AddColumn<DateTime>(
                 name: "GoogleAccessTokenExpiresAtUtc",
                 table: "Users",
@@ -128,6 +135,11 @@ namespace Orbit.Infrastructure.Migrations
                 DROP TRIGGER IF EXISTS maintain_xp_daily_totals ON "XpAwardLogs";
                 CREATE TRIGGER maintain_xp_daily_totals AFTER INSERT OR DELETE ON "XpAwardLogs"
                     FOR EACH ROW EXECUTE FUNCTION maintain_xp_daily_totals();
+                """);
+
+            migrationBuilder.Sql("""
+                SELECT set_config('statement_timeout', current_setting('orbit.bounded_reads_statement_timeout'), true),
+                    set_config('lock_timeout', current_setting('orbit.bounded_reads_lock_timeout'), true);
                 """);
         }
 

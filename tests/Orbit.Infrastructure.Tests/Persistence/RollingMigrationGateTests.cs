@@ -15,6 +15,20 @@ public class RollingMigrationGateTests
     private const string DeployedCommit = "7472203c7450bdd914c68282fefa905d9b432653";
 
     [Fact]
+    public void BoundedReadExpansion_RequiresRecordedCompatibilityEvidenceFromTheReleasedBase()
+    {
+        const string id = "20261102113348_AddBoundedReadState";
+        var migration = new AddBoundedReadState { ActiveProvider = "Npgsql.EntityFrameworkCore.PostgreSQL" };
+        var root = RepositoryRoot();
+
+        RollingMigrationGate.Check(id, migration.UpOperations).Should()
+            .ContainSingle().Which.Should().Contain(nameof(SqlOperation));
+        RollingMigrationGate.Check(id, migration.UpOperations, ReadBarriers(root),
+                (commit, descendant) => Git(root, "merge-base", "--is-ancestor", commit, descendant).ExitCode == 0, "main")
+            .Should().BeEmpty();
+    }
+
+    [Fact]
     public void ProactiveLedgerContract_RequiresRecordedWebAndBackgroundDrainEvidence()
     {
         const string id = "20261023111014_DropSentProactiveCheckins";
