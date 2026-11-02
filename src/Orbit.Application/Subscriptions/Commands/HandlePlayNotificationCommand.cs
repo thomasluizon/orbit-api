@@ -65,7 +65,11 @@ public partial class HandlePlayNotificationCommandHandler(
                 await userRepository.ReloadAsync(user, token);
                 var couponId = ApplySubscriptionState(user, state, notification.PurchaseToken,
                     notification.NotificationType, state.GrantsOrbitPro(_settings));
-                if (!string.IsNullOrEmpty(couponId)) claimRow.RecordConsumedCoupon(user.Id, couponId);
+                if (!string.IsNullOrEmpty(couponId))
+                {
+                    claimRow.RecordConsumedCoupon(user.Id, couponId);
+                    processedNotificationRepository.Update(claimRow);
+                }
                 await unitOfWork.SaveChangesAsync(token);
                 return user;
             }, cancellationToken);
