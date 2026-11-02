@@ -2,6 +2,7 @@ namespace Orbit.Application.Common;
 
 public static class AppConfigKeys
 {
+    public const string MaxActiveApiKeys = "MaxActiveApiKeys";
     public const string SendCodeEmailsPerIpPerDay = "SendCodeEmailsPerIpPerDay";
     public const string SendCodeEmailsPerDay = "SendCodeEmailsPerDay";
     public const string OnboardingAttestationCallsPerHour = "OnboardingAttestationCallsPerHour";

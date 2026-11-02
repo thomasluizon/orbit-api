@@ -26,13 +26,15 @@ public class CreateApiKeyCommandHandlerTests
 
     public CreateApiKeyCommandHandlerTests()
     {
+        _appConfigService.GetAsync(AppConfigKeys.MaxActiveApiKeys, 5, Arg.Any<CancellationToken>()).Returns(5);
         _challengeService = new EmailChallengeService(_cache, TimeProvider.System);
         _handler = new CreateApiKeyCommandHandler(
             _apiKeyRepo,
             _payGate,
             _unitOfWork,
             _cache,
-            new ApiKeyManagementAuthorization(_appConfigService, _challengeService));
+            new ApiKeyManagementAuthorization(_appConfigService, _challengeService),
+            _appConfigService);
 
         _appConfigService.GetAsync(
                 AppConfigKeys.RequireApiKeyCreationStepUp,
@@ -59,7 +61,8 @@ public class CreateApiKeyCommandHandlerTests
             _payGate,
             _unitOfWork,
             emptyCache,
-            new ApiKeyManagementAuthorization(_appConfigService, new EmailChallengeService(emptyCache, TimeProvider.System)));
+            new ApiKeyManagementAuthorization(_appConfigService, new EmailChallengeService(emptyCache, TimeProvider.System)),
+            _appConfigService);
 
         var result = await handler.Handle(
             new CreateApiKeyCommand(UserId, "My API Key"),
@@ -99,6 +102,34 @@ public class CreateApiKeyCommandHandlerTests
 
         result.IsFailure.Should().BeTrue();
         result.ErrorCode.Should().Be("PAY_GATE");
+        await _apiKeyRepo.DidNotReceive().AddAsync(Arg.Any<ApiKey>(), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(4, true)]
+    [InlineData(5, false)]
+    public async Task Handle_MissingConfig_UsesFiveAsTheServiceFallback(int activeCount, bool allowed)
+    {
+        _appConfigService.GetAsync(AppConfigKeys.MaxActiveApiKeys, 5, Arg.Any<CancellationToken>())
+            .Returns(call => call.ArgAt<int>(1));
+        _apiKeyRepo.CountAsync(Arg.Any<Expression<Func<ApiKey, bool>>>(), Arg.Any<CancellationToken>()).Returns(activeCount);
+
+        var result = await _handler.Handle(new CreateApiKeyCommand(UserId, "Default limit"), CancellationToken.None);
+
+        result.IsSuccess.Should().Be(allowed);
+        await _appConfigService.Received(1).GetAsync(AppConfigKeys.MaxActiveApiKeys, 5, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_ConfiguredLimit_RejectsFourthKey()
+    {
+        _appConfigService.GetAsync("MaxActiveApiKeys", 5, Arg.Any<CancellationToken>()).Returns(3);
+        _apiKeyRepo.CountAsync(Arg.Any<Expression<Func<ApiKey, bool>>>(), Arg.Any<CancellationToken>()).Returns(3);
+
+        var result = await _handler.Handle(new CreateApiKeyCommand(UserId, "Fourth key"), CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Be(ErrorMessages.MaxApiKeys.Format(3).Message);
         await _apiKeyRepo.DidNotReceive().AddAsync(Arg.Any<ApiKey>(), Arg.Any<CancellationToken>());
     }
 

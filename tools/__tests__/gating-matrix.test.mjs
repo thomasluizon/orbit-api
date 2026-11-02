@@ -444,3 +444,18 @@ test("the generator carries no sample gate, key, or limit literals", () => {
   assert.equal(source.includes("GoalsProOnly"), false)
   assert.equal(/\b(?:5|10|20|50|500|1000)\b/.test(source), false)
 })
+
+test("the release-safety SQL seed declares the API key limit without relaxing other SQL mutations", () => {
+  const matrix = JSON.parse(generate())
+  assert.deepEqual(matrix.appConfigs.find(row => row.key === "MaxActiveApiKeys"), {
+    key: "MaxActiveApiKeys", compiledDefault: 5, compiledDefaultExpression: "5", seededInMigrations: true,
+  })
+  const fixture = copySourceFixture("release-safety-upsert-update")
+  const migration = join(fixture, "src/Orbit.Infrastructure/Migrations/20261102123402_ReleaseSafetyAppConfig.cs")
+  const source = readFileSync(migration, "utf8")
+  assert.ok(source.includes('ON CONFLICT ("Key") DO NOTHING;'))
+  writeFileSync(migration, source.replace('ON CONFLICT ("Key") DO NOTHING;', 'ON CONFLICT ("Key") DO UPDATE SET "Value" = EXCLUDED."Value";'))
+  const result = spawnSync(process.execPath, [TOOL, "--root", fixture], { encoding: "utf8" })
+  assert.notEqual(result.status, 0)
+  assert.match(result.stderr, /unsupported SQL mutation of AppConfigs/)
+})
