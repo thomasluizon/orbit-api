@@ -438,17 +438,30 @@ public partial class ReminderSchedulerService(
     {
         if (pending.Count == 0) return;
         using var scope = scopeFactory.CreateScope();
+        using var progressGate = new SemaphoreSlim(1, 1);
+        var db = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
         try
         {
-            var delivered = await scope.ServiceProvider.GetRequiredService<IPushNotificationService>().TrySendManyAsync(pending.Select(p =>
-                new Orbit.Domain.Models.PushDelivery(p.UserId, p.Title, p.Body, NotificationUrls.Home, p.Data)).ToArray(), ct);
-            var ids = delivered.Select(index => pending[index].ReminderId).ToArray();
-            var sentAtUtc = (timeProvider ?? TimeProvider.System).GetUtcNow().UtcDateTime;
-            await scope.ServiceProvider.GetRequiredService<OrbitDbContext>().SentReminders
-                .Where(row => ids.Contains(row.Id) && row.PushSentAtUtc == null)
-                .ExecuteUpdateAsync(setters => setters.SetProperty(row => row.PushSentAtUtc, sentAtUtc), ct);
+            await scope.ServiceProvider.GetRequiredService<IPushNotificationService>().TrySendManyAsync(pending.Select(p =>
+                new Orbit.Domain.Models.PushDelivery(p.UserId, p.Title, p.Body, NotificationUrls.Home, p.Data)).ToArray(), async index =>
+                {
+                    using var completionDeadline = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                    await progressGate.WaitAsync(completionDeadline.Token);
+                    try
+                    {
+                        var id = pending[index].ReminderId;
+                        var sentAtUtc = (timeProvider ?? TimeProvider.System).GetUtcNow().UtcDateTime;
+                        await db.SentReminders.Where(row => row.Id == id && row.PushSentAtUtc == null)
+                            .ExecuteUpdateAsync(setters => setters.SetProperty(row => row.PushSentAtUtc, sentAtUtc), completionDeadline.Token);
+                    }
+                    finally { progressGate.Release(); }
+                }, ct);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            LogReminderPushDeadline(logger, pending.Count);
+        }
+        catch (Exception ex)
         {
             LogReminderPushFailed(logger, pending[0].HabitId, pending[0].UserId, ex);
         }
@@ -542,5 +555,8 @@ public partial class ReminderSchedulerService(
 
     [LoggerMessage(EventId = 8, Level = LogLevel.Warning, Message = "Failed to deliver reminder push for habit {HabitId} (user {UserId})")]
     private static partial void LogReminderPushFailed(ILogger logger, Guid habitId, Guid userId, Exception ex);
+
+    [LoggerMessage(EventId = 9, Level = LogLevel.Warning, Message = "Reminder push batch reached its deadline with {ReminderCount} reminders; pending deliveries will retry")]
+    private static partial void LogReminderPushDeadline(ILogger logger, int reminderCount);
 
 }

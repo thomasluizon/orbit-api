@@ -8,6 +8,13 @@ internal static class PushBatchTestAdapter
 {
     internal static void ForwardToSingleSends(IPushNotificationService push)
     {
+        push.TrySendManyAsync(Arg.Any<IReadOnlyList<PushDelivery>>(), Arg.Any<Func<int, Task>>(), Arg.Any<CancellationToken>())
+            .Returns(async call =>
+            {
+                var delivered = await push.TrySendManyAsync(call.Arg<IReadOnlyList<PushDelivery>>(), call.Arg<CancellationToken>());
+                foreach (var index in delivered) await call.Arg<Func<int, Task>>()(index);
+                return delivered;
+            });
         push.SendManyAsync(Arg.Any<IReadOnlyList<PushDelivery>>(), Arg.Any<CancellationToken>())
             .Returns(async call =>
             {
