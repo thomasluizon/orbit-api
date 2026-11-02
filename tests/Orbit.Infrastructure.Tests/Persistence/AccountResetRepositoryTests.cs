@@ -365,7 +365,10 @@ public class AccountResetRepositoryTests : IDisposable
             tableCounts[table] = (long)(await command.ExecuteScalarAsync())!;
         }
         var reset = () => handler.Handle(new(_userId), default);
-        await reset.Should().ThrowAsync<Exception>();
+        if (configured)
+            await reset.Should().ThrowAsync<IOException>().WithMessage("storage failed");
+        else
+            await reset.Should().ThrowAsync<InvalidOperationException>().WithMessage("Conversation image storage is unavailable.");
         _dbContext.ChangeTracker.Clear();
         (await _dbContext.Users.SingleAsync(u => u.Id == _userId)).TotalXp.Should().Be(123);
         (await _dbContext.Users.SingleAsync(u => u.Id == _userId)).HasCompletedOnboarding.Should().BeTrue();

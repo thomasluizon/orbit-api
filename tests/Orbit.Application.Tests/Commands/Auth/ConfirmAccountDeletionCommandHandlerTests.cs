@@ -178,7 +178,7 @@ public class ConfirmAccountDeletionCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ValidCode_ClearsGoogleOAuthTokens()
+    public async Task Handle_ValidCode_RetainsGoogleRefreshTokenForErasure()
     {
         var user = User.Create("Test", TestEmail).Value;
         user.SetGoogleTokens("access-token", "refresh-token");

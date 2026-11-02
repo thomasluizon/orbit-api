@@ -1142,7 +1142,7 @@ public class UserTests
     }
 
     [Fact]
-    public void Deactivate_ClearsGoogleCalendarConnection()
+    public void Deactivate_RetainsRefreshTokenForErasureAndDisablesCalendarSync()
     {
         var user = CreateValidUser();
         user.SetStripeSubscription("sub_123", DateTime.UtcNow.AddDays(30));

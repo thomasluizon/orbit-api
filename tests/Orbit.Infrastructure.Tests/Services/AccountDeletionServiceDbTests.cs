@@ -380,6 +380,46 @@ public class AccountDeletionServiceDbTests : IDisposable
                 Arg.Any<Exception?>(), Arg.Any<Func<Arg.AnyType, Exception?, string>>());
     }
 
+    [Theory]
+    [InlineData(1, true)]
+    [InlineData(8, false)]
+    public async Task Erasure_AppleProviderTimeout_RespectsDeferral(int daysOverdue, bool retained)
+    {
+        var userId = Guid.NewGuid();
+        SeedDeactivatedUser(userId, "apple-timeout@example.com", DateTime.UtcNow.AddDays(-daysOverdue));
+        _dbContext.Users.Local.Single(user => user.Id == userId).SetAppleIdentity("subject", "stored-apple", "client");
+        await _dbContext.SaveChangesAsync();
+        _dbContext.ChangeTracker.Clear();
+        _apple.RevokeAsync("stored-apple", "client", Arg.Any<CancellationToken>())
+            .Returns(Task.FromException(new TaskCanceledException("provider timeout")));
+        var erase = () => _service.RunAsync(default);
+        await erase.Should().NotThrowAsync();
+        await _apple.Received(1).RevokeAsync("stored-apple", "client", Arg.Any<CancellationToken>());
+        (await _dbContext.Users.IgnoreQueryFilters().AnyAsync(user => user.Id == userId)).Should().Be(retained);
+        _logger.Received(1).Log(Microsoft.Extensions.Logging.LogLevel.Error,
+            Arg.Is<Microsoft.Extensions.Logging.EventId>(eventId => eventId.Id == (retained ? 6 : 11)), Arg.Any<Arg.AnyType>(),
+            Arg.Any<Exception?>(), Arg.Any<Func<Arg.AnyType, Exception?, string>>());
+    }
+
+    [Fact]
+    public async Task Erasure_AppleCallerCancellation_PropagatesAndKeepsRow()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var userId = Guid.NewGuid();
+        SeedDeactivatedUser(userId, "apple-cancel@example.com", DateTime.UtcNow.AddDays(-1));
+        _dbContext.Users.Local.Single(user => user.Id == userId).SetAppleIdentity("subject", "stored-apple", "client");
+        await _dbContext.SaveChangesAsync();
+        _dbContext.ChangeTracker.Clear();
+        _apple.RevokeAsync("stored-apple", "client", Arg.Any<CancellationToken>()).Returns(_ =>
+        {
+            cancellation.Cancel();
+            return Task.FromCanceled(cancellation.Token);
+        });
+        var erase = () => _service.RunAsync(cancellation.Token);
+        await erase.Should().ThrowAsync<OperationCanceledException>();
+        (await _dbContext.Users.IgnoreQueryFilters().AnyAsync(user => user.Id == userId)).Should().BeTrue();
+    }
+
     private async Task AssertRetiredLedgerAbsent()
     {
         (await _dbContext.Database.SqlQueryRaw<int>(
