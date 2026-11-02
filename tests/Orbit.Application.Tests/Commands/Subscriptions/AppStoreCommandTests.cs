@@ -155,6 +155,18 @@ public partial class AppStoreCommandTests
     }
 
     [Fact]
+    public async Task Notification_UnboundAccount_DoesNotGrantOrBindPurchase()
+    {
+        _user.StartTrial(DateTime.UtcNow.AddDays(-30));
+        _apple.VerifyNotification("signed").Returns(new AppStoreNotification(Guid.NewGuid(), "SUBSCRIBED", "Sandbox", Transaction));
+        var result = await new HandleAppStoreNotificationCommandHandler(_apple, _users, _notifications, _work)
+            .Handle(new("signed"), default);
+        result.IsSuccess.Should().BeTrue();
+        _user.HasProAccess.Should().BeFalse();
+        _user.AppStoreOriginalTransactionId.Should().BeNull();
+    }
+
+    [Fact]
     public void Validators_RejectMissingInput()
     {
         new VerifyAppStorePurchaseCommandValidator().Validate(new VerifyAppStorePurchaseCommand(Guid.Empty, "")).IsValid.Should().BeFalse();
