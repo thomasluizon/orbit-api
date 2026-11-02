@@ -160,7 +160,7 @@ public sealed class ConversationTurnRecorder(
             && row.ConversationId == conversationId && row.TurnId == turnId && row.Role == "user", cancellationToken);
         if (row?.ImageObjectKey is null) return null;
         var stream = await storage.ReadPrivateAsync(row.ImageObjectKey, cancellationToken);
-        return new(stream, row.ImageContentType!);
+        return new(new VerifiedConversationImageStream(stream, row.ImageSha256!), row.ImageContentType!);
     }
 
     public Task<bool> DeleteAsync(Guid userId, Guid conversationId, CancellationToken cancellationToken = default) =>

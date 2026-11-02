@@ -59,6 +59,26 @@ public class ConversationTurnRecorderTests
             .OnlyContain(state => state.ConfirmedAtUtc != null);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ImageStream_RejectsCorruptedStorageBytesOnCompletion(bool asynchronous)
+    {
+        using var fixture = new Fixture();
+        var capture = fixture.Capture(image: true);
+        await fixture.Store.RecordAsync(capture);
+        fixture.Storage.ReadPrivateAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(_ => new MemoryStream([4, 3, 2, 1]));
+        var image = await fixture.Store.ReadImageAsync(fixture.User.Id, fixture.ConversationId, capture.TurnId);
+        await using var stream = image!.Data;
+        Func<Task> consume = asynchronous ? () => stream.CopyToAsync(Stream.Null) : () =>
+        {
+            stream.CopyTo(Stream.Null);
+            return Task.CompletedTask;
+        };
+        await consume.Should().ThrowAsync<InvalidOperationException>().WithMessage("Conversation image checksum did not match.");
+    }
+
     [Fact]
     public async Task FlagOff_PendingTransitionsAndRecording_DoNotReadOrUpdateStoredTurns()
     {
