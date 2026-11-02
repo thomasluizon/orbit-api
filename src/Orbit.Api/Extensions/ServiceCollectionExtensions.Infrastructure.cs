@@ -85,9 +85,9 @@ public static partial class ServiceCollectionExtensions
                 new BasicAWSCredentials(ses.AccessKeyId, ses.SecretAccessKey),
                 RegionEndpoint.GetBySystemName(ses.Region)));
         builder.Services.AddScoped<IEmailService, SesEmailService>();
-        builder.Services.AddHttpClient("SnsCertificate").ConfigurePrimaryHttpMessageHandler(() =>
+        builder.Services.AddHttpClient("SnsCertificate", client => client.Timeout = httpTimeout).ConfigurePrimaryHttpMessageHandler(() =>
             new HttpClientHandler { AllowAutoRedirect = false });
-        builder.Services.AddHttpClient("SnsConfirmation").ConfigurePrimaryHttpMessageHandler(() =>
+        builder.Services.AddHttpClient("SnsConfirmation", client => client.Timeout = httpTimeout).ConfigurePrimaryHttpMessageHandler(() =>
             new HttpClientHandler { AllowAutoRedirect = false });
         builder.Services.AddScoped<SnsMessageVerifier>();
         builder.Services.AddScoped<ISesEventProcessor, SesEventProcessor>();

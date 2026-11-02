@@ -182,7 +182,10 @@ public class S3ObjectStorageServiceTests
         var service = CreateService(client);
         await service.PutPrivateAsync(key, "image/png", bytes);
         uploaded.Should().Equal(bytes);
-        (await service.ReadPrivateAsync(key)).Should().Equal(bytes);
+        await using var read = await service.ReadPrivateAsync(key);
+        using var destination = new MemoryStream();
+        await read.CopyToAsync(destination);
+        destination.ToArray().Should().Equal(bytes);
         await service.DeletePrivateAsync(key);
         await client.Received(1).DeleteObjectAsync(Bucket, key, Arg.Any<CancellationToken>());
     }

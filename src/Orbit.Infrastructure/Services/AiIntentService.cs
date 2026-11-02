@@ -58,7 +58,7 @@ public sealed partial class AiIntentService(
             messages.Add(ResponseItem.CreateUserMessageItem(
                 [ResponseContentPart.CreateInputTextPart(userMessage),
                 ResponseContentPart.CreateInputImagePart(
-                    new Uri($"data:{imageMimeType};base64,{Convert.ToBase64String(imageData)}"))]));
+                    new BinaryData(imageData, imageMimeType))]));
         }
         else
         {
@@ -91,9 +91,6 @@ public sealed partial class AiIntentService(
             var text = prefix + ChatHistoryMessage.NormalizeRole(entry.Role)!.ToUpperInvariant() + ": "
                 + PromptDataSanitizer.SanitizeBlock(entry.Content, 16_000) + "\n" + HistorySuffix;
             messages.Add(ResponseItem.CreateSystemMessageItem(text));
-            if (entry.ImageData is { } bytes && entry.ImageMimeType is { } mime)
-                messages.Add(ResponseItem.CreateUserMessageItem([ResponseContentPart.CreateInputImagePart(
-                    new Uri($"data:{mime};base64,{Convert.ToBase64String(bytes)}"))]));
         }
     }
 
@@ -120,6 +117,7 @@ public sealed partial class AiIntentService(
             conversationContext.Options is not CreateResponseOptions options)
             return Result.Failure<AiResponse>(ErrorMessages.AiNoActiveConversation);
 
+        ReplaceImageInputs(messages);
         if (conversationContext.ResponseValidationFeedback is { } feedback)
         {
             messages.Add(ResponseItem.CreateSystemMessageItem(feedback));
@@ -164,6 +162,14 @@ public sealed partial class AiIntentService(
             streamSink,
             cancellationToken,
             telemetry: conversationContext.Telemetry, purpose: conversationContext.Purpose);
+    }
+
+    private static void ReplaceImageInputs(List<ResponseItem> messages)
+    {
+        foreach (var message in messages.OfType<MessageResponseItem>())
+            for (var index = 0; index < message.Content.Count; index++)
+                if (message.Content[index].Kind == ResponseContentPartKind.InputImage)
+                    message.Content[index] = ResponseContentPart.CreateInputTextPart("[Image supplied in the first round of this turn.]");
     }
 
     private static void AppendToolConstraints(List<ResponseItem> messages, CreateResponseOptions options,

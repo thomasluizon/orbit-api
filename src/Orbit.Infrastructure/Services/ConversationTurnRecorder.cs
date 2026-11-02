@@ -24,7 +24,6 @@ public sealed class ConversationTurnRecorder(
     IOptions<AiSettings> aiSettings) : IConversationTurnRecorder
 {
     public const int HistoryRows = 10;
-    public const int ImageHistoryRows = 6;
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 
     public async Task<bool> RecordAsync(ConversationTurnCapture turn, CancellationToken cancellationToken = default)
@@ -115,7 +114,6 @@ public sealed class ConversationTurnRecorder(
         var rows = await db.ConversationTurns.AsNoTracking().Where(row => row.UserId == userId && row.ConversationId == conversationId)
             .OrderByDescending(row => row.TurnOrder).Take(HistoryRows).ToListAsync(cancellationToken);
         rows.Reverse();
-        var image = rows.TakeLast(ImageHistoryRows).LastOrDefault(row => row.ImageObjectKey is not null);
         var messages = new List<ChatHistoryMessage>();
         foreach (var row in rows)
         {
@@ -131,14 +129,8 @@ public sealed class ConversationTurnRecorder(
                 }, JsonOptions);
                 content = ModelToolPayload.Fit(context, 12_000).ToJsonString();
             }
-            byte[]? bytes = null;
-            if (ReferenceEquals(image, row))
-            {
-                bytes = await storage.ReadPrivateAsync(row.ImageObjectKey!, cancellationToken);
-                if (Convert.ToHexStringLower(SHA256.HashData(bytes)) != row.ImageSha256)
-                    throw new InvalidOperationException("Conversation image checksum did not match.");
-            }
-            messages.Add(new(row.Role, content) { ServerOwned = true, ImageData = bytes, ImageMimeType = row.ImageContentType });
+            if (row.ImageObjectKey is not null) content += "\n[An image was attached to this earlier message.]";
+            messages.Add(new(row.Role, content) { ServerOwned = true });
         }
         return Result.Success(new StoredConversationHistory(rows.Count > 0, messages));
     }
@@ -167,10 +159,8 @@ public sealed class ConversationTurnRecorder(
         var row = await db.ConversationTurns.AsNoTracking().SingleOrDefaultAsync(row => row.UserId == userId
             && row.ConversationId == conversationId && row.TurnId == turnId && row.Role == "user", cancellationToken);
         if (row?.ImageObjectKey is null) return null;
-        var bytes = await storage.ReadPrivateAsync(row.ImageObjectKey, cancellationToken);
-        if (Convert.ToHexStringLower(SHA256.HashData(bytes)) != row.ImageSha256)
-            throw new InvalidOperationException("Conversation image checksum did not match.");
-        return new(bytes, row.ImageContentType!);
+        var stream = await storage.ReadPrivateAsync(row.ImageObjectKey, cancellationToken);
+        return new(stream, row.ImageContentType!);
     }
 
     public Task<bool> DeleteAsync(Guid userId, Guid conversationId, CancellationToken cancellationToken = default) =>

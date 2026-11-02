@@ -20,7 +20,7 @@ public sealed record ConversationDisplayTurn(Guid TurnId, long Order, string Rol
     string? Content, string? ResponseJson, string PreviewOutcomesJson, ConversationImageReference? Image);
 
 public sealed record ConversationImageReference(string FileName, string ContentType, string Sha256, string? Url = null);
-public sealed record StoredConversationImage(byte[] Data, string ContentType);
+public sealed record StoredConversationImage(Stream Data, string ContentType);
 
 public sealed record ConversationTurnCapture(
     Guid UserId,

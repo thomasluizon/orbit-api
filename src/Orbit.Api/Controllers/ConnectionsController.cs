@@ -30,6 +30,7 @@ public sealed class ConnectionsController(ISender sender, ILogger<ConnectionsCon
     }
 
     [HttpPost("callback")]
+    [RequestSizeLimit(64 * 1024)]
     [DistributedRateLimit("auth")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]

@@ -8,7 +8,7 @@ namespace Orbit.Application.Chat.Commands;
 
 public record TranscribeAudioResponse(string Text);
 
-public record TranscribeAudioCommand(Guid UserId, byte[] Audio, string FileName) : IRequest<Result<TranscribeAudioResponse>>;
+public record TranscribeAudioCommand(Guid UserId, Stream Audio, string FileName) : IRequest<Result<TranscribeAudioResponse>>;
 
 public class TranscribeAudioCommandHandler(
     IAudioTranscriptionService transcription,
@@ -17,7 +17,6 @@ public class TranscribeAudioCommandHandler(
 {
     public async Task<Result<TranscribeAudioResponse>> Handle(TranscribeAudioCommand request, CancellationToken cancellationToken)
     {
-        using var stream = new MemoryStream(request.Audio);
         var user = await users.GetByIdAsync(request.UserId, cancellationToken);
         var language = user?.Language switch
         {
@@ -25,7 +24,7 @@ public class TranscribeAudioCommandHandler(
             "en" => "en",
             _ => null
         };
-        var result = await transcription.TranscribeAsync(stream, request.FileName, language, cancellationToken);
+        var result = await transcription.TranscribeAsync(request.Audio, request.FileName, language, cancellationToken);
         return result.IsSuccess
             ? Result.Success(new TranscribeAudioResponse(result.Value))
             : result.PropagateError<TranscribeAudioResponse>();

@@ -187,6 +187,7 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
     }
 
     [HttpPost("transcribe")]
+    [ConcurrentChatLimit("transcription-in-flight")]
     [RequestSizeLimit(AppConstants.MaxAudioBytes)]
     [RequestFormLimits(MultipartBodyLengthLimit = AppConstants.MaxAudioBytes)]
     [ProducesResponseType(StatusCodes.Status200OK)]
@@ -201,10 +202,10 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
         if (audio is null || audio.Length == 0)
             return BadRequest(ErrorMessages.AudioRequired.ToErrorBody());
 
-        using var ms = new MemoryStream();
-        await audio.CopyToAsync(ms, cancellationToken);
-
-        var result = await mediator.Send(new TranscribeAudioCommand(HttpContext.GetUserId(), ms.ToArray(), audio.FileName), cancellationToken);
+        if (audio.Length > AppConstants.MaxAudioBytes)
+            return BadRequest(new AppError(ValidationErrorCodes.AudioSizeLimit, ErrorCopy.English(ValidationErrorCodes.AudioSizeLimit)).ToErrorBody());
+        await using var stream = audio.OpenReadStream();
+        var result = await mediator.Send(new TranscribeAudioCommand(HttpContext.GetUserId(), stream, audio.FileName), cancellationToken);
         return result.IsSuccess ? Ok(result.Value) : result.ToErrorResult();
     }
 
@@ -327,9 +328,10 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
             return (null, null, validationResult.ToErrorResult());
         }
 
-        using var ms = new MemoryStream();
-        await image.CopyToAsync(ms, cancellationToken);
-        return (ms.ToArray(), validationResult.Value.MimeType, null);
+        var data = new byte[checked((int)image.Length)];
+        uploadStream.Position = 0;
+        await uploadStream.ReadExactlyAsync(data, cancellationToken);
+        return (data, validationResult.Value.MimeType, null);
     }
 
     private (List<ChatHistoryMessage>? History, IActionResult? Error) ParseChatHistory(string? history)

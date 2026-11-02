@@ -1,4 +1,5 @@
 using MediatR;
+using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -13,7 +14,7 @@ using Stripe.Checkout;
 
 namespace Orbit.Application.Subscriptions.Commands;
 
-public record HandleWebhookCommand(string Json, string Signature) : IRequest<Result>, IConcurrencyRetryable;
+public record HandleWebhookCommand(ReadOnlyMemory<byte> Body, string Signature) : IRequest<Result>, IConcurrencyRetryable;
 
 public partial class HandleWebhookCommandHandler(
     IGenericRepository<User> userRepository,
@@ -28,7 +29,7 @@ public partial class HandleWebhookCommandHandler(
 
     public async Task<Result> Handle(HandleWebhookCommand request, CancellationToken cancellationToken)
     {
-        LogStripeWebhookReceived(logger, request.Json.Length);
+        LogStripeWebhookReceived(logger, request.Body.Length);
 
         if (string.IsNullOrEmpty(_settings.WebhookSecret))
         {
@@ -39,11 +40,8 @@ public partial class HandleWebhookCommandHandler(
         Event stripeEvent;
         try
         {
-            stripeEvent = EventUtility.ConstructEvent(
-                request.Json,
-                request.Signature,
-                _settings.WebhookSecret,
-                throwOnApiVersionMismatch: true);
+            StripeWebhookSignature.Verify(request.Body.Span, request.Signature, _settings.WebhookSecret);
+            stripeEvent = EventUtility.ParseEvent(Encoding.UTF8.GetString(request.Body.Span), throwOnApiVersionMismatch: true);
         }
         catch (StripeException ex)
         {

@@ -15,11 +15,18 @@ public sealed class ChatTurn : Entity
     public static ChatTurn Create(Guid userId, string keyHash, string fingerprint, DateTime expiresAtUtc)
     {
         ArgumentOutOfRangeException.ThrowIfEqual(userId, Guid.Empty);
-        if (!IsHash(keyHash) || !IsHash(fingerprint))
+        if (!IsHash(keyHash) || !IsFingerprint(fingerprint))
             throw new ArgumentException("Turn identity and fingerprint must be SHA256 hex digests.");
         if (expiresAtUtc.Kind != DateTimeKind.Utc)
             throw new ArgumentException("Turn expiry must be a UTC instant.", nameof(expiresAtUtc));
         return new ChatTurn { UserId = userId, KeyHash = keyHash, Fingerprint = fingerprint, ExpiresAtUtc = expiresAtUtc };
+    }
+
+    private static bool IsFingerprint(string value)
+    {
+        if (!value.StartsWith("v2:", StringComparison.Ordinal)) return IsHash(value);
+        Span<byte> digest = stackalloc byte[32];
+        return Convert.TryFromBase64String(value[3..], digest, out var count) && count == 32;
     }
 
     public void Complete(string terminalEvent)
