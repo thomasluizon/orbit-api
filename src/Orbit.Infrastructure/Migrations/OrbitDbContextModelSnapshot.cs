@@ -1556,6 +1556,9 @@ namespace Orbit.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("BackgroundJobId")
+                        .HasColumnType("text");
+
                     b.Property<string>("BodyHtmlEn")
                         .IsRequired()
                         .HasColumnType("text");
@@ -1576,6 +1579,9 @@ namespace Orbit.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
+
+                    b.Property<DateTime>("NextRecoveryAtUtc")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime>("NotBeforeAtUtc")
                         .HasColumnType("timestamp with time zone");
@@ -1598,6 +1604,8 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.HasIndex("BroadcastId", "RecipientId")
                         .IsUnique();
+
+                    b.HasIndex("SentAtUtc", "NextRecoveryAtUtc");
 
                     b.HasIndex("SentAtUtc", "NotBeforeAtUtc");
 

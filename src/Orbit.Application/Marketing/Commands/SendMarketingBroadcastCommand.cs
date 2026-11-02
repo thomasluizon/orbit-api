@@ -78,10 +78,24 @@ public partial class SendMarketingBroadcastCommandHandler(
         foreach (var delivery in deliveries)
             await deliveryRepository.AddAsync(delivery, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
-        foreach (var delivery in deliveries)
-            backgroundJobClient.Schedule<SendMarketingEmailJob>(job => job.ExecuteRecipientAsync(
-                delivery.BroadcastId, delivery.RecipientId, delivery.Email, delivery.Language),
-                new DateTimeOffset(delivery.NotBeforeAtUtc));
+        await unitOfWork.ExecuteOnceInTransactionAsync(async token =>
+        {
+            await unitOfWork.AcquireAdvisoryLockAsync("marketing-dispatch", token);
+            foreach (var delivery in deliveries)
+            {
+                await deliveryRepository.ReloadAsync(delivery, token);
+                if (delivery.SentAtUtc is not null || delivery.BackgroundJobId is not null)
+                    continue;
+                var jobId = backgroundJobClient.Schedule<SendMarketingEmailJob>(job => job.ExecuteRecipientAsync(
+                    delivery.BroadcastId, delivery.RecipientId, delivery.Email, delivery.Language),
+                    new DateTimeOffset(delivery.NotBeforeAtUtc));
+                if (jobId is not null)
+                    delivery.RecordDispatch(jobId, DateTime.UtcNow);
+                else
+                    delivery.DeferRecovery(DateTime.UtcNow);
+            }
+            await unitOfWork.SaveChangesAsync(token);
+        }, cancellationToken);
 
         return Result.Success(new MarketingBroadcastResult(recipients.Count, WasTest: false));
     }

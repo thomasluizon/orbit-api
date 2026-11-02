@@ -52,9 +52,6 @@ public partial class CompleteDurableAuthAndDeliveryState : Migration
                 ON "PendingCouponCancellations" ("NextAttemptAtUtc");
             """);
         migrationBuilder.Sql("""
-            DROP INDEX CONCURRENTLY IF EXISTS "IX_DistributedRateLimitBuckets_PolicyName_WindowEndsAtUtc"
-            """, suppressTransaction: true);
-        migrationBuilder.Sql("""
             CREATE INDEX CONCURRENTLY IF NOT EXISTS "IX_DistributedRateLimitBuckets_PolicyName_WindowEndsAtUtc"
                 ON "DistributedRateLimitBuckets" ("PolicyName", "WindowEndsAtUtc")
             """, suppressTransaction: true);

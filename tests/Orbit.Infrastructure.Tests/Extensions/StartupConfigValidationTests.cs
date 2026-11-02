@@ -173,6 +173,21 @@ public class StartupConfigValidationTests
         resolve.Should().NotThrow("the singleton estimator must use the singleton memory cache");
     }
 
+    [Fact]
+    public void AddOrbitDatabase_ResolvesContextAndAuthInvalidationWithoutAiServices()
+    {
+        var builder = BuildWith(ValidInfrastructure());
+        builder.Services.AddHttpContextAccessor();
+        builder.AddOrbitDatabase();
+        using var provider = builder.Services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
+        using var scope = provider.CreateScope();
+
+        Action resolve = () => scope.ServiceProvider.GetRequiredService<Orbit.Infrastructure.Persistence.OrbitDbContext>();
+
+        resolve.Should().NotThrow();
+        scope.ServiceProvider.GetRequiredService<Orbit.Infrastructure.Services.AuthValidationCache>().Should().NotBeNull();
+    }
+
     private static WebApplicationBuilder BuildWith(Dictionary<string, string?> values)
     {
         var builder = WebApplication.CreateBuilder();

@@ -127,6 +127,7 @@ public class OrbitDbContext : DbContext
         {
             entity.HasIndex(row => new { row.BroadcastId, row.RecipientId }).IsUnique();
             entity.HasIndex(row => new { row.SentAtUtc, row.NotBeforeAtUtc });
+            entity.HasIndex(row => new { row.SentAtUtc, row.NextRecoveryAtUtc });
             entity.Property(row => row.Email).HasMaxLength(320);
             entity.Property(row => row.Language).HasMaxLength(32);
         });

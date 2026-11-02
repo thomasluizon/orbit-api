@@ -1,4 +1,5 @@
 using Hangfire;
+using Hangfire.States;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -23,11 +24,34 @@ public sealed class DurableDeliveryRecoveryService(IServiceScopeFactory scopes, 
         var db = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
         var jobs = scope.ServiceProvider.GetRequiredService<IBackgroundJobClient>();
         var nowAtUtc = DateTime.UtcNow;
-        var pending = await db.MarketingDeliveries.AsNoTracking()
-            .Where(row => row.SentAtUtc == null && row.NotBeforeAtUtc <= nowAtUtc)
-            .OrderBy(row => row.NotBeforeAtUtc).ToListAsync(cancellationToken);
-        foreach (var row in pending)
-            jobs.Enqueue<SendMarketingEmailJob>(job => job.ExecuteRecipientAsync(row.BroadcastId, row.RecipientId, row.Email, row.Language));
+        var dispatchUnitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+        await dispatchUnitOfWork.ExecuteOnceInTransactionAsync(async token =>
+        {
+            await dispatchUnitOfWork.AcquireAdvisoryLockAsync("marketing-dispatch", token);
+            var pending = await db.MarketingDeliveries
+                .Where(row => row.SentAtUtc == null && row.NotBeforeAtUtc <= nowAtUtc && row.NextRecoveryAtUtc <= nowAtUtc)
+                .OrderBy(row => row.NextRecoveryAtUtc).ThenBy(row => row.Id).Take(100).ToListAsync(token);
+            if (pending.Count == 0)
+                return;
+            using var connection = scope.ServiceProvider.GetRequiredService<JobStorage>().GetConnection();
+            foreach (var row in pending)
+            {
+                var state = row.BackgroundJobId is null ? null : connection.GetStateData(row.BackgroundJobId);
+                if (state is not null && state.Name != FailedState.StateName && state.Name != DeletedState.StateName &&
+                    state.Name != SucceededState.StateName)
+                {
+                    row.DeferRecovery(nowAtUtc);
+                    continue;
+                }
+                var jobId = jobs.Enqueue<SendMarketingEmailJob>(job => job.ExecuteRecipientAsync(
+                    row.BroadcastId, row.RecipientId, row.Email, row.Language));
+                if (jobId is not null)
+                    row.RecordDispatch(jobId, nowAtUtc);
+                else
+                    row.DeferRecovery(nowAtUtc);
+            }
+            await db.SaveChangesAsync(token);
+        }, cancellationToken);
 
         var coupons = await db.PendingCouponCancellations.AsNoTracking()
             .Where(row => row.NextAttemptAtUtc <= nowAtUtc).Select(row => row.Id).Take(100).ToListAsync(cancellationToken);

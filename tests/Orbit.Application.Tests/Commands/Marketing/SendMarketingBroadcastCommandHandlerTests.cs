@@ -26,6 +26,9 @@ public class SendMarketingBroadcastCommandHandlerTests
 
     public SendMarketingBroadcastCommandHandlerTests()
     {
+        _jobs.Create(Arg.Any<Job>(), Arg.Any<IState>()).Returns("101");
+        _unitOfWork.ExecuteOnceInTransactionAsync(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.Arg<Func<CancellationToken, Task>>()(call.Arg<CancellationToken>()));
         _contacts.GetAllAsync(Arg.Any<CancellationToken>()).Returns(Array.Empty<MarketingContact>());
         _deliveries.AddAsync(Arg.Any<MarketingDelivery>(), Arg.Any<CancellationToken>())
             .Returns(call => { _rows.Add(call.Arg<MarketingDelivery>()); return Task.CompletedTask; });
@@ -50,6 +53,7 @@ public class SendMarketingBroadcastCommandHandlerTests
         var result = await _handler.Handle(Command(), CancellationToken.None);
         result.Value.RecipientCount.Should().Be(3);
         _rows.Should().HaveCount(3);
+        _rows.Should().OnlyContain(row => row.BackgroundJobId == "101");
         _rows.Select(row => row.BroadcastId).Distinct().Should().ContainSingle();
         (_rows[1].NotBeforeAtUtc - _rows[0].NotBeforeAtUtc).Should().Be(TimeSpan.FromMilliseconds(100));
         Received.InOrder(() =>
@@ -57,6 +61,7 @@ public class SendMarketingBroadcastCommandHandlerTests
             _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>());
             for (var i = 0; i < 3; i++)
                 _jobs.Create(Arg.Any<Job>(), Arg.Is<IState>(state => state is ScheduledState));
+            _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>());
         });
         _jobs.Received(3).Create(Arg.Is<Job>(job => job.Method.Name == nameof(SendMarketingEmailJob.ExecuteRecipientAsync)), Arg.Any<IState>());
     }

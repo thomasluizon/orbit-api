@@ -94,7 +94,8 @@ public sealed class SesEmailServiceTests
     {
         _client.SendEmailAsync(Arg.Any<SendEmailRequest>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromException<SendEmailResponse>(new TooManyRequestsException("throttled")));
-        await _service.SendMarketingEmailAsync("recipient@example.com", "News", "<p>Update</p>", "en", "https://api.useorbit.org/u");
+        await FluentActions.Invoking(() => _service.SendMarketingEmailAsync("recipient@example.com", "News", "<p>Update</p>", "en", "https://api.useorbit.org/u"))
+            .Should().ThrowAsync<TooManyRequestsException>();
         await _client.Received(5).SendEmailAsync(Arg.Any<SendEmailRequest>(), Arg.Any<CancellationToken>());
     }
 

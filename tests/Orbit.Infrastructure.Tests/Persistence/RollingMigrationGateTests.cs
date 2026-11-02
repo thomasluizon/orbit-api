@@ -15,6 +15,18 @@ public class RollingMigrationGateTests
     private const string DeployedCommit = "7472203c7450bdd914c68282fefa905d9b432653";
 
     [Fact]
+    public void DurableAuthAndDeliveryExpansion_IsAdditiveWithoutDeploymentBarrier()
+    {
+        var migration = new CompleteDurableAuthAndDeliveryState { ActiveProvider = "Npgsql.EntityFrameworkCore.PostgreSQL" };
+
+        RollingMigrationGate.Check("20261102083947_CompleteDurableAuthAndDeliveryState", migration.UpOperations)
+            .Should().BeEmpty();
+        var dispatchMigration = new TrackMarketingDispatch { ActiveProvider = "Npgsql.EntityFrameworkCore.PostgreSQL" };
+        RollingMigrationGate.Check("20261102123116_TrackMarketingDispatch", dispatchMigration.UpOperations)
+            .Should().BeEmpty();
+    }
+
+    [Fact]
     public void ProactiveLedgerContract_RequiresRecordedWebAndBackgroundDrainEvidence()
     {
         const string id = "20261023111014_DropSentProactiveCheckins";

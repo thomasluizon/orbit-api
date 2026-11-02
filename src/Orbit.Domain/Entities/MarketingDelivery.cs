@@ -14,6 +14,8 @@ public sealed class MarketingDelivery : Entity
     public string BodyHtmlPt { get; private set; } = string.Empty;
     public DateTime NotBeforeAtUtc { get; private set; }
     public DateTime? SentAtUtc { get; private set; }
+    public string? BackgroundJobId { get; private set; }
+    public DateTime NextRecoveryAtUtc { get; private set; }
 
     private MarketingDelivery() { }
 
@@ -40,8 +42,23 @@ public sealed class MarketingDelivery : Entity
             SubjectPt = subjectPt,
             BodyHtmlEn = bodyHtmlEn,
             BodyHtmlPt = bodyHtmlPt,
-            NotBeforeAtUtc = notBeforeAtUtc
+            NotBeforeAtUtc = notBeforeAtUtc,
+            NextRecoveryAtUtc = notBeforeAtUtc
         };
+    }
+
+    public void RecordDispatch(string backgroundJobId, DateTime checkedAtUtc)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(backgroundJobId);
+        DeferRecovery(checkedAtUtc);
+        BackgroundJobId = backgroundJobId;
+    }
+
+    public void DeferRecovery(DateTime checkedAtUtc)
+    {
+        if (checkedAtUtc.Kind != DateTimeKind.Utc)
+            throw new ArgumentException("Recovery checks require a UTC instant.");
+        NextRecoveryAtUtc = (checkedAtUtc > NotBeforeAtUtc ? checkedAtUtc : NotBeforeAtUtc).AddMinutes(5);
     }
 
     public void MarkSent(DateTime sentAtUtc)
