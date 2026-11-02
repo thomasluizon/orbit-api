@@ -67,22 +67,19 @@ public class DeleteGoalCommandHandlerTests
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
+
+
     [Fact]
-    public async Task Handle_WrongUser_GoalNotFoundBecauseFilterExcludesIt()
+    public async Task Handle_GoalOwnedByAnotherUser_ReturnsGoalNotFoundAndKeepsGoal()
     {
-        _goalRepo.FindOneTrackedAsync(
-            Arg.Any<Expression<Func<Goal, bool>>>(),
-            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
-            Arg.Any<CancellationToken>())
-            .Returns((Goal?)null);
+        var goal = Goal.Create(Guid.NewGuid(), "Foreign", 100, "km").Value;
 
-        var wrongUserId = Guid.NewGuid();
-        var command = new DeleteGoalCommand(wrongUserId, GoalId);
-
-        var result = await _handler.Handle(command, CancellationToken.None);
-
-        result.IsFailure.Should().BeTrue();
+        _goalRepo.FindOneTrackedAsync(Arg.Any<Expression<Func<Goal, bool>>>(), Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.Arg<Expression<Func<Goal, bool>>>().Compile()(goal) ? goal : null);
+        var result = await _handler.Handle(new DeleteGoalCommand(UserId, goal.Id), default);
         result.ErrorCode.Should().Be(ErrorCodes.GoalNotFound);
+        goal.IsDeleted.Should().BeFalse();
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
 }

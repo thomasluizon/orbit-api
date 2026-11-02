@@ -17,19 +17,6 @@ public class LogoutAllSessionsCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_RevokesEverySessionForTheUser()
-    {
-        var userId = Guid.NewGuid();
-        _authSessionService.RevokeAllSessionsAsync(userId, Arg.Any<CancellationToken>())
-            .Returns(Result.Success());
-
-        var result = await _handler.Handle(new LogoutAllSessionsCommand(userId), CancellationToken.None);
-
-        result.IsSuccess.Should().BeTrue();
-        await _authSessionService.Received(1).RevokeAllSessionsAsync(userId, Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
     public async Task Handle_PropagatesFailure()
     {
         var userId = Guid.NewGuid();

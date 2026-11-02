@@ -126,11 +126,15 @@ public partial class HandleWebhookCommandHandler(
         if (user is null || subscriptionId is null)
             return;
 
+        var customerId = session.CustomerId ?? session.Customer?.Id;
+        if (!CanLinkCheckoutCustomer(user, customerId))
+            return;
+
         var subscription = await subscriptionService.GetAsync(subscriptionId, cancellationToken: ct);
         var interval = GetSubscriptionInterval(subscription);
         var periodEnd = GetPeriodEnd(subscription, interval);
 
-        user.SetStripeCustomerId(session.CustomerId ?? session.Customer?.Id ?? "");
+        user.SetStripeCustomerId(customerId ?? "");
         user.SetStripeSubscription(subscriptionId, periodEnd, interval, stripeEvent.Created);
 
         if (!string.IsNullOrEmpty(user.ReferralCouponId))
@@ -143,6 +147,10 @@ public partial class HandleWebhookCommandHandler(
         LogUserUpgradedToPro(logger, uid, periodEnd);
         AnalyticsCapture.SafeCaptureUserEvent(productAnalytics, logger, user, "subscription_started");
     }
+
+    private static bool CanLinkCheckoutCustomer(User user, string? customerId) =>
+        user.StripeCustomerGeneration == 0
+        || !string.IsNullOrWhiteSpace(customerId) && user.StripeCustomerId == customerId;
 
     private async Task HandleInvoicePaid(Event stripeEvent, CancellationToken ct)
     {

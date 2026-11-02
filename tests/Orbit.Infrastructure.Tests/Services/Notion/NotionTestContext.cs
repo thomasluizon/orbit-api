@@ -1,5 +1,6 @@
 using MediatR;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using NSubstitute;
@@ -27,6 +28,7 @@ internal sealed class NotionTestContext : IDisposable
     internal readonly User User = User.Create("Notion person", "notion@example.com").Value;
     internal readonly SqliteOrbitDbContextFactory Factory;
     internal OrbitDbContext Db => Factory.Context;
+    internal readonly ILogger<NotionConnectionService> Logger = Substitute.For<ILogger<NotionConnectionService>>();
     internal readonly NotionConnectionService Connections;
     internal readonly NotionAccessGate Gate;
     internal readonly IUnitOfWork UnitOfWork;
@@ -54,7 +56,7 @@ internal sealed class NotionTestContext : IDisposable
             ClientId = "client-id",
             ClientSecret = "client-secret",
             AllowedRedirectUris = [RedirectUri]
-        }), encryption, UnitOfWork, Clock, Analytics, NullLogger<NotionConnectionService>.Instance);
+        }), encryption, UnitOfWork, Clock, Analytics, Logger);
         Api.ExchangeAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(new NotionCredentials("access-token", "refresh-token", Guid.NewGuid(), "Workspace", Guid.NewGuid()));
         Api.SearchAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(new[] { NotionExamples.Source() });

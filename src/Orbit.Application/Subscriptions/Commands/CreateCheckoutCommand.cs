@@ -48,7 +48,7 @@ public partial class CreateCheckoutCommandHandler(
             if (string.IsNullOrEmpty(user.StripeCustomerId))
             {
                 var customerId = await billingService.CreateCustomerAsync(
-                    user.Email, user.Name, request.UserId, cancellationToken);
+                    user.Email, user.Name, request.UserId, cancellationToken, user.StripeCustomerGeneration);
                 user.SetStripeCustomerId(customerId);
                 await unitOfWork.SaveChangesAsync(cancellationToken);
             }
