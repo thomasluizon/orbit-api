@@ -10,8 +10,10 @@ namespace Orbit.Infrastructure.Tests.Services;
 
 public class FoundingAchievementReconciliationServiceTests
 {
-    [Fact]
-    public async Task ReconcileCandidatesAsync_UsesBoundedCursorPagesAndProcessesEveryCandidate()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ReconcileCandidatesAsync_CandidateFailureDoesNotPreventCursorAdvancing(bool failFirst)
     {
         var reader = Substitute.For<IFoundingAchievementReader>();
         var gamificationService = Substitute.For<IGamificationService>();
@@ -28,6 +30,9 @@ public class FoundingAchievementReconciliationServiceTests
         var finalCandidate = new FoundingAchievementCursor(
             Guid.Parse("00000000-0000-0000-0000-000000000101"),
             new DateTime(2026, 8, 1, 0, 2, 0, DateTimeKind.Utc));
+        if (failFirst)
+            gamificationService.ReconcileFoundingAchievementsAsync(firstPage[0].UserId, Arg.Any<CancellationToken>())
+                .Returns(Task.FromException<IReadOnlyList<string>>(new InvalidOperationException("candidate failed")));
         reader.ReadCandidatePageAsync(
                 null,
                 FoundingAchievementReconciliationService.PageSize,

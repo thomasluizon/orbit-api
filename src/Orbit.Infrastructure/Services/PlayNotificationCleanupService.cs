@@ -14,7 +14,7 @@ namespace Orbit.Infrastructure.Services;
 /// </summary>
 public partial class PlayNotificationCleanupService(
     IServiceScopeFactory scopeFactory,
-    ILogger<PlayNotificationCleanupService> logger) : BackgroundService, IScheduledJob
+    ILogger<PlayNotificationCleanupService> logger, TimeProvider? clock = null) : BackgroundService, IScheduledJob
 {
     private static readonly TimeSpan Interval = TimeSpan.FromHours(24);
     private static readonly TimeSpan PlayRetentionPeriod = TimeSpan.FromDays(30);
@@ -46,7 +46,7 @@ public partial class PlayNotificationCleanupService(
                     LogServiceError(logger, ex);
                 }
 
-                await Task.Delay(Interval, stoppingToken);
+                await Task.Delay(Interval, clock ?? TimeProvider.System, stoppingToken);
             }
         }
         finally
@@ -60,25 +60,28 @@ public partial class PlayNotificationCleanupService(
         using var scope = scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
 
-#pragma warning disable ORBIT0004 // playCutoff removes processed Play notification dedupe entries by ProcessedAtUtc retention age. https://github.com/thomasluizon/orbit-tickets/issues/230
-        var playCutoff = DateTime.UtcNow - PlayRetentionPeriod;
-#pragma warning restore ORBIT0004
-        var purgedNotifications = await dbContext.ProcessedPlayNotifications
-            .Where(n => n.ProcessedAtUtc < playCutoff)
-            .ExecuteDeleteAsync(ct);
+        var nowAtUtc = TimeProvider.System.GetUtcNow().UtcDateTime;
+        await PurgeAsync(async () =>
+        {
+            var count = await dbContext.ProcessedPlayNotifications
+                .Where(n => n.ProcessedAtUtc < nowAtUtc - PlayRetentionPeriod).ExecuteDeleteAsync(ct);
+            if (count > 0) LogNotificationsPurged(logger, count);
+        });
+        await PurgeAsync(async () =>
+        {
+            var count = await dbContext.ProcessedStripeEvents
+                .Where(e => e.ProcessedAtUtc < nowAtUtc - StripeRetentionPeriod).ExecuteDeleteAsync(ct);
+            if (count > 0) LogStripeEventsPurged(logger, count);
+        });
+    }
 
-        if (purgedNotifications > 0)
-            LogNotificationsPurged(logger, purgedNotifications);
-
-#pragma warning disable ORBIT0004 // stripeCutoff removes processed Stripe event dedupe entries by ProcessedAtUtc retention age. https://github.com/thomasluizon/orbit-tickets/issues/230
-        var stripeCutoff = DateTime.UtcNow - StripeRetentionPeriod;
-#pragma warning restore ORBIT0004
-        var purgedEvents = await dbContext.ProcessedStripeEvents
-            .Where(e => e.ProcessedAtUtc < stripeCutoff)
-            .ExecuteDeleteAsync(ct);
-
-        if (purgedEvents > 0)
-            LogStripeEventsPurged(logger, purgedEvents);
+    private async Task PurgeAsync(Func<Task> purge)
+    {
+        try { await purge(); }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            LogServiceError(logger, exception);
+        }
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "PlayNotificationCleanupService started")]

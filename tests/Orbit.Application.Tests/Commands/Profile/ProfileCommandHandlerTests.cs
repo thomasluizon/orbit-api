@@ -65,7 +65,7 @@ public class ProfileCommandHandlerTests
     }
 
     [Fact]
-    public async Task SetTimezone_Valid_UpdatesAndSaves()
+    public async Task SetTimezone_Valid_InvalidatesDatePreferencesOnce()
     {
         var user = CreateTestUser();
         SetupUserFound(user);
@@ -77,7 +77,24 @@ public class ProfileCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         user.TimeZone.Should().Be("America/New_York");
+        await _userDateService.Received(1).InvalidateUserDatePreferencesAsync(UserId, Arg.Any<CancellationToken>());
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task SetTimezone_UnknownIanaZone_ReturnsFailureAndKeepsPreviousZone()
+    {
+        var user = CreateTestUser();
+        user.SetTimeZone("America/Sao_Paulo");
+        SetupUserFound(user);
+        var handler = new SetTimezoneCommandHandler(_userRepo, _unitOfWork, _userDateService);
+
+        var result = await handler.Handle(new SetTimezoneCommand(UserId, "Unknown/Zone"), default);
+
+        result.IsFailure.Should().BeTrue();
+        user.TimeZone.Should().Be("America/Sao_Paulo");
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _userDateService.DidNotReceive().InvalidateUserDatePreferencesAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

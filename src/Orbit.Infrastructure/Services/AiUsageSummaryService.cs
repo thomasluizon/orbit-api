@@ -29,6 +29,7 @@ public partial class AiUsageSummaryService(
 
     private readonly IReadOnlyDictionary<string, AiModelPrice> _pricing = aiOptions.Value.Pricing;
 
+    private readonly SemaphoreSlim _summaryGate = new(1, 1);
     private DateOnly? _lastSummarizedDate;
     private bool _startupSummarized;
 
@@ -54,10 +55,23 @@ public partial class AiUsageSummaryService(
 
     protected override void LogTickError(Exception ex) => LogServiceError(logger, ex);
 
-    internal async Task SummarizeStartupAsync(CancellationToken cancellationToken)
+    internal Task SummarizeStartupAsync(CancellationToken cancellationToken) =>
+        SerializeAsync(SummarizeStartupCoreAsync, cancellationToken);
+
+    internal Task SummarizeYesterdayAsync(CancellationToken cancellationToken) =>
+        SerializeAsync(SummarizeYesterdayCoreAsync, cancellationToken);
+
+    private async Task SerializeAsync(Func<CancellationToken, Task> summary, CancellationToken cancellationToken)
+    {
+        await _summaryGate.WaitAsync(cancellationToken);
+        try { await summary(cancellationToken); }
+        finally { _summaryGate.Release(); }
+    }
+
+    private async Task SummarizeStartupCoreAsync(CancellationToken cancellationToken)
     {
         if (_startupSummarized) return;
-        await SummarizeYesterdayAsync(cancellationToken);
+        await SummarizeYesterdayCoreAsync(cancellationToken);
         var today = DateOnly.FromDateTime(TimeProvider.System.GetUtcNow().UtcDateTime);
         using var scope = scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
@@ -68,7 +82,7 @@ public partial class AiUsageSummaryService(
         _startupSummarized = true;
     }
 
-    internal async Task SummarizeYesterdayAsync(CancellationToken cancellationToken)
+    private async Task SummarizeYesterdayCoreAsync(CancellationToken cancellationToken)
     {
 #pragma warning disable ORBIT0004 // yesterday selects the UTC AiUsageDaily accounting partition and operator quota summary log; user scheduling and quota enforcement do not consume it. https://github.com/thomasluizon/orbit-tickets/issues/230
         var yesterday = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-1);

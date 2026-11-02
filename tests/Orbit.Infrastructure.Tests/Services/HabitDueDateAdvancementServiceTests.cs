@@ -20,7 +20,7 @@ namespace Orbit.Infrastructure.Tests.Services;
 public class HabitDueDateAdvancementServiceTests
 {
     private static readonly Guid ValidUserId = Guid.NewGuid();
-    private static readonly DateOnly Today = DateOnly.FromDateTime(DateTime.UtcNow);
+    private static readonly DateOnly Today = new(2026, 11, 2);
 
     private static Habit CreateRecurringHabit(
         FrequencyUnit unit = FrequencyUnit.Day,
@@ -50,7 +50,7 @@ public class HabitDueDateAdvancementServiceTests
 
         habit.CatchUpDueDate(Today);
 
-        habit.NextDueDate.Should().BeOnOrAfter(Today);
+        habit.NextDueDate.Should().Be(Today);
     }
 
     [Fact]
@@ -60,7 +60,7 @@ public class HabitDueDateAdvancementServiceTests
 
         habit.CatchUpDueDate(Today);
 
-        habit.NextDueDate.Should().BeOnOrAfter(Today);
+        habit.NextDueDate.Should().Be(Today);
     }
 
     [Fact]
@@ -71,7 +71,7 @@ public class HabitDueDateAdvancementServiceTests
 
         habit.CatchUpDueDate(Today);
 
-        habit.NextDueDate.Should().BeOnOrAfter(Today);
+        habit.NextDueDate.Should().Be(Today);
     }
 
     [Fact]
@@ -103,7 +103,7 @@ public class HabitDueDateAdvancementServiceTests
 
         habit.CatchUpDueDate(Today);
 
-        habit.NextDueDate.Should().BeOnOrAfter(Today);
+        habit.NextDueDate.Should().Be(Today.AddDays(1));
         var daysDiff = habit.NextDueDate.DayNumber - startDate.DayNumber;
         (daysDiff % 2).Should().Be(0);
     }
@@ -130,7 +130,7 @@ public class HabitDueDateAdvancementServiceTests
         habit.CatchUpDueDate(Today);
 
         habit.IsCompleted.Should().BeFalse();
-        habit.NextDueDate.Should().BeOnOrAfter(Today);
+        habit.NextDueDate.Should().Be(Today);
     }
 
     [Fact]
@@ -141,7 +141,7 @@ public class HabitDueDateAdvancementServiceTests
 
         habit.CatchUpDueDate(Today);
 
-        habit.NextDueDate.Should().BeOnOrAfter(Today);
+        habit.NextDueDate.Should().Be(Today);
     }
 
     [Fact]
@@ -152,7 +152,7 @@ public class HabitDueDateAdvancementServiceTests
 
         habit.CatchUpDueDate(Today);
 
-        habit.NextDueDate.Should().BeOnOrAfter(Today);
+        habit.NextDueDate.Should().Be(Today);
         var daysDiff = habit.NextDueDate.DayNumber - startDate.DayNumber;
         (daysDiff % 3).Should().Be(0);
     }
@@ -164,7 +164,7 @@ public class HabitDueDateAdvancementServiceTests
 
         habit.CatchUpDueDate(Today);
 
-        habit.NextDueDate.Should().BeOnOrAfter(Today);
+        habit.NextDueDate.Should().Be(Today);
     }
 
     [Fact]
@@ -174,7 +174,7 @@ public class HabitDueDateAdvancementServiceTests
 
         habit.CatchUpDueDate(Today);
 
-        habit.NextDueDate.Should().BeOnOrAfter(Today);
+        habit.NextDueDate.Should().Be(Today);
     }
 
     [Fact]
@@ -185,7 +185,7 @@ public class HabitDueDateAdvancementServiceTests
 
         habit.CatchUpDueDate(Today);
 
-        habit.NextDueDate.Should().BeOnOrAfter(Today);
+        habit.NextDueDate.Should().Be(Today);
     }
 
     [Fact]
@@ -196,7 +196,7 @@ public class HabitDueDateAdvancementServiceTests
 
         habit.CatchUpDueDate(Today);
 
-        habit.NextDueDate.Should().BeOnOrAfter(Today);
+        habit.NextDueDate.Should().Be(Today);
     }
 
     [Fact]
@@ -274,7 +274,7 @@ public class HabitDueDateAdvancementServiceTests
         var reloadedBad = await dbContext.Habits.AsNoTracking()
             .SingleAsync(h => h.Id == badHabit.Id);
 
-        reloadedBad.NextDueDate.Should().BeOnOrAfter(Today);
+        reloadedBad.NextDueDate.Should().Be(Today);
         reloadedNonBad.NextDueDate.Should().Be(staleDueDate);
         reloadedNonBad.NextDueDate.Should().BeBefore(Today);
     }
@@ -313,7 +313,7 @@ public class HabitDueDateAdvancementServiceTests
 
         await act.Should().NotThrowAsync();
         unsatisfiableHabit.NextDueDate.Should().Be(unsatisfiableDueDate);
-        validHabit.NextDueDate.Should().BeOnOrAfter(Today);
+        validHabit.NextDueDate.Should().Be(Today);
     }
 
     [Fact]
@@ -352,7 +352,47 @@ public class HabitDueDateAdvancementServiceTests
         var reloadedValid = await dbContext.Habits.AsNoTracking()
             .SingleAsync(h => h.Id == validHabit.Id);
         reloadedBoundary.NextDueDate.Should().Be(DateOnly.MinValue);
-        reloadedValid.NextDueDate.Should().BeOnOrAfter(Today);
+        reloadedValid.NextDueDate.Should().Be(Today);
+    }
+
+    [Fact]
+    public async Task AdvanceStaleDueDates_SaoPauloUserLateEvening_AdvancesToUserLocalToday()
+    {
+        var databaseName = $"LocalToday_{Guid.NewGuid()}";
+        using var provider = new ServiceCollection()
+            .AddDbContext<OrbitDbContext>(options => options.UseInMemoryDatabase(databaseName))
+            .AddSingleton<TimeProvider>(new FixedClock())
+            .AddSingleton<IConfiguration>(new ConfigurationBuilder().Build())
+            .AddLogging()
+            .AddSingleton<HabitDueDateAdvancementService>()
+            .BuildServiceProvider();
+        Guid habitId;
+        using (var scope = provider.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
+            var user = User.Create("Local", "local@example.com").Value;
+            user.SetTimeZone("America/Sao_Paulo").IsSuccess.Should().BeTrue();
+            var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, user.Id,
+                "Daily", FrequencyUnit.Day, 1, new DateOnly(2026, 10, 25), IsBadHabit: true)).Value;
+            habitId = habit.Id;
+            db.AddRange(user, habit);
+            await db.SaveChangesAsync();
+        }
+        await provider.GetRequiredService<HabitDueDateAdvancementService>().RunAsync(default);
+        using var readScope = provider.CreateScope();
+        var reloaded = await readScope.ServiceProvider.GetRequiredService<OrbitDbContext>()
+            .Habits.AsNoTracking().SingleAsync(habit => habit.Id == habitId);
+        reloaded.NextDueDate.Should().Be(new DateOnly(2026, 11, 1));
+    }
+
+    private sealed class TodayClock : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => new(2026, 11, 2, 12, 0, 0, TimeSpan.Zero);
+    }
+
+    private sealed class FixedClock : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => new(2026, 11, 2, 1, 30, 0, TimeSpan.Zero);
     }
 
     private static OrbitDbContext CreateInMemoryDbContext()
@@ -374,7 +414,7 @@ public class HabitDueDateAdvancementServiceTests
         return new HabitDueDateAdvancementService(
             scopeFactory,
             logger ?? NullLogger<HabitDueDateAdvancementService>.Instance,
-            new ConfigurationBuilder().Build());
+            new ConfigurationBuilder().Build(), new TodayClock());
     }
 
     private sealed class ThrowOnSkippedLogger : ILogger<HabitDueDateAdvancementService>
@@ -398,7 +438,7 @@ public class HabitDueDateAdvancementServiceTests
     [Fact]
     public void QueryFilter_ConservativeCutoff_IsYesterdayUtc()
     {
-        var cutoff = HabitDueDateAdvancementService.ConservativeCutoffUtc();
+        var cutoff = HabitDueDateAdvancementService.ConservativeCutoffUtc(TimeProvider.System);
 
         cutoff.Should().Be(DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-1));
     }

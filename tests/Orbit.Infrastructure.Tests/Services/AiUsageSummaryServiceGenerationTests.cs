@@ -93,6 +93,36 @@ public class AiUsageSummaryServiceGenerationTests
             .And.Contain("cost_per_call=$0.001000");
     }
 
+    [Fact]
+    public async Task AiUsageSummary_ReadThrows_MarkerUnset()
+    {
+        var harness = new Harness();
+        harness.AppConfig.GetAsync(AppConfigKeys.FreeAiMessagesPerDay, 5, Arg.Any<CancellationToken>())
+            .Returns(Task.FromException<int>(new InvalidOperationException("read failed")), Task.FromResult(5));
+        var first = () => harness.Service.SummarizeYesterdayAsync(default);
+        await first.Should().ThrowAsync<InvalidOperationException>();
+        harness.Logger.Entries.Should().BeEmpty();
+        await harness.Service.SummarizeYesterdayAsync(default);
+        harness.SingleSummaryLine().Should().Contain("AI cost");
+    }
+
+    [Fact]
+    public async Task AiUsageSummary_TwoConcurrentCalls_EmitOnce()
+    {
+        var harness = new Harness();
+        var read = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var secondRead = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+        harness.AppConfig.GetAsync(AppConfigKeys.FreeAiMessagesPerDay, 5, Arg.Any<CancellationToken>())
+            .Returns(read.Task, secondRead.Task);
+        var first = harness.Service.SummarizeYesterdayAsync(default);
+        var second = harness.Service.SummarizeYesterdayAsync(default);
+        read.SetResult(5);
+        await first;
+        secondRead.SetResult(5);
+        await second;
+        harness.Logger.Entries.Count(entry => entry.Message.StartsWith("AI cost")).Should().Be(1);
+    }
+
     private static AiUsageDaily Row(string purpose, long calls, decimal costUsd) =>
         AiUsageDaily.Create(
             Yesterday, "gpt-4.1-mini", purpose,
@@ -118,12 +148,13 @@ public class AiUsageSummaryServiceGenerationTests
         private readonly ServiceProvider _provider;
 
         public CapturingLogger Logger { get; } = new();
+        public IAppConfigService AppConfig { get; } = Substitute.For<IAppConfigService>();
 
         public AiUsageSummaryService Service { get; }
 
         public Harness()
         {
-            var appConfig = Substitute.For<IAppConfigService>();
+            var appConfig = AppConfig;
             appConfig.GetAsync(AppConfigKeys.FreeAiMessagesPerDay, 5, Arg.Any<CancellationToken>()).Returns(5);
             appConfig.GetAsync(AppConfigKeys.ProAiMessagesPerWeek, 250, Arg.Any<CancellationToken>()).Returns(250);
             _provider = new ServiceCollection()

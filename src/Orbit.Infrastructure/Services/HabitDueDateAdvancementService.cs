@@ -15,7 +15,8 @@ namespace Orbit.Infrastructure.Services;
 public partial class HabitDueDateAdvancementService(
     IServiceScopeFactory scopeFactory,
     ILogger<HabitDueDateAdvancementService> logger,
-    IConfiguration configuration) : BackgroundService, IScheduledJob
+    IConfiguration configuration,
+    TimeProvider clock) : BackgroundService, IScheduledJob
 {
     private readonly TimeSpan _interval = TimeSpan.FromMinutes(
         configuration.GetValue("BackgroundServices:DueDateAdvancementIntervalMinutes", 30));
@@ -55,10 +56,8 @@ public partial class HabitDueDateAdvancementService(
         }
     }
 
-    internal static DateOnly ConservativeCutoffUtc() =>
-#pragma warning disable ORBIT0004 // ConservativeCutoffUtc is the widened stale-habit prefetch floor; ShouldAdvanceForUserToday checks the separately converted userToday before mutation. https://github.com/thomasluizon/orbit-tickets/issues/230
-        DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1));
-#pragma warning restore ORBIT0004
+    internal static DateOnly ConservativeCutoffUtc(TimeProvider clock) =>
+        DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime.AddDays(-1));
 
     internal static Expression<Func<Habit, bool>> StaleBadHabitFilter(DateOnly cutoff) =>
         h => !h.IsCompleted
@@ -75,7 +74,7 @@ public partial class HabitDueDateAdvancementService(
         using var scope = scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
 
-        var cutoff = ConservativeCutoffUtc();
+        var cutoff = ConservativeCutoffUtc(clock);
         var habits = await dbContext.Habits
             .Where(StaleBadHabitFilter(cutoff))
             .ToListAsync(ct);
@@ -95,7 +94,7 @@ public partial class HabitDueDateAdvancementService(
                 if (!users.TryGetValue(habit.UserId, out var user)) continue;
 
                 var tz = TimeZoneHelper.FindTimeZone(user.TimeZone, logger, user.Id);
-                var userNow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz);
+                var userNow = TimeZoneInfo.ConvertTimeFromUtc(clock.GetUtcNow().UtcDateTime, tz);
                 var userToday = DateOnly.FromDateTime(userNow);
 
                 if (!ShouldAdvanceForUserToday(habit, userToday)) continue;

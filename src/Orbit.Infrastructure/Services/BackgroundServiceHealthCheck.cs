@@ -39,13 +39,13 @@ public sealed class BackgroundServiceHealthCheck(
         await using var scope = scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
         var registeredAtUtc = clock.GetUtcNow().UtcDateTime;
-        foreach (var job in jobs)
+        foreach (var jobName in jobs.Select(job => job.Name))
         {
-            if (!ExpectedIntervals.ContainsKey(job.Name))
-                throw new InvalidOperationException($"No heartbeat interval configured for '{job.Name}'.");
+            if (!ExpectedIntervals.ContainsKey(jobName))
+                throw new InvalidOperationException($"No heartbeat interval configured for '{jobName}'.");
             await db.Database.ExecuteSqlInterpolatedAsync($"""
                 INSERT INTO "BackgroundJobHeartbeats" ("JobName", "RegisteredAtUtc")
-                VALUES ({job.Name}, {registeredAtUtc}) ON CONFLICT ("JobName") DO NOTHING
+                VALUES ({jobName}, {registeredAtUtc}) ON CONFLICT ("JobName") DO NOTHING
                 """, cancellationToken);
         }
     }
@@ -77,19 +77,19 @@ public sealed class BackgroundServiceHealthCheck(
         var nowAtUtc = clock.GetUtcNow().UtcDateTime;
         var stale = new List<string>();
         var statuses = new Dictionary<string, object>();
-        foreach (var job in jobs)
+        foreach (var jobName in jobs.Select(job => job.Name))
         {
-            if (!ExpectedIntervals.TryGetValue(job.Name, out var interval))
-                throw new InvalidOperationException($"No heartbeat interval configured for '{job.Name}'.");
-            if (!rows.TryGetValue(job.Name, out var row))
+            if (!ExpectedIntervals.TryGetValue(jobName, out var interval))
+                throw new InvalidOperationException($"No heartbeat interval configured for '{jobName}'.");
+            if (!rows.TryGetValue(jobName, out var row))
             {
-                stale.Add(job.Name);
-                statuses[job.Name] = "Job registration missing";
+                stale.Add(jobName);
+                statuses[jobName] = "Job registration missing";
                 continue;
             }
             var elapsed = nowAtUtc - (row.LastSuccessfulTickAtUtc ?? row.RegisteredAtUtc);
-            statuses[job.Name] = row.LastSuccessfulTickAtUtc is null ? "No tick recorded yet" : $"Last tick: {elapsed.TotalMinutes:F0}m ago";
-            if (elapsed > interval) stale.Add(job.Name);
+            statuses[jobName] = row.LastSuccessfulTickAtUtc is null ? "No tick recorded yet" : $"Last tick: {elapsed.TotalMinutes:F0}m ago";
+            if (elapsed > interval) stale.Add(jobName);
         }
         return stale.Count > 0
             ? HealthCheckResult.Unhealthy($"Stale services: {string.Join(", ", stale)}", data: statuses)

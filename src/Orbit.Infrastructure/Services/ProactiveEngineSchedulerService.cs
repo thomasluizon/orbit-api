@@ -7,11 +7,12 @@ using Orbit.Infrastructure.Services.Hosting;
 namespace Orbit.Infrastructure.Services;
 
 public sealed partial class ProactiveEngineSchedulerService(
-    IServiceScopeFactory scopeFactory, ILogger<ProactiveEngineSchedulerService> logger)
+    IServiceScopeFactory scopeFactory, ILogger<ProactiveEngineSchedulerService> logger, TimeProvider? clock = null)
     : ScheduledServiceBase, IScheduledJob
 {
     public string Name => "proactive-checkin-scheduler";
     public string CronExpression => "0 * * * *";
+    protected override TimeProvider DelayClock => clock ?? TimeProvider.System;
     protected override TimeSpan Interval => TimeSpan.FromHours(1);
     public Task RunAsync(CancellationToken cancellationToken) => ExecuteTickAsync(cancellationToken);
 

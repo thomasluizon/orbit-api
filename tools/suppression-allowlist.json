@@ -155,12 +155,6 @@
         "reason": "expiresAt falls back to the current UTC instant when Play provides no subscription expiry; it remains an absolute expiry value. The isActive check compares the Play expiry instant with the current UTC instant, independently of calendar dates."
       }
     },
-    "src/Orbit.Infrastructure/Services/HabitDueDateAdvancementService.cs": {
-      "ORBIT0004": {
-        "count": 1,
-        "reason": "ConservativeCutoffUtc is the widened stale-habit prefetch floor; ShouldAdvanceForUserToday checks the separately converted userToday before mutation."
-      }
-    },
     "src/Orbit.Infrastructure/Services/JwtTokenService.cs": {
       "ORBIT0004": {
         "count": 1,
@@ -177,12 +171,6 @@
       "ORBIT0004": {
         "count": 1,
         "reason": "GetForResolutionAsync compares ExpiresAtUtc with now to exclude expired clarification operations without selecting a user date."
-      }
-    },
-    "src/Orbit.Infrastructure/Services/PlayNotificationCleanupService.cs": {
-      "ORBIT0004": {
-        "count": 2,
-        "reason": "playCutoff removes processed Play notification dedupe entries by ProcessedAtUtc retention age. stripeCutoff removes processed Stripe event dedupe entries by ProcessedAtUtc retention age."
       }
     },
     "src/Orbit.Infrastructure/Services/SlipAlertSchedulerService.cs": {

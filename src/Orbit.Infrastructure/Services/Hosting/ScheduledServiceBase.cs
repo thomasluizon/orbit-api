@@ -6,6 +6,8 @@ public abstract class ScheduledServiceBase : BackgroundService
 {
     protected abstract TimeSpan Interval { get; }
 
+    protected virtual TimeProvider DelayClock => TimeProvider.System;
+
     protected abstract Task ExecuteTickAsync(CancellationToken stoppingToken);
 
     protected abstract void LogStarted();
@@ -31,7 +33,7 @@ public abstract class ScheduledServiceBase : BackgroundService
                     LogTickError(ex);
                 }
 
-                await Task.Delay(Interval, stoppingToken);
+                await Task.Delay(Interval, DelayClock, stoppingToken);
             }
         }
         finally

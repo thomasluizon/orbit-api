@@ -241,6 +241,33 @@ public class NotionPollServiceTests
         await test.Api.Received(1).SearchAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
+    [Fact]
+    public async Task NotionAutoSync_FirstAccountThrows_SecondAccountStillPolls()
+    {
+        using var test = new NotionTestContext();
+        await test.SeedConnectionAsync();
+        var second = User.Create("Second", "second@example.com").Value;
+        second.GrantLifetimePro();
+        test.Db.Users.Add(second);
+        test.Db.NotionConnections.Add(NotionConnection.Create(second.Id, "second-token", "refresh",
+            Guid.NewGuid(), "Second", Guid.NewGuid()));
+        await test.Db.SaveChangesAsync();
+        var resolutions = 0;
+        using var provider = new ServiceCollection()
+            .AddSingleton<OrbitDbContext>(_ => test.Db)
+            .AddScoped(_ => ++resolutions == 1 ? throw new InvalidOperationException("first account failed") : test.Poller())
+            .BuildServiceProvider();
+        var logger = NSubstitute.Substitute.For<Microsoft.Extensions.Logging.ILogger<NotionAutoSyncService>>();
+        var service = new NotionAutoSyncService(provider.GetRequiredService<IServiceScopeFactory>(), test.Clock, logger);
+
+        await service.RunAsync(default);
+
+        resolutions.Should().Be(2);
+        await test.Api.Received(1).SearchAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        logger.ReceivedCalls().Should().Contain(call => call.GetMethodInfo().Name == "Log"
+            && (Microsoft.Extensions.Logging.LogLevel)call.GetArguments()[0]! == Microsoft.Extensions.Logging.LogLevel.Warning);
+    }
+
     private sealed class MicrosecondTimestampMaterializer : IMaterializationInterceptor
     {
         public object InitializedInstance(MaterializationInterceptionData materializationData, object entity)
