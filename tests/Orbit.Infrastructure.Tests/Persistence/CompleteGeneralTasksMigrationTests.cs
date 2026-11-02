@@ -9,7 +9,7 @@ namespace Orbit.Infrastructure.Tests.Persistence;
 public class CompleteGeneralTasksMigrationTests
 {
     [Fact]
-    public void Up_CompletesOnlyLoggedTasksWithoutALaterUnlog_AndDownRestoresExactlyThoseRows()
+    public void Up_OnSqlite_CompletesOnlyLoggedTasksWithoutALaterUnlog_AndDownRestoresExactlyThoseRows()
     {
         using var connection = new SqliteConnection("Data Source=:memory:");
         connection.Open();

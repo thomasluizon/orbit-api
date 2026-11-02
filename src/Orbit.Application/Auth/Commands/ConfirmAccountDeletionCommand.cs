@@ -28,7 +28,8 @@ public class ConfirmAccountDeletionCommandHandler(
         var confirmation = await challengeService.ConfirmAsync(
             EmailChallengeOperation.AccountDeletion,
             user.Email,
-            request.Code);
+            request.Code,
+            cancellationToken);
         if (confirmation.IsFailure)
             return confirmation.PropagateError<DateTime>();
 

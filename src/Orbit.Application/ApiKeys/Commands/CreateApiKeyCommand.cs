@@ -30,10 +30,9 @@ public class CreateApiKeyCommandHandler(
     IPayGateService payGate,
     IUnitOfWork unitOfWork,
     IMemoryCache cache,
-    ApiKeyManagementAuthorization authorization) : IRequestHandler<CreateApiKeyCommand, Result<CreateApiKeyResponse>>
+    ApiKeyManagementAuthorization authorization,
+    IAppConfigService appConfigService) : IRequestHandler<CreateApiKeyCommand, Result<CreateApiKeyResponse>>
 {
-    private const int MaxActiveKeys = 5;
-
     public async Task<Result<CreateApiKeyResponse>> Handle(CreateApiKeyCommand request, CancellationToken cancellationToken)
     {
         var requiresStepUp = await authorization.IsRequiredAsync(cancellationToken);
@@ -49,8 +48,9 @@ public class CreateApiKeyCommandHandler(
             ActiveApiKeyPredicate.ForUser(request.UserId, nowAtUtc),
             cancellationToken);
 
-        if (activeKeyCount >= MaxActiveKeys)
-            return Result.Failure<CreateApiKeyResponse>(ErrorMessages.MaxApiKeys.Format(MaxActiveKeys));
+        var maxActiveKeys = await appConfigService.GetAsync(AppConfigKeys.MaxActiveApiKeys, 5, cancellationToken);
+        if (activeKeyCount >= maxActiveKeys)
+            return Result.Failure<CreateApiKeyResponse>(ErrorMessages.MaxApiKeys.Format(maxActiveKeys));
 
         var createResult = ApiKey.Create(
             request.UserId,

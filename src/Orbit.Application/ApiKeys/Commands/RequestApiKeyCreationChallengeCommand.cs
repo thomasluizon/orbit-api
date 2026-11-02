@@ -24,7 +24,7 @@ public sealed class RequestApiKeyCreationChallengeCommandHandler(
         if (user is null)
             return Result.Failure(ErrorMessages.UserNotFound);
 
-        var challenge = await challengeService.IssueAsync(EmailChallengeOperation.ApiKeyManagement, user.Email);
+        var challenge = await challengeService.IssueAsync(EmailChallengeOperation.ApiKeyManagement, user.Email, cancellationToken);
         if (challenge.IsFailure)
             return challenge.PropagateError();
 

@@ -11,6 +11,7 @@ namespace Orbit.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.Sql("SET LOCAL lock_timeout = '5s';");
             migrationBuilder.AddColumn<string>(
                 name: "BackgroundJobId",
                 table: "MarketingDeliveries",
@@ -27,15 +28,17 @@ namespace Orbit.Infrastructure.Migrations
             migrationBuilder.CreateIndex(
                 name: "IX_MarketingDeliveries_SentAtUtc_NextRecoveryAtUtc",
                 table: "MarketingDeliveries",
-                columns: new[] { "SentAtUtc", "NextRecoveryAtUtc" });
+                columns: new[] { "SentAtUtc", "NextRecoveryAtUtc" })
+                .Annotation("Npgsql:CreatedConcurrently", true);
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropIndex(
-                name: "IX_MarketingDeliveries_SentAtUtc_NextRecoveryAtUtc",
-                table: "MarketingDeliveries");
+            migrationBuilder.Sql("""
+                DROP INDEX CONCURRENTLY IF EXISTS "IX_MarketingDeliveries_SentAtUtc_NextRecoveryAtUtc";
+                """, suppressTransaction: true);
+            migrationBuilder.Sql("SET LOCAL lock_timeout = '5s';");
 
             migrationBuilder.DropColumn(
                 name: "BackgroundJobId",

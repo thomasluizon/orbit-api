@@ -26,7 +26,8 @@ public sealed class ConfirmApiKeyCreationChallengeCommandHandler(
         var confirmation = await challengeService.ConfirmAsync(
             EmailChallengeOperation.ApiKeyManagement,
             user.Email,
-            request.Code);
+            request.Code,
+            cancellationToken);
         if (confirmation.IsFailure)
             return confirmation.PropagateError();
 

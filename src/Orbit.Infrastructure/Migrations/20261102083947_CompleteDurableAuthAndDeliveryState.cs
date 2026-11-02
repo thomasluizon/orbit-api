@@ -11,6 +11,7 @@ public partial class CompleteDurableAuthAndDeliveryState : Migration
     protected override void Up(MigrationBuilder migrationBuilder)
     {
         migrationBuilder.Sql("""
+            SET LOCAL lock_timeout = '5s';
             ALTER TABLE "SentReminders" ADD COLUMN IF NOT EXISTS "PushBody" text;
             ALTER TABLE "SentReminders" ADD COLUMN IF NOT EXISTS "PushDataJson" text;
             ALTER TABLE "SentReminders" ADD COLUMN IF NOT EXISTS "PushSentAtUtc" timestamp with time zone;
@@ -40,20 +41,30 @@ public partial class CompleteDurableAuthAndDeliveryState : Migration
                 "Id" uuid NOT NULL PRIMARY KEY,
                 "Version" bigint NOT NULL
             );
-            CREATE INDEX IF NOT EXISTS "IX_SentReminders_PushSentAtUtc_SentAtUtc"
-                ON "SentReminders" ("PushSentAtUtc", "SentAtUtc");
-            CREATE UNIQUE INDEX IF NOT EXISTS "IX_MarketingDeliveries_BroadcastId_RecipientId"
-                ON "MarketingDeliveries" ("BroadcastId", "RecipientId");
-            CREATE INDEX IF NOT EXISTS "IX_MarketingDeliveries_SentAtUtc_NotBeforeAtUtc"
-                ON "MarketingDeliveries" ("SentAtUtc", "NotBeforeAtUtc");
-            CREATE UNIQUE INDEX IF NOT EXISTS "IX_PendingCouponCancellations_CouponId"
-                ON "PendingCouponCancellations" ("CouponId");
-            CREATE INDEX IF NOT EXISTS "IX_PendingCouponCancellations_NextAttemptAtUtc"
-                ON "PendingCouponCancellations" ("NextAttemptAtUtc");
             """);
         migrationBuilder.Sql("""
+            CREATE INDEX CONCURRENTLY IF NOT EXISTS "IX_SentReminders_PushSentAtUtc_SentAtUtc"
+                ON "SentReminders" ("PushSentAtUtc", "SentAtUtc");
+            """, suppressTransaction: true);
+        migrationBuilder.Sql("""
+            CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS "IX_MarketingDeliveries_BroadcastId_RecipientId"
+                ON "MarketingDeliveries" ("BroadcastId", "RecipientId");
+            """, suppressTransaction: true);
+        migrationBuilder.Sql("""
+            CREATE INDEX CONCURRENTLY IF NOT EXISTS "IX_MarketingDeliveries_SentAtUtc_NotBeforeAtUtc"
+                ON "MarketingDeliveries" ("SentAtUtc", "NotBeforeAtUtc");
+            """, suppressTransaction: true);
+        migrationBuilder.Sql("""
+            CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS "IX_PendingCouponCancellations_CouponId"
+                ON "PendingCouponCancellations" ("CouponId");
+            """, suppressTransaction: true);
+        migrationBuilder.Sql("""
+            CREATE INDEX CONCURRENTLY IF NOT EXISTS "IX_PendingCouponCancellations_NextAttemptAtUtc"
+                ON "PendingCouponCancellations" ("NextAttemptAtUtc");
+            """, suppressTransaction: true);
+        migrationBuilder.Sql("""
             CREATE INDEX CONCURRENTLY IF NOT EXISTS "IX_DistributedRateLimitBuckets_PolicyName_WindowEndsAtUtc"
-                ON "DistributedRateLimitBuckets" ("PolicyName", "WindowEndsAtUtc")
+                ON "DistributedRateLimitBuckets" ("PolicyName", "WindowEndsAtUtc");
             """, suppressTransaction: true);
     }
 
@@ -64,10 +75,13 @@ public partial class CompleteDurableAuthAndDeliveryState : Migration
             DROP INDEX CONCURRENTLY IF EXISTS "IX_DistributedRateLimitBuckets_PolicyName_WindowEndsAtUtc"
             """, suppressTransaction: true);
         migrationBuilder.Sql("""
+            DROP INDEX CONCURRENTLY IF EXISTS "IX_SentReminders_PushSentAtUtc_SentAtUtc";
+            """, suppressTransaction: true);
+        migrationBuilder.Sql("""
+            SET LOCAL lock_timeout = '5s';
             DROP TABLE IF EXISTS "MarketingDeliveries";
             DROP TABLE IF EXISTS "PendingCouponCancellations";
             DROP TABLE IF EXISTS "UserCacheVersions";
-            DROP INDEX IF EXISTS "IX_SentReminders_PushSentAtUtc_SentAtUtc";
             ALTER TABLE "SentReminders" DROP COLUMN IF EXISTS "PushBody";
             ALTER TABLE "SentReminders" DROP COLUMN IF EXISTS "PushDataJson";
             ALTER TABLE "SentReminders" DROP COLUMN IF EXISTS "PushSentAtUtc";

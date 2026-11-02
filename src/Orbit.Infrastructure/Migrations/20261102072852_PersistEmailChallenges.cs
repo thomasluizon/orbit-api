@@ -45,6 +45,7 @@ namespace Orbit.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.Sql("SET LOCAL lock_timeout = '5s';");
             migrationBuilder.DropTable(
                 name: "EmailChallenges");
         }

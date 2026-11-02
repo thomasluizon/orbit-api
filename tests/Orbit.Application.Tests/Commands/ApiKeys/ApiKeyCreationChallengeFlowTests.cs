@@ -52,6 +52,7 @@ public class ApiKeyCreationChallengeFlowTests
             .Returns(true);
         _backgroundJobClient.Create(Arg.Do<Job>(job => _enqueuedJob = job), Arg.Any<IState>());
 
+        _appConfigService.GetAsync(AppConfigKeys.MaxActiveApiKeys, 5, Arg.Any<CancellationToken>()).Returns(5);
         _challengeService = new EmailChallengeService(ChallengeTestDatabase.For(_cache).Store(_timeProvider));
         _requestHandler = new RequestApiKeyCreationChallengeCommandHandler(
             _challengeService,
@@ -66,7 +67,8 @@ public class ApiKeyCreationChallengeFlowTests
             _payGate,
             _unitOfWork,
             _cache,
-            new ApiKeyManagementAuthorization(_appConfigService, _challengeService));
+            new ApiKeyManagementAuthorization(_appConfigService, _challengeService),
+            _appConfigService);
     }
 
     [Fact]
