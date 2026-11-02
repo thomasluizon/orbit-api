@@ -45,6 +45,25 @@ public class GenericRepository<T>(OrbitDbContext context) : IGenericRepository<T
         return await projection(_dbSet.AsNoTracking().Where(predicate)).ToListAsync(cancellationToken);
     }
 
+    public async IAsyncEnumerable<TResult> StreamAsync<TResult>(
+        Expression<Func<T, bool>> predicate,
+        Func<IQueryable<T>, IQueryable<TResult>> projection,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        const int batchSize = 100;
+        var query = projection(_dbSet.AsNoTracking().Where(predicate).OrderBy(entity => entity.Id));
+        for (var offset = 0; ; offset += batchSize)
+        {
+            var count = 0;
+            await foreach (var row in query.Skip(offset).Take(batchSize).AsAsyncEnumerable().WithCancellation(cancellationToken))
+            {
+                count++;
+                yield return row;
+            }
+            if (count < batchSize) yield break;
+        }
+    }
+
     public async Task<IReadOnlyList<T>> FindIgnoringFiltersAsync(
         Expression<Func<T, bool>> predicate,
         Func<IQueryable<T>, IQueryable<T>>? includes = null,

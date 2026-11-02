@@ -11,6 +11,7 @@ namespace Orbit.Infrastructure.Tests.Persistence;
 public class HabitSchedulePostgresTests
 {
     private static readonly DateOnly Start = new(2026, 4, 3);
+    private const string Drop = "20261025042524_DropLegacyHabitScheduleColumns";
     private const string BeforeDrop = "20261025033041_UnmapLegacyHabitScheduleColumns";
 
     [PostgresFact]
@@ -102,7 +103,7 @@ public class HabitSchedulePostgresTests
             var indexes = await ScalarAsync(context, IndexDefinitionsSql);
 
             var migrator = context.GetService<IMigrator>();
-            await migrator.MigrateAsync();
+            await migrator.MigrateAsync(Drop);
             (await ReadHabitsAsync(context)).Should().Equal(before);
             (await context.HabitLogs.AsNoTracking().SingleAsync()).Id.Should().Be(log.Id);
             await AssertCompatibilityObjectsAbsentAsync(context);
@@ -163,9 +164,12 @@ public class HabitSchedulePostgresTests
             await AssertLegacyColumnsAsync(context);
             (await context.Habits.AsNoTracking().Where(row => row.Id == restored.Id)
                 .Select(row => row.NextDueDate).SingleAsync()).Should().Be(Start.AddDays(20));
-            await migrator.MigrateAsync();
+            await migrator.MigrateAsync(Drop);
             await AssertCompatibilityObjectsAbsentAsync(context);
             (await context.HabitLogs.AsNoTracking().SingleAsync()).Id.Should().Be(log.Id);
+            await migrator.MigrateAsync();
+            var restoredReminder = (await ScalarAsync(context, IndexDefinitionsSql))?.ToString();
+            restoredReminder.Should().Contain("IX_Habits_Reminder").And.Contain("ReminderEnabled").And.NotContain("DueDate");
         }, BeforeDrop);
 
     private static Task<int> InsertUserBeforeDropAsync(OrbitDbContext context, User user) =>

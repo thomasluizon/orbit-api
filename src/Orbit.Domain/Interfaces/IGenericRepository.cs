@@ -14,6 +14,11 @@ public interface IGenericRepository<T> where T : Entity
         Func<IQueryable<T>, IQueryable<TResult>> projection,
         CancellationToken cancellationToken = default);
 
+    IAsyncEnumerable<TResult> StreamAsync<TResult>(
+        Expression<Func<T, bool>> predicate,
+        Func<IQueryable<T>, IQueryable<TResult>> projection,
+        CancellationToken cancellationToken = default);
+
     /// <summary>
     /// Loads untracked entities with global query filters disabled and optional navigations included.
     /// Historical reads use this when a later soft delete must not erase an earlier period.

@@ -37,10 +37,6 @@ public partial class ProfileController(
         ApplyGoalInput? Goal,
         int? WeekStartDay);
 
-    private static readonly JsonSerializerOptions ExportJsonOptions = new(JsonSerializerDefaults.Web)
-    {
-        WriteIndented = true
-    };
 
     private static string ToggleLabel(bool enabled) => enabled ? "enabled" : "disabled";
 
@@ -286,12 +282,13 @@ public partial class ProfileController(
     }
 
     [HttpGet("export")]
+    [DistributedRateLimit("data-export")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> ExportUserData(CancellationToken cancellationToken)
     {
-        var query = new ExportUserDataQuery(HttpContext.GetUserId());
+        var query = new StreamUserDataQuery(HttpContext.GetUserId());
         var result = await mediator.Send(query, cancellationToken);
 
         if (!result.IsSuccess)
@@ -299,8 +296,7 @@ public partial class ProfileController(
 
         var userToday = await userDateService.GetUserTodayAsync(HttpContext.GetUserId(), cancellationToken);
         var fileName = string.Create(System.Globalization.CultureInfo.InvariantCulture, $"orbit-data-export-{userToday:yyyy-MM-dd}.json");
-        var json = JsonSerializer.SerializeToUtf8Bytes(result.Value, ExportJsonOptions);
-        return File(json, "application/json", fileName);
+        return new Orbit.Api.Streaming.StreamingJsonFileResult(fileName, result.Value.WriteAsync);
     }
 }
 
