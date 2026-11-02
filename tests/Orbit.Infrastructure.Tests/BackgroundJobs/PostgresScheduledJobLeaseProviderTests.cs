@@ -8,6 +8,24 @@ namespace Orbit.Infrastructure.Tests.BackgroundJobs;
 
 public sealed class PostgresScheduledJobLeaseProviderTests
 {
+    [Fact]
+    public void LeaseCommands_UseLiteralSqlStatements()
+    {
+        var root = new DirectoryInfo(AppContext.BaseDirectory);
+        while (root is not null && !File.Exists(Path.Combine(root.FullName, "Orbit.slnx")))
+            root = root.Parent;
+
+        root.Should().NotBeNull();
+        var assignments = File.ReadLines(Path.Combine(root!.FullName, "src", "Orbit.Infrastructure",
+                "BackgroundJobs", "PostgresScheduledJobLeaseProvider.cs"))
+            .Select(line => line.Trim())
+            .Where(line => line.StartsWith("command.CommandText =", StringComparison.Ordinal));
+
+        assignments.Should().Equal(
+            "command.CommandText = \"SELECT pg_try_advisory_lock(hashtextextended(@name, 0))\";",
+            "command.CommandText = \"SELECT pg_advisory_unlock(hashtextextended(@name, 0))\";");
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
@@ -15,7 +33,8 @@ public sealed class PostgresScheduledJobLeaseProviderTests
     {
         var connection = Substitute.For<DbConnection>();
         var command = Command();
-        connection.CreateCommand().Returns(command);
+        var unlockCommand = Command();
+        connection.CreateCommand().Returns(command, unlockCommand);
         command.ExecuteScalarAsync(Arg.Any<CancellationToken>()).Returns(acquired);
         var provider = new PostgresScheduledJobLeaseProvider(() => connection);
         using var cancellation = new CancellationTokenSource();
@@ -23,15 +42,19 @@ public sealed class PostgresScheduledJobLeaseProviderTests
         var lease = await provider.TryAcquireAsync("reminder-scheduler", cancellation.Token);
 
         await connection.Received(1).OpenAsync(cancellation.Token);
-        command.CommandText.Should().Contain("pg_try_advisory_lock");
+        command.CommandText.Should().Be("SELECT pg_try_advisory_lock(hashtextextended(@name, 0))");
+        command.Parameters.Count.Should().Be(1);
+        command.Parameters[0].ParameterName.Should().Be("name");
         command.Parameters[0].Value.Should().Be("orbit-scheduled:reminder-scheduler");
         if (acquired)
         {
             lease.Should().NotBeNull();
             await connection.DidNotReceive().DisposeAsync();
             await lease!.DisposeAsync();
-            command.CommandText.Should().Contain("pg_advisory_unlock");
-            command.Parameters[1].Value.Should().Be(command.Parameters[0].Value);
+            unlockCommand.CommandText.Should().Be("SELECT pg_advisory_unlock(hashtextextended(@name, 0))");
+            unlockCommand.Parameters.Count.Should().Be(1);
+            unlockCommand.Parameters[0].ParameterName.Should().Be("name");
+            unlockCommand.Parameters[0].Value.Should().Be(command.Parameters[0].Value);
         }
         else lease.Should().BeNull();
         await connection.Received(1).DisposeAsync();

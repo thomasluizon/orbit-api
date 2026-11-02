@@ -21,7 +21,8 @@ public sealed class PostgresScheduledJobLeaseProvider : IScheduledJobLeaseProvid
         try
         {
             await connection.OpenAsync(cancellationToken);
-            await using var command = CreateCommand(connection, "pg_try_advisory_lock", jobName);
+            await using var command = CreateCommand(connection, jobName);
+            command.CommandText = "SELECT pg_try_advisory_lock(hashtextextended(@name, 0))";
             acquired = await command.ExecuteScalarAsync(cancellationToken) is true;
         }
         catch
@@ -34,10 +35,9 @@ public sealed class PostgresScheduledJobLeaseProvider : IScheduledJobLeaseProvid
         return null;
     }
 
-    private static DbCommand CreateCommand(DbConnection connection, string function, string jobName)
+    private static DbCommand CreateCommand(DbConnection connection, string jobName)
     {
         var command = connection.CreateCommand();
-        command.CommandText = $"SELECT {function}(hashtextextended(@name, 0))";
         var parameter = command.CreateParameter();
         parameter.ParameterName = "name";
         parameter.Value = $"orbit-scheduled:{jobName}";
@@ -51,7 +51,8 @@ public sealed class PostgresScheduledJobLeaseProvider : IScheduledJobLeaseProvid
         {
             try
             {
-                await using var command = CreateCommand(connection, "pg_advisory_unlock", jobName);
+                await using var command = CreateCommand(connection, jobName);
+                command.CommandText = "SELECT pg_advisory_unlock(hashtextextended(@name, 0))";
                 await command.ExecuteScalarAsync(CancellationToken.None);
             }
             finally
