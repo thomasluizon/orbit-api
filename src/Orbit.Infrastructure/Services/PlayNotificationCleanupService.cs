@@ -61,26 +61,29 @@ public partial class PlayNotificationCleanupService(
         var dbContext = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
 
         var nowAtUtc = TimeProvider.System.GetUtcNow().UtcDateTime;
+        var failures = new List<Exception>();
         await PurgeAsync(async () =>
         {
             var count = await BatchedDelete.ExecuteAsync(dbContext.ProcessedPlayNotifications
                 .Where(n => n.ProcessedAtUtc < nowAtUtc - PlayRetentionPeriod), ct);
             if (count > 0) LogNotificationsPurged(logger, count);
-        });
+        }, failures, "ProcessedPlayNotifications");
         await PurgeAsync(async () =>
         {
             var count = await BatchedDelete.ExecuteAsync(dbContext.ProcessedStripeEvents
                 .Where(e => e.ProcessedAtUtc < nowAtUtc - StripeRetentionPeriod), ct);
             if (count > 0) LogStripeEventsPurged(logger, count);
-        });
+        }, failures, "ProcessedStripeEvents");
+        if (failures.Count > 0) throw new AggregateException("Billing history cleanup failed.", failures);
     }
 
-    private async Task PurgeAsync(Func<Task> purge)
+    private async Task PurgeAsync(Func<Task> purge, List<Exception> failures, string table)
     {
         try { await purge(); }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
-            LogServiceError(logger, exception);
+            failures.Add(exception);
+            LogPurgeFailed(logger, exception, table);
         }
     }
 
@@ -90,7 +93,7 @@ public partial class PlayNotificationCleanupService(
     [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "PlayNotificationCleanupService stopped")]
     private static partial void LogServiceStopped(ILogger logger);
 
-    [LoggerMessage(EventId = 3, Level = LogLevel.Error, Message = "Error purging processed Play notifications")]
+    [LoggerMessage(EventId = 3, Level = LogLevel.Error, Message = "Billing history cleanup failed")]
     private static partial void LogServiceError(ILogger logger, Exception ex);
 
     [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "Purged {Count} processed Play notifications older than 30 days")]
@@ -98,4 +101,7 @@ public partial class PlayNotificationCleanupService(
 
     [LoggerMessage(EventId = 5, Level = LogLevel.Information, Message = "Purged {Count} processed Stripe events older than 90 days")]
     private static partial void LogStripeEventsPurged(ILogger logger, int count);
+    [LoggerMessage(EventId = 6, Level = LogLevel.Warning, Message = "Billing history purge failed for {Table}")]
+    private static partial void LogPurgeFailed(ILogger logger, Exception exception, string table);
+
 }

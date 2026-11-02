@@ -304,6 +304,8 @@ registrations.
 Apply the additive `DurableJobHeartbeats` migration before starting the recurring
 registrar. Startup migration failures or recurring registration failures stop startup.
 A heartbeat write failure logs a warning and leaves the successful job result intact.
+Billing cleanup attempts both provider purges, then propagates any failures so a
+partial purge cannot refresh its successful heartbeat; hosted ticks log and retry.
 Job staleness does not fail Render's `/health` probe.
 
 The `orbit-production-health` Lambda polls both production reports every minute.

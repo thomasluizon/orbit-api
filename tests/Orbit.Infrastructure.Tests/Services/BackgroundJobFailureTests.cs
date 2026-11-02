@@ -8,6 +8,8 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
 using Orbit.Infrastructure.Configuration;
+using Orbit.Infrastructure.BackgroundJobs;
+using Orbit.Infrastructure.Tests.BackgroundJobs;
 using Orbit.Infrastructure.Tests.AI;
 using NSubstitute;
 using Orbit.Api.Authentication;
@@ -58,11 +60,29 @@ public sealed class BackgroundJobFailureTests
 
         var run = () => service.RunAsync(default);
 
-        await run.Should().NotThrowAsync();
+        await run.Should().ThrowAsync<AggregateException>();
         using var read = factory.CreateContext();
         (await read.ProcessedStripeEvents.CountAsync()).Should().Be(0);
         logger.ReceivedCalls().Should().Contain(call => call.GetMethodInfo().Name == "Log"
-            && (LogLevel)call.GetArguments()[0]! == LogLevel.Error);
+            && (LogLevel)call.GetArguments()[0]! == LogLevel.Warning);
+    }
+
+    [Fact]
+    public async Task PlayCleanup_FailedPurge_DoesNotRecordSuccessfulHeartbeat()
+    {
+        using var factory = new SqliteOrbitDbContextFactory(new FailPlayDelete());
+        using var provider = new ServiceCollection().AddScoped(_ => factory.CreateContext()).BuildServiceProvider();
+        var scopes = provider.GetRequiredService<IServiceScopeFactory>();
+        using var service = new PlayNotificationCleanupService(scopes, Substitute.For<ILogger<PlayNotificationCleanupService>>());
+        var health = BackgroundServiceHealthCheckTests.Create(provider, null, service);
+        await health.RegisterAsync(default);
+        var runner = new ScheduledJobRunner([service], new TestScheduledJobLeaseProvider(), health, new ConfigurationBuilder().Build());
+
+        var failure = await Record.ExceptionAsync(() => runner.RunAsync(service.Name, default));
+
+        using var read = factory.CreateContext();
+        (await read.BackgroundJobHeartbeats.SingleAsync(row => row.JobName == service.Name)).LastSuccessfulTickAtUtc.Should().BeNull();
+        failure.Should().BeOfType<AggregateException>();
     }
 
     [Fact]
@@ -71,8 +91,7 @@ public sealed class BackgroundJobFailureTests
         var failures = new FailPlayDelete();
         using var factory = new SqliteOrbitDbContextFactory(failures);
         using var provider = new ServiceCollection().AddScoped(_ => factory.CreateContext()).BuildServiceProvider();
-        var logger = Substitute.For<ILogger<PlayNotificationCleanupService>>();
-        logger.IsEnabled(Arg.Any<LogLevel>()).Returns(true);
+        var logger = new CleanupLogger();
         var clock = new CompletionTestClock();
         using var service = new PlayNotificationCleanupService(provider.GetRequiredService<IServiceScopeFactory>(), logger, clock);
         await service.StartAsync(default);
@@ -81,11 +100,10 @@ public sealed class BackgroundJobFailureTests
             for (var attempt = 0; attempt < 100 && clock.ActiveTimers == 0; attempt++) await Task.Delay(10);
             clock.ActiveTimers.Should().Be(1);
             clock.Advance(TimeSpan.FromHours(24));
-            await failures.SecondAttempt.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await logger.TwoErrors.Task.WaitAsync(TimeSpan.FromSeconds(10));
         }
         finally { await service.StopAsync(default); }
-        logger.ReceivedCalls().Count(call => call.GetMethodInfo().Name == "Log"
-            && (LogLevel)call.GetArguments()[0]! == LogLevel.Error).Should().Be(2);
+        logger.Errors.Should().Be(2);
     }
 
     [Fact]
@@ -104,17 +122,27 @@ public sealed class BackgroundJobFailureTests
             && (LogLevel)call.GetArguments()[0]! == LogLevel.Warning);
     }
 
+    private sealed class CleanupLogger : ILogger<PlayNotificationCleanupService>
+    {
+        private int _errors;
+        internal int Errors => Volatile.Read(ref _errors);
+        internal TaskCompletionSource TwoErrors { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public bool IsEnabled(LogLevel logLevel) => true;
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        {
+            if (logLevel == LogLevel.Error && Interlocked.Increment(ref _errors) == 2) TwoErrors.TrySetResult();
+        }
+    }
+
     private sealed class FailPlayDelete : DbCommandInterceptor
     {
-        private int _attempts;
-        internal TaskCompletionSource SecondAttempt { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(DbCommand command,
             CommandEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
         {
             if (command.CommandText.StartsWith("DELETE", StringComparison.Ordinal)
                 && command.CommandText.Contains("ProcessedPlayNotifications", StringComparison.Ordinal))
             {
-                if (Interlocked.Increment(ref _attempts) == 2) SecondAttempt.TrySetResult();
                 throw new InvalidOperationException("Play delete failed");
             }
             return base.NonQueryExecutingAsync(command, eventData, result, cancellationToken);
