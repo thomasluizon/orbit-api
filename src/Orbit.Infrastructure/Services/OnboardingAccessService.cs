@@ -27,9 +27,9 @@ public sealed class OnboardingAccessService(
 
     public async Task<OnboardingChallenge?> ChallengeAsync(string platform, string clientIp, CancellationToken cancellationToken)
     {
-        if (!Configured(platform) || !await AcquireAttestationQuotaAsync(cancellationToken)
-            || !await quotas.TryAcquireAsync("onboarding-enroll", Hash(clientIp),
-                10, 1, TimeSpan.FromHours(1), cancellationToken))
+        if (!Configured(platform) || !await quotas.TryAcquireAsync("onboarding-enroll", Hash(clientIp),
+                10, 1, TimeSpan.FromHours(1), cancellationToken)
+            || !await AcquireAttestationQuotaAsync(cancellationToken))
             return null;
         var expires = clock.GetUtcNow().Add(ChallengeLifetime);
         return new OnboardingChallenge(Sign(new Credential("challenge", platform, RandomId(), RandomId(),
@@ -40,12 +40,13 @@ public sealed class OnboardingAccessService(
         string clientIp, CancellationToken cancellationToken)
     {
         var credential = Read(challenge, "challenge", evidence.Platform, clientIp);
-        if (credential is null || !await AcquireAttestationQuotaAsync(cancellationToken))
+        if (credential is null)
             return null;
         var enrollLimit = await config.GetAsync(AppConfigKeys.OnboardingEnrollAttemptsPerInstallPerHour, 0, cancellationToken);
         if (!await quotas.TryAcquireAsync("onboarding-enroll-install", Hash(credential.Subject), enrollLimit, 1,
                 TimeSpan.FromHours(1), cancellationToken)
-            || !await ConsumeAsync(challenge, credential, cancellationToken))
+            || !await ConsumeAsync(challenge, credential, cancellationToken)
+            || !await AcquireAttestationQuotaAsync(cancellationToken))
             return null;
         var proof = await VerifyAsync(evidence, challenge, null, 0, cancellationToken);
         if (proof is null)

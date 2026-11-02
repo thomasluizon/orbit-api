@@ -39,7 +39,7 @@ locals {
     AI__EvalDailyBudgetUsd              = "0.50"
     AI__Model                           = "gpt-6-luna"
     AI__SubTaskModel                    = "gpt-6-luna"
-    BotProtection__Enabled              = "true"
+    BotProtection__Enabled              = "false"
     ASPNETCORE_ENVIRONMENT              = "Production"
     Cors__AllowedOrigins__0             = "https://app.useorbit.org"
     Database__MigrateOnStartup          = "true"
@@ -88,7 +88,7 @@ locals {
     Ses__TransactionalConfigurationSet = aws_sesv2_configuration_set.staging["transactional"].configuration_set_name
     Ses__MarketingConfigurationSet     = aws_sesv2_configuration_set.staging["marketing"].configuration_set_name
     Ses__TopicArn                      = aws_sns_topic.ses_events_staging.arn
-    BotProtection__Enabled             = "true"
+    BotProtection__Enabled             = "false"
     ASPNETCORE_ENVIRONMENT             = "Staging"
     Database__MigrateOnStartup         = "true"
     DesktopAuth__RedirectUri           = "org.useorbit.desktop.staging://auth/callback"

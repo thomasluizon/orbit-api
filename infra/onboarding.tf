@@ -13,10 +13,19 @@ locals {
     staging    = []
   }
 
+  bot_protection_api_hostnames = {
+    production = ["api.useorbit.org"]
+    staging    = ["api-staging.useorbit.org"]
+  }
+
   bot_protection_api_values = {
     for environment, origins in local.onboarding_allowed_origins : environment => {
       for index, hostname in sort(setintersection(
-        toset(concat([for origin in origins : trimprefix(origin, "https://")], local.bot_protection_landing_hostnames[environment])),
+        toset(concat(
+          [for origin in origins : trimprefix(origin, "https://")],
+          local.bot_protection_landing_hostnames[environment],
+          local.bot_protection_api_hostnames[environment],
+        )),
         toset(cloudflare_turnstile_widget.orbit.domains)
       )) : "BotProtection__AllowedHostnames__${index}" => hostname
     }

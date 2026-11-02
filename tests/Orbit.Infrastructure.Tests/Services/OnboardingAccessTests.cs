@@ -224,6 +224,48 @@ public sealed class OnboardingAccessTests : IDisposable
     }
 
     [Fact]
+    public async Task OverLimitChallenges_DoNotSpendGlobalAdmission()
+    {
+        config.GetAsync(AppConfigKeys.OnboardingAttestationCallsPerHour, 0, Arg.Any<CancellationToken>()).Returns(14);
+        config.GetAsync(AppConfigKeys.OnboardingAttestationCallsPerDay, 0, Arg.Any<CancellationToken>()).Returns(14);
+        for (var count = 0; count < 10; count++)
+            (await Service().ChallengeAsync("web", Ip, default)).Should().NotBeNull();
+        for (var count = 0; count < 40; count++)
+            (await Service().ChallengeAsync("web", Ip, default)).Should().BeNull();
+
+        AssertAttestationCounts(10);
+        (await Enroll("192.0.2.2")).Should().NotBeNullOrEmpty();
+        AssertAttestationCounts(12);
+        verifier.ReceivedCalls().Count(call => call.GetMethodInfo().Name == "VerifyAsync").Should().Be(1);
+    }
+
+    [Theory]
+    [InlineData(2)]
+    [InlineData(100)]
+    public async Task ReplayedChallenges_DoNotSpendGlobalAdmission(int installAttemptLimit)
+    {
+        config.GetAsync(AppConfigKeys.OnboardingEnrollAttemptsPerInstallPerHour, 0, Arg.Any<CancellationToken>())
+            .Returns(installAttemptLimit);
+        config.GetAsync(AppConfigKeys.OnboardingAttestationCallsPerHour, 0, Arg.Any<CancellationToken>()).Returns(6);
+        config.GetAsync(AppConfigKeys.OnboardingAttestationCallsPerDay, 0, Arg.Any<CancellationToken>()).Returns(6);
+        var challenge = (await Service().ChallengeAsync("web", Ip, default))!.Challenge;
+        (await Service().EnrollAsync(challenge, Proof, Ip, default)).Should().NotBeNull();
+        for (var count = 0; count < 40; count++)
+            (await Service().EnrollAsync(challenge, Proof, Ip, default)).Should().BeNull();
+
+        AssertAttestationCounts(2);
+        (await Enroll("192.0.2.2")).Should().NotBeNullOrEmpty();
+        AssertAttestationCounts(4);
+        verifier.ReceivedCalls().Count(call => call.GetMethodInfo().Name == "VerifyAsync").Should().Be(2);
+    }
+
+    private void AssertAttestationCounts(int expected)
+    {
+        foreach (var policy in new[] { "onboarding-attestation-hour", "onboarding-attestation-day" })
+            db.DistributedRateLimitBuckets.Single(bucket => bucket.PolicyName == policy).Count.Should().Be(expected);
+    }
+
+    [Fact]
     public async Task GlobalHourlyQuota_ResetsWhileDailyQuotaStillApplies()
     {
         config.GetAsync(AppConfigKeys.OnboardingAttestationCallsPerHour, 0, Arg.Any<CancellationToken>()).Returns(1);
