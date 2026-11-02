@@ -139,6 +139,34 @@ public class MigrationLockGateTests
         MigrationLockGate.Check(id, migration.UpOperations, policy).Should().ContainSingle().Which.Should().Contain("lock-timeout");
     }
 
+    [Theory]
+    [InlineData(typeof(PersistPlayCouponCancellation), "lock-timeout", 0, "41465351944", "ProcessedPlayNotifications", 2)]
+    [InlineData(typeof(AddReminderScheduleProbes), "batched-data", 4499, "41465351944", "Habits", 1)]
+    [InlineData(typeof(PersistNotificationRecovery), "lock-timeout", 0, "41465351944", "ProcessedPlayNotifications", 2)]
+    [InlineData(typeof(PersistStripeCustomerErasureRecovery), "lock-timeout", 187, "41449803649", "Users", 2)]
+    public void AppliedRecoveryMigrationsUseOnlyTheirRecordedRuleExceptions(Type migrationType, string rule, long rowCount, string releaseRun, string table, int findingCount)
+    {
+        var migration = (Migration)Activator.CreateInstance(migrationType)!;
+        migration.ActiveProvider = "Npgsql.EntityFrameworkCore.PostgreSQL";
+        var id = migrationType.GetCustomAttribute<MigrationAttribute>()!.Id;
+        var policy = ReadPolicy();
+        var evidence = policy.Exceptions.Should().ContainKey(id).WhoseValue.Should().ContainSingle().Subject;
+        evidence.Rule.Should().Be(rule);
+        evidence.RowCount.Should().Be(rowCount);
+        evidence.ExpectedLockMilliseconds.Should().BePositive();
+        evidence.EvidenceUrl.Should().Be($"https://github.com/thomasluizon/orbit-api/actions/runs/{releaseRun}");
+        var reason = $"applied in production by Release API run {releaseRun} before this gate; {table} held {rowCount} rows in the dpg-dasotg8473hc739a5gpg-a/2026-11-02T14:46Z export";
+        if (migration is AddReminderScheduleProbes)
+            reason += "; ReminderScheduleProbes was created by this migration and held 0 rows when it ran";
+        evidence.Reason.Should().Be(reason);
+        MigrationLockGate.Check(id, migration.UpOperations, policy).Should().BeEmpty();
+        MigrationLockGate.Check(id, [new CreateIndexOperation { Table = table, Name = "IX_Fixture", Columns = ["Id"] }], policy)
+            .Should().ContainSingle().Which.Should().Contain("concurrent-index");
+        policy.Exceptions.Remove(id);
+        var failures = MigrationLockGate.Check(id, migration.UpOperations, policy);
+        failures.Should().HaveCount(findingCount).And.OnlyContain(failure => failure.Contains($": {rule}:"));
+    }
+
     [Fact]
     public void EveryMigrationAfterTheAppliedBaselineMeetsLockRules()
     {
