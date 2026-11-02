@@ -107,7 +107,7 @@ public sealed class ProactiveProposalTests
         var result = ProactiveProposal.CompleteCreateReminder(call, client).Args.GetProperty("habits")[0];
         if (nested) result = result.GetProperty("sub_habits")[0];
         result.GetProperty("reminder_enabled").GetBoolean().Should().BeTrue();
-        result.GetProperty("reminder_times")[0].GetInt32().Should().Be(0);
+        result.GetProperty("reminder_times")[0].GetInt32().Should().Be(Orbit.Application.Common.AppConstants.DefaultReminderMinutes);
         result.GetProperty("suggested_fields").EnumerateArray().Select(field => field.GetString())
             .Should().BeEquivalentTo("reminder_enabled", "reminder_times");
     }
