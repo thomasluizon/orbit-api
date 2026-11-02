@@ -1,0 +1,127 @@
+{
+  "sourceCommit": "bb7a3a846e64a64e8310010b1eff00e76fe3435b",
+  "pages": [
+    {
+      "url": "https://useorbit.org/",
+      "hashes": [
+        "sha256-k1e/+bWIdT8Uk71F22RZrxB9jhVXHo0aDeugvXsMOoI=",
+        "sha256-ToGJyZnmvAQTDp5OmZMZhqM1qqRRZ0q3GF58fxTZeGA=",
+        "sha256-rjo/oE/zlFf1WPLat5zh4mfQfZuW1LJJoVIsPjvFDZU=",
+        "sha256-hZbgQ3xSIhIik3d8jPnzSZjpKVRyVkUefFOcVHzxpVw="
+      ]
+    },
+    {
+      "url": "https://useorbit.org/waitlist-confirmed",
+      "hashes": [
+        "sha256-MgAZSqwvMKKaCDkH6zMaQJGXaZgYMd62+D1j4/g/xGg=",
+        "sha256-ToGJyZnmvAQTDp5OmZMZhqM1qqRRZ0q3GF58fxTZeGA=",
+        "sha256-rjo/oE/zlFf1WPLat5zh4mfQfZuW1LJJoVIsPjvFDZU=",
+        "sha256-hZbgQ3xSIhIik3d8jPnzSZjpKVRyVkUefFOcVHzxpVw="
+      ]
+    },
+    {
+      "url": "https://useorbit.org/404",
+      "hashes": [
+        "sha256-MgAZSqwvMKKaCDkH6zMaQJGXaZgYMd62+D1j4/g/xGg=",
+        "sha256-ToGJyZnmvAQTDp5OmZMZhqM1qqRRZ0q3GF58fxTZeGA=",
+        "sha256-rjo/oE/zlFf1WPLat5zh4mfQfZuW1LJJoVIsPjvFDZU=",
+        "sha256-hZbgQ3xSIhIik3d8jPnzSZjpKVRyVkUefFOcVHzxpVw="
+      ]
+    },
+    {
+      "url": "https://orbit-landing-staging.onrender.com/",
+      "hashes": [
+        "sha256-VXGu3ijBQHccnEJv6/iI2EPmSvKz/3To4GNktGgsfVM=",
+        "sha256-ToGJyZnmvAQTDp5OmZMZhqM1qqRRZ0q3GF58fxTZeGA=",
+        "sha256-rjo/oE/zlFf1WPLat5zh4mfQfZuW1LJJoVIsPjvFDZU=",
+        "sha256-hZbgQ3xSIhIik3d8jPnzSZjpKVRyVkUefFOcVHzxpVw="
+      ]
+    },
+    {
+      "url": "https://orbit-landing-staging.onrender.com/waitlist-confirmed",
+      "hashes": [
+        "sha256-MgAZSqwvMKKaCDkH6zMaQJGXaZgYMd62+D1j4/g/xGg=",
+        "sha256-ToGJyZnmvAQTDp5OmZMZhqM1qqRRZ0q3GF58fxTZeGA=",
+        "sha256-rjo/oE/zlFf1WPLat5zh4mfQfZuW1LJJoVIsPjvFDZU=",
+        "sha256-hZbgQ3xSIhIik3d8jPnzSZjpKVRyVkUefFOcVHzxpVw="
+      ]
+    },
+    {
+      "url": "https://orbit-landing-staging.onrender.com/404",
+      "hashes": [
+        "sha256-MgAZSqwvMKKaCDkH6zMaQJGXaZgYMd62+D1j4/g/xGg=",
+        "sha256-ToGJyZnmvAQTDp5OmZMZhqM1qqRRZ0q3GF58fxTZeGA=",
+        "sha256-rjo/oE/zlFf1WPLat5zh4mfQfZuW1LJJoVIsPjvFDZU=",
+        "sha256-hZbgQ3xSIhIik3d8jPnzSZjpKVRyVkUefFOcVHzxpVw="
+      ]
+    }
+  ],
+  "blocks": [
+    {
+      "tag": "script",
+      "type": "application/ld+json",
+      "body": "{\"@context\":\"https://schema.org\",\"@graph\":[{\"@type\":\"Organization\",\"name\":\"Orbit\",\"url\":\"https://useorbit.org\",\"logo\":\"https://useorbit.org/logo.png\"},{\"@type\":\"WebSite\",\"name\":\"Orbit\",\"url\":\"https://useorbit.org\"},{\"@type\":\"SoftwareApplication\",\"name\":\"Orbit\",\"applicationCategory\":\"LifestyleApplication\",\"operatingSystem\":\"Web\",\"offers\":[{\"@type\":\"Offer\",\"name\":\"Orbit Free\",\"price\":0,\"priceCurrency\":\"USD\"},{\"@type\":\"Offer\",\"name\":\"Orbit Pro monthly\",\"price\":9.99,\"priceCurrency\":\"USD\",\"priceSpecification\":{\"@type\":\"UnitPriceSpecification\",\"price\":9.99,\"priceCurrency\":\"USD\",\"billingDuration\":\"P1M\"}},{\"@type\":\"Offer\",\"name\":\"Orbit Pro yearly\",\"price\":69.99,\"priceCurrency\":\"USD\",\"priceSpecification\":{\"@type\":\"UnitPriceSpecification\",\"price\":69.99,\"priceCurrency\":\"USD\",\"billingDuration\":\"P1Y\"}}],\"description\":\"Tell Astra what you want to do, and she turns it into habits for your day. Nothing changes until you approve it.\"},{\"@type\":\"MobileApplication\",\"name\":\"Orbit\",\"applicationCategory\":\"LifestyleApplication\",\"operatingSystem\":\"Android\",\"offers\":[{\"@type\":\"Offer\",\"name\":\"Orbit Free\",\"price\":0,\"priceCurrency\":\"USD\"},{\"@type\":\"Offer\",\"name\":\"Orbit Pro monthly\",\"price\":9.99,\"priceCurrency\":\"USD\",\"priceSpecification\":{\"@type\":\"UnitPriceSpecification\",\"price\":9.99,\"priceCurrency\":\"USD\",\"billingDuration\":\"P1M\"}},{\"@type\":\"Offer\",\"name\":\"Orbit Pro yearly\",\"price\":69.99,\"priceCurrency\":\"USD\",\"priceSpecification\":{\"@type\":\"UnitPriceSpecification\",\"price\":69.99,\"priceCurrency\":\"USD\",\"billingDuration\":\"P1Y\"}}],\"installUrl\":\"https://play.google.com/store/apps/details?id=org.useorbit.app\",\"description\":\"Tell Astra what you want to do, and she turns it into habits for your day. Nothing changes until you approve it.\"}]}",
+      "hash": "sha256-k1e/+bWIdT8Uk71F22RZrxB9jhVXHo0aDeugvXsMOoI="
+    },
+    {
+      "tag": "style",
+      "type": "",
+      "body": "@font-face{font-family:Geist-6ac8844e0b7cf714;src:url(\"/_astro/fonts/502b9851e13aed9b.woff2\") format(\"woff2\");font-display:swap;unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;font-weight:400;font-style:normal;}@font-face{font-family:Geist-6ac8844e0b7cf714;src:url(\"/_astro/fonts/502b9851e13aed9b.woff2\") format(\"woff2\");font-display:swap;unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;font-weight:500;font-style:normal;}@font-face{font-family:Geist-6ac8844e0b7cf714;src:url(\"/_astro/fonts/502b9851e13aed9b.woff2\") format(\"woff2\");font-display:swap;unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;font-weight:600;font-style:normal;}@font-face{font-family:\"Geist-6ac8844e0b7cf714 fallback: Arial\";src:local(\"Arial\");font-display:swap;font-weight:400;font-style:normal;size-adjust:104.7553%;ascent-override:95.9379%;descent-override:28.1609%;line-gap-override:0%;}@font-face{font-family:\"Geist-6ac8844e0b7cf714 fallback: Arial\";src:local(\"Arial\");font-display:swap;font-weight:500;font-style:normal;size-adjust:104.7553%;ascent-override:95.9379%;descent-override:28.1609%;line-gap-override:0%;}@font-face{font-family:\"Geist-6ac8844e0b7cf714 fallback: Arial\";src:local(\"Arial\");font-display:swap;font-weight:600;font-style:normal;size-adjust:104.7553%;ascent-override:95.9379%;descent-override:28.1609%;line-gap-override:0%;}:root{--font-geist:Geist-6ac8844e0b7cf714,\"Geist-6ac8844e0b7cf714 fallback: Arial\",system-ui,sans-serif;}",
+      "hash": "sha256-ToGJyZnmvAQTDp5OmZMZhqM1qqRRZ0q3GF58fxTZeGA="
+    },
+    {
+      "tag": "style",
+      "type": "",
+      "body": "@font-face{font-family:\"Space Grotesk-8f8559dbf54b0e3e\";src:url(\"/_astro/fonts/68c4c61e5cf389d9.woff2\") format(\"woff2\");font-display:swap;unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;font-weight:500;font-style:normal;}@font-face{font-family:\"Space Grotesk-8f8559dbf54b0e3e\";src:url(\"/_astro/fonts/68c4c61e5cf389d9.woff2\") format(\"woff2\");font-display:swap;unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;font-weight:600;font-style:normal;}@font-face{font-family:\"Space Grotesk-8f8559dbf54b0e3e fallback: Arial\";src:local(\"Arial\");font-display:swap;font-weight:500;font-style:normal;size-adjust:109.4659%;ascent-override:89.891%;descent-override:26.675%;line-gap-override:0%;}@font-face{font-family:\"Space Grotesk-8f8559dbf54b0e3e fallback: Arial\";src:local(\"Arial\");font-display:swap;font-weight:600;font-style:normal;size-adjust:109.4659%;ascent-override:89.891%;descent-override:26.675%;line-gap-override:0%;}:root{--font-space-grotesk:\"Space Grotesk-8f8559dbf54b0e3e\",\"Space Grotesk-8f8559dbf54b0e3e fallback: Arial\",system-ui,sans-serif;}",
+      "hash": "sha256-rjo/oE/zlFf1WPLat5zh4mfQfZuW1LJJoVIsPjvFDZU="
+    },
+    {
+      "tag": "style",
+      "type": "",
+      "body": "@font-face{font-family:\"Geist Mono-d9e4763fa767d8ed\";src:url(\"/_astro/fonts/181a29443484632f.woff2\") format(\"woff2\");font-display:swap;unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;font-weight:400;font-style:normal;}@font-face{font-family:\"Geist Mono-d9e4763fa767d8ed\";src:url(\"/_astro/fonts/181a29443484632f.woff2\") format(\"woff2\");font-display:swap;unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;font-weight:500;font-style:normal;}@font-face{font-family:\"Geist Mono-d9e4763fa767d8ed fallback: Courier New\";src:local(\"Courier New\");font-display:swap;font-weight:400;font-style:normal;size-adjust:99.9837%;ascent-override:100.5164%;descent-override:29.5048%;}@font-face{font-family:\"Geist Mono-d9e4763fa767d8ed fallback: Courier New\";src:local(\"Courier New\");font-display:swap;font-weight:500;font-style:normal;size-adjust:99.9837%;ascent-override:100.5164%;descent-override:29.5048%;}:root{--font-geist-mono:\"Geist Mono-d9e4763fa767d8ed\",\"Geist Mono-d9e4763fa767d8ed fallback: Courier New\",ui-monospace,monospace;}",
+      "hash": "sha256-hZbgQ3xSIhIik3d8jPnzSZjpKVRyVkUefFOcVHzxpVw="
+    },
+    {
+      "tag": "script",
+      "type": "application/ld+json",
+      "body": "{\"@context\":\"https://schema.org\",\"@graph\":[{\"@type\":\"Organization\",\"name\":\"Orbit\",\"url\":\"https://useorbit.org\",\"logo\":\"https://useorbit.org/logo.png\"},{\"@type\":\"WebSite\",\"name\":\"Orbit\",\"url\":\"https://useorbit.org\"}]}",
+      "hash": "sha256-MgAZSqwvMKKaCDkH6zMaQJGXaZgYMd62+D1j4/g/xGg="
+    },
+    {
+      "tag": "script",
+      "type": "application/ld+json",
+      "body": "{\"@context\":\"https://schema.org\",\"@graph\":[{\"@type\":\"Organization\",\"name\":\"Orbit\",\"url\":\"https://useorbit.org\",\"logo\":\"https://useorbit.org/logo.png\"},{\"@type\":\"WebSite\",\"name\":\"Orbit\",\"url\":\"https://useorbit.org\"},{\"@type\":\"SoftwareApplication\",\"name\":\"Orbit\",\"applicationCategory\":\"LifestyleApplication\",\"operatingSystem\":\"Web\",\"offers\":[{\"@type\":\"Offer\",\"name\":\"Orbit Free\",\"price\":0,\"priceCurrency\":\"USD\"},{\"@type\":\"Offer\",\"name\":\"Orbit Pro monthly\",\"price\":9.99,\"priceCurrency\":\"USD\",\"priceSpecification\":{\"@type\":\"UnitPriceSpecification\",\"price\":9.99,\"priceCurrency\":\"USD\",\"billingDuration\":\"P1M\"}},{\"@type\":\"Offer\",\"name\":\"Orbit Pro yearly\",\"price\":69.99,\"priceCurrency\":\"USD\",\"priceSpecification\":{\"@type\":\"UnitPriceSpecification\",\"price\":69.99,\"priceCurrency\":\"USD\",\"billingDuration\":\"P1Y\"}}],\"description\":\"Tell Astra what you want to do, and she turns it into habits for your day. Nothing changes until you approve it.\"},{\"@type\":\"MobileApplication\",\"name\":\"Orbit\",\"applicationCategory\":\"LifestyleApplication\",\"operatingSystem\":\"Android\",\"offers\":[{\"@type\":\"Offer\",\"name\":\"Orbit Free\",\"price\":0,\"priceCurrency\":\"USD\"},{\"@type\":\"Offer\",\"name\":\"Orbit Pro monthly\",\"price\":9.99,\"priceCurrency\":\"USD\",\"priceSpecification\":{\"@type\":\"UnitPriceSpecification\",\"price\":9.99,\"priceCurrency\":\"USD\",\"billingDuration\":\"P1M\"}},{\"@type\":\"Offer\",\"name\":\"Orbit Pro yearly\",\"price\":69.99,\"priceCurrency\":\"USD\",\"priceSpecification\":{\"@type\":\"UnitPriceSpecification\",\"price\":69.99,\"priceCurrency\":\"USD\",\"billingDuration\":\"P1Y\"}}],\"installUrl\":\"https://play.google.com/store/apps/details?id=org.useorbit.app.staging\",\"description\":\"Tell Astra what you want to do, and she turns it into habits for your day. Nothing changes until you approve it.\"}]}",
+      "hash": "sha256-VXGu3ijBQHccnEJv6/iI2EPmSvKz/3To4GNktGgsfVM="
+    }
+  ],
+  "styleAttributes": [
+    {
+      "body": "--bar-height: 0%",
+      "hash": "sha256-G8OlkJCBxpyX1wt0zk9/2k2PJF9fH5GLm3J8/T8buL8="
+    },
+    {
+      "body": "--bar-height: 100%",
+      "hash": "sha256-K7aatvhR2cxc1o8M7VBuiC36qi+QyiIbaEjcxiEH84U="
+    },
+    {
+      "body": "--bar-height: 67%",
+      "hash": "sha256-Af4cbr19oxIo4Y83I+1ni9EkDJYWS9rDEXWuj7Drk5M="
+    },
+    {
+      "body": "--bar-height: 80%",
+      "hash": "sha256-+RPvILNSL8AcrWSaeTg08BEHILtDlXR2B47zZgrB1DA="
+    },
+    {
+      "body": "--goal-progress: 30%",
+      "hash": "sha256-5/LkdnOEzEX0yKRI9PjMXWYXvJlyF9icTNaUYHYU5hk="
+    },
+    {
+      "body": "box-shadow: inset 0 1px 0 var(--color-hairline);",
+      "hash": "sha256-1jzk3lFz4l2PXAOUe/L+3H2QN5nFvjOi+LcWNsdneIg="
+    },
+    {
+      "body": "color-scheme: dark only",
+      "hash": "sha256-Ws6VRf2/QatDw/v6+Z7cN+fslmD5NrDZWQWmypKE/N8="
+    }
+  ]
+}

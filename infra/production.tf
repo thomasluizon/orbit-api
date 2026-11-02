@@ -14,7 +14,6 @@ resource "render_web_service" "production_api" {
   custom_domains             = [{ name = "api.useorbit.org" }]
 
   lifecycle {
-    # The imported service's own variables stay until the linked group is verified live, so the first apply cannot strip production's configuration.
     ignore_changes = [env_vars, runtime_source.image.digest]
   }
 
@@ -39,21 +38,25 @@ resource "render_postgres" "production" {
 
   lifecycle {
     ignore_changes = [database_name, database_user]
+    precondition {
+      condition     = length(var.production_postgres_ip_allow_list) > 0
+      error_message = "Production Postgres requires a non-empty operator IP allow-list."
+    }
   }
 }
 
 resource "render_web_service" "production_web" {
-  # The web release drain needs a 300 second allowance before Render kills the process.
   max_shutdown_delay_seconds = 300
   environment_id             = render_project.orbit.environments["Production"].id
   name                       = "orbit-web"
+  env_vars                   = { ORBIT_TERRAFORM_ENV_GROUP = { value = "production-web" } }
   plan                       = "0.5c-512mb"
   region                     = "ohio"
   health_check_path          = var.web_health_check_path
   custom_domains             = length(var.web_custom_domains) > 0 ? [for domain in var.web_custom_domains : { name = domain }] : null
 
   lifecycle {
-    ignore_changes = [runtime_source.image.digest]
+    ignore_changes = [env_vars, runtime_source.image.digest]
   }
 
   runtime_source = {
@@ -79,6 +82,7 @@ resource "render_static_site" "landing" {
   }
 
   headers = [
+    { path = "/*", name = "Content-Security-Policy", value = local.landing_csp.production },
     { path = "/", name = "Link", value = "<https://useorbit.org/>; rel=\"canonical\"" },
     { path = "/*", name = "X-Content-Type-Options", value = "nosniff" },
     { path = "/*", name = "X-Frame-Options", value = "DENY" },

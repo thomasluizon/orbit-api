@@ -42,6 +42,7 @@ resource "render_static_site" "staging_landing" {
   }
 
   headers = [
+    { path = "/*", name = var.staging_landing_csp_report_only ? "Content-Security-Policy-Report-Only" : "Content-Security-Policy", value = local.landing_csp.staging },
     { path = "/", name = "Link", value = "<https://useorbit.org/>; rel=\"canonical\"" },
     { path = "/*", name = "X-Content-Type-Options", value = "nosniff" },
     { path = "/*", name = "X-Frame-Options", value = "DENY" },
