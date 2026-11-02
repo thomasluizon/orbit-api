@@ -163,6 +163,16 @@ public class StartupConfigValidationTests
         new Uri(readUrl).Host.Should().Contain("orbit-uploads-staging-713285551626");
     }
 
+    [Fact]
+    public void SingletonCostEstimator_ResolvesWithScopeValidationEnabled()
+    {
+        var builder = BuildWith(ValidInfrastructure());
+        builder.AddOrbitDatabase().AddOrbitAiServices().AddOrbitInfrastructure();
+        using var provider = builder.Services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
+        Action resolve = () => provider.GetRequiredService<Orbit.Infrastructure.AI.IAiRequestCostEstimator>();
+        resolve.Should().NotThrow("the singleton estimator must use the singleton memory cache");
+    }
+
     private static WebApplicationBuilder BuildWith(Dictionary<string, string?> values)
     {
         var builder = WebApplication.CreateBuilder();

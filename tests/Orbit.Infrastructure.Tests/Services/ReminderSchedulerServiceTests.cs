@@ -272,7 +272,7 @@ public partial class ReminderSchedulerServiceTests : IDisposable
         int hour, int minute, int second, int secondReminderMinute, int secondReminderSecond)
     {
         await using var dbContext = CreateSqliteDbContext();
-        var pushService = Substitute.For<IPushNotificationService>();
+        var pushService = SuccessfulPush();
         var clock = new MutableTimeProvider(new DateTimeOffset(
             UtcToday.ToDateTime(new TimeOnly(hour, minute, second)), TimeSpan.Zero));
         var secondReminderTime = new TimeOnly(0, secondReminderMinute, secondReminderSecond);
@@ -300,7 +300,7 @@ public partial class ReminderSchedulerServiceTests : IDisposable
         sent.Should().OnlyContain(r => r.Date == UtcToday);
         sent.Select(r => r.ReminderTimeUtc).Should().BeEquivalentTo(
             new TimeOnly?[] { new TimeOnly(0, 0), secondReminderTime });
-        await pushService.Received(2).SendToUserAsync(
+        await pushService.Received(2).TrySendToUserAsync(
             user.Id, habit.Title, Arg.Any<string>(), "/", Arg.Any<CancellationToken>());
     }
 
@@ -308,7 +308,7 @@ public partial class ReminderSchedulerServiceTests : IDisposable
     public async Task CheckAndSendReminders_DayBeforeScheduledReminder_KeysOnSendDateNotDueDate()
     {
         await using var dbContext = CreateSqliteDbContext();
-        var pushService = Substitute.For<IPushNotificationService>();
+        var pushService = SuccessfulPush();
 
         var dueTomorrow = UtcToday.AddDays(1);
         var user = User.Create("Alex", "alex@test.com").Value;
@@ -332,7 +332,7 @@ public partial class ReminderSchedulerServiceTests : IDisposable
         sent.Should().ContainSingle();
         sent[0].Date.Should().Be(UtcToday);
         sent[0].ReminderTimeUtc.Should().Be(new TimeOnly(0, 0));
-        await pushService.Received(1).SendToUserAsync(
+        await pushService.Received(1).TrySendToUserAsync(
             user.Id, habit.Title, Arg.Any<string>(), "/", Arg.Any<CancellationToken>());
     }
 
@@ -340,7 +340,7 @@ public partial class ReminderSchedulerServiceTests : IDisposable
     public async Task CheckAndSendReminders_DayBeforeAlreadySentYesterdayForTodayDue_DoesNotBlockSameDay()
     {
         await using var dbContext = CreateSqliteDbContext();
-        var pushService = Substitute.For<IPushNotificationService>();
+        var pushService = SuccessfulPush();
 
         var reminderTime = new TimeOnly(0, 0);
         var user = User.Create("Alex", "alex@test.com").Value;
@@ -365,7 +365,7 @@ public partial class ReminderSchedulerServiceTests : IDisposable
             .Where(r => r.HabitId == habit.Id && r.Date == UtcToday)
             .ToListAsync();
         sent.Should().ContainSingle();
-        await pushService.Received(1).SendToUserAsync(
+        await pushService.Received(1).TrySendToUserAsync(
             user.Id, habit.Title, Arg.Any<string>(), "/", Arg.Any<CancellationToken>());
     }
 
@@ -373,7 +373,7 @@ public partial class ReminderSchedulerServiceTests : IDisposable
     public async Task CheckAndSendReminders_SameDayAndDayBeforeSameTime_PersistsBothWithoutCollision()
     {
         await using var dbContext = CreateSqliteDbContext();
-        var pushService = Substitute.For<IPushNotificationService>();
+        var pushService = SuccessfulPush();
 
         var reminderTime = new TimeOnly(0, 0);
         var user = User.Create("Alex", "alex@test.com").Value;
@@ -400,7 +400,7 @@ public partial class ReminderSchedulerServiceTests : IDisposable
         sent.Should().HaveCount(2);
         sent.Select(r => r.When).Should().BeEquivalentTo(
             new ScheduledReminderWhen?[] { ScheduledReminderWhen.SameDay, ScheduledReminderWhen.DayBefore });
-        await pushService.Received(2).SendToUserAsync(
+        await pushService.Received(2).TrySendToUserAsync(
             user.Id, habit.Title, Arg.Any<string>(), "/", Arg.Any<CancellationToken>());
     }
 
@@ -408,7 +408,7 @@ public partial class ReminderSchedulerServiceTests : IDisposable
     public async Task CheckAndSendReminders_ScheduledReminderAlreadySent_DoesNotResend()
     {
         await using var dbContext = CreateSqliteDbContext();
-        var pushService = Substitute.For<IPushNotificationService>();
+        var pushService = SuccessfulPush();
 
         var reminderTime = new TimeOnly(0, 0);
         var user = User.Create("Alex", "alex@test.com").Value;
@@ -430,7 +430,7 @@ public partial class ReminderSchedulerServiceTests : IDisposable
         await service.CheckAndSendReminders(CancellationToken.None);
 
         (await dbContext.SentReminders.CountAsync(r => r.HabitId == habit.Id)).Should().Be(1);
-        await pushService.DidNotReceive().SendToUserAsync(
+        await pushService.DidNotReceive().TrySendToUserAsync(
             Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
 
@@ -438,7 +438,7 @@ public partial class ReminderSchedulerServiceTests : IDisposable
     public async Task CheckAndSendReminders_RelativeReminderDueButUnsent_FiresAndRecords()
     {
         await using var dbContext = CreateSqliteDbContext();
-        var pushService = Substitute.For<IPushNotificationService>();
+        var pushService = SuccessfulPush();
 
         var user = User.Create("Alex", "alex@test.com").Value;
         var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
@@ -459,7 +459,7 @@ public partial class ReminderSchedulerServiceTests : IDisposable
         sent.Should().ContainSingle();
         sent[0].MinutesBefore.Should().Be(0);
         sent[0].ReminderTimeUtc.Should().BeNull();
-        await pushService.Received(1).SendToUserAsync(
+        await pushService.Received(1).TrySendToUserAsync(
             user.Id, habit.Title, Arg.Any<string>(), "/", Arg.Any<CancellationToken>());
     }
 
@@ -476,7 +476,7 @@ public partial class ReminderSchedulerServiceTests : IDisposable
         string instant, string timeZoneId, string dueDateText, int dueHour, int dueMinute, int minutesBefore)
     {
         await using var dbContext = CreateSqliteDbContext();
-        var pushService = Substitute.For<IPushNotificationService>();
+        var pushService = SuccessfulPush();
         var dueDate = DateOnly.Parse(dueDateText);
         var reminderInstant = DateTimeOffset.Parse(instant);
         var clock = new MutableTimeProvider(reminderInstant.AddMinutes(-1));
@@ -506,7 +506,7 @@ public partial class ReminderSchedulerServiceTests : IDisposable
         sent.Should().ContainSingle();
         sent[0].Date.Should().Be(dueDate);
         sent[0].MinutesBefore.Should().Be(minutesBefore);
-        await pushService.Received(1).SendToUserAsync(
+        await pushService.Received(1).TrySendToUserAsync(
             user.Id, habit.Title, Arg.Any<string>(), "/", Arg.Any<CancellationToken>());
     }
 
@@ -519,7 +519,7 @@ public partial class ReminderSchedulerServiceTests : IDisposable
         ScheduledReminderWhen when, int reminderHour, int reminderMinute)
     {
         await using var dbContext = CreateSqliteDbContext();
-        var pushService = Substitute.For<IPushNotificationService>();
+        var pushService = SuccessfulPush();
         var clock = new MutableTimeProvider(DateTimeOffset.Parse(instant).AddMinutes(-1));
         var user = User.Create("Alex", "alex@test.com").Value;
         user.SetTimeZone(timeZoneId).IsSuccess.Should().BeTrue();
@@ -549,7 +549,7 @@ public partial class ReminderSchedulerServiceTests : IDisposable
         sent.Should().ContainSingle();
         sent[0].When.Should().Be(when);
         sent[0].ReminderTimeUtc.Should().Be(new TimeOnly(reminderHour, reminderMinute));
-        await pushService.Received(1).SendToUserAsync(
+        await pushService.Received(1).TrySendToUserAsync(
             user.Id, habit.Title, Arg.Any<string>(), "/", Arg.Any<CancellationToken>());
     }
 
@@ -559,7 +559,7 @@ public partial class ReminderSchedulerServiceTests : IDisposable
     public async Task CheckAndSendReminders_RelativeClockAtOffsetInstant_DeliversOnce(bool explicitOffset)
     {
         await using var dbContext = CreateSqliteDbContext();
-        var pushService = Substitute.For<IPushNotificationService>();
+        var pushService = SuccessfulPush();
         var instant = new DateTimeOffset(2027, 9, 26, 8, 45, 0, TimeSpan.Zero);
         var clock = new MutableTimeProvider(instant.AddMinutes(-1));
         var user = User.Create("Alex", "alex@test.com").Value;
@@ -584,7 +584,7 @@ public partial class ReminderSchedulerServiceTests : IDisposable
         await service.CheckAndSendReminders(CancellationToken.None);
 
         (await dbContext.SentReminders.CountAsync(r => r.HabitId == habit.Id)).Should().Be(1);
-        await pushService.Received(1).SendToUserAsync(
+        await pushService.Received(1).TrySendToUserAsync(
             user.Id, habit.Title, Arg.Any<string>(), "/", Arg.Any<CancellationToken>());
     }
 
@@ -595,7 +595,7 @@ public partial class ReminderSchedulerServiceTests : IDisposable
         string instant, string timeZoneId, string dueDateText, int dueHour, int dueMinute, int minutesBefore)
     {
         await using var dbContext = CreateSqliteDbContext();
-        var pushService = Substitute.For<IPushNotificationService>();
+        var pushService = SuccessfulPush();
         var reminderInstant = DateTimeOffset.Parse(instant);
         var clock = new MutableTimeProvider(reminderInstant.AddMinutes(-1));
         var user = User.Create("Alex", "alex@test.com").Value;
@@ -625,7 +625,7 @@ public partial class ReminderSchedulerServiceTests : IDisposable
         var sent = await dbContext.SentReminders.Where(r => r.HabitId == habit.Id).ToListAsync();
         sent.Should().ContainSingle();
         sent[0].MinutesBefore.Should().Be(minutesBefore);
-        await pushService.Received(1).SendToUserAsync(
+        await pushService.Received(1).TrySendToUserAsync(
             user.Id, habit.Title, Arg.Any<string>(), "/", Arg.Any<CancellationToken>());
     }
 
@@ -633,7 +633,7 @@ public partial class ReminderSchedulerServiceTests : IDisposable
     public async Task CheckAndSendReminders_RelativeReminderAfterItsLocalDay_DoesNotSendLate()
     {
         await using var dbContext = CreateSqliteDbContext();
-        var pushService = Substitute.For<IPushNotificationService>();
+        var pushService = SuccessfulPush();
         var dueDate = new DateOnly(2027, 9, 26);
         var clock = new MutableTimeProvider(new DateTimeOffset(2027, 9, 26, 9, 0, 0, TimeSpan.Zero));
 
@@ -653,7 +653,7 @@ public partial class ReminderSchedulerServiceTests : IDisposable
         await service.CheckAndSendReminders(CancellationToken.None);
 
         (await dbContext.SentReminders.CountAsync(r => r.HabitId == habit.Id)).Should().Be(0);
-        await pushService.DidNotReceive().SendToUserAsync(
+        await pushService.DidNotReceive().TrySendToUserAsync(
             Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
 
@@ -661,7 +661,7 @@ public partial class ReminderSchedulerServiceTests : IDisposable
     public async Task CheckAndSendReminders_RelativeReminder_LoggedBeforeInstant_DoesNotSend()
     {
         await using var dbContext = CreateSqliteDbContext();
-        var pushService = Substitute.For<IPushNotificationService>();
+        var pushService = SuccessfulPush();
         var dueDate = new DateOnly(2027, 9, 26);
         var clock = new MutableTimeProvider(new DateTimeOffset(2027, 9, 25, 9, 0, 0, TimeSpan.Zero));
 
@@ -682,7 +682,7 @@ public partial class ReminderSchedulerServiceTests : IDisposable
         await service.CheckAndSendReminders(CancellationToken.None);
 
         (await dbContext.SentReminders.CountAsync(r => r.HabitId == habit.Id)).Should().Be(0);
-        await pushService.DidNotReceive().SendToUserAsync(
+        await pushService.DidNotReceive().TrySendToUserAsync(
             Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
 
@@ -690,7 +690,7 @@ public partial class ReminderSchedulerServiceTests : IDisposable
     public async Task CheckAndSendReminders_RelativeReminderAlreadySent_DoesNotDoubleSend()
     {
         await using var dbContext = CreateSqliteDbContext();
-        var pushService = Substitute.For<IPushNotificationService>();
+        var pushService = SuccessfulPush();
 
         var user = User.Create("Alex", "alex@test.com").Value;
         var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
@@ -709,7 +709,7 @@ public partial class ReminderSchedulerServiceTests : IDisposable
         await service.CheckAndSendReminders(CancellationToken.None);
 
         (await dbContext.SentReminders.CountAsync(r => r.HabitId == habit.Id)).Should().Be(1);
-        await pushService.DidNotReceive().SendToUserAsync(
+        await pushService.DidNotReceive().TrySendToUserAsync(
             Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
 
@@ -720,7 +720,7 @@ public partial class ReminderSchedulerServiceTests : IDisposable
         int utcHour, string timeZoneId, int localDayOffset)
     {
         await using var dbContext = CreateSqliteDbContext();
-        var pushService = Substitute.For<IPushNotificationService>();
+        var pushService = SuccessfulPush();
 
         var clock = new MutableTimeProvider(new DateTimeOffset(
             UtcToday.ToDateTime(new TimeOnly(utcHour, 0)), TimeSpan.Zero));
@@ -744,7 +744,7 @@ public partial class ReminderSchedulerServiceTests : IDisposable
         await service.CheckAndSendReminders(CancellationToken.None);
 
         (await dbContext.SentReminders.CountAsync(r => r.HabitId == habit.Id)).Should().Be(1);
-        await pushService.DidNotReceive().SendToUserAsync(
+        await pushService.DidNotReceive().TrySendToUserAsync(
             Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
 
@@ -755,7 +755,7 @@ public partial class ReminderSchedulerServiceTests : IDisposable
         int utcHour, string timeZoneId, int localDayOffset)
     {
         await using var dbContext = CreateSqliteDbContext();
-        var pushService = Substitute.For<IPushNotificationService>();
+        var pushService = SuccessfulPush();
 
         var clock = new MutableTimeProvider(new DateTimeOffset(
             UtcToday.ToDateTime(new TimeOnly(utcHour, 0)), TimeSpan.Zero));
@@ -779,7 +779,7 @@ public partial class ReminderSchedulerServiceTests : IDisposable
         await service.CheckAndSendReminders(CancellationToken.None);
 
         (await dbContext.SentReminders.CountAsync(r => r.HabitId == habit.Id)).Should().Be(0);
-        await pushService.DidNotReceive().SendToUserAsync(
+        await pushService.DidNotReceive().TrySendToUserAsync(
             Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
 
@@ -787,7 +787,7 @@ public partial class ReminderSchedulerServiceTests : IDisposable
     public async Task CheckAndSendReminders_RelativeReminderSentYesterday_DoesNotBlockToday()
     {
         await using var dbContext = CreateSqliteDbContext();
-        var pushService = Substitute.For<IPushNotificationService>();
+        var pushService = SuccessfulPush();
 
         var user = User.Create("Alex", "alex@test.com").Value;
         var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
@@ -808,7 +808,7 @@ public partial class ReminderSchedulerServiceTests : IDisposable
         var sentToday = await dbContext.SentReminders
             .Where(r => r.HabitId == habit.Id && r.Date == UtcToday).ToListAsync();
         sentToday.Should().ContainSingle();
-        await pushService.Received(1).SendToUserAsync(
+        await pushService.Received(1).TrySendToUserAsync(
             user.Id, habit.Title, Arg.Any<string>(), "/", Arg.Any<CancellationToken>());
     }
 
@@ -816,7 +816,7 @@ public partial class ReminderSchedulerServiceTests : IDisposable
     public async Task CheckAndSendReminders_ManyDueReminders_DeliversEachRecipientExactlyOnce()
     {
         await using var dbContext = CreateSqliteDbContext();
-        var pushService = Substitute.For<IPushNotificationService>();
+        var pushService = SuccessfulPush();
 
         var users = SeedDueRelativeReminders(dbContext, count: 6);
         await dbContext.SaveChangesAsync();
@@ -827,10 +827,10 @@ public partial class ReminderSchedulerServiceTests : IDisposable
         (await dbContext.SentReminders.CountAsync()).Should().Be(users.Count);
         foreach (var user in users)
         {
-            await pushService.Received(1).SendToUserAsync(
+            await pushService.Received(1).TrySendToUserAsync(
                 user.Id, Arg.Any<string>(), Arg.Any<string>(), "/", Arg.Any<CancellationToken>());
         }
-        await pushService.Received(users.Count).SendToUserAsync(
+        await pushService.Received(users.Count).TrySendToUserAsync(
             Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), "/", Arg.Any<CancellationToken>());
     }
 
@@ -838,14 +838,14 @@ public partial class ReminderSchedulerServiceTests : IDisposable
     public async Task CheckAndSendReminders_OneRecipientPushThrows_OthersStillRecordedAndDelivered()
     {
         await using var dbContext = CreateSqliteDbContext();
-        var pushService = Substitute.For<IPushNotificationService>();
+        var pushService = SuccessfulPush();
 
         var users = SeedDueRelativeReminders(dbContext, count: 4);
         await dbContext.SaveChangesAsync();
 
-        pushService.SendToUserAsync(
+        pushService.TrySendToUserAsync(
                 users[0].Id, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromException(new InvalidOperationException("push down")));
+            .Returns(Task.FromException<bool>(new InvalidOperationException("push down")));
 
         var service = CreateService(dbContext, pushService);
         await service.CheckAndSendReminders(CancellationToken.None);
@@ -853,7 +853,7 @@ public partial class ReminderSchedulerServiceTests : IDisposable
         (await dbContext.SentReminders.CountAsync()).Should().Be(users.Count);
         foreach (var user in users.Skip(1))
         {
-            await pushService.Received(1).SendToUserAsync(
+            await pushService.Received(1).TrySendToUserAsync(
                 user.Id, Arg.Any<string>(), Arg.Any<string>(), "/", Arg.Any<CancellationToken>());
         }
     }
@@ -862,7 +862,7 @@ public partial class ReminderSchedulerServiceTests : IDisposable
     public async Task ExecuteAsync_HostedLifecycle_RunsOneReminderPassThenStopsGracefully()
     {
         await using var dbContext = CreateSqliteDbContext();
-        var pushService = Substitute.For<IPushNotificationService>();
+        var pushService = SuccessfulPush();
 
         var user = User.Create("Alex", "alex@test.com").Value;
         var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
@@ -875,8 +875,8 @@ public partial class ReminderSchedulerServiceTests : IDisposable
 
         var firstPush = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         pushService
-            .SendToUserAsync(user.Id, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
-            .Returns(_ => { firstPush.TrySetResult(); return Task.CompletedTask; });
+            .TrySendToUserAsync(user.Id, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(_ => { firstPush.TrySetResult(); return Task.FromResult(true); });
 
         var service = CreateService(dbContext, pushService);
 
@@ -884,7 +884,7 @@ public partial class ReminderSchedulerServiceTests : IDisposable
         await firstPush.Task.WaitAsync(TimeSpan.FromSeconds(30));
         await service.StopAsync(CancellationToken.None);
 
-        await pushService.Received(1).SendToUserAsync(
+        await pushService.Received(1).TrySendToUserAsync(
             user.Id, habit.Title, Arg.Any<string>(), "/", Arg.Any<CancellationToken>());
         (await dbContext.SentReminders.CountAsync(r => r.HabitId == habit.Id)).Should().Be(1);
         service.ExecuteTask.Should().NotBeNull();
@@ -909,7 +909,7 @@ public partial class ReminderSchedulerServiceTests : IDisposable
         using var factory = new SqliteOrbitDbContextFactory(
             new ThrowForHabitReminderInterceptor(throwingHabit.Id));
         var dbContext = factory.Context;
-        var pushService = Substitute.For<IPushNotificationService>();
+        var pushService = SuccessfulPush();
 
         dbContext.Users.AddRange(throwingUser, healthyUser);
         dbContext.Habits.AddRange(throwingHabit, healthyHabit);
@@ -920,9 +920,9 @@ public partial class ReminderSchedulerServiceTests : IDisposable
         var run = async () => await service.CheckAndSendReminders(CancellationToken.None);
         await run.Should().NotThrowAsync();
 
-        await pushService.Received(1).SendToUserAsync(
+        await pushService.Received(1).TrySendToUserAsync(
             healthyUser.Id, healthyHabit.Title, Arg.Any<string>(), "/", Arg.Any<CancellationToken>());
-        await pushService.DidNotReceive().SendToUserAsync(
+        await pushService.DidNotReceive().TrySendToUserAsync(
             throwingUser.Id, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
         (await dbContext.SentReminders.CountAsync(r => r.HabitId == healthyHabit.Id)).Should().Be(1);
         (await dbContext.SentReminders.CountAsync(r => r.HabitId == throwingHabit.Id)).Should().Be(0);
@@ -948,6 +948,15 @@ public partial class ReminderSchedulerServiceTests : IDisposable
     }
 
     private OrbitDbContext CreateSqliteDbContext() => (_factory ??= new SqliteOrbitDbContextFactory()).Context;
+
+    private static IPushNotificationService SuccessfulPush()
+    {
+        var push = Substitute.For<IPushNotificationService>();
+        push.TrySendToUserAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>()).Returns(true);
+        push.TrySendReminderToUserAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(),
+            Arg.Any<IReadOnlyDictionary<string, string>>(), Arg.Any<string?>(), Arg.Any<CancellationToken>()).Returns(true);
+        return push;
+    }
 
     private static ReminderSchedulerService CreateService(
         OrbitDbContext dbContext, IPushNotificationService pushService, TimeProvider? timeProvider = null)

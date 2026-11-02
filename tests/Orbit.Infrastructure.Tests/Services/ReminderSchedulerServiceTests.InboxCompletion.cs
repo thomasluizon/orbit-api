@@ -35,7 +35,7 @@ public partial class ReminderSchedulerServiceTests
             db.Entry(row).Property(n => n.CreatedAtUtc).CurrentValue = sentAtUtc;
         await db.SaveChangesAsync();
 
-        await CreateService(db, Substitute.For<IPushNotificationService>(), new MutableTimeProvider(new(sentAtUtc)))
+        await CreateService(db, SuccessfulPush(), new MutableTimeProvider(new(sentAtUtc)))
             .CheckAndSendReminders(default);
 
         db.ChangeTracker.Clear();
@@ -81,7 +81,7 @@ public partial class ReminderSchedulerServiceTests
         await db.SaveChangesAsync();
         var sentAtUtc = dueDate.ToDateTime(new(2, 30), DateTimeKind.Utc);
 
-        await CreateService(db, Substitute.For<IPushNotificationService>(), new MutableTimeProvider(new(sentAtUtc)))
+        await CreateService(db, SuccessfulPush(), new MutableTimeProvider(new(sentAtUtc)))
             .CheckAndSendReminders(default);
 
         var reminder = await db.Notifications.SingleAsync();
@@ -107,7 +107,7 @@ public partial class ReminderSchedulerServiceTests
         db.Habits.Add(habit);
         await db.SaveChangesAsync();
         var clock = new MutableTimeProvider(new(UtcToday.ToDateTime(new(8, 0), DateTimeKind.Utc)));
-        var service = CreateService(db, Substitute.For<IPushNotificationService>(), clock);
+        var service = CreateService(db, SuccessfulPush(), clock);
         await service.CheckAndSendReminders(default);
         var firstId = (await db.Notifications.SingleAsync()).Id;
         clock.SetUtcNow(new(UtcToday.ToDateTime(new(9, 0), DateTimeKind.Utc)));

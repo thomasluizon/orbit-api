@@ -44,11 +44,11 @@ public partial class ReminderSchedulerServiceTests
         }
         else
         {
-            var push = Substitute.For<IPushNotificationService>();
+            var push = SuccessfulPush();
             var scheduler = CreateService(db, push, clock);
             await Task.Run(() => scheduler.CheckAndSendReminders(default)).WaitAsync(TimeSpan.FromSeconds(5));
             (await db.SentReminders.ToListAsync()).Should().ContainSingle().Which.HabitId.Should().Be(active.Id);
-            await push.Received(1).SendReminderToUserAsync(active.UserId, active.Title, Arg.Any<string>(),
+            await push.Received(1).TrySendReminderToUserAsync(active.UserId, active.Title, Arg.Any<string>(),
                 Arg.Any<IReadOnlyDictionary<string, string>>(), "/", Arg.Any<CancellationToken>());
         }
     }
@@ -83,7 +83,7 @@ public partial class ReminderSchedulerServiceTests
             next.Should().Be(clock.GetUtcNow().UtcDateTime);
         else
             next.Should().BeAfter(clock.GetUtcNow().UtcDateTime);
-        var push = Substitute.For<IPushNotificationService>();
+        var push = SuccessfulPush();
         var scheduler = CreateService(db, push, clock);
         await scheduler.CheckAndSendReminders(default);
         await scheduler.CheckAndSendReminders(default);
@@ -92,7 +92,7 @@ public partial class ReminderSchedulerServiceTests
         if (sends)
         {
             reminders.Single().ReminderAtUtc.Should().Be(next);
-            await push.Received(1).SendReminderToUserAsync(user.Id, habit.Title, Arg.Any<string>(),
+            await push.Received(1).TrySendReminderToUserAsync(user.Id, habit.Title, Arg.Any<string>(),
                 Arg.Is<IReadOnlyDictionary<string, string>>(data => data.ContainsKey("doneToken") && data["doneLabel"] == "Done"),
                 "/", Arg.Any<CancellationToken>());
         }
@@ -119,7 +119,7 @@ public partial class ReminderSchedulerServiceTests
         db.Habits.Add(habit);
         await db.SaveChangesAsync();
         var clock = new MutableTimeProvider(new(startAtUtc.AddHours(8)));
-        var scheduler = CreateService(db, Substitute.For<IPushNotificationService>(), clock);
+        var scheduler = CreateService(db, SuccessfulPush(), clock);
         await scheduler.CheckAndSendReminders(default);
         (await db.SentReminders.CountAsync()).Should().Be(1);
         if (value > 0)
@@ -177,7 +177,7 @@ public partial class ReminderSchedulerServiceTests
         await db.SaveChangesAsync();
         var clock = new MutableTimeProvider(new(startAtUtc.AddHours(8)));
         (await ReadNextReminder(habit, clock)).Should().BeAfter(startAtUtc.AddDays(4));
-        await CreateService(db, Substitute.For<IPushNotificationService>(), clock).CheckAndSendReminders(default);
+        await CreateService(db, SuccessfulPush(), clock).CheckAndSendReminders(default);
         (await db.SentReminders.CountAsync()).Should().Be(0);
     }
 }

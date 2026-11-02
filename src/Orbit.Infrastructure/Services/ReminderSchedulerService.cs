@@ -430,10 +430,11 @@ public partial class ReminderSchedulerService(
         {
             try
             {
-                if (push.Data is { } data)
-                    await pushService.SendReminderToUserAsync(push.UserId, push.Title, push.Body, data, NotificationUrls.Home, ct);
-                else
-                    await pushService.SendToUserAsync(push.UserId, push.Title, push.Body, NotificationUrls.Home, ct);
+                var delivered = push.Data is { } data
+                    ? await pushService.TrySendReminderToUserAsync(push.UserId, push.Title, push.Body, data, NotificationUrls.Home, ct)
+                    : await pushService.TrySendToUserAsync(push.UserId, push.Title, push.Body, NotificationUrls.Home, ct);
+                if (!delivered)
+                    continue;
                 var sentAtUtc = (timeProvider ?? TimeProvider.System).GetUtcNow().UtcDateTime;
                 await db.SentReminders.Where(row => row.Id == push.ReminderId && row.PushSentAtUtc == null)
                     .ExecuteUpdateAsync(setters => setters.SetProperty(row => row.PushSentAtUtc, sentAtUtc), ct);
