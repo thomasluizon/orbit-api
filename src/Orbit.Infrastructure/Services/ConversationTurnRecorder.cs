@@ -29,7 +29,37 @@ public sealed class ConversationTurnRecorder(
 
     public async Task<bool> RecordAsync(ConversationTurnCapture turn, CancellationToken cancellationToken = default)
     {
-        return await work.ExecuteInTransactionAsync(async token =>
+        if (!(await flags.GetEnabledKeysForUserAsync(turn.UserId, cancellationToken)).Contains(FeatureFlagKeys.AstraConversationRecording))
+            return false;
+        await new ConversationTurnCaptureValidator().ValidateAndThrowAsync(turn, cancellationToken);
+        var conversationId = turn.ConversationId ?? turn.TurnId;
+        if (await db.ConversationTurns.AsNoTracking().AnyAsync(row => row.UserId == turn.UserId
+            && row.ConversationId == conversationId && row.TurnId == turn.TurnId, cancellationToken))
+            return true;
+        var (imageKey, imageSha256) = ImageMetadata(turn, conversationId);
+        var uploaded = false;
+        var recorded = false;
+        try
+        {
+            if (imageKey is not null)
+            {
+                await storage.PutPrivateAsync(imageKey, turn.ImageMimeType!, turn.ImageData!, cancellationToken);
+                uploaded = true;
+            }
+            recorded = await RecordRowsAsync(turn, conversationId, imageKey, imageSha256, cancellationToken);
+            return recorded;
+        }
+        finally
+        {
+            if (uploaded && !recorded)
+                await storage.DeletePrivateAsync(imageKey!, CancellationToken.None);
+        }
+    }
+
+    private Task<bool> RecordRowsAsync(ConversationTurnCapture turn, Guid conversationId, string? imageKey, string? imageSha256,
+        CancellationToken cancellationToken)
+    {
+        return work.ExecuteInTransactionAsync(async token =>
         {
             await work.AcquireUserRowLockAsync(turn.UserId, token);
             if (!(await flags.GetEnabledKeysForUserAsync(turn.UserId, token)).Contains(FeatureFlagKeys.AstraConversationRecording))
@@ -40,7 +70,6 @@ public sealed class ConversationTurnRecorder(
             var user = await db.Users.AsNoTracking().SingleOrDefaultAsync(user => user.Id == turn.UserId, token);
             if (!CanRecord(user, turn.CreatedAtUtc))
                 return false;
-            var conversationId = turn.ConversationId ?? turn.TurnId;
             var query = db.ConversationTurns.Where(row => row.UserId == turn.UserId && row.ConversationId == conversationId);
             if (turn.ExistingConversation && !await query.AnyAsync(token))
                 return false;
@@ -49,7 +78,6 @@ public sealed class ConversationTurnRecorder(
             if (await query.AnyAsync(row => row.TurnId == turn.TurnId, token))
                 return true;
             var order = (await query.MaxAsync(row => row.TurnOrder, token) ?? 0) + 1;
-            var (imageKey, imageSha256) = ImageMetadata(turn, conversationId);
             var resultsJson = JsonSerializer.Serialize(turn.ToolResults ?? [], JsonOptions);
             var summaries = resultsJson.Length <= 12_000 ? resultsJson : "[" + ModelToolPayload.Fit(resultsJson, 12_000).ToJsonString() + "]";
             var previews = await db.PendingAgentOperations.AsNoTracking().Where(item => item.UserId == turn.UserId
@@ -64,19 +92,8 @@ public sealed class ConversationTurnRecorder(
                 conversationId, order + 1, summaries, outcomes);
             if (userRow.IsFailure || assistantRow.IsFailure)
                 throw new InvalidOperationException(userRow.IsFailure ? userRow.Error : assistantRow.Error);
-            try
-            {
-                if (imageKey is not null)
-                    await storage.PutPrivateAsync(imageKey, turn.ImageMimeType!, turn.ImageData!, token);
-                db.ConversationTurns.AddRange(userRow.Value, assistantRow.Value);
-                await work.SaveChangesAsync(token);
-            }
-            catch
-            {
-                if (imageKey is not null)
-                    await storage.DeletePrivateAsync(imageKey, CancellationToken.None);
-                throw;
-            }
+            db.ConversationTurns.AddRange(userRow.Value, assistantRow.Value);
+            await work.SaveChangesAsync(token);
             return true;
         }, cancellationToken);
     }
@@ -94,7 +111,7 @@ public sealed class ConversationTurnRecorder(
             "image/webp" => "webp",
             _ => throw new ArgumentException("Conversation image type is invalid.")
         };
-        return ($"{turn.UserId}/conversations/{conversationId}/{turn.TurnId}.{extension}",
+        return ($"{turn.UserId}/conversations/{conversationId}/{turn.TurnId}-{Guid.NewGuid():N}.{extension}",
             Convert.ToHexStringLower(SHA256.HashData(turn.ImageData)));
     }
 
@@ -158,7 +175,7 @@ public sealed class ConversationTurnRecorder(
         var selected = rows.Take(pageSize).Reverse().ToArray();
         return new(conversationId.Value, selected.Select(row => new ConversationDisplayTurn(row.TurnId, row.TurnOrder!.Value,
             row.Role, row.CreatedAtUtc, row.Content, row.ResponseJson, row.PreviewOutcomesJson,
-            row.ImageObjectKey is null ? null : new(Path.GetFileName(row.ImageObjectKey), row.ImageContentType!, row.ImageSha256!, $"/api/chat/conversations/{conversationId}/images/{row.TurnId}"))).ToArray(),
+            row.ImageObjectKey is null ? null : new($"{row.TurnId}{Path.GetExtension(row.ImageObjectKey)}", row.ImageContentType!, row.ImageSha256!, $"/api/chat/conversations/{conversationId}/images/{row.TurnId}"))).ToArray(),
             hasMore ? selected[0].TurnOrder : null);
     }
 
@@ -173,13 +190,13 @@ public sealed class ConversationTurnRecorder(
         return new(bytes, row.ImageContentType!);
     }
 
-    public Task<bool> DeleteAsync(Guid userId, Guid conversationId, CancellationToken cancellationToken = default) =>
-        work.ExecuteInTransactionAsync(async token =>
+    public async Task<bool> DeleteAsync(Guid userId, Guid conversationId, CancellationToken cancellationToken = default)
+    {
+        var deleted = await work.ExecuteInTransactionAsync(async token =>
         {
             await work.AcquireUserRowLockAsync(userId, token);
             var query = db.ConversationTurns.Where(row => row.UserId == userId && row.ConversationId == conversationId);
             if (!await query.AnyAsync(token)) return false;
-            await storage.DeleteConversationObjectsAsync(userId, conversationId, token);
             var turnIds = query.Select(row => row.TurnId);
             await db.ChatTurns.Where(row => row.UserId == userId && turnIds.Contains(row.Id)).ExecuteDeleteAsync(token);
             await query.ExecuteDeleteAsync(token);
@@ -187,4 +204,8 @@ public sealed class ConversationTurnRecorder(
             await db.PendingAgentOperations.Where(row => row.UserId == userId && row.ConversationId == conversationId).ExecuteDeleteAsync(token);
             return true;
         }, cancellationToken);
+        if (deleted)
+            await storage.DeleteConversationObjectsAsync(userId, conversationId, CancellationToken.None);
+        return deleted;
+    }
 }

@@ -12,7 +12,7 @@ using PortalSessionService = Stripe.BillingPortal.SessionService;
 
 namespace Orbit.Infrastructure.Tests.Services;
 
-public class StripeBillingServiceTests
+public partial class StripeBillingServiceTests
 {
     private const string SuccessUrl = "https://app.useorbit.org/profile?subscription=success";
     private const string CancelUrl = "https://app.useorbit.org/upgrade";

@@ -25,20 +25,18 @@ public partial class ReminderSchedulerService(
     private const int MinRelativeDayOffset = -1;
     private const int MaxRelativeLookaheadDays = DomainConstants.MaxReminderMinutesBefore / 1440 + 1;
     private const string ReminderProbeSql = """
-        SELECT COUNT(*) AS "HabitCount",
-               CAST(COALESCE(SUM(h."ReminderProbeVersion"), 0) AS bigint) AS "HabitVersionSum",
-               (SELECT CAST(COALESCE(SUM("ReminderPreferencesVersion"), 0) AS bigint) FROM "Users") AS "UserPreferencesVersionSum"
-        FROM "Habits" AS h
+        SELECT p."UserId", p."Version" AS "ScheduleVersion",
+               u."ReminderPreferencesVersion" AS "UserPreferencesVersion"
+        FROM "ReminderScheduleProbes" AS p JOIN "Users" AS u ON u."Id" = p."UserId"
+        WHERE u."IsDeactivated" = FALSE
         """;
 
     private readonly TimeSpan _interval = TimeSpan.FromMinutes(
         configuration.GetValue("BackgroundServices:ReminderIntervalMinutes", 1));
 
-    private readonly int _pushConcurrency = Math.Max(1,
-        configuration.GetValue("BackgroundServices:ReminderPushConcurrency", 8));
-
     private readonly SemaphoreSlim _tickGate = new(1, 1);
-    private ReminderSnapshot? _snapshot;
+    private readonly Dictionary<Guid, ReminderSnapshot> _snapshots = [];
+    private readonly List<ReminderWrite> _writes = [];
 
     public string Name => "reminder-scheduler";
 
@@ -62,36 +60,43 @@ public partial class ReminderSchedulerService(
 
     internal async Task CheckAndSendReminders(CancellationToken ct)
     {
+        var pending = new List<PendingReminderPush>();
         await _tickGate.WaitAsync(ct);
         try
         {
             using var scope = scopeFactory.CreateScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
             var nowUtc = (timeProvider ?? TimeProvider.System).GetUtcNow().UtcDateTime;
-            var snapshot = await GetSnapshotAsync(dbContext, nowUtc, ct);
-            var pending = new List<PendingReminderPush>();
-            await ProcessRelativeReminders(snapshot, dbContext, pending, nowUtc, ct);
-            await ProcessScheduledReminders(snapshot, dbContext, pending, nowUtc, ct);
-            await ProcessRepeatReminders(snapshot, dbContext, pending, nowUtc, ct);
-            await SendPushesAsync(pending, ct);
+            var probes = await dbContext.Database.SqlQueryRaw<ReminderProbe>(ReminderProbeSql).ToListAsync(ct);
+            var currentUsers = probes.Select(p => p.UserId).ToHashSet();
+            foreach (var removed in _snapshots.Keys.Where(id => !currentUsers.Contains(id)).ToArray())
+                _snapshots.Remove(removed);
+            foreach (var probe in probes)
+            {
+                if (!_snapshots.TryGetValue(probe.UserId, out var snapshot) || nowUtc < snapshot.LoadedAtUtc
+                    || nowUtc - snapshot.LoadedAtUtc >= TimeSpan.FromHours(1) || probe != snapshot.Probe)
+                {
+                    snapshot = await LoadSnapshotAsync(dbContext, probe, nowUtc, ct);
+                    _snapshots[probe.UserId] = snapshot;
+                }
+                ProcessRelativeReminders(snapshot, pending, nowUtc, ct);
+                ProcessScheduledReminders(snapshot, pending, nowUtc, ct);
+                ProcessRepeatReminders(snapshot, pending, nowUtc, ct);
+            }
+            var accepted = await FlushRemindersAsync(dbContext, ct);
+            pending.RemoveAll(p => !accepted.Contains(p.ReminderId));
+        }
+        catch
+        {
+            _snapshots.Clear();
+            throw;
         }
         finally
         {
+            _writes.Clear();
             _tickGate.Release();
         }
-    }
-
-    private async Task<ReminderSnapshot> GetSnapshotAsync(OrbitDbContext dbContext, DateTime nowUtc, CancellationToken ct)
-    {
-        var probe = await dbContext.Database.SqlQueryRaw<ReminderProbe>(ReminderProbeSql).SingleAsync(ct);
-
-        if (_snapshot is not null && nowUtc >= _snapshot.LoadedAtUtc
-            && nowUtc - _snapshot.LoadedAtUtc < TimeSpan.FromHours(1)
-            && probe == _snapshot.Probe)
-            return _snapshot;
-
-        _snapshot = await LoadSnapshotAsync(dbContext, probe, nowUtc, ct);
-        return _snapshot;
+        await SendPushesAsync(pending, ct);
     }
 
     private async Task<ReminderSnapshot> LoadSnapshotAsync(
@@ -99,14 +104,13 @@ public partial class ReminderSchedulerService(
     {
         var minLocalDate = DateOnly.FromDateTime(nowUtc.AddDays(-1));
         var maxLocalDate = DateOnly.FromDateTime(nowUtc.AddDays(MaxRelativeLookaheadDays + 1));
-        var (relativeHabits, scheduledHabits) = await LoadLegacyHabits(dbContext, nowUtc, minLocalDate, maxLocalDate, ct);
+        var (relativeHabits, scheduledHabits) = await LoadLegacyHabits(dbContext, probe.UserId, nowUtc, minLocalDate, maxLocalDate, ct);
 
-        var repeatHabits = await LoadRepeatHabits(dbContext, minLocalDate, ct);
+        var repeatHabits = await LoadRepeatHabits(dbContext, probe.UserId, minLocalDate, ct);
 
-        var userIds = relativeHabits.Concat(scheduledHabits).Concat(repeatHabits).Select(h => h.UserId).Distinct().ToList();
         var users = await dbContext.Users
             .AsNoTracking()
-            .Where(u => userIds.Contains(u.Id))
+            .Where(u => u.Id == probe.UserId)
             .ToDictionaryAsync(u => u.Id, ct);
 
         var (repeatAnchors, repeatEligibility, repeatSent) = await LoadRepeatSnapshot(
@@ -161,32 +165,34 @@ public partial class ReminderSchedulerService(
             users, loggedHabitDates, sentReminderSet, sentClockSet, sentScheduledSet, repeatHabits, repeatAnchors, repeatEligibility, repeatSent);
     }
 
-    private async Task ProcessRelativeReminders(ReminderSnapshot snapshot, OrbitDbContext dbContext,
+    private void ProcessRelativeReminders(ReminderSnapshot snapshot,
         List<PendingReminderPush> pending, DateTime nowUtc, CancellationToken ct)
     {
+        var sentByHabit = snapshot.SentReminderSet.ToLookup(r => r.HabitId);
+        var clocksByHabit = snapshot.SentClockSet.ToLookup(r => r.HabitId);
         foreach (var habit in snapshot.RelativeHabits)
         {
-            await ProcessSingleRelativeReminderAsync(
+            ProcessSingleRelativeReminder(
                 habit, snapshot.Users, snapshot.LoggedHabitDates, snapshot.SentReminderSet,
-                snapshot.SentClockSet, pending, dbContext, nowUtc, ct);
+                snapshot.SentClockSet, sentByHabit[habit.Id], clocksByHabit[habit.Id], pending, nowUtc, ct);
         }
     }
 
     private static async Task<(List<Habit> Relative, List<Habit> Scheduled)> LoadLegacyHabits(
-        OrbitDbContext dbContext, DateTime nowUtc, DateOnly minLocalDate, DateOnly maxLocalDate, CancellationToken ct)
+        OrbitDbContext dbContext, Guid userId, DateTime nowUtc, DateOnly minLocalDate, DateOnly maxLocalDate, CancellationToken ct)
     {
         var relativeHabits = await dbContext.Habits
             .AsNoTracking()
-            .Where(h => !h.IsCompleted && h.Schedule != HabitSchedule.General && h.ReminderEnabled && h.RepeatIntervalMinutes == null && h.DueTime != null
+            .Where(h => h.UserId == userId && !h.IsCompleted && h.Schedule != HabitSchedule.General && h.ReminderEnabled && h.RepeatIntervalMinutes == null && h.DueTime != null
                 && h.NextDueDate <= maxLocalDate
                 && (!h.EndDate.HasValue || h.EndDate.Value >= minLocalDate))
-            .ToListAsync(ct);
+            .LoadReminderPageAsync(ct);
         var scheduledHabits = await dbContext.Habits
             .AsNoTracking()
-            .Where(h => !h.IsCompleted && h.Schedule != HabitSchedule.General && h.ReminderEnabled && h.RepeatIntervalMinutes == null && h.DueTime == null
+            .Where(h => h.UserId == userId && !h.IsCompleted && h.Schedule != HabitSchedule.General && h.ReminderEnabled && h.RepeatIntervalMinutes == null && h.DueTime == null
                 && h.NextDueDate <= DateOnly.FromDateTime(nowUtc.AddDays(2))
                 && (!h.EndDate.HasValue || h.EndDate.Value >= minLocalDate))
-            .ToListAsync(ct);
+            .LoadReminderPageAsync(ct);
         scheduledHabits = scheduledHabits.Where(h => h.ScheduledReminders.Count > 0).ToList();
 
         return (relativeHabits, scheduledHabits);
@@ -214,12 +220,14 @@ public partial class ReminderSchedulerService(
         return LocalDueInstantUtc(reminderLocal, tz);
     }
 
-    private async Task ProcessSingleRelativeReminderAsync(
+    private void ProcessSingleRelativeReminder(
         Habit habit, Dictionary<Guid, User> users,
         HashSet<(Guid HabitId, DateOnly Date)> loggedHabitDates,
         HashSet<(Guid HabitId, DateOnly Date, int MinutesBefore)> sentReminderSet,
         HashSet<(Guid HabitId, DateOnly Date, TimeOnly Time, ScheduledReminderWhen? When)> sentClockSet,
-        List<PendingReminderPush> pending, OrbitDbContext dbContext, DateTime nowUtc, CancellationToken ct)
+        IEnumerable<(Guid HabitId, DateOnly Date, int MinutesBefore)> sentForHabit,
+        IEnumerable<(Guid HabitId, DateOnly Date, TimeOnly Time, ScheduledReminderWhen? When)> clocksForHabit,
+        List<PendingReminderPush> pending, DateTime nowUtc, CancellationToken ct)
     {
         if (!users.TryGetValue(habit.UserId, out var user)) return;
 
@@ -228,9 +236,9 @@ public partial class ReminderSchedulerService(
         var userToday = DateOnly.FromDateTime(userNow);
         if (HasEnded(habit, userToday))
             return;
-        var sentInstants = sentReminderSet.Where(r => r.HabitId == habit.Id)
+        var sentInstants = sentForHabit
             .Select(r => LocalDueInstantUtc(r.Date.ToDateTime(habit.DueTime!.Value), tz).AddMinutes(-r.MinutesBefore))
-            .Concat(sentClockSet.Where(r => r.HabitId == habit.Id)
+            .Concat(clocksForHabit
                 .Select(r => LocalReminderInstantUtc(r.Date.ToDateTime(r.Time), tz)))
             .ToHashSet();
 
@@ -259,12 +267,11 @@ public partial class ReminderSchedulerService(
                 var notification = Notification.Create(
                     habit.UserId, habit.Title, minutesText, NotificationUrls.Home, habit.Id);
 
-                if (!await TryRecordReminderAsync(habit, sentReminder, notification, dbContext, tz, nowUtc, ct))
-                    continue;
+                StageReminder(habit, sentReminder, notification, tz, nowUtc, ct);
 
                 sentReminderSet.Add((habit.Id, occurrenceDate, minutesBefore));
                 sentInstants.Add(reminderUtc);
-                pending.Add(new PendingReminderPush(habit.UserId, habit.Title, minutesText, habit.Id));
+                pending.Add(new PendingReminderPush(habit.UserId, habit.Title, minutesText, habit.Id, sentReminder.Id));
 
                 if (logger.IsEnabled(LogLevel.Debug))
                     LogSentReminder(logger, minutesBefore, habit.Id, habit.UserId);
@@ -288,30 +295,29 @@ public partial class ReminderSchedulerService(
                 var body = FormatScheduledReminderText(reminder.When!.Value, lang);
                 var sentReminder = SentReminder.Create(habit.Id, sendDate, 0, reminder.Time, reminder.When);
                 var notification = Notification.Create(habit.UserId, habit.Title, body, NotificationUrls.Home, habit.Id);
-                if (!await TryRecordReminderAsync(habit, sentReminder, notification, dbContext, tz, nowUtc, ct))
-                    continue;
+                StageReminder(habit, sentReminder, notification, tz, nowUtc, ct);
 
                 sentClockSet.Add(clockKey);
                 sentInstants.Add(sendUtc);
-                pending.Add(new PendingReminderPush(habit.UserId, habit.Title, body, habit.Id));
+                pending.Add(new PendingReminderPush(habit.UserId, habit.Title, body, habit.Id, sentReminder.Id));
             }
         }
     }
 
-    private async Task ProcessScheduledReminders(ReminderSnapshot snapshot, OrbitDbContext dbContext,
+    private void ProcessScheduledReminders(ReminderSnapshot snapshot,
         List<PendingReminderPush> pending, DateTime nowUtc, CancellationToken ct)
     {
         foreach (var habit in snapshot.ScheduledHabits)
         {
-            await ProcessSingleScheduledReminderAsync(
-                habit, snapshot.Users, snapshot.SentScheduledSet, pending, dbContext, nowUtc, ct);
+            ProcessSingleScheduledReminder(
+                habit, snapshot.Users, snapshot.SentScheduledSet, pending, nowUtc, ct);
         }
     }
 
-    private async Task ProcessSingleScheduledReminderAsync(
+    private void ProcessSingleScheduledReminder(
         Habit habit, Dictionary<Guid, User> users,
         HashSet<(Guid HabitId, DateOnly Date, TimeOnly ReminderTimeUtc, ScheduledReminderWhen? When)> sentScheduledSet,
-        List<PendingReminderPush> pending, OrbitDbContext dbContext, DateTime nowUtc, CancellationToken ct)
+        List<PendingReminderPush> pending, DateTime nowUtc, CancellationToken ct)
     {
         if (!users.TryGetValue(habit.UserId, out var user)) return;
 
@@ -341,11 +347,10 @@ public partial class ReminderSchedulerService(
             var notification = Notification.Create(
                 habit.UserId, habit.Title, text, NotificationUrls.Home, habit.Id);
 
-            if (!await TryRecordReminderAsync(habit, sentReminder, notification, dbContext, tz, nowUtc, ct))
-                continue;
+            StageReminder(habit, sentReminder, notification, tz, nowUtc, ct);
 
             sentScheduledSet.Add((habit.Id, userToday, sr.Time, sr.When));
-            pending.Add(new PendingReminderPush(habit.UserId, habit.Title, text, habit.Id));
+            pending.Add(new PendingReminderPush(habit.UserId, habit.Title, text, habit.Id, sentReminder.Id));
 
             if (logger.IsEnabled(LogLevel.Debug))
                 LogSentScheduledReminder(logger, sr.When, sr.Time, habit.Id, habit.UserId);
@@ -362,68 +367,72 @@ public partial class ReminderSchedulerService(
         return userTimeNow >= sr.Time;
     }
 
-    private async Task<bool> TryRecordReminderAsync(
-        Habit habit, SentReminder sentReminder, Notification notification,
-        OrbitDbContext dbContext, TimeZoneInfo zone, DateTime sentAtUtc, CancellationToken ct)
+    private void StageReminder(Habit habit, SentReminder sentReminder, Notification notification,
+        TimeZoneInfo zone, DateTime sentAtUtc, CancellationToken ct)
     {
-        await dbContext.SentReminders.AddAsync(sentReminder, ct);
+        ct.ThrowIfCancellationRequested();
+        _writes.Add(new(habit, sentReminder, notification, zone, sentAtUtc));
+    }
 
+    private sealed record ReminderWrite(Habit Habit, SentReminder Reminder, Notification Notification, TimeZoneInfo Zone, DateTime SentAtUtc);
+
+    private async Task<HashSet<Guid>> FlushRemindersAsync(OrbitDbContext db, CancellationToken ct)
+    {
+        if (_writes.Count == 0) return [];
+        db.SentReminders.AddRange(_writes.Select(w => w.Reminder));
+        foreach (var write in _writes.GroupBy(w => (w.Habit.Id,
+            DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(w.SentAtUtc, w.Zone)))).Select(g => g.Last()))
+            await RefreshInboxAsync(db, write, ct);
         try
         {
-            var reminderDate = sentReminder.When == ScheduledReminderWhen.DayBefore
-                ? sentReminder.Date.AddDays(1) : sentReminder.Date;
-            await HabitReminderInbox.RefreshAsync(new GenericRepository<Notification>(dbContext),
-                notification, zone, sentAtUtc, reminderDate, ct);
-            await dbContext.SaveChangesAsync(ct);
-        }
-        catch (DbUpdateException ex) when (DbUniqueViolation.IsUniqueViolation(ex))
-        {
-            DetachPendingEntries(dbContext);
-            if (logger.IsEnabled(LogLevel.Debug))
-                LogReminderAlreadySent(logger, habit.Id);
-            return false;
+            await db.SaveChangesAsync(ct);
+            return _writes.Select(w => w.Reminder.Id).ToHashSet();
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            DetachPendingEntries(dbContext);
-            LogReminderRecordFailed(logger, habit.Id, habit.UserId, ex);
-            return false;
+            DetachPendingEntries(db);
+            _snapshots.Clear();
         }
-
-        return true;
+        var accepted = new HashSet<Guid>();
+        foreach (var write in _writes)
+        {
+            db.SentReminders.Add(write.Reminder);
+            try
+            {
+                await RefreshInboxAsync(db, write, ct);
+                await db.SaveChangesAsync(ct);
+                accepted.Add(write.Reminder.Id);
+            }
+            catch (DbUpdateException ex) when (DbUniqueViolation.IsUniqueViolation(ex))
+            {
+                DetachPendingEntries(db);
+                if (logger.IsEnabled(LogLevel.Debug)) LogReminderAlreadySent(logger, write.Habit.Id);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                DetachPendingEntries(db);
+                LogReminderRecordFailed(logger, write.Habit.Id, write.Habit.UserId, ex);
+            }
+        }
+        return accepted;
     }
+
+    private static Task RefreshInboxAsync(OrbitDbContext db, ReminderWrite write, CancellationToken ct) =>
+        HabitReminderInbox.RefreshAsync(new GenericRepository<Notification>(db), write.Notification, write.Zone, write.SentAtUtc,
+            write.Reminder.When == ScheduledReminderWhen.DayBefore ? write.Reminder.Date.AddDays(1) : write.Reminder.Date, ct);
 
     private async Task SendPushesAsync(IReadOnlyList<PendingReminderPush> pending, CancellationToken ct)
     {
         if (pending.Count == 0) return;
-
-        var concurrency = Math.Min(_pushConcurrency, pending.Count);
-        var queue = new ConcurrentQueue<PendingReminderPush>(pending);
-        var workers = new Task[concurrency];
-        for (var i = 0; i < concurrency; i++)
-            workers[i] = DrainPushQueueAsync(queue, ct);
-
-        await Task.WhenAll(workers);
-    }
-
-    private async Task DrainPushQueueAsync(ConcurrentQueue<PendingReminderPush> queue, CancellationToken ct)
-    {
         using var scope = scopeFactory.CreateScope();
-        var pushService = scope.ServiceProvider.GetRequiredService<IPushNotificationService>();
-
-        while (queue.TryDequeue(out var push))
+        try
         {
-            try
-            {
-                if (push.Data is { } data)
-                    await pushService.SendReminderToUserAsync(push.UserId, push.Title, push.Body, data, NotificationUrls.Home, ct);
-                else
-                    await pushService.SendToUserAsync(push.UserId, push.Title, push.Body, NotificationUrls.Home, ct);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                LogReminderPushFailed(logger, push.HabitId, push.UserId, ex);
-            }
+            await scope.ServiceProvider.GetRequiredService<IPushNotificationService>().SendManyAsync(pending.Select(p =>
+                new Orbit.Domain.Models.PushDelivery(p.UserId, p.Title, p.Body, NotificationUrls.Home, p.Data)).ToArray(), ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            LogReminderPushFailed(logger, pending[0].HabitId, pending[0].UserId, ex);
         }
     }
 
@@ -433,14 +442,14 @@ public partial class ReminderSchedulerService(
             entry.State = EntityState.Detached;
     }
 
-    private readonly record struct PendingReminderPush(Guid UserId, string Title, string Body, Guid HabitId,
+    private readonly record struct PendingReminderPush(Guid UserId, string Title, string Body, Guid HabitId, Guid ReminderId,
         IReadOnlyDictionary<string, string>? Data = null);
 
     private sealed record ReminderProbe
     {
-        public long HabitCount { get; init; }
-        public long HabitVersionSum { get; init; }
-        public long UserPreferencesVersionSum { get; init; }
+        public Guid UserId { get; init; }
+        public long ScheduleVersion { get; init; }
+        public int UserPreferencesVersion { get; init; }
     }
 
     private sealed record ReminderSnapshot(

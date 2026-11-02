@@ -9,6 +9,8 @@ namespace Orbit.Domain.Interfaces;
 public interface IContentModerationService
 {
     Task<ModerationResult> CheckTextAsync(string text, CancellationToken cancellationToken = default);
+    Task<ModerationResult> CheckTextAsync(string text, IReadOnlyList<string> enabledFlags, CancellationToken cancellationToken = default) =>
+        CheckTextAsync(text, cancellationToken);
 }
 
 /// <summary>

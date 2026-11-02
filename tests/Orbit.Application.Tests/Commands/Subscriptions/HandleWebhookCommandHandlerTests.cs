@@ -50,6 +50,56 @@ public class HandleWebhookCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_InvoiceWithExpandedRecurringPrice_UsesPayloadPeriodWithoutProviderCall()
+    {
+        var user = User.Create("Alex", "payload@example.com").Value;
+        user.SetStripeSubscription("sub_test", DateTime.UtcNow.AddDays(1));
+        _userRepo.FindOneTrackedIgnoringFiltersAsync(Arg.Any<Expression<Func<User, bool>>>(), Arg.Any<CancellationToken>()).Returns(user);
+        var periodEnd = DateTime.UtcNow.AddYears(1);
+        var invoice = new Invoice
+        {
+            Id = "in_test",
+            Object = "invoice",
+            Parent = new InvoiceParent { Type = "subscription_details", SubscriptionDetails = new InvoiceParentSubscriptionDetails { SubscriptionId = "sub_test" } },
+            Lines = new StripeList<InvoiceLineItem>
+            {
+                Data = [new InvoiceLineItem
+                {
+                    Parent = new InvoiceLineItemParent { Type = "subscription_item_details", SubscriptionItemDetails = new InvoiceLineItemParentSubscriptionItemDetails
+                    { Subscription = "sub_test", Proration = false } },
+                    Period = new InvoiceLineItemPeriod { Start = DateTime.UtcNow, End = periodEnd },
+                    Pricing = new InvoiceLineItemPricing { Type = "price_details", PriceDetails = new InvoiceLineItemPricingPriceDetails
+                    { Price = new Price { Id = "price_yearly", Recurring = new PriceRecurring { Interval = "year", IntervalCount = 1 } } } }
+                }]
+            }
+        };
+        var (json, signature) = BuildSignedEvent("invoice.paid", System.Text.Json.JsonSerializer.Serialize(invoice));
+        (await _handler.Handle(new(json, signature), default)).IsSuccess.Should().BeTrue();
+        user.SubscriptionInterval.Should().Be(SubscriptionInterval.Yearly);
+        user.SubscriptionExpiresAtUtc.Should().BeCloseTo(periodEnd, TimeSpan.FromSeconds(1));
+        await _subscriptionService.DidNotReceiveWithAnyArgs().GetAsync(default!, default, default, default);
+    }
+
+    [Fact]
+    public async Task Handle_RedeliveredStripeEvent_SkipsProviderAndWrites()
+    {
+        var user = User.Create("Alex", "test@example.com").Value;
+        _userRepo.FindOneTrackedIgnoringFiltersAsync(Arg.Any<Expression<Func<User, bool>>>(), Arg.Any<CancellationToken>()).Returns(user);
+        _subscriptionService.GetAsync("sub_test", Arg.Any<SubscriptionGetOptions>(), Arg.Any<RequestOptions>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                _unitOfWork.HasActiveTransaction.Should().BeFalse();
+                return CreateMockSubscription("sub_test");
+            });
+        var (json, signature) = BuildSignedEvent("checkout.session.completed", BuildCheckoutSessionJson(UserId.ToString(), "sub_test", "cus_test"));
+        (await _handler.Handle(new(json, signature), default)).IsSuccess.Should().BeTrue();
+        _processedRepo.AnyAsync(Arg.Any<Expression<Func<ProcessedStripeEvent, bool>>>(), Arg.Any<CancellationToken>()).Returns(true);
+        (await _handler.Handle(new(json, signature), default)).IsSuccess.Should().BeTrue();
+        await _subscriptionService.Received(1).GetAsync("sub_test", Arg.Any<SubscriptionGetOptions>(), Arg.Any<RequestOptions>(), Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Handle_WebhookSecretNotConfigured_ReturnsFailure()
     {
         var settings = Options.Create(new StripeSettings { WebhookSecret = "" });
@@ -150,7 +200,7 @@ public class HandleWebhookCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -256,7 +306,7 @@ public class HandleWebhookCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -385,7 +435,7 @@ public class HandleWebhookCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -424,7 +474,7 @@ public class HandleWebhookCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -442,7 +492,7 @@ public class HandleWebhookCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -458,7 +508,7 @@ public class HandleWebhookCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ReservesProcessedEventViaConstraint_WithoutCheckThenInsertPreCheck()
+    public async Task Handle_ChecksProcessedEventBeforeProviderAndReservesViaConstraint()
     {
         var user = User.Create("Alex", "test@example.com").Value;
         _userRepo.FindOneTrackedIgnoringFiltersAsync(
@@ -477,7 +527,7 @@ public class HandleWebhookCommandHandlerTests
         var result = await _handler.Handle(new HandleWebhookCommand(json, signature), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        await _processedRepo.DidNotReceive().AnyAsync(
+        await _processedRepo.Received(1).AnyAsync(
             Arg.Any<Expression<Func<ProcessedStripeEvent, bool>>>(),
             Arg.Any<CancellationToken>());
         await _processedRepo.Received(1).AddAsync(
@@ -633,7 +683,7 @@ public class HandleWebhookCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         await _userRepo.DidNotReceive().FindOneTrackedIgnoringFiltersAsync(
             Arg.Any<Expression<Func<User, bool>>>(), Arg.Any<CancellationToken>());
-        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -796,7 +846,7 @@ public class HandleWebhookCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         await _userRepo.DidNotReceive().FindOneTrackedIgnoringFiltersAsync(
             Arg.Any<Expression<Func<User, bool>>>(), Arg.Any<CancellationToken>());
-        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]

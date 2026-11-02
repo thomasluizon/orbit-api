@@ -41,6 +41,7 @@ public class OrbitDbContext : DbContext
     public DbSet<AppConfig> AppConfigs => Set<AppConfig>();
     public DbSet<Tag> Tags => Set<Tag>();
     public DbSet<PushSubscription> PushSubscriptions => Set<PushSubscription>();
+    internal DbSet<ReminderScheduleProbe> ReminderScheduleProbes => Set<ReminderScheduleProbe>();
     public DbSet<SentReminder> SentReminders => Set<SentReminder>();
     public DbSet<SentSlipAlert> SentSlipAlerts => Set<SentSlipAlert>();
     public DbSet<ProactiveItem> ProactiveItems => Set<ProactiveItem>();
@@ -127,6 +128,7 @@ public class OrbitDbContext : DbContext
         ConfigureTagEntity(modelBuilder);
         ConfigurePushSubscriptionEntity(modelBuilder);
         ConfigureSentReminderEntity(modelBuilder);
+        ConfigureReminderScheduleProbeEntity(modelBuilder);
         ConfigureSentSlipAlertEntity(modelBuilder);
         ConfigureProactiveEntities(modelBuilder);
         modelBuilder.Entity<ProcessedAppStoreNotification>(entity =>
@@ -324,10 +326,22 @@ public class OrbitDbContext : DbContext
         });
     }
 
+    private static void ConfigureReminderScheduleProbeEntity(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ReminderScheduleProbe>(entity =>
+        {
+            entity.ToTable("ReminderScheduleProbes");
+            entity.HasKey(p => p.UserId);
+            entity.Property(p => p.Version).HasDefaultValue(0L);
+            entity.HasOne<User>().WithMany().HasForeignKey(p => p.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+    }
+
     private static void ConfigureSentReminderEntity(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<SentReminder>(entity =>
         {
+            entity.HasIndex(r => new { r.HabitId, r.Date }).IsCreatedConcurrently();
             entity.HasIndex(r => new { r.HabitId, r.Date, r.MinutesBefore, r.ReminderTimeUtc, r.When })
                 .IsUnique()
                 .AreNullsDistinct(false)
@@ -377,6 +391,7 @@ public class OrbitDbContext : DbContext
     {
         modelBuilder.Entity<ProcessedPlayNotification>(entity =>
         {
+            entity.Property(e => e.ConsumedCouponId).HasMaxLength(255);
             entity.HasIndex(p => p.MessageId).IsUnique();
             entity.Property(p => p.MessageId).IsRequired().HasMaxLength(255);
         });
@@ -827,6 +842,9 @@ public class OrbitDbContext : DbContext
     {
         modelBuilder.Entity<Habit>(entity =>
         {
+            entity.HasIndex(h => new { h.ReminderEnabled, h.IsCompleted, h.Schedule }, "IX_Habits_Reminder")
+                .HasFilter("\"ReminderEnabled\" = TRUE AND \"IsCompleted\" = FALSE")
+                .IsCreatedConcurrently();
             entity.HasIndex(h => h.UserId);
             entity.HasIndex(h => new { h.UserId, h.IsDeleted });
             entity.HasIndex(h => new { h.UserId, h.UpdatedAtUtc });

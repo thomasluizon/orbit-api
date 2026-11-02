@@ -460,7 +460,7 @@ public partial class ProcessUserChatCommandHandlerTests
         replay.Value.Should().BeEquivalentTo(first.Value);
         user.GetAiMessagesUsedToday(Today).Should().Be(1);
         work.Order.Where(item => item.StartsWith("lock:astra-blocks:", StringComparison.Ordinal))
-            .Should().HaveCount(4).And.OnlyContain(item => item == $"lock:astra-blocks:{UserId}");
+            .Should().HaveCount(2).And.OnlyContain(item => item == $"lock:astra-blocks:{UserId}");
         await _aiIntentService.Received(1).SendWithToolsAsync(Arg.Any<AiToolRequest>(),
             Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
     }

@@ -66,7 +66,7 @@ public partial class PlayNotificationCleanupService(
         var playCutoff = DateTime.UtcNow - PlayRetentionPeriod;
 #pragma warning restore ORBIT0004
         var purgedNotifications = await dbContext.ProcessedPlayNotifications
-            .Where(n => n.ProcessedAtUtc < playCutoff)
+            .Where(n => n.ProcessedAtUtc < playCutoff && n.ConsumedCouponId == null)
             .ExecuteDeleteAsync(ct);
 
         if (purgedNotifications > 0)
