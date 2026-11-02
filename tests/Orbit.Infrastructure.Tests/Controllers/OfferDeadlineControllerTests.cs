@@ -44,23 +44,19 @@ public sealed partial class OfferDeadlineControllerTests
     [InlineData(true, false)]
     [InlineData(false, true)]
     [InlineData(true, true)]
-    public async Task EquivalentGoalRequest_OfferDeadlinePreservesHttpReply(bool continuation, bool callerCancelled)
+    public async Task EquivalentGoalRequest_ReadOfferUsesNoSelectorAndPreservesCancellation(bool continuation, bool callerCancelled)
     {
         var input = JsonNode.Parse(await File.ReadAllTextAsync(FixturePath("OfferDeadlineRequest.json")))!.AsObject();
-        using var transport = new DeadlineTransport(continuation);
+        using var transport = new DeadlineTransport(continuation, stallMain: callerCancelled);
         using var http = new HttpClient(transport);
         using var caller = new CancellationTokenSource();
         var (controller, goal, offers, mediator, messages) = CreateController(http, caller.Token);
         var pending = controller.ProcessChat(input["message"]!.GetValue<string>(), input["history"]!.GetValue<string>(),
             null, caller.Token, input["clientContext"]!.ToJsonString(), evalTrace: "1");
-        if (await Task.WhenAny(pending, transport.SelectionEntered.Task) == pending)
-            (await pending).Should().BeOfType<OkObjectResult>();
-        await transport.SelectionEntered.Task.WaitAsync(TimeSpan.FromSeconds(10));
-
-        if (callerCancelled) await caller.CancelAsync();
-
         if (callerCancelled)
         {
+            await transport.StalledRequestEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await caller.CancelAsync();
             Func<Task> completion = () => pending;
             await completion.Should().ThrowAsync<OperationCanceledException>();
         }
@@ -79,13 +75,14 @@ public sealed partial class OfferDeadlineControllerTests
             reply.EvalTrace!.ToolCalls.Should().ContainSingle(call => call.Name == "query_goals");
         }
 
-        transport.Cancelled.Should().BeTrue();
-        transport.Requests.Should().HaveCount(continuation ? 3 : 2);
-        transport.Requests[^1].Should().Contain(ProactiveOfferPlanner.SelectionInstruction);
-        transport.Requests[^1].Should().Contain("Run five kilometers");
-        messages.Should().Contain(message => message.Contains("TaskCanceledException", StringComparison.Ordinal));
-        messages.Should().Contain(message => message.Contains("AI token usage was missing from the buffered chat response", StringComparison.Ordinal));
-        messages.Should().Contain("AI completion failed at completion with cancelled");
+        transport.Cancelled.Should().Be(callerCancelled);
+        transport.Requests.Should().HaveCount(callerCancelled ? 1 : continuation ? 2 : 1);
+        transport.Requests.Should().OnlyContain(body => !body.Contains(ProactiveOfferPlanner.SelectionInstruction, StringComparison.Ordinal));
+        transport.Requests[0].Should().Contain("Run five kilometers");
+        if (callerCancelled)
+            messages.Should().Contain("AI completion failed at completion with cancelled");
+        else
+            messages.Should().NotContain("AI completion failed at completion with cancelled");
         await offers.DidNotReceiveWithAnyArgs().IssueAsync(default, default, default!, default);
         await mediator.Received(1).Send(Arg.Is<ProcessUserChatCommand>(command =>
             command.Message == input["message"]!.GetValue<string>() && command.History!.Count == 0
@@ -243,18 +240,18 @@ public sealed partial class OfferDeadlineControllerTests
             Func<TState, Exception?, string> formatter) => messages.Add(formatter(state, exception));
     }
 
-    private sealed class DeadlineTransport(bool continuation) : HttpMessageHandler
+    private sealed class DeadlineTransport(bool continuation, bool stallMain = false) : HttpMessageHandler
     {
         public List<string> Requests { get; } = [];
         public bool Cancelled { get; private set; }
-        public TaskCompletionSource SelectionEntered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource StalledRequestEntered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             Requests.Add(await request.Content!.ReadAsStringAsync(cancellationToken));
-            if (Requests.Count > (continuation ? 2 : 1))
+            if (stallMain || Requests.Count > (continuation ? 2 : 1))
             {
-                SelectionEntered.TrySetResult();
+                StalledRequestEntered.TrySetResult();
                 try { await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken); }
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                 {

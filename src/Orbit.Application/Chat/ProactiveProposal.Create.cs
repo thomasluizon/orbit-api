@@ -10,10 +10,10 @@ public static partial class ProactiveProposal
 {
     private static string? FieldInstruction(string field) => field switch
     {
-        "reminder_enabled" => "For a new dated OneTime task with due_time and no reminder preference, set true and include reminder_enabled and reminder_times in suggested_fields. Preserve explicit false and all requested or stored reminders.",
-        "reminder_times" => $"Minutes before due_time; 0 means at that time. For an unrequested timed-task reminder, set [{AppConstants.DefaultReminderMinutes}], set reminder_enabled=true and list both names in suggested_fields. Prescribed fixed clock times use scheduled_reminders instead.",
-        "parent_habit_id" => "When unrequested, choose a fitting owned routine from offer_account_facts.Habits, set its ID here and list parent_habit_id in suggested_fields. Do not leave it null when a clear fit exists. Ambiguous parents require a preview choice. Keep the bulk container parent unset for item-level suggestions.",
-        "goal_ids" => "Use matching owned IDs from offer_account_facts.ActiveGoals. When unrequested, set the matching IDs here and list goal_ids in suggested_fields. Preserve stored links; query only missing facts, never create an equivalent goal.",
+        "reminder_enabled" => "For a timed OneTime task without a reminder preference, set true and mark reminder_enabled and reminder_times in suggested_fields; preserve explicit false.",
+        "reminder_times" => $"Minutes before due_time; suggest [{AppConstants.DefaultReminderMinutes}] with reminder_enabled=true, marking both in suggested_fields. Prescribed times use scheduled_reminders.",
+        "parent_habit_id" => "Set a fitting offer_account_facts.Habits ID; mark parent_habit_id in suggested_fields. Resolve ambiguity in preview; leave the bulk parent unset.",
+        "goal_ids" => "Set matching offer_account_facts.ActiveGoals IDs; mark unrequested goal_ids in suggested_fields. Preserve links; never requery or create equivalent goals.",
         _ => null
     };
 

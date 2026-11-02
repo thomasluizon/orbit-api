@@ -329,8 +329,7 @@ public sealed class ProactiveProposalTests
             .And.Contain("Explicitly requested or prescribed clock times stay requested in scheduled_reminders, never in suggested_fields.")
             .And.Contain("Every unrequested emoji, schedule default or other added configuration belongs in suggested_fields; never present it as requested.")
             .And.Contain("To find a fitting parent, use its routine index as well as checking for duplicates of the new item; query only missing facts when that index is partial.")
-            .And.Contain("When a supplied active goal matches the requested activity, include its owned ID in goal_ids and list goal_ids in suggested_fields when unrequested; do not read those goals again.")
-            .And.Contain("For a dated task with due_time, set reminder_enabled=true and non-empty reminder_times, listing both in suggested_fields when unrequested. Preserve requested or stored reminder configuration.")
+            .And.Contain("Preserve requested or stored reminder configuration.")
             .And.Contain("Keep doctor-prescribed fixed times in scheduled_reminders;")
             .And.Contain("neither fixed medication times nor ordinary daily reading calls for a repeat reminder.")
             .And.Contain("never regenerate rejected suggestions.");

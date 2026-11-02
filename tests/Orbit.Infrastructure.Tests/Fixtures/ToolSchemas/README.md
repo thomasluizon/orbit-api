@@ -23,6 +23,17 @@ The date-context correction in thomasluizon/orbit-tickets#1944 updates only the
 `due_date` and `due_time` descriptions at their existing schema sites. Every
 constraint and the original inlined structure remain unchanged.
 
+The proactive-offer argument amendment for thomasluizon/orbit-tickets#1674
+updates 81 existing description sites for create proposals and concrete starting
+actions. It adds `orbit_offer_intent` and its strict required entry at 18 existing
+offer read-schema sites. Only those descriptions and the declared control
+properties were copied from the actual expanded SDK producer. The 71 repeated
+dismissal-control descriptions are removed; the full dismissal instruction remains
+in the shared system prompt. Every prior type,
+constraint, enum, required entry and inlined structure is retained. The equivalence
+test still checks the complete amended schema. The compact exporter did not
+replace the baseline wholesale.
+
 The bounded schema builders remain the execution contract. Export compaction recognizes
 the repeated habit structure, keeps a single recursive habit definition, and shares
 identical schema blocks within a tool when a reference saves space. The strict normalizer

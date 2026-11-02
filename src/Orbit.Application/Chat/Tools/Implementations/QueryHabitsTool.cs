@@ -21,15 +21,12 @@ public class QueryHabitsTool(
     public bool IsReadOnly => true;
 
     public string Description =>
-        "Read individual habits, schedules, metrics and checklists. For an unstructured task and habit preview, use this lookup for existing IDs and stored titles; no calendar, habit month, profile or analytics read is needed. Use for habit listings, including compound requests for habits and goals; "
-        + "pair with query_goals for the goals. A daily summary does not replace this listing. Call before answering habit questions; indexes do not ground replies. "
-        + "For a habit's completion or skip state on a day, use date with is_completed null to include done, remaining and skipped entries. "
-        + "For a requested skip, call skip_habit or bulk_skip_habits after resolving the target, even when isSkippedOnDate is true; this read does not perform that action. "
+        "Read habits, schedules, metrics and checklists before answering; indexes do not ground replies. For compound requests for habits and goals, pair with query_goals. A daily summary does not replace this listing. "
+        + "For unstructured previews, resolve existing IDs and stored titles here, without calendar, habit-month, profile or analytics reads. "
+        + "For completion or skip state, use date with is_completed=null to include done, remaining and skipped. Still call skip_habit or bulk_skip_habits for a requested skip, even when isSkippedOnDate=true. "
         + "Use an explicit habit ID supplied by the person directly in the matching write tool; no selection lookup or ask is needed. "
-        + "For choosing records or resolving an unclear write target, set for_selection=true and orbit_read_complete=false, then call ask. "
-        + "Once a selection read returns the needed candidates, call ask with them next. Do not repeat the same selection scope just to change optional filters; read again only for missing or partial candidates. "
-        + "For a restart proposal, set for_selection=false and orbit_read_complete=false, then prepare the complete bulk_reschedule_habits preview yourself; this account read needs no selection question. "
-        + "A selection lookup never finishes the answer or authorizes a write, even with one candidate. Multiple matches require the person's choice.";
+        + "For record selection or unclear targets, set for_selection=true and orbit_read_complete=false, then ask with returned candidates, even one. Requery only missing or partial candidates; selection never authorizes writes. "
+        + "For restart, set for_selection=false and orbit_read_complete=false, then prepare the complete bulk_reschedule_habits preview; no selection question.";
 
     public object GetParameterSchema() => new
     {
