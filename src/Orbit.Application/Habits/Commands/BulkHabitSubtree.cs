@@ -12,6 +12,28 @@ internal static class BulkHabitSubtree
     private static readonly BulkHabitItemValidator RootValidator = new(isRoot: true);
     private static readonly BulkHabitItemValidator ChildValidator = new(isRoot: false);
 
+    internal static Result CheckLimits(IReadOnlyList<BulkHabitItem> roots, int maxDepth = int.MaxValue)
+    {
+        if (roots.Count > AppConstants.MaxBulkOperationSize)
+            return Result.Failure(ErrorCopy.English(ValidationErrorCodes.BulkCreateLimit), ValidationErrorCodes.BulkCreateLimit);
+        var pending = new Stack<(BulkHabitItem Item, int Depth)>(roots.Select(root => (root, 0)));
+        var count = 0;
+        while (pending.TryPop(out var next))
+        {
+            count++;
+            if (next.Depth >= maxDepth)
+                return Result.Failure(ErrorMessages.MaxDepthReached.Format(maxDepth));
+            var children = next.Item.SubHabits ?? [];
+            if (children.Count > AppConstants.MaxSubHabits)
+                return Result.Failure(ErrorCopy.English(ValidationErrorCodes.SubHabitLimit), ValidationErrorCodes.SubHabitLimit);
+            if (count + pending.Count + children.Count > AppConstants.MaxBulkOperationSize)
+                return Result.Failure(ErrorCopy.English(ValidationErrorCodes.BulkCreateLimit), ValidationErrorCodes.BulkCreateLimit);
+            foreach (var child in children)
+                pending.Push((child, next.Depth + 1));
+        }
+        return Result.Success();
+    }
+
     internal sealed record Node(Habit Habit, IReadOnlyList<Tag> Tags);
 
     internal static Result<IReadOnlyList<Node>> Build(
@@ -19,6 +41,12 @@ internal static class BulkHabitSubtree
         CancellationToken ct, out string? field)
     {
         field = null;
+        var limits = CheckLimits([root], maxDepth);
+        if (limits.IsFailure)
+        {
+            field = "SubHabits";
+            return limits.PropagateError<IReadOnlyList<Node>>();
+        }
         var nodes = new List<Node>();
         var pending = new Stack<(BulkHabitItem Item, Habit? Parent, int Position, int Depth)>();
         pending.Push((root, null, rootPosition, 0));

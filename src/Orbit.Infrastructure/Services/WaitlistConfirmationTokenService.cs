@@ -22,7 +22,7 @@ public sealed class WaitlistConfirmationTokenService(
 
         var payload = $"{email}|{language}|{expiresAtUnix}";
         var payloadBytes = Encoding.UTF8.GetBytes(payload);
-        return SignedTokenCodec.Encode(payloadBytes, _settings.SigningKey);
+        return SignedTokenCodec.Encode(WaitlistTokenCipher.Encrypt(payloadBytes, _settings.SigningKey), _settings.SigningKey);
     }
 
     public bool TryValidateToken(string token, out string email, out string language)
@@ -33,7 +33,9 @@ public sealed class WaitlistConfirmationTokenService(
         if (string.IsNullOrWhiteSpace(_settings.SigningKey) || string.IsNullOrWhiteSpace(token))
             return false;
 
-        if (!SignedTokenCodec.TryDecode(token, _settings.SigningKey, out var payloadBytes))
+        if (token.Length > 4096
+            || !SignedTokenCodec.TryDecode(token, _settings.SigningKey, out var encryptedBytes)
+            || !WaitlistTokenCipher.TryDecrypt(encryptedBytes, _settings.SigningKey, out var payloadBytes))
             return false;
 
         var parts = Encoding.UTF8.GetString(payloadBytes).Split('|');

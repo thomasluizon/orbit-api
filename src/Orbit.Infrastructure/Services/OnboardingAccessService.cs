@@ -28,7 +28,8 @@ public sealed class OnboardingAccessService(
     public async Task<OnboardingChallenge?> ChallengeAsync(string platform, string clientIp, CancellationToken cancellationToken)
     {
         if (!Configured(platform) || !await quotas.TryAcquireAsync("onboarding-enroll", Hash(clientIp),
-                10, 1, TimeSpan.FromHours(1), cancellationToken))
+                10, 1, TimeSpan.FromHours(1), cancellationToken)
+            || !await AcquireAttestationQuotaAsync(cancellationToken))
             return null;
         var expires = clock.GetUtcNow().Add(ChallengeLifetime);
         return new OnboardingChallenge(Sign(new Credential("challenge", platform, RandomId(), RandomId(),
@@ -39,7 +40,13 @@ public sealed class OnboardingAccessService(
         string clientIp, CancellationToken cancellationToken)
     {
         var credential = Read(challenge, "challenge", evidence.Platform, clientIp);
-        if (credential is null || !await ConsumeAsync(challenge, credential, cancellationToken))
+        if (credential is null)
+            return null;
+        var enrollLimit = await config.GetAsync(AppConfigKeys.OnboardingEnrollAttemptsPerInstallPerHour, 0, cancellationToken);
+        if (!await quotas.TryAcquireAsync("onboarding-enroll-install", Hash(credential.Subject), enrollLimit, 1,
+                TimeSpan.FromHours(1), cancellationToken)
+            || !await ConsumeAsync(challenge, credential, cancellationToken)
+            || !await AcquireAttestationQuotaAsync(cancellationToken))
             return null;
         var proof = await VerifyAsync(evidence, challenge, null, 0, cancellationToken);
         if (proof is null)
@@ -87,6 +94,14 @@ public sealed class OnboardingAccessService(
 
         var next = credential with { Nonce = RandomId(), Counter = proof.Counter };
         return new OnboardingAccess(Sign(next));
+    }
+
+    private async Task<bool> AcquireAttestationQuotaAsync(CancellationToken ct)
+    {
+        var hourly = await config.GetAsync(AppConfigKeys.OnboardingAttestationCallsPerHour, 0, ct);
+        var daily = await config.GetAsync(AppConfigKeys.OnboardingAttestationCallsPerDay, 0, ct);
+        return await quotas.TryAcquireAsync("onboarding-attestation-hour", "global", hourly, 1, TimeSpan.FromHours(1), ct)
+            && await quotas.TryAcquireAsync("onboarding-attestation-day", "global", daily, 1, TimeSpan.FromDays(1), ct);
     }
 
     public static string BindRequest(string installId, OnboardingInput input)
