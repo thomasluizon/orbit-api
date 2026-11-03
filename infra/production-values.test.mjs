@@ -24,6 +24,12 @@ test('production API values are pinned', () => {
   assert.match(api, /Storage__S3__Bucket\s*=\s*aws_s3_bucket.uploads\["production"\].bucket/)
   assert.match(text('uploads.tf'), /bucket\s*=\s*"orbit-uploads-\$\{each.key\}-713285551626"/)
 })
+test('staging overrides production to enable bot protection while production stays off', () => {
+  const api = configuration.split('  production_api_values = {')[1].split('  staging_api_values =')[0]
+  const staging = configuration.split('  staging_api_values = merge(local.production_api_values, {')[1].split('\n  })')[0]
+  value(api, 'BotProtection__Enabled', 'false')
+  value(staging, 'BotProtection__Enabled', 'true')
+})
 test('api_secret_keys covers every required API secret', () => {
   const keys = [...configuration.split('api_secret_keys = toset([')[1].split('])')[0].matchAll(/"([^"]+)"/g)].map(match => match[1])
   assert.deepEqual(keys.sort(), ['AI__ApiKey', 'Encryption__Key', 'Firebase__CredentialsJson', 'GooglePlay__ServiceAccountJson', 'Google__ClientSecret', 'Jwt__SecretKey', 'Marketing__UnsubscribeSigningKey', 'PostHog__ApiKey', 'SMOKE_TEST_CODE', 'SMOKE_TEST_EMAIL', 'Sentry__Dsn', 'Stripe__SecretKey', 'Stripe__WebhookSecret', 'Vapid__PrivateKey', 'Waitlist__SigningKey', 'Wns__ClientSecret'].sort())
