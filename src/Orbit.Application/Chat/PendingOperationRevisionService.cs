@@ -2,6 +2,8 @@ using static Orbit.Application.Chat.Tools.ToolArgumentNames;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using FluentValidation;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Orbit.Application.Chat.Tools;
 using Orbit.Domain.Common;
 using Orbit.Domain.Interfaces;
@@ -28,7 +30,7 @@ public sealed partial class PendingOperationRevisionService(
     IPendingAgentOperationStore store,
     IPendingOperationChangePreviewer previewer,
     IValidator<RevisePendingOperationRequest> validator,
-    AiToolRegistry toolRegistry, IConversationOfferStore? offerStore = null, IConversationPlanStore? plans = null)
+    AiToolRegistry toolRegistry, IConversationOfferStore? offerStore = null, IConversationPlanStore? plans = null, ILogger<PendingOperationRevisionService>? logger = null)
 {
     public async Task<PendingOperationRevisionResult> RefreshAsync(
         Guid userId, Guid pendingOperationId, CancellationToken cancellationToken, AgentClientContext? clientContext = null)
@@ -99,7 +101,8 @@ public sealed partial class PendingOperationRevisionService(
         {
             return store.Cancel(userId, pendingOperationId, expectedFingerprint)
                 ? new PendingOperationRevisionResult(true, null, null, null, Cancelled: true,
-                    Plan: plans is null ? null : await plans.ChangeAsync(userId, pendingOperationId, "skipped", cancellationToken))
+                    Plan: await ConversationPlanUpdates.AfterCommitAsync(plans, userId, pendingOperationId, "skipped",
+                        logger ?? NullLogger<PendingOperationRevisionService>.Instance, cancellationToken))
                 : Failure("revision_conflict");
         }
 

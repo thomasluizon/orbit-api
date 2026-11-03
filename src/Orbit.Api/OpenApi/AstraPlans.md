@@ -54,6 +54,34 @@ required. The `astra_conversation_recording` gate is rechecked for recording
 and updates; when off, no plan is stored. Deleting the conversation deletes
 its plan with the rest of the turn.
 
+Plan response updates are auxiliary after a committed approval, rejection or
+execution. A failed update logs an error with `PendingOperationId` and preserves
+the primary response; request cancellation still propagates. Confirmation and
+rejection already patch the stored plan atomically with their pending-state
+changes through `PendingAgentOperationStore.SaveChangesWithConversationOutcomes`.
+Their subsequent response update must not invalidate those commits.
+
+Execution cannot universally share that transaction: `ExecuteWithPolicyAsync`
+uses a shared transaction only for transactional tools and account change sets;
+other tools dispatch commands with their own save boundaries or external effects.
+The executor records the actual terminal outcome in the existing agent audit
+store with source `pending_operation_execution` and the pending operation ID as
+`TargetId`, then attempts the auxiliary plan update. The outcome contains no
+conversation text and uses no model call. Audit persistence retains its existing
+independent scope and error reporting. If both the execution audit and the plan
+write are unavailable, the primary response is still preserved and both failures
+are observable; reload leaves the execution unresolved rather than inferring
+success from a consumed confirmation.
+
+Conversation display and model-history reads repair unfinished approval steps
+from the owner's pending state and explicit execution outcome. Approval alone
+stays running. A consumed confirmation without an execution outcome never proves
+success or rejection, including after its approval window expires. A failed execution remains failed even when its confirmation was consumed.
+Reconfirmation excludes older execution outcomes. Repair is bounded to the loaded
+page, takes the same user write lock and rechecks `astra_conversation_recording`
+before writing encrypted plan JSON. Disabling recording prevents repair writes.
+No schema migration or additional configuration is required.
+
 Old clients may ignore the additional fields and unknown stream event types.
 Old payloads without plans still deserialize. No client capability is needed
 to receive the additive fields, and existing parts and action blocks retain

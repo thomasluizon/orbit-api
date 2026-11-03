@@ -38,11 +38,18 @@ public partial class AgentOperationExecutor(
                 AgentOperationFingerprint.Compute(operation.Id, arguments.GetRawText()), token) : null;
         var response = await ExecuteCoreAsync(request, cancellationToken);
         if (pending is not null && plans is not null)
+        {
+            var succeeded = response.Operation.Status == AgentOperationStatus.Succeeded && !IsPartialMutation(response.Operation.Payload);
+            await TryAuditAsync(new AuditContext(request with { OperationId = ConversationPlanUpdates.ExecutionAuditSource },
+                pending.CapabilityId, response.Operation.RiskClass, AgentPolicyDecisionStatus.Allowed,
+                succeeded ? AgentOperationStatus.Succeeded : AgentOperationStatus.Failed,
+                "Record pending operation execution outcome", null, TargetId: pending.PendingOperationId.ToString()));
             response = response with
             {
-                Plan = await plans.ChangeAsync(request.UserId, pending.PendingOperationId,
-                response.Operation.Status == AgentOperationStatus.Succeeded && !IsPartialMutation(response.Operation.Payload) ? "done" : "failed", cancellationToken)
+                Plan = await ConversationPlanUpdates.AfterCommitAsync(plans, request.UserId, pending.PendingOperationId,
+                    succeeded ? "done" : "failed", logger, cancellationToken)
             };
+        }
         return response;
     }
 

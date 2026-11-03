@@ -24,7 +24,8 @@ public sealed partial class PendingOperationRevisionService
         if (request.Items.Count == 0)
             return store.Cancel(userId, execution.PendingOperationId, expected)
                 ? new(true, null, null, null, Cancelled: true,
-                    Plan: plans is null ? null : await plans.ChangeAsync(userId, execution.PendingOperationId, "skipped", ct)) : Failure("revision_conflict");
+                    Plan: await ConversationPlanUpdates.AfterCommitAsync(plans, userId, execution.PendingOperationId, "skipped",
+                        logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<PendingOperationRevisionService>.Instance, ct)) : Failure("revision_conflict");
         var revisedMembers = await ReviseChangeSetMembersAsync(userId, members, request, items, ct, request.ClientContext);
         if (revisedMembers is null) return Failure("invalid_revision");
         var revised = JsonSerializer.SerializeToElement(new { operations = revisedMembers, reservations = AccountChangeSet.Reservations(execution.Arguments) });

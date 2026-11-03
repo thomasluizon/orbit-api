@@ -220,7 +220,8 @@ public class AiController(
                 confirmation.PendingOperationId,
                 confirmation.ConfirmationToken,
                 confirmation.ExpiresAtUtc,
-                plans is null ? null : await plans.ChangeAsync(userId, id, "running", cancellationToken)));
+                await ConversationPlanUpdates.AfterCommitAsync(plans, userId, id, "running",
+                    logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<AiController>.Instance, cancellationToken)));
     }
 
     [HttpPost("pending-operations/{id:guid}/step-up")]

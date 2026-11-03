@@ -15,7 +15,7 @@ using Orbit.Infrastructure.Persistence;
 
 namespace Orbit.Infrastructure.Services;
 
-public sealed class ConversationTurnRecorder(
+public sealed partial class ConversationTurnRecorder(
     OrbitDbContext db,
     IUnitOfWork work,
     IFeatureFlagService flags,
@@ -142,6 +142,7 @@ public sealed class ConversationTurnRecorder(
             return Result.Failure<StoredConversationHistory>(ConversationErrors.NotFound);
         var rows = await db.ConversationTurns.AsNoTracking().Where(row => row.UserId == userId && row.ConversationId == conversationId)
             .OrderByDescending(row => row.TurnOrder).Take(HistoryRows).ToListAsync(cancellationToken);
+        await ReconcilePlansAsync(userId, rows, cancellationToken);
         rows.Reverse();
         var image = rows.TakeLast(ImageHistoryRows).LastOrDefault(row => row.ImageObjectKey is not null);
         var messages = new List<ChatHistoryMessage>();
@@ -189,6 +190,7 @@ public sealed class ConversationTurnRecorder(
             && (!beforeOrder.HasValue || row.TurnOrder < beforeOrder))
             .OrderByDescending(row => row.TurnOrder).Take(pageSize + 1).ToListAsync(cancellationToken);
         if (rows.Count == 0) return null;
+        await ReconcilePlansAsync(userId, rows, cancellationToken);
         var hasMore = rows.Count > pageSize;
         var selected = rows.Take(pageSize).Reverse().ToArray();
         return new(conversationId.Value, selected.Select(row => new ConversationDisplayTurn(row.TurnId, row.TurnOrder!.Value,
