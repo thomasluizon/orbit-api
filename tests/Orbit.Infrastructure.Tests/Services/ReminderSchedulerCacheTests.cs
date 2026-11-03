@@ -42,7 +42,7 @@ public class ReminderSchedulerCacheTests
         await db.SaveChangesAsync();
         oldHabit.ReminderProbeVersion.Should().Be(0);
 
-        var push = Substitute.For<IPushNotificationService>();
+        var push = SuccessfulPush();
         var scheduler = new ReminderSchedulerService(Scope(db, push),
             NullLogger<ReminderSchedulerService>.Instance, new ConfigurationBuilder().Build(), clock);
         await scheduler.CheckAndSendReminders(CancellationToken.None);
@@ -79,9 +79,9 @@ public class ReminderSchedulerCacheTests
         await scheduler.CheckAndSendReminders(CancellationToken.None);
 
         reads.Commands.Should().Contain(c => c.Contains("\"Title\"", StringComparison.Ordinal));
-        await push.Received(1).SendToUserAsync(user.Id, "New reminder", "Due now", "/",
+        await push.Received(1).TrySendToUserAsync(user.Id, "New reminder", "Due now", "/",
             Arg.Any<CancellationToken>());
-        await push.DidNotReceive().SendToUserAsync(user.Id, "Old reminder", Arg.Any<string>(),
+        await push.DidNotReceive().TrySendToUserAsync(user.Id, "Old reminder", Arg.Any<string>(),
             Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
 
@@ -91,14 +91,16 @@ public class ReminderSchedulerCacheTests
         var reads = new SchedulerReadInterceptor();
         using var factory = new SqliteOrbitDbContextFactory(reads);
         var service = new ReminderSchedulerService(
-            Scope(factory.Context, Substitute.For<IPushNotificationService>()),
+            Scope(factory.Context, SuccessfulPush()),
             NullLogger<ReminderSchedulerService>.Instance, new ConfigurationBuilder().Build());
 
         await service.CheckAndSendReminders(CancellationToken.None);
         reads.Clear();
         await service.CheckAndSendReminders(CancellationToken.None);
 
-        reads.Commands.Should().ContainSingle().Which.Should().Contain("ReminderScheduleProbes");
+        reads.Commands.Should().HaveCount(2);
+        reads.Commands[0].Should().Contain("ReminderScheduleProbes");
+        reads.Commands[1].Should().Contain("\"PushSentAtUtc\" IS NULL");
     }
 
     [Fact]
@@ -118,18 +120,18 @@ public class ReminderSchedulerCacheTests
         await db.SaveChangesAsync();
         reads.Clear();
 
-        var push = Substitute.For<IPushNotificationService>();
+        var push = SuccessfulPush();
         var service = new ReminderSchedulerService(Scope(db, push), NullLogger<ReminderSchedulerService>.Instance,
             new ConfigurationBuilder().Build());
         await service.CheckAndSendReminders(CancellationToken.None);
 
-        await push.Received(1).SendToUserAsync(user.Id, "Relative", "Due now", "/", Arg.Any<CancellationToken>());
-        await push.Received(1).SendToUserAsync(user.Id, "Scheduled", "Due today", "/", Arg.Any<CancellationToken>());
+        await push.Received(1).TrySendToUserAsync(user.Id, "Relative", "Due now", "/", Arg.Any<CancellationToken>());
+        await push.Received(1).TrySendToUserAsync(user.Id, "Scheduled", "Due today", "/", Arg.Any<CancellationToken>());
         user.SetName("Alex Updated").IsSuccess.Should().BeTrue();
         await db.SaveChangesAsync();
         reads.Clear();
         await service.CheckAndSendReminders(CancellationToken.None);
-        reads.Commands.Should().ContainSingle();
+        reads.Commands.Should().HaveCount(2);
         reads.Commands[0].Should().Contain("ReminderScheduleProbes").And.Contain("\"ReminderPreferencesVersion\"")
             .And.NotContain("SUM(").And.NotContain("GROUP BY").And.NotContain("\"Habits\"");
         reads.Commands[0].Should().NotContain("\"Title\"")
@@ -170,7 +172,7 @@ public class ReminderSchedulerCacheTests
             await db.Habits.Where(h => h.Title == "Later reminder").ExecuteUpdateAsync(
                 setters => setters.SetProperty(h => h.UpdatedAtUtc, DateTime.UtcNow.AddDays(1)));
 
-        var service = new ReminderSchedulerService(Scope(db, Substitute.For<IPushNotificationService>()),
+        var service = new ReminderSchedulerService(Scope(db, SuccessfulPush()),
             NullLogger<ReminderSchedulerService>.Instance, new ConfigurationBuilder().Build());
         await service.CheckAndSendReminders(CancellationToken.None);
         reads.Clear();
@@ -213,7 +215,7 @@ public class ReminderSchedulerCacheTests
         await using var schedulerDb = factory.CreateContext();
         var firstHabit = await firstDb.Habits.SingleAsync(h => h.Id == habit.Id);
         var secondHabit = await secondDb.Habits.SingleAsync(h => h.Id == habit.Id);
-        var service = new ReminderSchedulerService(Scope(schedulerDb, Substitute.For<IPushNotificationService>()),
+        var service = new ReminderSchedulerService(Scope(schedulerDb, SuccessfulPush()),
             NullLogger<ReminderSchedulerService>.Instance, new ConfigurationBuilder().Build(),
             new MutableTimeProvider(new DateTimeOffset(2027, 9, 26, 8, 0, 0, TimeSpan.Zero)));
 
@@ -256,7 +258,7 @@ public class ReminderSchedulerCacheTests
         db.Users.Add(user);
         db.Habits.Add(habit);
         await db.SaveChangesAsync();
-        var push = Substitute.For<IPushNotificationService>();
+        var push = SuccessfulPush();
         var service = new ReminderSchedulerService(Scope(db, push), NullLogger<ReminderSchedulerService>.Instance,
             new ConfigurationBuilder().Build(), clock);
         await service.CheckAndSendReminders(CancellationToken.None);
@@ -268,7 +270,7 @@ public class ReminderSchedulerCacheTests
         await service.CheckAndSendReminders(CancellationToken.None);
 
         reads.Commands.Should().Contain(c => c.Contains("\"Title\"", StringComparison.Ordinal));
-        await push.Received(1).SendToUserAsync(user.Id, habit.Title, "Agora", "/", Arg.Any<CancellationToken>());
+        await push.Received(1).TrySendToUserAsync(user.Id, habit.Title, "Agora", "/", Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -285,7 +287,7 @@ public class ReminderSchedulerCacheTests
         db.Users.Add(user);
         db.Habits.Add(habit);
         await db.SaveChangesAsync();
-        var push = Substitute.For<IPushNotificationService>();
+        var push = SuccessfulPush();
         var service = new ReminderSchedulerService(Scope(db, push), NullLogger<ReminderSchedulerService>.Instance,
             new ConfigurationBuilder().Build(), clock);
         await service.CheckAndSendReminders(CancellationToken.None);
@@ -297,7 +299,7 @@ public class ReminderSchedulerCacheTests
         await service.CheckAndSendReminders(CancellationToken.None);
 
         reads.Commands.Should().Contain(c => c.Contains("\"Title\"", StringComparison.Ordinal));
-        await push.Received(1).SendToUserAsync(user.Id, habit.Title, "Due now", "/", Arg.Any<CancellationToken>());
+        await push.Received(1).TrySendToUserAsync(user.Id, habit.Title, "Due now", "/", Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -316,7 +318,7 @@ public class ReminderSchedulerCacheTests
         await db.SaveChangesAsync();
         deletedHabit.ReminderProbeVersion.Should().Be(0);
 
-        var push = Substitute.For<IPushNotificationService>();
+        var push = SuccessfulPush();
         var service = new ReminderSchedulerService(Scope(db, push), NullLogger<ReminderSchedulerService>.Instance,
             new ConfigurationBuilder().Build(), clock);
         await service.CheckAndSendReminders(CancellationToken.None);
@@ -342,9 +344,9 @@ public class ReminderSchedulerCacheTests
         await service.CheckAndSendReminders(CancellationToken.None);
 
         reads.Commands.Should().Contain(c => c.Contains("\"Title\"", StringComparison.Ordinal));
-        await push.Received(1).SendToUserAsync(user.Id, "New reminder", "Due now", "/",
+        await push.Received(1).TrySendToUserAsync(user.Id, "New reminder", "Due now", "/",
             Arg.Any<CancellationToken>());
-        await push.DidNotReceive().SendToUserAsync(user.Id, "Old reminder", Arg.Any<string>(),
+        await push.DidNotReceive().TrySendToUserAsync(user.Id, "Old reminder", Arg.Any<string>(),
             Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
 
@@ -371,7 +373,7 @@ public class ReminderSchedulerCacheTests
         await db.SaveChangesAsync();
         await db.Habits.Where(h => h.Id == latestHabit.Id).ExecuteUpdateAsync(
             setters => setters.SetProperty(h => h.UpdatedAtUtc, DateTime.UtcNow.AddDays(1)));
-        var push = Substitute.For<IPushNotificationService>();
+        var push = SuccessfulPush();
         var service = new ReminderSchedulerService(Scope(db, push), NullLogger<ReminderSchedulerService>.Instance,
             new ConfigurationBuilder().Build(), clock);
         await service.CheckAndSendReminders(CancellationToken.None);
@@ -384,9 +386,9 @@ public class ReminderSchedulerCacheTests
         await service.CheckAndSendReminders(CancellationToken.None);
 
         reads.Commands.Should().Contain(c => c.Contains("\"Title\"", StringComparison.Ordinal));
-        await push.Received(1).SendToUserAsync(secondUser.Id, secondHabit.Title, "Due now", "/",
+        await push.Received(1).TrySendToUserAsync(secondUser.Id, secondHabit.Title, "Due now", "/",
             Arg.Any<CancellationToken>());
-        await push.DidNotReceive().SendToUserAsync(firstUser.Id, Arg.Any<string>(), Arg.Any<string>(),
+        await push.DidNotReceive().TrySendToUserAsync(firstUser.Id, Arg.Any<string>(), Arg.Any<string>(),
             Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
 
@@ -403,7 +405,7 @@ public class ReminderSchedulerCacheTests
         db.Users.Add(user);
         db.Habits.Add(habit);
         await db.SaveChangesAsync();
-        var push = Substitute.For<IPushNotificationService>();
+        var push = SuccessfulPush();
         var service = new ReminderSchedulerService(Scope(db, push), NullLogger<ReminderSchedulerService>.Instance,
             new ConfigurationBuilder().Build(), clock);
         await service.CheckAndSendReminders(CancellationToken.None);
@@ -418,7 +420,7 @@ public class ReminderSchedulerCacheTests
         await service.CheckAndSendReminders(CancellationToken.None);
 
         (await db.SentReminders.CountAsync(r => r.HabitId == habit.Id)).Should().Be(1);
-        await push.Received(1).SendToUserAsync(user.Id, habit.Title, "Due today", "/",
+        await push.Received(1).TrySendToUserAsync(user.Id, habit.Title, "Due today", "/",
             Arg.Any<CancellationToken>());
     }
 
@@ -436,7 +438,7 @@ public class ReminderSchedulerCacheTests
         db.Users.Add(user);
         db.Habits.Add(habit);
         await db.SaveChangesAsync();
-        var push = Substitute.For<IPushNotificationService>();
+        var push = SuccessfulPush();
         var service = new ReminderSchedulerService(Scope(db, push), NullLogger<ReminderSchedulerService>.Instance,
             new ConfigurationBuilder().Build(), clock);
         await service.CheckAndSendReminders(CancellationToken.None);
@@ -450,7 +452,7 @@ public class ReminderSchedulerCacheTests
 
         reads.Commands.Should().Contain(c => c.Contains("FROM \"HabitLogs\"", StringComparison.Ordinal));
         (await db.SentReminders.CountAsync()).Should().Be(0);
-        await push.DidNotReceive().SendToUserAsync(Arg.Any<Guid>(), Arg.Any<string>(),
+        await push.DidNotReceive().TrySendToUserAsync(Arg.Any<Guid>(), Arg.Any<string>(),
             Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
 
@@ -470,8 +472,8 @@ public class ReminderSchedulerCacheTests
 
         await using var firstDb = factory.CreateContext();
         await using var secondDb = factory.CreateContext();
-        var firstPush = Substitute.For<IPushNotificationService>();
-        var secondPush = Substitute.For<IPushNotificationService>();
+        var firstPush = SuccessfulPush();
+        var secondPush = SuccessfulPush();
         var first = new ReminderSchedulerService(Scope(firstDb, firstPush),
             NullLogger<ReminderSchedulerService>.Instance, new ConfigurationBuilder().Build(), clock);
         var second = new ReminderSchedulerService(Scope(secondDb, secondPush),
@@ -484,9 +486,9 @@ public class ReminderSchedulerCacheTests
         await second.CheckAndSendReminders(CancellationToken.None);
 
         (await db.SentReminders.CountAsync(r => r.HabitId == habit.Id)).Should().Be(1);
-        await firstPush.Received(1).SendToUserAsync(user.Id, habit.Title, "Due today", "/",
+        await firstPush.Received(1).TrySendToUserAsync(user.Id, habit.Title, "Due today", "/",
             Arg.Any<CancellationToken>());
-        await secondPush.DidNotReceive().SendToUserAsync(Arg.Any<Guid>(), Arg.Any<string>(),
+        await secondPush.DidNotReceive().TrySendToUserAsync(Arg.Any<Guid>(), Arg.Any<string>(),
             Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
 
@@ -503,7 +505,7 @@ public class ReminderSchedulerCacheTests
             new DateOnly(2027, 9, 26), ReminderEnabled: true,
             ScheduledReminders: [new ScheduledReminderTime(ScheduledReminderWhen.SameDay, new TimeOnly(12, 0))])).Value);
         await db.SaveChangesAsync();
-        var service = new ReminderSchedulerService(Scope(db, Substitute.For<IPushNotificationService>()),
+        var service = new ReminderSchedulerService(Scope(db, SuccessfulPush()),
             NullLogger<ReminderSchedulerService>.Instance, new ConfigurationBuilder().Build(), clock);
         await service.CheckAndSendReminders(CancellationToken.None);
 
@@ -522,6 +524,13 @@ public class ReminderSchedulerCacheTests
         public override DateTimeOffset GetUtcNow() => _now;
 
         public void Set(DateTimeOffset now) => _now = now;
+    }
+
+    private static IPushNotificationService SuccessfulPush()
+    {
+        var push = Substitute.For<IPushNotificationService>();
+        push.TrySendToUserAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>()).Returns(true);
+        return push;
     }
 
     private static IServiceScopeFactory Scope(Orbit.Infrastructure.Persistence.OrbitDbContext db,

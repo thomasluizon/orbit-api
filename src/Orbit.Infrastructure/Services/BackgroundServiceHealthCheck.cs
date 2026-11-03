@@ -25,6 +25,8 @@ public sealed class BackgroundServiceHealthCheck(
         ["account-deletion"] = TimeSpan.FromHours(48),
         ["sync-cleanup"] = TimeSpan.FromHours(48),
         ["play-notification-cleanup"] = TimeSpan.FromHours(48),
+        ["auth-state-cleanup"] = TimeSpan.FromMinutes(45),
+        ["durable-delivery-recovery"] = TimeSpan.FromMinutes(3),
         ["calendar-auto-sync"] = TimeSpan.FromMinutes(45),
         ["notion-auto-sync"] = TimeSpan.FromMinutes(45),
         ["ai-usage-summary"] = TimeSpan.FromHours(48),

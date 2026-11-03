@@ -4,7 +4,6 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Orbit.Application.Common;
 using Orbit.Domain.Entities;
-using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Subscriptions.Services;
 

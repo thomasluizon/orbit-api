@@ -13,6 +13,9 @@ using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
+using Orbit.Infrastructure.Services;
+using Orbit.Infrastructure.Configuration;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace Orbit.Infrastructure.Tests.Authentication;
 
@@ -27,7 +30,7 @@ public class ApiKeyAuthenticationHandlerTests
         string? authorizationHeader,
         string path = "/mcp",
         IReadOnlyList<ApiKey>? candidates = null,
-        Result? payGateResult = null)
+        Result? payGateResult = null, bool deactivated = false)
     {
         var apiKeyRepo = Substitute.For<IGenericRepository<ApiKey>>();
         var payGate = Substitute.For<IPayGateService>();
@@ -38,7 +41,17 @@ public class ApiKeyAuthenticationHandlerTests
                 Arg.Any<Expression<Func<ApiKey, bool>>>(), Arg.Any<CancellationToken>())
             .Returns(call => (candidates ?? []).Where(call.Arg<Expression<Func<ApiKey, bool>>>().Compile()).ToList());
 
+        var store = Substitute.For<IApiKeyAuthenticationStore>();
+        store.FindAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(call =>
+        {
+            var matches = (candidates ?? []).Where(key => key.KeyPrefix == call.Arg<string>() && !key.IsRevoked).ToList();
+            return matches.Count == 1 ? new ApiKeyAuthenticationCandidate(matches[0], deactivated,
+                (payGateResult ?? Result.Success()).IsSuccess, null) : null;
+        });
         var services = new ServiceCollection();
+        services.AddSingleton(store);
+        services.AddSingleton(new AuthValidationCache(new MemoryCache(new MemoryCacheOptions()),
+            Options.Create(new AuthCacheSettings()), TimeProvider.System));
         services.AddSingleton(apiKeyRepo);
         services.AddSingleton(payGate);
         services.AddSingleton(unitOfWork);
@@ -62,11 +75,6 @@ public class ApiKeyAuthenticationHandlerTests
         var result = await handler.AuthenticateAsync();
         return new HandlerRun(result, apiKeyRepo, unitOfWork);
     }
-
-    private static Expression<Func<ApiKey, bool>> CapturedPredicate(IGenericRepository<ApiKey> repo) =>
-        (Expression<Func<ApiKey, bool>>)repo.ReceivedCalls()
-            .Single(call => call.GetMethodInfo().Name == "FindTrackedAsync")
-            .GetArguments()[0]!;
 
     [Fact]
     public async Task LegacyKey_RepeatedAuthentication_PreservesRollbackReadableHash()
@@ -261,16 +269,19 @@ public class ApiKeyAuthenticationHandlerTests
     }
 
     [Fact]
-    public async Task HandleAuthenticateAsync_QueryPredicateExcludesRevokedKeys()
+    public async Task DeactivatedOwner_IsRejectedEvenWithAValidProKey()
     {
-        var (apiKey, rawKey) = ApiKey.Create(Guid.NewGuid(), "Agent Key").Value;
+        var (key, raw) = ApiKey.Create(Guid.NewGuid(), "Key").Value;
+        var result = await RunHandler($"Bearer {raw}", candidates: [key], deactivated: true);
+        result.Result.Succeeded.Should().BeFalse();
+        result.Result.Failure!.Message.Should().Contain("deactivated");
+    }
 
-        var run = await RunHandler($"Bearer {rawKey}", candidates: []);
-
-        var predicate = CapturedPredicate(run.ApiKeyRepo).Compile();
-        predicate(apiKey).Should().BeTrue();
-
-        apiKey.Revoke();
-        predicate(apiKey).Should().BeFalse();
+    [Fact]
+    public async Task RevokedKey_IsRejected()
+    {
+        var (key, raw) = ApiKey.Create(Guid.NewGuid(), "Key").Value;
+        key.Revoke();
+        (await RunHandler($"Bearer {raw}", candidates: [key])).Result.Succeeded.Should().BeFalse();
     }
 }

@@ -61,12 +61,6 @@
         "reason": "LogRateLimitRejected maps each policy, partition, count, retry, method, path and request id to its own generated structured-log placeholder."
       }
     },
-    "src/Orbit.Application/Auth/Commands/SendCodeCommand.cs": {
-      "ORBIT0004": {
-        "count": 4,
-        "reason": "Handle compares elapsed seconds since VerificationEntry.CreatedAt to enforce the 60-second code resend cooldown. Handle stamps the randomized verification code issuance instant for cooldown checks; the cache TTL is separate. TrySeedTestAccountCode stamps the configured test code issuance instant, with a separate 30-minute cache TTL. TrySeedProductionSmokeCode stamps the smoke code issuance instant, with a separate 30-minute cache TTL."
-      }
-    },
     "src/Orbit.Application/Calendar/Commands/DismissCalendarSuggestionCommand.cs": {
       "ORBIT0004": {
         "count": 1,
@@ -77,12 +71,6 @@
       "ORBIT0004": {
         "count": 1,
         "reason": "MarkImported records the same ImportedAtUtc audit instant for every matched calendar suggestion in this import."
-      }
-    },
-    "src/Orbit.Application/Waitlist/Commands/JoinWaitlistCommand.cs": {
-      "ORBIT0004": {
-        "count": 1,
-        "reason": "The lastSentAt comparison enforces a 60-second waitlist email resend interval against a cached UTC instant."
       }
     },
     "src/Orbit.Domain/Entities/PendingClarification.cs": {

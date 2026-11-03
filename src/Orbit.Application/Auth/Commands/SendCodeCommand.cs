@@ -1,7 +1,7 @@
-using System.Security.Cryptography;
 using Hangfire;
 using MediatR;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Hosting;
+using Orbit.Application.Auth.Services;
 using Orbit.Application.Auth.Jobs;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
@@ -11,104 +11,50 @@ namespace Orbit.Application.Auth.Commands;
 public record SendCodeCommand(string Email, string Language = "en")
     : IRequest<Result>;
 
-public record VerificationEntry(string Code, int Attempts, DateTime CreatedAt);
-
 public class SendCodeCommandHandler(
-    IMemoryCache cache,
+    IEmailChallengeStore challenges,
+    IHostEnvironment environment,
     IBackgroundJobClient backgroundJobClient) : IRequestHandler<SendCodeCommand, Result>
 {
-    private const int SmokeCodeLength = 6;
-
-    public Task<Result> Handle(SendCodeCommand request, CancellationToken cancellationToken)
+    public async Task<Result> Handle(SendCodeCommand request, CancellationToken cancellationToken)
     {
         var email = request.Email.Trim().ToLowerInvariant();
-        var cacheKey = $"verify:{email}";
-
-        var aspNetEnv = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT");
-        var isProduction = string.Equals(aspNetEnv, "Production", StringComparison.OrdinalIgnoreCase);
-
-        if (isProduction)
-        {
-            if (TrySeedProductionSmokeCode(email, cacheKey))
-                return Task.FromResult(Result.Success());
-        }
-        else if (TrySeedTestAccountCode(email, cacheKey))
-        {
-            return Task.FromResult(Result.Success());
-        }
-
-        if (cache.TryGetValue(cacheKey, out VerificationEntry? existing) && existing is not null)
-        {
-#pragma warning disable ORBIT0004 // Handle compares elapsed seconds since VerificationEntry.CreatedAt to enforce the 60-second code resend cooldown. https://github.com/thomasluizon/orbit-tickets/issues/230
-            var elapsed = DateTime.UtcNow - existing.CreatedAt;
-#pragma warning restore ORBIT0004
-            if (elapsed.TotalSeconds < 60)
-                return Task.FromResult(Result.Failure(ErrorMessages.CodeRequestCooldown));
-        }
-
-        var code = RandomNumberGenerator.GetInt32(100000, 1000000).ToString(System.Globalization.CultureInfo.InvariantCulture);
-
-#pragma warning disable ORBIT0004 // Handle stamps the randomized verification code issuance instant for cooldown checks; the cache TTL is separate. https://github.com/thomasluizon/orbit-tickets/issues/230
-        var entry = new VerificationEntry(code, 0, DateTime.UtcNow);
-#pragma warning restore ORBIT0004
-        cache.Set(cacheKey, entry, new MemoryCacheEntryOptions
-        {
-            AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5)
-        });
-
-        backgroundJobClient.Enqueue<SendVerificationCodeEmailJob>(
-            job => job.ExecuteAsync(email, code, request.Language));
-
-        return Task.FromResult(Result.Success());
+        var fixedCode = TrySeedProductionSmokeCode(email) ?? TrySeedTestAccountCode(email);
+        var issued = await challenges.IssueAsync(EmailChallengeOperation.SignIn,
+            email, fixedCode, cancellationToken: cancellationToken);
+        if (issued.IsFailure)
+            return issued.PropagateError();
+        if (fixedCode is null)
+            backgroundJobClient.Enqueue<SendVerificationCodeEmailJob>(
+                job => job.ExecuteAsync(email, issued.Value, request.Language));
+        return Result.Success();
     }
 
-    private bool TrySeedTestAccountCode(string email, string cacheKey)
+    private string? TrySeedTestAccountCode(string email)
     {
-        var testAccountsEnv = Environment.GetEnvironmentVariable("TEST_ACCOUNTS");
-        if (string.IsNullOrEmpty(testAccountsEnv))
-            return false;
-
-        foreach (var pair in testAccountsEnv.Split(',', StringSplitOptions.RemoveEmptyEntries))
+        if (!environment.IsDevelopment()
+            && !environment.IsStaging())
+            return null;
+        foreach (var pair in (Environment.GetEnvironmentVariable("TEST_ACCOUNTS") ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries))
         {
             var parts = pair.Split(':', 2);
-            if (parts.Length != 2 || !string.Equals(parts[0].Trim(), email, StringComparison.OrdinalIgnoreCase))
-                continue;
-
-#pragma warning disable ORBIT0004 // TrySeedTestAccountCode stamps the configured test code issuance instant, with a separate 30-minute cache TTL. https://github.com/thomasluizon/orbit-tickets/issues/230
-            var entry = new VerificationEntry(parts[1].Trim(), 0, DateTime.UtcNow);
-#pragma warning restore ORBIT0004
-            cache.Set(cacheKey, entry, new MemoryCacheEntryOptions
+            if (parts.Length == 2 && string.Equals(parts[0].Trim(), email, StringComparison.OrdinalIgnoreCase))
             {
-                AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(30)
-            });
-            return true;
+                var code = parts[1].Trim();
+                if (code.Length == 6 && code.All(char.IsAsciiDigit))
+                    return code;
+            }
         }
-
-        return false;
+        return null;
     }
 
-    private bool TrySeedProductionSmokeCode(string email, string cacheKey)
+    private string? TrySeedProductionSmokeCode(string email)
     {
+        if (!environment.IsProduction())
+            return null;
         var smokeEmail = Environment.GetEnvironmentVariable("SMOKE_TEST_EMAIL");
         var smokeCode = Environment.GetEnvironmentVariable("SMOKE_TEST_CODE");
-
-        if (string.IsNullOrEmpty(smokeEmail) || string.IsNullOrEmpty(smokeCode))
-            return false;
-
-        if (smokeCode.Length != SmokeCodeLength || !smokeCode.All(char.IsDigit))
-            return false;
-
-        if (!string.Equals(smokeEmail.Trim(), email, StringComparison.OrdinalIgnoreCase))
-            return false;
-
-#pragma warning disable ORBIT0004 // TrySeedProductionSmokeCode stamps the smoke code issuance instant, with a separate 30-minute cache TTL. https://github.com/thomasluizon/orbit-tickets/issues/230
-        var entry = new VerificationEntry(smokeCode, 0, DateTime.UtcNow);
-#pragma warning restore ORBIT0004
-        cache.Set(cacheKey, entry, new MemoryCacheEntryOptions
-        {
-            AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(30)
-        });
-
-        return true;
+        return smokeCode is { Length: 6 } && smokeCode.All(char.IsAsciiDigit)
+            && string.Equals(smokeEmail?.Trim(), email, StringComparison.OrdinalIgnoreCase) ? smokeCode : null;
     }
 }

@@ -33,6 +33,7 @@
     <None Update="Fixtures/Push/*.json" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Fixtures/AppAttest/*.json" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Fixtures/Notion/*.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Fixtures/Marketing/*.json" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Fixtures/OAuth/ClaudeClientMetadata.json" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Fixtures/Chat/OfferDeadlineRequest.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../Orbit.Application.Tests/Fixtures/ProactiveOffers/offers-goal-gap-en-r2.json" Link="Fixtures/Chat/GoalRead.json" CopyToOutputDirectory="PreserveNewest" />
@@ -53,5 +54,9 @@
     <Compile Include="../Shared/InMemoryHabitRankingReader.cs" Link="Common/InMemoryHabitRankingReader.cs" />
     <Compile Include="../Shared/GoalToolCommandMediator.cs" Link="Common/GoalToolCommandMediator.cs" />
     <Compile Include="../Shared/HabitToolCommandMediator.cs" Link="Common/HabitToolCommandMediator.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="../Shared/ChallengeTestDatabase.cs" Link="Common/ChallengeTestDatabase.cs" />
+    <Using Include="Orbit.Tests.Shared" />
   </ItemGroup>
 </Project>

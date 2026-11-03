@@ -630,6 +630,45 @@ public class DistributedRateLimitFilterTests
         logs.Should().OnlyContain(message => !message!.Contains("a@example.com", StringComparison.Ordinal));
     }
 
+    [Theory]
+    [InlineData("chat-in-flight")]
+    [InlineData("transcription-in-flight")]
+    public async Task CombinedChatLimit_UsesTheActionLeasePolicyAndReleasesItOnce(string policy)
+    {
+        var userId = Guid.NewGuid();
+        var partition = $"user:{userId}";
+        var rateLimit = new DistributedRateLimitDecision(true, 1, 10, DateTime.UtcNow.AddMinutes(1));
+        var lease = new DistributedRateLimitDecision(true, 1, 1, DateTime.UtcNow.AddMinutes(5));
+        _service.TryAcquireWithLeaseAsync("chat", partition, Arg.Any<string>(), 1,
+                TimeSpan.FromMinutes(5), Arg.Any<CancellationToken>()).Returns((rateLimit, lease));
+        var filter = new DistributedRateLimitFilter("chat", _service, _authSessionService,
+            new BffClientIpResolver(Options.Create(new BffForwardingSettings())), _logger);
+        var concurrent = new ConcurrentChatLimitFilter(_service,
+            Substitute.For<ILogger<ConcurrentChatLimitFilter>>(), policy);
+        var (context, _) = CreateAuthenticatedExecutingContext(userId);
+        context.Filters.Add(concurrent);
+        var invoked = false;
+
+        await filter.OnActionExecutionAsync(context, async () =>
+        {
+            await concurrent.OnActionExecutionAsync(context, () =>
+            {
+                invoked = true;
+                return Task.FromResult(CreateExecutedContext(context));
+            });
+            return CreateExecutedContext(context);
+        });
+
+        invoked.Should().BeTrue();
+        await _service.Received(1).TryAcquireWithLeaseAsync("chat", partition, policy, 1,
+            TimeSpan.FromMinutes(5), context.HttpContext.RequestAborted);
+        await _service.DidNotReceive().TryAcquireLeaseAsync(Arg.Any<string>(), Arg.Any<string>(),
+            Arg.Any<int>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>());
+        await _service.Received(1).ReleaseLeaseAsync(policy, partition, lease.WindowEndsAtUtc, CancellationToken.None);
+        _service.ReceivedCalls().Count(call => call.GetMethodInfo().Name == nameof(IDistributedRateLimitService.ReleaseLeaseAsync))
+            .Should().Be(1);
+    }
+
     private void SetupAllowedLease(Guid userId)
     {
         _service.TryAcquireLeaseAsync(

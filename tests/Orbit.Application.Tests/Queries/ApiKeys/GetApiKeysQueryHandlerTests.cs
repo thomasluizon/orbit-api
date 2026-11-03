@@ -1,4 +1,4 @@
-﻿using System.Linq.Expressions;
+using System.Linq.Expressions;
 using FluentAssertions;
 using Microsoft.Extensions.Caching.Memory;
 using NSubstitute;
@@ -12,7 +12,7 @@ using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Tests.Queries.ApiKeys;
 
-public class GetApiKeysQueryHandlerTests
+public class GetApiKeysQueryHandlerTests : IAsyncLifetime
 {
     private readonly IGenericRepository<ApiKey> _apiKeyRepo = Substitute.For<IGenericRepository<ApiKey>>();
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
@@ -32,17 +32,17 @@ public class GetApiKeysQueryHandlerTests
                 false,
                 Arg.Any<CancellationToken>())
             .Returns(true);
-        _challengeService = new EmailChallengeService(_cache, TimeProvider.System);
-        _challengeService.AuthorizeOnce(
-            EmailChallengeOperation.ApiKeyManagement,
-            UserId,
-            TimeSpan.FromMinutes(10));
+        _challengeService = new EmailChallengeService(ChallengeTestDatabase.For(_cache).Store(TimeProvider.System));
         _handler = new GetApiKeysQueryHandler(
             _apiKeyRepo,
             _payGate,
             _cache,
             new ApiKeyManagementAuthorization(_appConfigService, _challengeService));
     }
+
+    public Task InitializeAsync() => _challengeService.AuthorizeOnceAsync(
+        EmailChallengeOperation.ApiKeyManagement, UserId, TimeSpan.FromMinutes(10));
+    public Task DisposeAsync() => Task.CompletedTask;
 
     [Fact]
     public async Task Handle_WithoutChallenge_ReturnsNamedRefusal()
@@ -52,7 +52,7 @@ public class GetApiKeysQueryHandlerTests
             _apiKeyRepo,
             _payGate,
             emptyCache,
-            new ApiKeyManagementAuthorization(_appConfigService, new EmailChallengeService(emptyCache, TimeProvider.System)));
+            new ApiKeyManagementAuthorization(_appConfigService, new EmailChallengeService(ChallengeTestDatabase.For(emptyCache).Store(TimeProvider.System))));
 
         var result = await handler.Handle(new GetApiKeysQuery(UserId), CancellationToken.None);
 
@@ -76,13 +76,13 @@ public class GetApiKeysQueryHandlerTests
 
         first.IsSuccess.Should().BeTrue();
         second.IsSuccess.Should().BeTrue();
-        _challengeService.HasAuthorization(EmailChallengeOperation.ApiKeyManagement, UserId).Should().BeTrue();
+        (await _challengeService.HasAuthorizationAsync(EmailChallengeOperation.ApiKeyManagement, UserId)).Should().BeTrue();
     }
 
     [Fact]
     public async Task Handle_SpentChallenge_ReturnsNamedRefusal()
     {
-        _challengeService.TryConsumeAuthorization(EmailChallengeOperation.ApiKeyManagement, UserId);
+        await _challengeService.TryConsumeAuthorizationAsync(EmailChallengeOperation.ApiKeyManagement, UserId);
 
         var result = await _handler.Handle(new GetApiKeysQuery(UserId), CancellationToken.None);
 
@@ -94,8 +94,8 @@ public class GetApiKeysQueryHandlerTests
     public async Task Handle_ExpiredChallenge_ReturnsNamedRefusal()
     {
         var expiringCache = new MemoryCache(new MemoryCacheOptions());
-        var challengeService = new EmailChallengeService(expiringCache, TimeProvider.System);
-        challengeService.AuthorizeOnce(
+        var challengeService = new EmailChallengeService(ChallengeTestDatabase.For(expiringCache).Store(TimeProvider.System));
+        await challengeService.AuthorizeOnceAsync(
             EmailChallengeOperation.ApiKeyManagement,
             UserId,
             TimeSpan.FromMilliseconds(1));
@@ -118,10 +118,10 @@ public class GetApiKeysQueryHandlerTests
     public async Task Handle_NonProWithOrWithoutChallenge_ReturnsPayGateRefusal(bool authorize)
     {
         var cache = new MemoryCache(new MemoryCacheOptions());
-        var challengeService = new EmailChallengeService(cache, TimeProvider.System);
+        var challengeService = new EmailChallengeService(ChallengeTestDatabase.For(cache).Store(TimeProvider.System));
         if (authorize)
         {
-            challengeService.AuthorizeOnce(
+            await challengeService.AuthorizeOnceAsync(
                 EmailChallengeOperation.ApiKeyManagement,
                 UserId,
                 TimeSpan.FromMinutes(10));

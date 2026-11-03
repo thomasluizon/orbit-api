@@ -110,7 +110,7 @@ public class RestoreHabitCommandHandler(
             ct => userStreakService.RecalculateAsync(userId, cancellationToken: ct),
             cancellationToken);
 
-        CacheInvalidationHelper.InvalidateUserAiCaches(cache, userId, today);
+        await CacheInvalidationHelper.InvalidateUserAiCachesAsync(cache, userId, today);
 
         return Result.Success();
     }

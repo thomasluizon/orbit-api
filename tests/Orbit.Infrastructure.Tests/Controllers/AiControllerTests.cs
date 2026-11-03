@@ -79,7 +79,7 @@ public class AiControllerTests
     [Fact]
     public async Task GetCapabilitiesMetadata_ReturnsForbidWhenPolicyDenies()
     {
-        _policyEvaluator.Evaluate(Arg.Any<AgentPolicyEvaluationContext>())
+        _policyEvaluator.EvaluateAsync(Arg.Any<AgentPolicyEvaluationContext>())
             .Returns(new AgentPolicyDecision(AgentPolicyDecisionStatus.Denied, null));
 
         var result = await _controller.GetCapabilitiesMetadata(CancellationToken.None);
@@ -104,7 +104,7 @@ public class AiControllerTests
                 false,
                 AgentConfirmationRequirement.None)
         ];
-        _policyEvaluator.Evaluate(Arg.Any<AgentPolicyEvaluationContext>())
+        _policyEvaluator.EvaluateAsync(Arg.Any<AgentPolicyEvaluationContext>())
             .Returns(new AgentPolicyDecision(AgentPolicyDecisionStatus.Allowed, null));
         _catalogService.GetCapabilities().Returns(capabilities);
 
@@ -137,7 +137,7 @@ public class AiControllerTests
                 Parse("{}"),
                 Parse("{}"))
         ];
-        _policyEvaluator.Evaluate(Arg.Any<AgentPolicyEvaluationContext>())
+        _policyEvaluator.EvaluateAsync(Arg.Any<AgentPolicyEvaluationContext>())
             .Returns(new AgentPolicyDecision(AgentPolicyDecisionStatus.Allowed, null));
         _catalogService.GetOperations().Returns(operations);
 
@@ -157,7 +157,7 @@ public class AiControllerTests
         [
             new UserDataCatalogEntry("profile", "Profile", "Profile data", "medium", "keep", true, true, [])
         ];
-        _policyEvaluator.Evaluate(Arg.Any<AgentPolicyEvaluationContext>())
+        _policyEvaluator.EvaluateAsync(Arg.Any<AgentPolicyEvaluationContext>())
             .Returns(new AgentPolicyDecision(AgentPolicyDecisionStatus.Allowed, null));
         _catalogService.GetUserDataCatalog().Returns(dataCatalog);
 
@@ -177,7 +177,7 @@ public class AiControllerTests
         [
             new AppSurface("today", "Today", "Today screen", [], [], [], [])
         ];
-        _policyEvaluator.Evaluate(Arg.Any<AgentPolicyEvaluationContext>())
+        _policyEvaluator.EvaluateAsync(Arg.Any<AgentPolicyEvaluationContext>())
             .Returns(new AgentPolicyDecision(AgentPolicyDecisionStatus.Allowed, null));
         _catalogService.GetSurfaces().Returns(surfaces);
 

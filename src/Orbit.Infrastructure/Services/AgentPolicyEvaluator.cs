@@ -19,13 +19,7 @@ public class AgentPolicyEvaluator(
         && context.AuthMethod is AgentAuthMethod.ApiKey or AgentAuthMethod.OAuth
         && !context.GrantedScopes.Contains(AgentScopes.ReadGoals, StringComparer.OrdinalIgnoreCase);
 
-    public AgentPolicyDecision Evaluate(AgentPolicyEvaluationContext context)
-    {
-        return EvaluateInternal(context);
-    }
-
-    private AgentPolicyDecision EvaluateInternal(
-        AgentPolicyEvaluationContext context)
+    public async Task<AgentPolicyDecision> EvaluateAsync(AgentPolicyEvaluationContext context)
     {
         var declared = catalogService.GetCapability(context.CapabilityId);
         if (declared is null)
@@ -46,7 +40,7 @@ public class AgentPolicyEvaluator(
         if (accessDecision is not null)
             return accessDecision;
 
-        return EvaluateConfirmationRequirement(context, capability);
+        return await EvaluateConfirmationRequirementAsync(context, capability);
     }
 
     private User? GetUser(Guid userId)
@@ -110,7 +104,7 @@ public class AgentPolicyEvaluator(
         return null;
     }
 
-    private AgentPolicyDecision EvaluateConfirmationRequirement(
+    private async Task<AgentPolicyDecision> EvaluateConfirmationRequirementAsync(
         AgentPolicyEvaluationContext context,
         AgentCapability capability)
     {
@@ -121,7 +115,7 @@ public class AgentPolicyEvaluator(
         if (HasFreshConfirmation(context, capability, requireStepUp))
         {
             if (requireStepUp)
-                stepUpAuthorizationBridge.OnStepUpVerified(capability.Id, context.UserId);
+                await stepUpAuthorizationBridge.OnStepUpVerifiedAsync(capability.Id, context.UserId);
 
             return new AgentPolicyDecision(AgentPolicyDecisionStatus.Allowed, capability,
                 ConsumedConfirmation: true);

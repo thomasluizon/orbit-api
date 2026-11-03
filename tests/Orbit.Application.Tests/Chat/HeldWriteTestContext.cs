@@ -90,6 +90,8 @@ internal sealed class HeldWriteTestContext : IDisposable
         services.AddSingleton(new BulkHabitReplayPlanner(Substitute.For<IIdempotencyContext>(),
             Substitute.For<IIdempotencyStore>(), UnitOfWork));
         services.AddSingleton(TimeProvider.System);
+        var challengeDatabase = new ChallengeTestDatabase();
+        services.AddSingleton<IEmailChallengeStore>(challengeDatabase.Store());
         services.AddSingleton<EmailChallengeService>();
         RegisterRepository<Habit>(services);
         RegisterRepository<HabitLog>(services);
@@ -107,8 +109,8 @@ internal sealed class HeldWriteTestContext : IDisposable
         var handler = new CheckChatCommandQueryHandler(_services);
         Mediator.Send(Arg.Any<CheckChatCommandQuery>(), Arg.Any<CancellationToken>())
             .Returns(call => handler.Handle(call.ArgAt<CheckChatCommandQuery>(0), call.ArgAt<CancellationToken>(1)));
-        DeletionCode = _services.GetRequiredService<EmailChallengeService>()
-            .Issue(EmailChallengeOperation.AccountDeletion, user.Email).Value;
+        DeletionCode = "123456";
+        challengeDatabase.Seed($"delete:{user.Email}", DeletionCode);
         SetupWrite<CreateTagCommand, Guid>(Guid.NewGuid());
         SetupWrite<CreateChecklistTemplateCommand, Guid>(Guid.NewGuid());
         SetupWrite<CreateSubHabitCommand, Guid>(Guid.NewGuid());

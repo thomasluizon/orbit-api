@@ -2,6 +2,7 @@ using Orbit.Application.FeatureFlags;
 using System.Text;
 using System.Security.Claims;
 using FluentValidation;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
@@ -40,6 +41,9 @@ public static partial class ServiceCollectionExtensions
     {
         if (BuildTimeDocumentGeneration.IsActive)
             return builder;
+
+        if (builder.Environment.IsProduction() && Environment.GetEnvironmentVariable("TEST_ACCOUNTS") is not null)
+            throw new InvalidOperationException("Production must not configure TEST_ACCOUNTS.");
 
         var jwtSettings = builder.Configuration.GetSection(JwtSettings.SectionName).Get<JwtSettings>();
         jwtSettings?.Validate();
@@ -93,6 +97,15 @@ public static partial class ServiceCollectionExtensions
                     serviceProvider.GetRequiredService<AccountEventTransactionInterceptor>()));
 
         builder.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
+        var authCacheSettings = builder.Configuration.GetSection(AuthCacheSettings.SectionName).Get<AuthCacheSettings>() ?? new();
+        authCacheSettings.Validate();
+        builder.Services.Configure<AuthCacheSettings>(builder.Configuration.GetSection(AuthCacheSettings.SectionName));
+        builder.Services.AddMemoryCache();
+        builder.Services.TryAddSingleton(TimeProvider.System);
+        builder.Services.TryAddSingleton<Microsoft.Extensions.Caching.Memory.MemoryCache>(sp =>
+            new Microsoft.Extensions.Caching.Memory.MemoryCache(sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<Microsoft.Extensions.Caching.Memory.MemoryCacheOptions>>()));
+        builder.Services.AddSingleton<AuthValidationCache>();
+        builder.Services.AddScoped<IApiKeyAuthenticationStore, ApiKeyAuthenticationStore>();
         builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
         builder.Services.AddScoped<EventTicketService>();
         builder.Services.AddScoped<IAccountResetRepository, AccountResetRepository>();
@@ -102,7 +115,8 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<ChatTurnStream>();
         builder.Services.AddScoped<IClosedMonthRecapStore, ClosedMonthRecapStore>();
         builder.Services.AddScoped<IAppConfigService, AppConfigService>();
-        builder.Services.AddSingleton<Orbit.Application.Auth.Services.EmailChallengeService>();
+        builder.Services.AddScoped<Orbit.Application.Auth.Services.EmailChallengeService>();
+        builder.Services.AddScoped<Orbit.Application.Auth.Services.IEmailChallengeStore, IndependentEmailChallengeStore>();
         builder.Services.AddScoped<Orbit.Application.ApiKeys.Services.ApiKeyManagementAuthorization>();
         builder.Services.AddScoped<IAgentStepUpAuthorizationBridge>(sp =>
             sp.GetRequiredService<Orbit.Application.ApiKeys.Services.ApiKeyManagementAuthorization>());
@@ -383,6 +397,10 @@ public static partial class ServiceCollectionExtensions
             .ConfigureHttpClient(c => c.Timeout = httpTimeout);
 
         builder.Services.AddMemoryCache();
+        builder.Services.TryAddSingleton<Microsoft.Extensions.Caching.Memory.MemoryCache>(sp =>
+            new Microsoft.Extensions.Caching.Memory.MemoryCache(sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<Microsoft.Extensions.Caching.Memory.MemoryCacheOptions>>()));
+        builder.Services.AddScoped<Orbit.Application.Common.IUserCacheVersions, UserCacheVersions>();
+        builder.Services.AddScoped<Microsoft.Extensions.Caching.Memory.IMemoryCache, VersionedMemoryCache>();
         AddOrbitDistributedCache(builder);
 
         builder.Services.AddValidatorsFromAssemblyContaining<CreateHabitCommandValidator>();

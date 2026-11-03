@@ -1,12 +1,11 @@
 using Hangfire;
 using MediatR;
 using Orbit.Application.Auth.Jobs;
-using Microsoft.Extensions.Caching.Memory;
+using Orbit.Application.Auth.Services;
 using Orbit.Application.Auth.Queries;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
-using System.Security.Cryptography;
 using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Auth.Commands;
@@ -15,7 +14,7 @@ public record VerifyCodeCommand(string Email, string Code, string Language = "en
     : IRequest<Result<LoginResponse>>;
 
 public class VerifyCodeCommandHandler(
-    IMemoryCache cache,
+    IEmailChallengeStore challenges,
     IAuthUserStore userStore,
     IUnitOfWork unitOfWork,
     IAuthSessionService authSessionService,
@@ -27,7 +26,7 @@ public class VerifyCodeCommandHandler(
     {
         var email = request.Email.Trim().ToLowerInvariant();
 
-        var codeValidation = ValidateCode(email, request.Code);
+        var codeValidation = await challenges.ConfirmAsync(EmailChallengeOperation.SignIn, email, request.Code, cancellationToken: cancellationToken);
         if (codeValidation.IsFailure)
             return codeValidation.PropagateError<LoginResponse>();
 
@@ -81,43 +80,6 @@ public class VerifyCodeCommandHandler(
 
         return result;
     }
-
-    private Result ValidateCode(string email, string code)
-    {
-        var cacheKey = $"verify:{email}";
-
-        if (CountFailedAttempts(email) >= AppConstants.MaxVerificationAttempts)
-            return Result.Failure(ErrorMessages.TooManyCodeAttempts);
-
-        if (!cache.TryGetValue(cacheKey, out VerificationEntry? entry) || entry is null)
-            return Result.Failure(ErrorMessages.VerificationCodeExpired);
-
-        if (!CryptographicOperations.FixedTimeEquals(
-            System.Text.Encoding.UTF8.GetBytes(entry.Code),
-            System.Text.Encoding.UTF8.GetBytes(code)))
-        {
-            RecordFailedAttempt(email);
-            return Result.Failure(ErrorMessages.InvalidVerificationCode);
-        }
-
-        cache.Remove(cacheKey);
-        return Result.Success();
-    }
-
-    private int CountFailedAttempts(string email) =>
-        cache.TryGetValue(FailedAttemptCacheKey(email), out int attempts) ? attempts : 0;
-
-    private void RecordFailedAttempt(string email)
-    {
-        var cacheKey = FailedAttemptCacheKey(email);
-        var attempts = CountFailedAttempts(email) + 1;
-        cache.Set(cacheKey, attempts, new MemoryCacheEntryOptions
-        {
-            AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(AppConstants.VerificationAttemptWindowMinutes)
-        });
-    }
-
-    private static string FailedAttemptCacheKey(string email) => $"verify-attempts:{email}";
 
     private Task<Result<User>> FindOrCreateUserAsync(
         string email, string language, string? referralCode, CancellationToken cancellationToken) =>

@@ -1,19 +1,21 @@
-using System.Collections.Concurrent;
+using FluentValidation;
 using Hangfire;
-using Microsoft.Extensions.Options;
-using Orbit.Application.Common;
 using Orbit.Application.Marketing.Commands;
-using Orbit.Domain.Interfaces;
+using Orbit.Application.Marketing.Validators;
 
 namespace Orbit.Application.Marketing.Jobs;
 
 public sealed record MarketingRecipient(Guid UserId, string Email, string Language);
 
-public sealed class SendMarketingBroadcastPageJob(IEmailService email, IMarketingUnsubscribeTokenService tokens,
-    IOptions<MarketingSettings> options, TimeProvider clock, IMarketingBroadcastDeliveryStore deliveries)
+public interface ILegacyMarketingBroadcastPageStore
 {
-    public const int RetryWindowDays = 30;
+    Task ImportAsync(Guid broadcastId, SendMarketingBroadcastCommand content, MarketingRecipient[] recipients,
+        DateTime notBeforeAtUtc, CancellationToken cancellationToken);
+}
 
+// https://github.com/thomasluizon/orbit-tickets/issues/1956: Remove this transition shim only when no legacy page job remains in Hangfire storage (thomasluizon/orbit-tickets#1956).
+public sealed class SendMarketingBroadcastPageJob(ILegacyMarketingBroadcastPageStore store, TimeProvider clock)
+{
     [Queue("marketing")]
     [DisableConcurrentExecution(600)]
     public async Task ExecuteAsync(Guid broadcastId, int pageNumber, SendMarketingBroadcastCommand content,
@@ -22,34 +24,15 @@ public sealed class SendMarketingBroadcastPageJob(IEmailService email, IMarketin
         if (broadcastId == Guid.Empty) throw new ArgumentException("Broadcast is required.", nameof(broadcastId));
         ArgumentOutOfRangeException.ThrowIfNegative(pageNumber);
         if (recipients.Length > 500) throw new ArgumentException("A broadcast page contains at most 500 recipients.", nameof(recipients));
-        if (recipients.Any(recipient => recipient.UserId == Guid.Empty)) throw new ArgumentException("Recipient is required.", nameof(recipients));
         if (expiresAtUtc.Kind != DateTimeKind.Utc || expiresAtUtc == default)
             throw new ArgumentException("Broadcast expiry must be a UTC instant.", nameof(expiresAtUtc));
         cancellationToken.ThrowIfCancellationRequested();
-        if (clock.GetUtcNow().UtcDateTime >= expiresAtUtc) return;
-        var delivered = await deliveries.GetDeliveredRecipientIdsAsync(broadcastId, recipients.Select(recipient => recipient.UserId).ToArray(), cancellationToken);
-        var settings = options.Value;
-        var delay = TimeSpan.FromMilliseconds(Math.Max(settings.SendDelayMilliseconds, 1000d / Math.Clamp(settings.MaxSendsPerSecond, 1, 14)));
-        using var pacing = new SemaphoreSlim(1, 1);
-        var failures = new ConcurrentQueue<Exception>();
-        await Parallel.ForEachAsync(recipients.DistinctBy(recipient => recipient.UserId).Where(recipient => !delivered.Contains(recipient.UserId)), new ParallelOptions
-        { MaxDegreeOfParallelism = Math.Clamp(settings.BroadcastParallelism, 1, 4), CancellationToken = cancellationToken }, async (recipient, token) =>
-        {
-            if (clock.GetUtcNow().UtcDateTime >= expiresAtUtc) return;
-            await pacing.WaitAsync(token);
-            try { await Task.Delay(delay, clock, token); }
-            finally { pacing.Release(); }
-            try
-            {
-                if (clock.GetUtcNow().UtcDateTime >= expiresAtUtc) return;
-                var portuguese = LocaleHelper.IsPortuguese(recipient.Language);
-                var url = $"{settings.ApiBaseUrl.TrimEnd('/')}/api/marketing/unsubscribe?token={Uri.EscapeDataString(tokens.CreateToken(recipient.UserId))}&lang={(portuguese ? "pt" : "en")}";
-                await email.SendMarketingEmailAsync(recipient.Email, portuguese ? content.SubjectPt : content.SubjectEn,
-                    portuguese ? content.BodyHtmlPt : content.BodyHtmlEn, recipient.Language, url, token);
-                await deliveries.RecordDeliveredAsync(broadcastId, recipient.UserId, clock.GetUtcNow().UtcDateTime, CancellationToken.None);
-            }
-            catch (Exception exception) when (exception is not OperationCanceledException) { failures.Enqueue(exception); }
-        });
-        if (!failures.IsEmpty) throw new AggregateException("Broadcast page delivery failed.", failures);
+        var nowAtUtc = clock.GetUtcNow().UtcDateTime;
+        if (nowAtUtc >= expiresAtUtc) return;
+        await new SendMarketingBroadcastCommandValidator().ValidateAndThrowAsync(content, cancellationToken);
+        var validator = new MarketingRecipientDeliveryValidator();
+        foreach (var recipient in recipients)
+            await validator.ValidateAndThrowAsync(new(broadcastId, recipient.UserId, recipient.Email, recipient.Language), cancellationToken);
+        await store.ImportAsync(broadcastId, content, recipients, nowAtUtc, cancellationToken);
     }
 }

@@ -149,24 +149,24 @@ public class OAuthConnectorConfirmationTests : IDisposable
         var user = await Authenticate(_userId, legacy ? null : Guid.NewGuid(), legacy: legacy);
         user.GetAgentAuthMethod().Should().Be(AgentAuthMethod.OAuth);
         var context = Context(user, "delete_habit:original");
-        var decision = _policy.Evaluate(context);
+        var decision = (await _policy.EvaluateAsync(context));
         decision.Status.Should().Be(AgentPolicyDecisionStatus.ConfirmationRequired);
         var pending = decision.PendingOperation!;
         var confirmation = Payload<PendingAgentOperationConfirmation>(
             _tools.ConfirmAgentOperation(user, pending.Id.ToString()));
 
-        _policy.Evaluate(context with { UserId = Guid.NewGuid(), ConfirmationToken = confirmation.ConfirmationToken })
+        (await _policy.EvaluateAsync(context with { UserId = Guid.NewGuid(), ConfirmationToken = confirmation.ConfirmationToken }))
             .Status.Should().Be(AgentPolicyDecisionStatus.Denied);
         _store.Confirm(Guid.NewGuid(), pending.Id).Should().BeNull();
         _store.TryConsumeFreshConfirmation(Guid.NewGuid(), AgentCapabilityIds.HabitsDelete,
             context.OperationFingerprint!, confirmation.ConfirmationToken, false).Should().BeFalse();
         _store.TryConsumeFreshConfirmation(_userId, AgentCapabilityIds.GoalsDelete,
             context.OperationFingerprint!, confirmation.ConfirmationToken, false).Should().BeFalse();
-        _policy.Evaluate(context with { OperationFingerprint = "delete_habit:other", ConfirmationToken = confirmation.ConfirmationToken })
+        (await _policy.EvaluateAsync(context with { OperationFingerprint = "delete_habit:other", ConfirmationToken = confirmation.ConfirmationToken }))
             .Status.Should().Be(AgentPolicyDecisionStatus.ConfirmationRequired);
-        _policy.Evaluate(context with { ConfirmationToken = confirmation.ConfirmationToken })
+        (await _policy.EvaluateAsync(context with { ConfirmationToken = confirmation.ConfirmationToken }))
             .Status.Should().Be(AgentPolicyDecisionStatus.Allowed);
-        _policy.Evaluate(context with { ConfirmationToken = confirmation.ConfirmationToken })
+        (await _policy.EvaluateAsync(context with { ConfirmationToken = confirmation.ConfirmationToken }))
             .Status.Should().Be(AgentPolicyDecisionStatus.ConfirmationRequired);
     }
 
@@ -176,7 +176,7 @@ public class OAuthConnectorConfirmationTests : IDisposable
         var familyId = Guid.NewGuid();
         var original = await Authenticate(_userId, familyId);
         var context = Context(original, "delete_habit:refresh");
-        var decision = _policy.Evaluate(context);
+        var decision = (await _policy.EvaluateAsync(context));
         decision.Status.Should().Be(AgentPolicyDecisionStatus.ConfirmationRequired);
         var pending = decision.PendingOperation!;
         var refreshed = await Authenticate(_userId, familyId);
@@ -185,8 +185,8 @@ public class OAuthConnectorConfirmationTests : IDisposable
         var confirmation = Payload<PendingAgentOperationConfirmation>(
             _tools.ConfirmAgentOperation(refreshed, pending.Id.ToString()));
 
-        _policy.Evaluate(Context(refreshed, context.OperationFingerprint!) with
-        { ConfirmationToken = confirmation.ConfirmationToken }).Status.Should().Be(AgentPolicyDecisionStatus.Allowed);
+        (await _policy.EvaluateAsync(Context(refreshed, context.OperationFingerprint!) with
+        { ConfirmationToken = confirmation.ConfirmationToken })).Status.Should().Be(AgentPolicyDecisionStatus.Allowed);
     }
 
     [Fact]
@@ -197,11 +197,11 @@ public class OAuthConnectorConfirmationTests : IDisposable
         foreach (var user in new[] { legacy, newer })
         {
             var context = Context(user, $"delete_habit:{user.FindFirst("api_key_id")!.Value}");
-            var pending = _policy.Evaluate(context).PendingOperation!;
+            var pending = (await _policy.EvaluateAsync(context)).PendingOperation!;
             var confirmation = Payload<PendingAgentOperationConfirmation>(
                 _tools.ConfirmAgentOperation(user, pending.Id.ToString()));
 
-            _policy.Evaluate(context with { ConfirmationToken = confirmation.ConfirmationToken })
+            (await _policy.EvaluateAsync(context with { ConfirmationToken = confirmation.ConfirmationToken }))
                 .Status.Should().Be(AgentPolicyDecisionStatus.Allowed);
         }
     }
@@ -227,7 +227,7 @@ public class OAuthConnectorConfirmationTests : IDisposable
     {
         var user = await Authenticate(_userId, legacy ? null : Guid.NewGuid(), legacy: legacy);
         user.GetAgentAuthMethod().Should().Be(AgentAuthMethod.OAuth);
-        var pending = _policy.Evaluate(Context(user, "delete_habit:owner")).PendingOperation!;
+        var pending = (await _policy.EvaluateAsync(Context(user, "delete_habit:owner"))).PendingOperation!;
         var foreign = await Authenticate(Guid.NewGuid(), Guid.NewGuid());
         var result = _tools.ConfirmAgentOperation(foreign, pending.Id.ToString());
         result.Should().BeOfType<CallToolResult>().Which.IsError.Should().BeTrue();
@@ -261,7 +261,7 @@ public class OAuthConnectorConfirmationTests : IDisposable
     public async Task ReadOnlyConnector_CannotApproveAnyWrite(string action, bool legacy)
     {
         var writable = await Authenticate(_userId, Guid.NewGuid());
-        var pending = _policy.Evaluate(Context(writable, "delete_habit:read-only")).PendingOperation!;
+        var pending = (await _policy.EvaluateAsync(Context(writable, "delete_habit:read-only"))).PendingOperation!;
         var user = await Authenticate(_userId, legacy ? null : Guid.NewGuid(), readOnly: true, legacy: legacy);
         user.GetAgentAuthMethod().Should().Be(AgentAuthMethod.OAuth);
         var id = pending.Id.ToString();
@@ -273,7 +273,7 @@ public class OAuthConnectorConfirmationTests : IDisposable
         };
         AssertError(result, "read_only_credential");
         _db.PendingAgentOperations.Single().ConfirmedAtUtc.Should().BeNull();
-        _policy.Evaluate(Context(user, "delete_habit:read-only")).Reason.Should().Be("read_only_credential");
+        (await _policy.EvaluateAsync(Context(user, "delete_habit:read-only"))).Reason.Should().Be("read_only_credential");
     }
 
     [Theory]

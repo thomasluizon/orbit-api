@@ -1,5 +1,4 @@
 using System.IdentityModel.Tokens.Jwt;
-using System.Linq.Expressions;
 using System.Security.Claims;
 using FluentAssertions;
 using Microsoft.AspNetCore.Authentication;
@@ -9,6 +8,8 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using NSubstitute;
 using Orbit.Api.Extensions;
 using Orbit.Application.Auth.Commands;
@@ -16,6 +17,9 @@ using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.Configuration;
 using Orbit.Infrastructure.Services;
+using Orbit.Infrastructure.Events;
+using Orbit.Infrastructure.Persistence;
+using Orbit.Infrastructure.Tests.Persistence;
 
 namespace Orbit.Infrastructure.Tests.Extensions;
 
@@ -47,29 +51,23 @@ public class JwtSessionValidationTests
     [Fact]
     public async Task Logout_SameAccessToken_IsRejectedWithUnauthorizedChallenge()
     {
-        var rows = new List<UserSession>();
-        var repository = Substitute.For<IGenericRepository<UserSession>>();
-        repository.AddAsync(Arg.Any<UserSession>(), Arg.Any<CancellationToken>())
-            .Returns(call =>
-            {
-                rows.Add(call.Arg<UserSession>());
-                return Task.CompletedTask;
-            });
-        repository.FindOneTrackedAsync(
-                Arg.Any<Expression<Func<UserSession, bool>>>(),
-                Arg.Any<Func<IQueryable<UserSession>, IQueryable<UserSession>>?>(),
-                Arg.Any<CancellationToken>())
-            .Returns(call => rows.SingleOrDefault(call.Arg<Expression<Func<UserSession, bool>>>().Compile()));
-        repository.AnyAsync(Arg.Any<Expression<Func<UserSession, bool>>>(), Arg.Any<CancellationToken>())
-            .Returns(call => rows.Any(call.Arg<Expression<Func<UserSession, bool>>>().Compile()));
+        using var memory = new MemoryCache(new MemoryCacheOptions());
+        var cache = new AuthValidationCache(memory, Options.Create(new AuthCacheSettings()), TimeProvider.System);
+        using var bus = new InMemoryAccountEventBus();
+        var collector = new AccountEventCollector(bus, new HttpContextAccessor(), cache);
+        using var database = new SqliteOrbitDbContextFactory(collector, new AccountEventTransactionInterceptor(collector));
+        var db = database.Context;
+        var user = User.Create("User", "user@example.com").Value;
+        db.Users.Add(user);
+        await db.SaveChangesAsync();
         var sessions = new AuthSessionService(
-            repository,
-            Substitute.For<IGenericRepository<UserSessionRefreshToken>>(),
-            Substitute.For<IGenericRepository<User>>(),
+            new GenericRepository<UserSession>(db),
+            new GenericRepository<UserSessionRefreshToken>(db),
+            new GenericRepository<User>(db),
             new JwtTokenService(Options.Create(Settings())),
-            Substitute.For<IUnitOfWork>(),
-            Options.Create(Settings()));
-        var issued = await sessions.CreateSessionAsync(Guid.NewGuid(), "user@example.com");
+            new UnitOfWork(db, new DatabaseConnectionSettings()),
+            Options.Create(Settings()), cache);
+        var issued = await sessions.CreateSessionAsync(user.Id, user.Email);
         issued.IsSuccess.Should().BeTrue();
         using var services = CreateServices(sessions);
         using (var scope = services.CreateScope())
@@ -83,7 +81,7 @@ public class JwtSessionValidationTests
             .Handle(new LogoutSessionCommand(issued.Value.RefreshToken), CancellationToken.None);
 
         logout.IsSuccess.Should().BeTrue();
-        rows.Should().ContainSingle().Which.RevokedAtUtc.Should().NotBeNull();
+        (await db.UserSessions.AsNoTracking().SingleAsync()).RevokedAtUtc.Should().NotBeNull();
         (await sessions.RefreshSessionAsync(issued.Value.RefreshToken)).IsFailure.Should().BeTrue();
         using (var scope = services.CreateScope())
         {

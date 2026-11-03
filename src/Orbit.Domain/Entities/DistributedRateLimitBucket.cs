@@ -39,6 +39,14 @@ public class DistributedRateLimitBucket : Entity
         };
     }
 
+    public void RenewLease(DateTime leaseEndsAtUtc)
+    {
+        if (WindowStartUtc != DateTime.UnixEpoch || leaseEndsAtUtc.Kind != DateTimeKind.Utc || leaseEndsAtUtc <= WindowEndsAtUtc)
+            throw new ArgumentException("A lease renewal must extend its UTC expiry.");
+        WindowEndsAtUtc = leaseEndsAtUtc;
+        UpdatedAtUtc = DateTime.UtcNow;
+    }
+
     public void Increment(int amount = 1)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(amount, 1);

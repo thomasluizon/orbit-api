@@ -28,7 +28,7 @@ public sealed class CorrectHabitDoseCommandHandler(
                 return result;
             await unitOfWork.SaveChangesAsync(ct);
             var today = await dates.GetUserTodayAsync(request.UserId, ct);
-            CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, today);
+            await CacheInvalidationHelper.InvalidateUserAiCachesAsync(cache, request.UserId, today);
             return Result.Success();
         }, cancellationToken);
 }

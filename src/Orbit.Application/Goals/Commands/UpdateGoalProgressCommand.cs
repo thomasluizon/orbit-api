@@ -59,7 +59,7 @@ public class UpdateGoalProgressCommandHandler(
             return saved;
 
         var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
-        CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, today);
+        await CacheInvalidationHelper.InvalidateUserAiCachesAsync(cache, request.UserId, today);
 
         return Result.Success();
     }

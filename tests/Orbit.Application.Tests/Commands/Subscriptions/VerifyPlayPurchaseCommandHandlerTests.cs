@@ -19,6 +19,7 @@ public class VerifyPlayPurchaseCommandHandlerTests
     private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly IPlayBillingService _playBilling = Substitute.For<IPlayBillingService>();
+    private readonly IGenericRepository<PendingCouponCancellation> _cancellations = Substitute.For<IGenericRepository<PendingCouponCancellation>>();
     private readonly IPlayReferralCouponConsumer _referralConsumer = Substitute.For<IPlayReferralCouponConsumer>();
     private readonly VerifyPlayPurchaseCommandHandler _handler;
 
@@ -30,7 +31,7 @@ public class VerifyPlayPurchaseCommandHandlerTests
     public VerifyPlayPurchaseCommandHandlerTests()
     {
         _handler = new VerifyPlayPurchaseCommandHandler(
-            _userRepo, _unitOfWork, _playBilling, _referralConsumer, Settings,
+            _userRepo, _unitOfWork, _playBilling, _referralConsumer, _cancellations, Settings,
             Substitute.For<ILogger<VerifyPlayPurchaseCommandHandler>>());
     }
 
@@ -323,7 +324,7 @@ public class VerifyPlayPurchaseCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ReferralCoupon_CancelledOnlyAfterSaveSucceeds()
+    public async Task Handle_ReferralCoupon_CancellationRecordedBeforeSharedSave()
     {
         var user = User.Create("Alex", "test@example.com").Value;
         StubUser(user);
@@ -336,13 +337,13 @@ public class VerifyPlayPurchaseCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         Received.InOrder(() =>
         {
+            _cancellations.AddAsync(Arg.Is<PendingCouponCancellation>(row => row.UserId == user.Id && row.CouponId == "coupon_abc"), Arg.Any<CancellationToken>());
             _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>());
-            _referralConsumer.CancelConsumedCouponAsync(UserId, "coupon_abc", Arg.Any<CancellationToken>());
         });
     }
 
     [Fact]
-    public async Task Handle_ReferralCoupon_SaveFails_CouponNotCancelled()
+    public async Task Handle_ReferralCoupon_SaveFails_ExternalCancelIsNotCalled()
     {
         var user = User.Create("Alex", "test@example.com").Value;
         StubUser(user);
@@ -357,7 +358,6 @@ public class VerifyPlayPurchaseCommandHandlerTests
         var act = () => _handler.Handle(Command(), CancellationToken.None);
 
         await act.Should().ThrowAsync<DbUpdateException>();
-        await _referralConsumer.DidNotReceive().CancelConsumedCouponAsync(
-            Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _cancellations.Received(1).AddAsync(Arg.Any<PendingCouponCancellation>(), Arg.Any<CancellationToken>());
     }
 }

@@ -34,7 +34,7 @@ public class UpdateChecklistTemplateCommandHandler(
             return result;
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
-        cache.Remove(ReferenceCacheKeys.ChecklistTemplates(request.UserId));
+        await CacheInvalidationHelper.InvalidateReferenceCacheAsync(cache, request.UserId, ReferenceCacheKeys.ChecklistTemplates(request.UserId));
         return Result.Success();
     }
 }

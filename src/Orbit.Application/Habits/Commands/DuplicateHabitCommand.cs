@@ -67,7 +67,7 @@ public class DuplicateHabitCommandHandler(
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
-        CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, today);
+        await CacheInvalidationHelper.InvalidateUserAiCachesAsync(cache, request.UserId, today);
 
         return Result.Success(rootCopy.Value.Id);
     }

@@ -69,7 +69,7 @@ public class WaitlistControllerRateLimitTests
         var tokens = Substitute.For<IWaitlistConfirmationTokenService>();
         tokens.CreateToken(Arg.Any<string>(), Arg.Any<string>()).Returns("confirmation-token");
         var options = Options.Create(new WaitlistSettings { ApiBaseUrl = "https://api.useorbit.org" });
-        var handler = new JoinWaitlistCommandHandler(cache, tokens, jobs, options);
+        var handler = new JoinWaitlistCommandHandler(ChallengeTestDatabase.For(cache).Store(), tokens, jobs, options);
         var mediator = Substitute.For<IMediator>();
         mediator.Send(Arg.Any<JoinWaitlistCommand>(), Arg.Any<CancellationToken>())
             .Returns(call => handler.Handle(call.Arg<JoinWaitlistCommand>(), call.Arg<CancellationToken>()));

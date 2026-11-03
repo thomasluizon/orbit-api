@@ -148,7 +148,7 @@ public class ChatEmptySuccessTests
         IAiTool[] tools = successfulRead ? [new DescribeFeatureTool(new FeatureExplanationService(), new AppSurfaceCatalog())] : [];
         var catalog = new AgentCatalogService(tools);
         var policy = Substitute.For<IAgentPolicyEvaluator>();
-        policy.Evaluate(Arg.Any<AgentPolicyEvaluationContext>()).Returns(call =>
+        policy.EvaluateAsync(Arg.Any<AgentPolicyEvaluationContext>()).Returns(call =>
             new AgentPolicyDecision(AgentPolicyDecisionStatus.Allowed,
                 catalog.GetCapability(call.Arg<AgentPolicyEvaluationContext>().CapabilityId)!));
         var bridge = Substitute.For<IAgentStepUpAuthorizationBridge>();

@@ -27,7 +27,8 @@ public class GetGoalReviewQueryHandler(
         GetGoalReviewQuery request,
         CancellationToken cancellationToken)
     {
-        var cacheKey = $"goal-review:{request.UserId}:{request.Language}";
+        var cacheVersion = await CacheInvalidationHelper.VersionSuffixAsync(cache, request.UserId, cancellationToken);
+        var cacheKey = $"goal-review:{request.UserId}:{request.Language}" + cacheVersion;
 
         if (cache.TryGetValue(cacheKey, out string? cached) && cached is not null)
             return Result.Success(new GoalReviewResponse(cached, FromCache: true));

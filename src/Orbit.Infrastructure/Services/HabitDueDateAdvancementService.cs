@@ -79,6 +79,7 @@ public partial class HabitDueDateAdvancementService(
         while (true)
         {
             var habits = await dbContext.Habits
+                .AsNoTracking()
                 .Where(StaleBadHabitFilter(cutoff)).Page(cursor, configuration.GetValue("BackgroundServices:ScanPageSize", JobPaging.DefaultPageSize))
                 .ToListAsync(ct);
 
@@ -103,6 +104,7 @@ public partial class HabitDueDateAdvancementService(
 
                     if (!ShouldAdvanceForUserToday(habit, userToday)) continue;
 
+                    var loadedVersion = habit.ReminderProbeVersion;
                     var result = habit.CatchUpDueDate(userToday, user.WeekStartDay);
                     if (result.IsFailure)
                     {
@@ -110,7 +112,23 @@ public partial class HabitDueDateAdvancementService(
                         continue;
                     }
 
-                    advanced++;
+                    var changed = await dbContext.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+                    {
+                        await using var transaction = await dbContext.Database.BeginTransactionAsync(ct);
+                        var updated = await dbContext.Habits
+                            .Where(row => row.Id == habit.Id && row.ReminderProbeVersion == loadedVersion)
+                            .ExecuteUpdateAsync(setters => setters
+                                .SetProperty(row => row.NextDueDate, habit.NextDueDate)
+                                .SetProperty(row => row.IsCompleted, habit.IsCompleted)
+                                .SetProperty(row => row.ScheduledStartDate, habit.ScheduledStartDate)
+                                .SetProperty(row => row.UpdatedAtUtc, clock.GetUtcNow().UtcDateTime)
+                                .SetProperty(row => row.ReminderProbeVersion, row => row.ReminderProbeVersion + 1), ct);
+                        if (updated > 0)
+                            await new UserCacheVersions(dbContext).BumpAsync(habit.UserId, ct);
+                        await transaction.CommitAsync(ct);
+                        return updated;
+                    });
+                    advanced += changed;
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
@@ -120,7 +138,6 @@ public partial class HabitDueDateAdvancementService(
 
             if (advanced > 0)
             {
-                await dbContext.SaveChangesAsync(ct);
                 if (logger.IsEnabled(LogLevel.Debug))
                     LogDueDatesAdvanced(logger, advanced);
             }

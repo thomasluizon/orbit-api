@@ -36,7 +36,7 @@ public class VerifyCodeCommandHandlerTests
         _unitOfWork.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task<Result<Orbit.Application.Auth.Queries.LoginResponse>>>>(), Arg.Any<CancellationToken>())
             .Returns(call => call.Arg<Func<CancellationToken, Task<Result<Orbit.Application.Auth.Queries.LoginResponse>>>>()(call.Arg<CancellationToken>()));
         _handler = new VerifyCodeCommandHandler(
-            _cache, _userRepo, _unitOfWork, _authSessionService, new SignupJobDispatcher(_jobs, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance), _jobs, new AccountReactivation(Substitute.For<IGenericRepository<OwedSubscriptionCancellation>>()));
+            ChallengeTestDatabase.For(_cache).Store(), _userRepo, _unitOfWork, _authSessionService, new SignupJobDispatcher(_jobs, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance), _jobs, new AccountReactivation(Substitute.For<IGenericRepository<OwedSubscriptionCancellation>>()));
 
         _userRepo.UpsertAsync(Arg.Any<User>(), Arg.Any<CancellationToken>()).Returns(call => call.Arg<User>());
         _authSessionService.CreateSessionAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
@@ -104,7 +104,7 @@ public class VerifyCodeCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.Token.Should().Be("jwt-token");
         result.Value.Email.Should().Be(TestEmail);
-        _cache.TryGetValue($"verify:{TestEmail}", out _).Should().BeFalse();
+        ChallengeTestDatabase.For(_cache).HasCode($"verify:{TestEmail}").Should().BeFalse();
         await _userRepo.Received(1).UpsertAsync(Arg.Any<User>(), Arg.Any<CancellationToken>());
     }
 
@@ -120,7 +120,7 @@ public class VerifyCodeCommandHandlerTests
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Be(ErrorMessages.InvalidVerificationCode.Message);
         result.ErrorCode.Should().Be("INVALID_VERIFICATION_CODE");
-        _cache.TryGetValue($"verify-attempts:{TestEmail}", out int attempts).Should().BeTrue();
+        var attempts = ChallengeTestDatabase.For(_cache).Attempts($"verify-attempts:{TestEmail}");
         attempts.Should().Be(1);
     }
 
@@ -168,7 +168,7 @@ public class VerifyCodeCommandHandlerTests
     [Fact]
     public async Task Handle_ResendingCode_DoesNotResetAttemptBudget()
     {
-        var sendCodeHandler = new SendCodeCommandHandler(_cache, Substitute.For<IBackgroundJobClient>());
+        var sendCodeHandler = new SendCodeCommandHandler(ChallengeTestDatabase.For(_cache).Store(), ChallengeTestDatabase.Environment(), Substitute.For<IBackgroundJobClient>());
         await sendCodeHandler.Handle(new SendCodeCommand(TestEmail), CancellationToken.None);
 
         for (var attempt = 0; attempt < 3; attempt++)
@@ -226,8 +226,7 @@ public class VerifyCodeCommandHandlerTests
         var failures = new List<(string Error, string? Code, int Attempts)>();
         foreach (var exists in new[] { true, false })
         {
-            _cache.Remove($"verify:{TestEmail}");
-            _cache.Remove($"verify-attempts:{TestEmail}");
+            ChallengeTestDatabase.For(_cache).Clear();
             if (exists)
                 SetupExistingUser(User.Create("Existing", TestEmail).Value);
             else
@@ -235,15 +234,14 @@ public class VerifyCodeCommandHandlerTests
             if (mode != "absent")
                 SetupCacheWithCode("123456");
             if (mode == "expired")
-                _cache.Set($"verify:{TestEmail}", new VerificationEntry("123456", 0, DateTime.UtcNow),
-                    new MemoryCacheEntryOptions { AbsoluteExpiration = DateTimeOffset.UtcNow.AddMinutes(-1) });
+                ChallengeTestDatabase.For(_cache).Seed($"verify:{TestEmail}", "123456", expired: true);
             if (mode == "throttled")
-                _cache.Set($"verify-attempts:{TestEmail}", 3);
+                ChallengeTestDatabase.For(_cache).SetAttempts($"verify:{TestEmail}", 3);
 
             var result = await _handler.Handle(new VerifyCodeCommand(TestEmail, "999999"), CancellationToken.None);
 
             result.IsFailure.Should().BeTrue();
-            _cache.TryGetValue($"verify-attempts:{TestEmail}", out int attempts);
+            var attempts = ChallengeTestDatabase.For(_cache).Attempts($"verify-attempts:{TestEmail}");
             failures.Add((result.Error, result.ErrorCode, attempts));
         }
 
@@ -257,9 +255,7 @@ public class VerifyCodeCommandHandlerTests
 
     private void SetupCacheWithCode(string code)
     {
-        var entry = new VerificationEntry(code, 0, DateTime.UtcNow);
-        _cache.Set($"verify:{TestEmail}", entry,
-            new MemoryCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5) });
+        ChallengeTestDatabase.For(_cache).Seed($"verify:{TestEmail}", code);
     }
 
     private void SetupExistingUser(User user)

@@ -40,6 +40,15 @@ public class RollingMigrationGateTests
     private const string DeployedCommit = "7472203c7450bdd914c68282fefa905d9b432653";
 
     [Fact]
+    public void DurableAuthAndDeliveryExpansion_IsAdditiveWithoutDeploymentBarrier()
+    {
+        var migration = new CompleteDurableAuthAndDeliveryState { ActiveProvider = "Npgsql.EntityFrameworkCore.PostgreSQL" };
+
+        RollingMigrationGate.Check("20261102214043_CompleteDurableAuthAndDeliveryState", migration.UpOperations)
+            .Should().BeEmpty();
+    }
+
+    [Fact]
     public void BoundedReadExpansion_RequiresRecordedCompatibilityEvidenceFromTheReleasedBase()
     {
         const string id = "20261102113348_AddBoundedReadState";

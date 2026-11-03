@@ -33,7 +33,7 @@ public partial class ReminderSchedulerServiceTests
         await CreateService(db, push).CheckAndSendReminders(default);
         saves.Count.Should().Be(1);
         (await db.SentReminders.CountAsync()).Should().Be(count);
-        await push.Received(1).SendManyAsync(Arg.Is<IReadOnlyList<PushDelivery>>(d => d.Count == count - 1), Arg.Any<CancellationToken>());
+        await push.Received(1).TrySendManyAsync(Arg.Is<IReadOnlyList<PushDelivery>>(d => d.Count == count - 1), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -49,14 +49,25 @@ public partial class ReminderSchedulerServiceTests
         var service = CreateService(db, push);
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        push.SendManyAsync(Arg.Any<IReadOnlyList<PushDelivery>>(), Arg.Any<CancellationToken>())
-            .Returns(async _ => { entered.TrySetResult(); await release.Task; });
+        var secondEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var calls = 0;
+        push.TrySendManyAsync(Arg.Any<IReadOnlyList<PushDelivery>>(), Arg.Any<CancellationToken>())
+            .Returns(async _ =>
+            {
+                if (Interlocked.Increment(ref calls) == 2) secondEntered.TrySetResult();
+                entered.TrySetResult();
+                await release.Task;
+                return (IReadOnlySet<int>)new HashSet<int>();
+            });
         var first = service.CheckAndSendReminders(default);
         try
         {
             await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
-            await service.CheckAndSendReminders(default).WaitAsync(TimeSpan.FromSeconds(5));
+            var second = service.CheckAndSendReminders(default);
+            await secondEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
             first.IsCompleted.Should().BeFalse();
+            release.TrySetResult();
+            await second.WaitAsync(TimeSpan.FromSeconds(5));
         }
         finally { release.TrySetResult(); await first; }
     }

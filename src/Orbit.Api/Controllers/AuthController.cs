@@ -283,7 +283,7 @@ public partial class AuthController(IMediator mediator, IAgentAuditService audit
         {
             if (logger.IsEnabled(LogLevel.Information))
                 logger.LogAllSessionsRevoked(HttpContext.GetUserId(), HttpContext.GetRequestId());
-            return Ok(new { message = "Logged out of all sessions" });
+            return Ok(new { message = "Logged out of all sessions", personalApiKeysRemainActive = true });
         }
 
         if (logger.IsEnabled(LogLevel.Warning))

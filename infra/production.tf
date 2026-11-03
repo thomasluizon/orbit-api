@@ -4,8 +4,10 @@ import {
 }
 
 resource "render_web_service" "production_api" {
-  environment_id             = render_project.orbit.environments["Production"].id
-  name                       = "orbit-api"
+  environment_id = render_project.orbit.environments["Production"].id
+  name           = "orbit-api"
+  # https://github.com/thomasluizon/orbit-tickets/issues/1956: the account event bus requires one API instance.
+  num_instances              = 1
   plan                       = "starter"
   region                     = "ohio"
   health_check_path          = "/health"
@@ -14,6 +16,10 @@ resource "render_web_service" "production_api" {
   custom_domains             = [{ name = "api.useorbit.org" }]
 
   lifecycle {
+    postcondition {
+      condition     = self.num_instances == 1 && self.autoscaling == null
+      error_message = "The production API requires one instance until the account event bus has a shared backplane."
+    }
     ignore_changes = [env_vars, runtime_source.image.digest]
   }
 

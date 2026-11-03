@@ -25,6 +25,7 @@ public class HandlePlayNotificationCommandHandlerTests
     private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly IPlayBillingService _playBilling = Substitute.For<IPlayBillingService>();
+    private readonly IGenericRepository<PendingCouponCancellation> _cancellations = Substitute.For<IGenericRepository<PendingCouponCancellation>>();
     private readonly IPlayReferralCouponConsumer _referralConsumer = Substitute.For<IPlayReferralCouponConsumer>();
     private readonly IGenericRepository<ProcessedPlayNotification> _processedRepo = Substitute.For<IGenericRepository<ProcessedPlayNotification>>();
     private readonly HandlePlayNotificationCommandHandler _handler;
@@ -45,7 +46,7 @@ public class HandlePlayNotificationCommandHandlerTests
         _unitOfWork.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task<User?>>>(), Arg.Any<CancellationToken>())
             .Returns(call => call.Arg<Func<CancellationToken, Task<User?>>>()(call.Arg<CancellationToken>()));
         _handler = new HandlePlayNotificationCommandHandler(
-            _userRepo, _unitOfWork, _playBilling, _referralConsumer, _processedRepo, Settings,
+            _userRepo, _unitOfWork, _playBilling, _referralConsumer, _processedRepo, _cancellations, Settings,
             Substitute.For<ILogger<HandlePlayNotificationCommandHandler>>());
     }
 
@@ -560,7 +561,7 @@ public class HandlePlayNotificationCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ReferralCoupon_CancelledOnlyAfterSaveSucceeds()
+    public async Task Handle_ReferralCoupon_CancellationRecordedBeforeSharedSave()
     {
         var user = User.Create("Alex", "test@example.com").Value;
         StubUser(user);
@@ -572,12 +573,20 @@ public class HandlePlayNotificationCommandHandlerTests
         var result = await _handler.Handle(new HandlePlayNotificationCommand(BuildPushBody(4, "tok_purchase", "orbit_pro")), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
+        Received.InOrder(() =>
+        {
+            _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>());
+            _cancellations.AddAsync(Arg.Is<PendingCouponCancellation>(row => row.UserId == user.Id && row.CouponId == "coupon_abc"), Arg.Any<CancellationToken>());
+            _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>());
+            _referralConsumer.CancelConsumedCouponAsync(user.Id, "coupon_abc", Arg.Any<CancellationToken>());
+            _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>());
+        });
         await _unitOfWork.Received(3).SaveChangesAsync(Arg.Any<CancellationToken>());
         await _referralConsumer.Received(1).CancelConsumedCouponAsync(user.Id, "coupon_abc", Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task Handle_ReferralCoupon_SaveFails_CouponNotCancelled()
+    public async Task Handle_ReferralCoupon_SaveFails_ExternalCancelIsNotCalled()
     {
         var user = User.Create("Alex", "test@example.com").Value;
         StubUser(user);
@@ -590,13 +599,13 @@ public class HandlePlayNotificationCommandHandlerTests
             Arg.Any<CancellationToken>())
             .Returns(false);
         _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
-            .ThrowsAsync(new DbUpdateException("transient"));
+            .Returns(_ => Task.FromResult(1), _ => Task.FromException<int>(new DbUpdateException("transient")));
 
         var act = () => _handler.Handle(new HandlePlayNotificationCommand(BuildPushBody(4, "tok_purchase", "orbit_pro")), CancellationToken.None);
 
         await act.Should().ThrowAsync<DbUpdateException>();
-        await _referralConsumer.DidNotReceive().CancelConsumedCouponAsync(
-            Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _cancellations.Received(1).AddAsync(Arg.Any<PendingCouponCancellation>(), Arg.Any<CancellationToken>());
+        await _referralConsumer.DidNotReceive().CancelConsumedCouponAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

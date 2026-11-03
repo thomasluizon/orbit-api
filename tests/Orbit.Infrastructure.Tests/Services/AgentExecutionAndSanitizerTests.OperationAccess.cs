@@ -40,7 +40,7 @@ public partial class AgentExecutionAndSanitizerTests
         catalog.GetOperation(operation.Id).Returns(operation);
         catalog.GetCapability(capability.Id).Returns(capability);
         var policy = Substitute.For<IAgentPolicyEvaluator>();
-        policy.Evaluate(Arg.Any<AgentPolicyEvaluationContext>()).Returns(new AgentPolicyDecision(
+        policy.EvaluateAsync(Arg.Any<AgentPolicyEvaluationContext>()).Returns(new AgentPolicyDecision(
             outcome == "denied" ? AgentPolicyDecisionStatus.Denied
                 : outcome == "confirmation" ? AgentPolicyDecisionStatus.ConfirmationRequired : AgentPolicyDecisionStatus.Allowed,
             capability));
@@ -97,7 +97,7 @@ public partial class AgentExecutionAndSanitizerTests
         var tools = new AiToolRegistry([tool]);
         var catalog = new AgentCatalogService([tool]);
         var policy = Substitute.For<IAgentPolicyEvaluator>();
-        policy.Evaluate(Arg.Any<AgentPolicyEvaluationContext>()).Returns(new AgentPolicyDecision(
+        policy.EvaluateAsync(Arg.Any<AgentPolicyEvaluationContext>()).Returns(new AgentPolicyDecision(
             AgentPolicyDecisionStatus.Allowed, catalog.GetCapabilityByChatTool(tool.Name)!));
         var executor = CreateExecutor(catalog, policyEvaluator: policy, toolRegistry: tools);
         var intent = Substitute.For<IAiIntentService>();

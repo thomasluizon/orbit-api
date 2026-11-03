@@ -83,7 +83,7 @@ public class ReferenceCacheInvalidationTests
         var payGate = Substitute.For<IPayGateService>();
         var unitOfWork = Substitute.For<IUnitOfWork>();
         var appConfig = Substitute.For<IAppConfigService>();
-        var challengeService = new EmailChallengeService(cache, TimeProvider.System);
+        var challengeService = new EmailChallengeService(ChallengeTestDatabase.For(cache).Store(TimeProvider.System));
         var (apiKey, _) = ApiKey.Create(UserId, "Agent Key").Value;
 
         payGate.CanReadApiKeys(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Result.Success());

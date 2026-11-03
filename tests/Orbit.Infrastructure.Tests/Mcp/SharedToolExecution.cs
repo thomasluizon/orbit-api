@@ -37,7 +37,7 @@ internal static class SharedToolExecution
             .Returns(call => call.ArgAt<Func<CancellationToken, Task<AgentExecuteOperationResponse>>>(0)(call.ArgAt<CancellationToken>(1)));
         var catalog = new AgentCatalogService([tool]);
         var policy = Substitute.For<IAgentPolicyEvaluator>();
-        policy.Evaluate(Arg.Any<AgentPolicyEvaluationContext>()).Returns(new AgentPolicyDecision(
+        policy.EvaluateAsync(Arg.Any<AgentPolicyEvaluationContext>()).Returns(new AgentPolicyDecision(
             AgentPolicyDecisionStatus.Allowed, catalog.GetCapabilityByChatTool(tool.Name)!));
         var ownership = Substitute.For<IAgentTargetOwnershipService>();
         ownership.GetDenialReasonAsync(

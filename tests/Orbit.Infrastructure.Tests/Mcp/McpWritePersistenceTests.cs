@@ -96,7 +96,7 @@ public partial class McpWritePersistenceTests
         var tools = BackingTools.Select(type => (IAiTool)services.GetRequiredService(type)).ToArray();
         var catalog = new AgentCatalogService(tools);
         var policy = Substitute.For<IAgentPolicyEvaluator>();
-        policy.Evaluate(Arg.Any<AgentPolicyEvaluationContext>()).Returns(call => new AgentPolicyDecision(
+        policy.EvaluateAsync(Arg.Any<AgentPolicyEvaluationContext>()).Returns(call => new AgentPolicyDecision(
             AgentPolicyDecisionStatus.Allowed, catalog.GetCapability(call.Arg<AgentPolicyEvaluationContext>().CapabilityId)!));
         var executor = new AgentOperationExecutor(catalog, policy, Substitute.For<IAgentAuditService>(),
             new AgentTargetOwnershipService(db), Substitute.For<IAgentStepUpAuthorizationBridge>(), new AiToolRegistry(tools),

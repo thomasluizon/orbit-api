@@ -183,6 +183,19 @@ public class MigrationLockGateTests
         failures.Should().BeEmpty();
     }
 
+    [Theory]
+    [InlineData(typeof(CompleteDurableAuthAndDeliveryState))]
+    public void DurableAuthAndDeliveryMigrations_UpAndDownMeetLockRulesWithoutExceptions(Type type)
+    {
+        var migration = (Migration)Activator.CreateInstance(type)!;
+        migration.ActiveProvider = "Npgsql.EntityFrameworkCore.PostgreSQL";
+        var id = type.GetCustomAttribute<MigrationAttribute>()!.Id;
+
+        ReadPolicy().Exceptions.Should().NotContainKey(id);
+        MigrationLockGate.Check(id, migration.UpOperations, Policy).Should().BeEmpty();
+        MigrationLockGate.Check(id, migration.DownOperations, Policy).Should().BeEmpty();
+    }
+
     private static MigrationLockPolicy ReadPolicy()
     {
         var root = new DirectoryInfo(AppContext.BaseDirectory);

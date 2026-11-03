@@ -54,10 +54,20 @@ public sealed partial class DistributedRateLimitFilter(
             DistributedRateLimitDecision decision;
             try
             {
-                decision = await distributedRateLimitService.TryAcquireAsync(
-                    partition.PolicyName,
-                    partition.PartitionKey,
-                    context.HttpContext.RequestAborted);
+                if (policyName == "chat" && context.HttpContext.User.Identity?.IsAuthenticated == true
+                    && context.Filters.OfType<ConcurrentChatLimitFilter>().FirstOrDefault() is { } concurrent
+                    && !ConcurrentChatLimitFilter.IsIdempotentStream(context))
+                {
+                    var combined = await distributedRateLimitService.TryAcquireWithLeaseAsync(partition.PolicyName,
+                        partition.PartitionKey, concurrent.LeasePolicyName,
+                        AppConstants.MaxConcurrentChatRequestsPerUser, TimeSpan.FromMinutes(5), context.HttpContext.RequestAborted);
+                    decision = combined.RateLimit;
+                    if (combined.Lease is not null)
+                        context.HttpContext.Items[ConcurrentChatLimitFilter.LeaseItemKey] = combined.Lease;
+                }
+                else
+                    decision = await distributedRateLimitService.TryAcquireAsync(
+                        partition.PolicyName, partition.PartitionKey, context.HttpContext.RequestAborted);
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
             {
@@ -110,7 +120,18 @@ public sealed partial class DistributedRateLimitFilter(
             return;
         }
 
-        await next();
+        try
+        {
+            await next();
+        }
+        finally
+        {
+            if (context.HttpContext.Items.Remove(ConcurrentChatLimitFilter.LeaseItemKey, out var remaining)
+                && remaining is DistributedRateLimitDecision { Allowed: true } lease)
+                await distributedRateLimitService.ReleaseLeaseAsync(
+                    context.Filters.OfType<ConcurrentChatLimitFilter>().First().LeasePolicyName,
+                    $"user:{context.HttpContext.GetUserId()}", lease.WindowEndsAtUtc, CancellationToken.None);
+        }
     }
 
     private async Task<(string PolicyName, string PartitionKey)[]> ResolvePartitionsAsync(
@@ -271,19 +292,26 @@ public sealed partial class ConcurrentChatLimitFilter(
     internal const string PolicyName = "chat-in-flight";
     private static readonly TimeSpan LeaseDuration = TimeSpan.FromMinutes(5);
 
+    internal string LeasePolicyName => policyName;
+
+    internal static readonly object LeaseItemKey = new();
+    internal static bool IsIdempotentStream(ActionExecutingContext context) =>
+        context.HttpContext.Request.Headers.ContainsKey("Idempotency-Key")
+        && context.ActionDescriptor is Microsoft.AspNetCore.Mvc.Controllers.ControllerActionDescriptor action
+        && action.ControllerTypeInfo?.AsType() == typeof(Orbit.Api.Controllers.ChatController)
+        && action.MethodInfo.Name == nameof(Orbit.Api.Controllers.ChatController.ProcessChatStream);
+
     public async Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
     {
-        if (context.HttpContext.Request.Headers.ContainsKey("Idempotency-Key")
-            && context.ActionDescriptor is Microsoft.AspNetCore.Mvc.Controllers.ControllerActionDescriptor action
-            && action.ControllerTypeInfo?.AsType() == typeof(Orbit.Api.Controllers.ChatController)
-            && action.MethodInfo.Name == nameof(Orbit.Api.Controllers.ChatController.ProcessChatStream))
+        if (IsIdempotentStream(context))
         {
             await next();
             return;
         }
 
         var partitionKey = $"user:{context.HttpContext.GetUserId()}";
-        var decision = await distributedRateLimitService.TryAcquireLeaseAsync(
+        var decision = context.HttpContext.Items.TryGetValue(LeaseItemKey, out var shared) && shared is DistributedRateLimitDecision acquired
+            ? acquired : await distributedRateLimitService.TryAcquireLeaseAsync(
             policyName,
             partitionKey,
             AppConstants.MaxConcurrentChatRequestsPerUser,
@@ -319,6 +347,7 @@ public sealed partial class ConcurrentChatLimitFilter(
         }
         finally
         {
+            context.HttpContext.Items.Remove(LeaseItemKey);
             await distributedRateLimitService.ReleaseLeaseAsync(
                 policyName,
                 partitionKey,

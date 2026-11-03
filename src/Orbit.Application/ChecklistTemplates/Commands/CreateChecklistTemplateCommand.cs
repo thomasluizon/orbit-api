@@ -26,7 +26,7 @@ public class CreateChecklistTemplateCommandHandler(
         await repository.AddAsync(result.Value, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        cache.Remove(ReferenceCacheKeys.ChecklistTemplates(request.UserId));
+        await CacheInvalidationHelper.InvalidateReferenceCacheAsync(cache, request.UserId, ReferenceCacheKeys.ChecklistTemplates(request.UserId));
 
         return Result.Success(result.Value.Id);
     }

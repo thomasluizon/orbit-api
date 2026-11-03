@@ -65,7 +65,7 @@ public class ScheduledJobRegistryTests
     [Fact]
     public void AllRecurringSchedulers_AreRegisteredAsJobs()
     {
-        BuildAll().Should().HaveCount(18);
+        BuildAll().Should().HaveCount(20);
         BuildAll().Select(job => job.Name).Should().NotContain("openai-batch-poller");
     }
 
@@ -74,6 +74,14 @@ public class ScheduledJobRegistryTests
     {
         foreach (var job in BuildAll())
             BackgroundServiceHealthCheck.ExpectedIntervals.Should().ContainKey(job.Name);
+    }
+
+    [Theory]
+    [InlineData("auth-state-cleanup")]
+    [InlineData("durable-delivery-recovery")]
+    public void DurableAuthJobs_HavePersistedHeartbeatIntervals(string name)
+    {
+        BackgroundServiceHealthCheck.ExpectedIntervals.Should().ContainKey(name);
     }
 
     [Fact]
@@ -160,6 +168,8 @@ public class ScheduledJobRegistryTests
         new StreakGoalSyncService(ScopeFactory(), NullLogger<StreakGoalSyncService>.Instance, EmptyConfiguration),
         new SyncCleanupService(ScopeFactory(), NullLogger<SyncCleanupService>.Instance),
         new PlayNotificationCleanupService(ScopeFactory(), NullLogger<PlayNotificationCleanupService>.Instance),
+        new AuthStateCleanupService(ScopeFactory(), TimeProvider.System, NullLogger<AuthStateCleanupService>.Instance),
+        new DurableDeliveryRecoveryService(ScopeFactory(), NullLogger<DurableDeliveryRecoveryService>.Instance),
         new CalendarAutoSyncService(ScopeFactory(), NullLogger<CalendarAutoSyncService>.Instance, EmptyConfiguration, TimeProvider.System),
         new AiUsageSummaryService(ScopeFactory(), NullLogger<AiUsageSummaryService>.Instance, EmptyConfiguration, Options.Create(new AiSettings())),
         new FoundingAchievementReconciliationService(

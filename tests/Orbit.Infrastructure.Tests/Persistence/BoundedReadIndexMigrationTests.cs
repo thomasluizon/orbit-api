@@ -24,11 +24,16 @@ public class BoundedReadIndexMigrationTests(Xunit.Abstractions.ITestOutputHelper
             "20261102153013_PersistOAuthClients",
             "20261102193912_CompleteBoundedReadIndexes");
         var initializer = db.GetService<IModelRuntimeInitializer>();
-        var target = initializer.Initialize(new CompleteBoundedReadIndexes().TargetModel, designTime: true);
+        var target = initializer.Initialize(new UnmapMarketingBroadcastDeliveries().TargetModel, designTime: true);
         var snapshot = initializer.Initialize(new OrbitDbContextModelSnapshot().Model, designTime: true);
 
         target.FindEntityType("Orbit.Domain.Entities.OAuthClient").Should().NotBeNull();
         target.FindEntityType("Orbit.Domain.Entities.XpDailyTotal").Should().NotBeNull();
+        target.FindEntityType("Orbit.Domain.Entities.EmailChallenge").Should().NotBeNull();
+        target.FindEntityType("Orbit.Domain.Entities.MarketingDelivery").Should().NotBeNull();
+        target.FindEntityType("Orbit.Domain.Entities.MarketingBroadcastDelivery").Should().BeNull();
+        target.FindEntityType("Orbit.Domain.Entities.User")!.FindProperty("GoogleAccessTokenExpiresAtUtc").Should().NotBeNull();
+        target.FindEntityType("Orbit.Domain.Entities.Habit")!.FindProperty("LongestRecordedStreak").Should().NotBeNull();
         db.GetService<IMigrationsModelDiffer>().GetDifferences(target.GetRelationalModel(), snapshot.GetRelationalModel())
             .Should().BeEmpty();
         db.Database.HasPendingModelChanges().Should().BeFalse();

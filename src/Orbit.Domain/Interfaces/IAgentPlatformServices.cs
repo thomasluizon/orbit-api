@@ -38,7 +38,7 @@ public interface IAgentCatalogService
 
 public interface IAgentPolicyEvaluator
 {
-    AgentPolicyDecision Evaluate(AgentPolicyEvaluationContext context);
+    Task<AgentPolicyDecision> EvaluateAsync(AgentPolicyEvaluationContext context);
 }
 
 public interface IPendingAgentOperationStore
@@ -126,7 +126,7 @@ public interface IAgentStepUpAuthorizationBridge
         string capabilityId,
         CancellationToken cancellationToken = default);
 
-    void OnStepUpVerified(string capabilityId, Guid userId);
+    Task OnStepUpVerifiedAsync(string capabilityId, Guid userId);
 }
 
 public interface IAgentAuditService
@@ -184,6 +184,10 @@ public interface IDistributedRateLimitService
         string partitionKey,
         int permitLimit,
         TimeSpan leaseDuration,
+        CancellationToken cancellationToken = default);
+
+    Task<(DistributedRateLimitDecision RateLimit, DistributedRateLimitDecision? Lease)> TryAcquireWithLeaseAsync(
+        string policyName, string partitionKey, string leasePolicy, int permitLimit, TimeSpan leaseDuration,
         CancellationToken cancellationToken = default);
 
     Task ReleaseLeaseAsync(

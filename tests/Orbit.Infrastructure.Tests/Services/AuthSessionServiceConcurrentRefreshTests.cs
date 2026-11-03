@@ -36,7 +36,7 @@ public class AuthSessionServiceConcurrentRefreshTests
 
         result.IsFailure.Should().BeTrue();
         result.ErrorCode.Should().Be("INVALID_SESSION");
-        interceptor.SaveAttempts.Should().Be(1);
+        interceptor.SaveAttempts.Should().Be(2);
         context.ChangeTracker.Entries().Should().NotContain(entry =>
             entry.State == EntityState.Added || entry.State == EntityState.Modified || entry.State == EntityState.Deleted);
 
@@ -67,12 +67,13 @@ public class AuthSessionServiceConcurrentRefreshTests
 
         result.IsFailure.Should().BeTrue();
         result.ErrorCode.Should().Be("INVALID_SESSION");
-        interceptor.SaveAttempts.Should().Be(1);
+        interceptor.SaveAttempts.Should().Be(2);
 
         await using var verify = CreateContext(dbName);
         var persisted = verify.UserSessions.Single(s => s.UserId == userId);
         persisted.TokenHash.Should().Be(Hash(winnerToken));
         persisted.TokenHash.Should().NotBe(Hash(token));
+        persisted.RevokedAtUtc.Should().NotBeNull("the losing use of a token rotated by another client is replay");
     }
 
     [Fact]

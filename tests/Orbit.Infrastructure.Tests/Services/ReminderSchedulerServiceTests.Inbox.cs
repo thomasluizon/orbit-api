@@ -43,7 +43,7 @@ public partial class ReminderSchedulerServiceTests
         user.SetTimeZone("America/Sao_Paulo");
         await db.SaveChangesAsync();
         var clock = new MutableTimeProvider(new(firstAtUtc));
-        var service = CreateService(db, Substitute.For<IPushNotificationService>(), clock);
+        var service = CreateService(db, SuccessfulPush(), clock);
 
         await service.CheckAndSendReminders(default);
         clock.SetUtcNow(new(firstAtUtc.AddMinutes(30)));
@@ -77,7 +77,7 @@ public partial class ReminderSchedulerServiceTests
         await db.SaveChangesAsync();
 
         var sentAtUtc = startAtUtc.AddHours(8);
-        await CreateService(db, Substitute.For<IPushNotificationService>(), new MutableTimeProvider(new(sentAtUtc)))
+        await CreateService(db, SuccessfulPush(), new MutableTimeProvider(new(sentAtUtc)))
             .CheckAndSendReminders(default);
 
         db.ChangeTracker.Clear();
@@ -106,7 +106,7 @@ public partial class ReminderSchedulerServiceTests
         db.Habits.Add(habit);
         await db.SaveChangesAsync();
         var clock = new MutableTimeProvider(new(UtcToday.ToDateTime(new(8, 0), DateTimeKind.Utc)));
-        var service = CreateService(db, Substitute.For<IPushNotificationService>(), clock);
+        var service = CreateService(db, SuccessfulPush(), clock);
         await service.CheckAndSendReminders(default);
         clock.SetUtcNow(new(UtcToday.ToDateTime(new(9, 0), DateTimeKind.Utc)));
         await service.CheckAndSendReminders(default);
