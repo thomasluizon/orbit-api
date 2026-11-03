@@ -38,7 +38,7 @@ locals {
     AI__EvalDailyBudgetUsd              = "0.50"
     AI__Model                           = "gpt-6-luna"
     AI__SubTaskModel                    = "gpt-6-luna"
-    BotProtection__Enabled              = "false"
+    BotProtection__Enabled              = "true"
     ASPNETCORE_ENVIRONMENT              = "Production"
     Cors__AllowedOrigins__0             = "https://app.useorbit.org"
     Database__MigrateOnStartup          = "true"

@@ -85,12 +85,12 @@ public class BotProtectionTerraformTests
     }
 
     [Fact]
-    public void ProvisionedSwitch_EnablesStagingWhileProductionWaitsForAcceptance()
+    public void ProvisionedSwitch_EnablesProductionAndStaging()
     {
         var configuration = File.ReadAllText(Path.Combine(RepositoryRoot(), "infra/configuration.tf"));
         var values = Regex.Matches(configuration, "(?m)^\\s*BotProtection__Enabled\\s*=\\s*\"(true|false)\"")
             .Select(match => match.Groups[1].Value);
-        values.Should().Equal("false", "true");
+        values.Should().Equal("true", "true");
     }
 
     private static string RepositoryRoot()

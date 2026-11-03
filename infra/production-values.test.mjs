@@ -24,10 +24,10 @@ test('production API values are pinned', () => {
   assert.match(api, /Storage__S3__Bucket\s*=\s*aws_s3_bucket.uploads\["production"\].bucket/)
   assert.match(text('uploads.tf'), /bucket\s*=\s*"orbit-uploads-\$\{each.key\}-713285551626"/)
 })
-test('staging overrides production to enable bot protection while production stays off', () => {
+test('production and staging explicitly enable bot protection', () => {
   const api = configuration.split('  production_api_values = {')[1].split('  staging_api_values =')[0]
   const staging = configuration.split('  staging_api_values = merge(local.production_api_values, {')[1].split('\n  })')[0]
-  value(api, 'BotProtection__Enabled', 'false')
+  value(api, 'BotProtection__Enabled', 'true')
   value(staging, 'BotProtection__Enabled', 'true')
 })
 test('api_secret_keys covers every required API secret', () => {
