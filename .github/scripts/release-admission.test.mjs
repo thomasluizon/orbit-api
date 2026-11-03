@@ -19,7 +19,7 @@ test('CI requires both successful workflows and their check runs', async () => {
   const paths = []
   await requireCI(async path => {
     paths.push(path)
-    return path.includes('/check-suites/') ? { check_runs: [{ head_sha: sha, head_branch: 'main', event: 'push', status: 'completed', conclusion: 'success' }] }
+    return path.includes('/check-suites/') ? { check_runs: [{ head_sha: sha, status: 'completed', conclusion: 'success' }] }
       : { workflow_runs: [{ head_sha: sha, head_branch: 'main', event: 'push', status: 'completed', conclusion: 'success', check_suite_id: 123 }] }
   }, 'owner/repo', sha)
   assert.equal(paths.length, 4)
