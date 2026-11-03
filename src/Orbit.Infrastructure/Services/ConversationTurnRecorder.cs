@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Orbit.Application.Chat;
 using Orbit.Application.Chat.Validators;
@@ -21,7 +22,8 @@ public sealed partial class ConversationTurnRecorder(
     IFeatureFlagService flags,
     IEncryptionService encryption,
     IObjectStorageService storage,
-    IOptions<AiSettings> aiSettings) : IConversationTurnRecorder
+    IOptions<AiSettings> aiSettings,
+    ILogger<ConversationTurnRecorder> logger) : IConversationTurnRecorder
 {
     public const int HistoryRows = 10;
     public const int ImageHistoryRows = 6;
