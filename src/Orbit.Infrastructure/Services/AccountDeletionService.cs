@@ -234,7 +234,9 @@ public partial class AccountDeletionService(
         foreach (var store in stores)
             await DeleteObjectsWithRetryAsync(store, userId, ct);
 
-        await dbContext.MarketingBroadcastDeliveries.Where(delivery => delivery.RecipientId == userId).ExecuteDeleteAsync(ct);
+        var email = user.Email.Trim().ToLowerInvariant();
+        await dbContext.MarketingDeliveries.Where(delivery => delivery.RecipientId == userId || delivery.Email.ToLower() == email)
+            .ExecuteDeleteAsync(ct);
         await dbContext.AiUsageDaily.Where(u => u.UserId == userId).ExecuteDeleteAsync(ct);
         await services.GetRequiredService<IAccountResetRepository>().DeleteAllUserDataAsync(userId, ct);
         dbContext.Users.Remove(user);

@@ -104,7 +104,7 @@ public partial class ProcessUserChatCommandHandlerTests
                 : "You can add a sub-habit to an existing habit.";
             result.Value.AiMessage.Should().Be(expected + " " + nextStep);
             result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatTextPart>().Which.Text.Should().Be(result.Value.AiMessage);
-            policy.DidNotReceive().Evaluate(Arg.Any<AgentPolicyEvaluationContext>());
+            await policy.DidNotReceive().EvaluateAsync(Arg.Any<AgentPolicyEvaluationContext>());
             _pendingOperationStore.DidNotReceiveWithAnyArgs().Create(default, default!, default!, default!, default!, default!, default);
             await _aiIntentService.Received(1).ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
                 Arg.Is<IReadOnlyList<AiToolCallResult>>(results => results.Count == 1 && !results[0].Success
@@ -147,7 +147,7 @@ public partial class ProcessUserChatCommandHandlerTests
         var catalog = new AgentCatalogService([tool]);
         var policy = Substitute.For<IAgentPolicyEvaluator>();
         _pendingOperationStore.Revise(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>()).Returns(true);
-        policy.Evaluate(Arg.Any<AgentPolicyEvaluationContext>()).Returns(call =>
+        policy.EvaluateAsync(Arg.Any<AgentPolicyEvaluationContext>()).Returns(call =>
         {
             var context = call.Arg<AgentPolicyEvaluationContext>();
             var capability = catalog.GetCapability(context.CapabilityId)!;

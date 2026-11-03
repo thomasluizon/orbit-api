@@ -24,13 +24,16 @@ public class SendMarketingBroadcastCommandHandlerTests
     private readonly RecordingEmailService _emailService = new();
     private readonly IMarketingUnsubscribeTokenService _tokenService = Substitute.For<IMarketingUnsubscribeTokenService>();
     private readonly IBackgroundJobClient _backgroundJobClient = Substitute.For<IBackgroundJobClient>();
+    private readonly IGenericRepository<MarketingDelivery> _deliveries = Substitute.For<IGenericRepository<MarketingDelivery>>();
+    private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
+    private readonly List<MarketingDelivery> _rows = [];
     private readonly SendMarketingBroadcastCommandHandler _handler;
     private Job? _enqueuedJob;
     private readonly List<Job> _pages = [];
     private User[] _audience = [];
     private MarketingContact[] _contacts = [];
     private readonly MarketingSettings _settings = new() { ApiBaseUrl = "https://api.useorbit.org", SendDelayMilliseconds = 0 };
-    private readonly BroadcastClock _clock = new();
+    private readonly TimeProvider _clock = TimeProvider.System;
 
     public SendMarketingBroadcastCommandHandlerTests()
     {
@@ -47,10 +50,17 @@ public class SendMarketingBroadcastCommandHandlerTests
             .Returns(call => call.Arg<Func<IQueryable<MarketingContact>, IQueryable<MarketingContact>>>()(
                 _contacts.AsQueryable().Where(call.Arg<Expression<Func<MarketingContact, bool>>>())).ToArray());
         _tokenService.CreateToken(Arg.Any<Guid>()).Returns(call => $"token-{call.Arg<Guid>():N}");
-        _backgroundJobClient.Create(Arg.Do<Job>(job => { _enqueuedJob = job; _pages.Add(job); }), Arg.Any<IState>());
+        _backgroundJobClient.Create(Arg.Do<Job>(job => { _enqueuedJob = job; _pages.Add(job); }), Arg.Any<IState>()).Returns("101");
+        _unitOfWork.ExecuteOnceInTransactionAsync(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.Arg<Func<CancellationToken, Task>>()(call.Arg<CancellationToken>()));
+        _deliveries.AddAsync(Arg.Any<MarketingDelivery>(), Arg.Any<CancellationToken>())
+            .Returns(call => { _rows.Add(call.Arg<MarketingDelivery>()); return Task.CompletedTask; });
+        _deliveries.FindOneTrackedAsync(Arg.Any<Expression<Func<MarketingDelivery, bool>>>(),
+                Arg.Any<Func<IQueryable<MarketingDelivery>, IQueryable<MarketingDelivery>>?>(), Arg.Any<CancellationToken>())
+            .Returns(call => _rows.SingleOrDefault(call.Arg<Expression<Func<MarketingDelivery, bool>>>().Compile()));
 
         _handler = new SendMarketingBroadcastCommandHandler(
-            _userRepo, _contactRepo, _backgroundJobClient, _tokenService, Options.Create(_settings),
+            _userRepo, _contactRepo, _backgroundJobClient, _tokenService, _deliveries, _unitOfWork, Options.Create(_settings),
             NullLogger<SendMarketingBroadcastCommandHandler>.Instance, _clock);
     }
 
@@ -60,14 +70,61 @@ public class SendMarketingBroadcastCommandHandlerTests
     private void AudienceReturns(params User[] users) => _audience = users;
     private void ContactsReturn(params MarketingContact[] contacts) => _contacts = contacts;
 
+    [Fact]
+    public async Task LiveBroadcast_QueuesEachRecipientDurably()
+    {
+        _settings.SendDelayMilliseconds = 100;
+        var users = Enumerable.Range(0, 3).Select(i => User.Create("Recipient", $"recipient{i}@example.com").Value).ToArray();
+        foreach (var user in users) user.SetMarketingConsent(true);
+        AudienceReturns(users);
+        var result = await _handler.Handle(Command(), CancellationToken.None);
+        result.Value.RecipientCount.Should().Be(3);
+        _rows.Should().HaveCount(3).And.OnlyContain(row => row.BackgroundJobId == "101");
+        _rows.Select(row => row.BroadcastId).Distinct().Should().ContainSingle();
+        (_rows[1].NotBeforeAtUtc - _rows[0].NotBeforeAtUtc).Should().Be(TimeSpan.FromMilliseconds(100));
+        Received.InOrder(() =>
+        {
+            _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>());
+            for (var i = 0; i < 3; i++)
+                _backgroundJobClient.Create(Arg.Any<Job>(), Arg.Is<IState>(state => state is ScheduledState));
+            _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>());
+        });
+    }
+
+    [Fact]
+    public async Task Audience_DeduplicatesUsersAndWaitlistAndExcludesBlockedOrInactive()
+    {
+        var allowed = User.Create("Allowed", "person@example.com").Value;
+        allowed.SetMarketingConsent(true);
+        var inactive = User.Create("Inactive", "inactive@example.com").Value;
+        inactive.SetMarketingConsent(true);
+        inactive.Deactivate(DateTime.UtcNow.AddDays(7));
+        var blocked = User.Create("Blocked", "blocked@example.com").Value;
+        blocked.SetMarketingConsent(true);
+        var suppression = MarketingContact.ConfirmWaitlist(blocked.Email, "en");
+        suppression.Suppress();
+        AudienceReturns(allowed, inactive, blocked, User.Create("No consent", "no@example.com").Value);
+        ContactsReturn(MarketingContact.ConfirmWaitlist("PERSON@example.com", "en"), suppression,
+            MarketingContact.ConfirmWaitlist("waitlist@example.com", "pt-BR"));
+        var result = await _handler.Handle(Command(), default);
+        result.Value.RecipientCount.Should().Be(2);
+        _rows.Select(row => row.Email).Should().BeEquivalentTo("person@example.com", "waitlist@example.com");
+    }
+
     private async Task WaitForSendCountAsync(RecordingEmailService email, int expected)
     {
         email.MarketingSends.Should().BeEmpty();
-        foreach (var queued in _pages.Where(job => job.Type == typeof(SendMarketingBroadcastPageJob)))
-            await new SendMarketingBroadcastPageJob(email, _tokenService, Options.Create(_settings), _clock,
-                Substitute.For<IMarketingBroadcastDeliveryStore>())
-                .ExecuteAsync((Guid)queued.Args[0], (int)queued.Args[1], (SendMarketingBroadcastCommand)queued.Args[2],
-                    (MarketingRecipient[])queued.Args[3], (DateTime)queued.Args[4], default);
+        var failures = new List<Exception>();
+        foreach (var queued in _pages.Where(job => job.Method.Name == nameof(SendMarketingEmailJob.ExecuteRecipientAsync)))
+        {
+            try
+            {
+                await new SendMarketingEmailJob(email, _deliveries, _unitOfWork, _tokenService, Options.Create(_settings))
+                    .ExecuteRecipientAsync((Guid)queued.Args[0], (Guid)queued.Args[1], (string)queued.Args[2], (string)queued.Args[3]);
+            }
+            catch (Exception exception) { failures.Add(exception); }
+        }
+        if (failures.Count > 0) throw new AggregateException(failures);
         email.MarketingSends.Should().HaveCount(expected);
     }
 
@@ -162,7 +219,7 @@ public class SendMarketingBroadcastCommandHandlerTests
     {
         var logger = new CollectingLogger<SendMarketingBroadcastCommandHandler>();
         var handler = new SendMarketingBroadcastCommandHandler(
-            _userRepo, _contactRepo, _backgroundJobClient, _tokenService,
+            _userRepo, _contactRepo, _backgroundJobClient, _tokenService, _deliveries, _unitOfWork,
             Options.Create(new MarketingSettings { ApiBaseUrl = "https://api.useorbit.org", SendDelayMilliseconds = 0 }),
             logger, _clock);
 
@@ -228,7 +285,7 @@ public class SendMarketingBroadcastCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_TwelveHundredRecipients_EnqueuesThreeDurablePagesBeforeAnyEmail()
+    public async Task Handle_TwelveHundredRecipients_PagesAudienceAndPersistsEveryRecipientBeforeDispatch()
     {
         var users = Enumerable.Range(0, 1200).Select(index =>
         {
@@ -241,16 +298,12 @@ public class SendMarketingBroadcastCommandHandlerTests
         var result = await _handler.Handle(Command(), default);
 
         result.Value.RecipientCount.Should().Be(1200);
-        _backgroundJobClient.Received(3).Create(Arg.Any<Job>(), Arg.Any<IState>());
+        _backgroundJobClient.Received(1200).Create(Arg.Any<Job>(), Arg.Any<IState>());
         _emailService.MarketingSends.Should().BeEmpty();
-        _pages.Select(job => ((MarketingRecipient[])job.Args[3]).Length).Should().Equal(500, 500, 200);
-        _pages.Select(job => (Guid)job.Args[0]).Distinct().Should().ContainSingle();
-        _pages.Select(job => (DateTime)job.Args[4]).Should().OnlyContain(deadline => deadline == _clock.GetUtcNow().UtcDateTime.AddDays(30));
-    }
-
-    private sealed class BroadcastClock : TimeProvider
-    {
-        public override DateTimeOffset GetUtcNow() => new(2030, 6, 15, 12, 0, 0, TimeSpan.Zero);
+        _rows.Should().HaveCount(1200).And.OnlyContain(row => row.BackgroundJobId == "101");
+        _rows.Select(row => row.BroadcastId).Distinct().Should().ContainSingle();
+        await _userRepo.Received(3).FindIgnoringFiltersAsync(Arg.Any<Expression<Func<User, bool>>>(),
+            Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(), Arg.Any<CancellationToken>());
     }
 
     private sealed class CollectingLogger<T> : ILogger<T>

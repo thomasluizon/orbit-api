@@ -165,11 +165,12 @@ public class GoogleAuthFirstLoginRaceTests
         var dispatcher = new SignupJobDispatcher(jobs, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance);
         var users = new AuthUserStore(context);
         using var cache = new MemoryCache(new MemoryCacheOptions());
-        cache.Set("verify:google@example.com", new VerificationEntry("123456", 0, DateTime.UtcNow));
+        ChallengeTestDatabase.For(cache).Seed("verify:google@example.com", "123456");
         var result = google
             ? await new GoogleSignInFlow(users, work, sessions, dispatcher, jobs, new AccountReactivation(Substitute.For<IGenericRepository<OwedSubscriptionCancellation>>())).CompleteAsync(
                 "google@example.com", "Google User", language, referralCode, null, null, CancellationToken.None)
-            : await new VerifyCodeCommandHandler(cache, users, work, sessions, dispatcher, jobs, new AccountReactivation(Substitute.For<IGenericRepository<OwedSubscriptionCancellation>>())).Handle(
+            : await new VerifyCodeCommandHandler(
+            ChallengeTestDatabase.For(cache).Store(), users, work, sessions, dispatcher, jobs, new AccountReactivation(Substitute.For<IGenericRepository<OwedSubscriptionCancellation>>())).Handle(
                 new VerifyCodeCommand("google@example.com", "123456", language, referralCode), CancellationToken.None);
         result.IsSuccess.Should().BeTrue();
         result.Value.Token.Should().Be("session-token");

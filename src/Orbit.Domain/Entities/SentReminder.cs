@@ -15,9 +15,39 @@ public class SentReminder : Entity
     public DateTime? DoseAnchorAtUtc { get; private set; }
     public Guid? ParentReminderId { get; private set; }
     public DateTime? ConsumedAtUtc { get; private set; }
+    public DateTime? PushSentAtUtc { get; private set; }
+    public Guid? PushUserId { get; private set; }
+    public string? PushTitle { get; private set; }
+    public string? PushBody { get; private set; }
+    public string? PushDataJson { get; private set; }
     public DateTime SentAtUtc { get; private set; }
 
     private SentReminder() { }
+
+    public void PreparePush(Guid userId, string title, string body, IReadOnlyDictionary<string, string>? data = null, DateTime? recordedAtUtc = null)
+    {
+        if (userId == Guid.Empty)
+            throw new ArgumentException("A reminder push requires an owner.");
+        ArgumentException.ThrowIfNullOrWhiteSpace(title);
+        ArgumentException.ThrowIfNullOrWhiteSpace(body);
+        if (recordedAtUtc.HasValue)
+        {
+            if (recordedAtUtc.Value.Kind != DateTimeKind.Utc)
+                throw new ArgumentException("Reminder recording requires a UTC instant.");
+            SentAtUtc = recordedAtUtc.Value;
+        }
+        PushUserId = userId;
+        PushTitle = title;
+        PushBody = body;
+        PushDataJson = data is null ? null : System.Text.Json.JsonSerializer.Serialize(data);
+    }
+
+    public void MarkPushSent(DateTime sentAtUtc)
+    {
+        if (sentAtUtc.Kind != DateTimeKind.Utc)
+            throw new ArgumentException("Push delivery requires a UTC instant.");
+        PushSentAtUtc ??= sentAtUtc;
+    }
 
     public static SentReminder CreateRepeat(Guid habitId, DateOnly localDate, DateTime reminderAtUtc,
         DateTime expiresAtUtc, DateTime doseAnchorAtUtc, Guid? parentReminderId = null)

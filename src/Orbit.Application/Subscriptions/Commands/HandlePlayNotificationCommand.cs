@@ -23,6 +23,7 @@ public partial class HandlePlayNotificationCommandHandler(
     IPlayBillingService playBilling,
     IPlayReferralCouponConsumer referralCouponConsumer,
     IGenericRepository<ProcessedPlayNotification> processedNotificationRepository,
+    IGenericRepository<PendingCouponCancellation> couponCancellationRepository,
     IOptions<GooglePlaySettings> playSettings,
     ILogger<HandlePlayNotificationCommandHandler> logger,
     TimeProvider? timeProvider = null) : IRequestHandler<HandlePlayNotificationCommand, Result>
@@ -84,6 +85,7 @@ public partial class HandlePlayNotificationCommandHandler(
                         notification.NotificationType, state.GrantsOrbitPro(_settings));
                     if (!string.IsNullOrEmpty(couponId))
                     {
+                        await couponCancellationRepository.AddAsync(PendingCouponCancellation.Create(user.Id, couponId), token);
                         claimRow.RecordConsumedCoupon(user.Id, couponId);
                         processedNotificationRepository.Update(claimRow);
                     }

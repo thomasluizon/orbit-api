@@ -235,7 +235,7 @@ public partial class LogHabitCommandHandler(
             async ct => streakState = await services.UserStreakService.RecalculateAsync(
                 userId, awardFreezeIfEligible: false, ct),
             cancellationToken);
-        CacheInvalidationHelper.InvalidateUserAiCaches(cache, userId, today, preserveDailyNarrative: true);
+        await CacheInvalidationHelper.InvalidateUserAiCachesAsync(cache, userId, today, preserveDailyNarrative: true);
 
         return Result.Success(new LogHabitResponse(
             unlogId,
@@ -294,7 +294,7 @@ public partial class LogHabitCommandHandler(
         if (gamificationResult is null)
             await PersistStreakRecalcAsync(request.UserId, cancellationToken);
 
-        CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, today, preserveDailyNarrative: true);
+        await CacheInvalidationHelper.InvalidateUserAiCachesAsync(cache, request.UserId, today, preserveDailyNarrative: true);
 
         await CheckReferralCompletionSafeAsync(request.UserId, cancellationToken);
 
@@ -416,7 +416,7 @@ public partial class LogHabitCommandHandler(
         var streakState = await services.UserStreakService.CalculateAsync(habit.UserId, cancellationToken);
         var currentStreak = streakState?.CurrentStreak ?? 0;
 
-        CacheInvalidationHelper.InvalidateUserAiCaches(cache, habit.UserId, today, preserveDailyNarrative: true);
+        await CacheInvalidationHelper.InvalidateUserAiCachesAsync(cache, habit.UserId, today, preserveDailyNarrative: true);
 
         return Result.Success(new LogHabitResponse(
             winningLog.Id,

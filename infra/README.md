@@ -347,26 +347,31 @@ expiration sweep removes expired rows within an hour. State locks prevent a retr
 job from expiring on an obsolete monitoring snapshot. These are application settings;
 the installed PostgreSql provider exposes no options with those list-size names.
 
-Marketing broadcasts enqueue pages identified by broadcast id and page number.
-`Marketing:BroadcastPageSize` defaults to 500, `Marketing:BroadcastParallelism` to three,
-and `Marketing:MaxSendsPerSecond` to ten. Page jobs share a distributed method lock;
-the separate queue keeps their waits away from reminder workers. Send starts are
-paced by the greater of `Marketing:SendDelayMilliseconds` and the configured rate.
-The rate is capped at fourteen, matching the verified SES quota. SES requests have a
-thirty-second timeout. Each successful send records a `MarketingBroadcastDeliveries`
-checkpoint keyed by broadcast and recipient. A page retry reads those checkpoints
-and sends only to recipients without one, including after cancellation or a restart.
-Checkpoint writes finish independently of the page's cancellation token. SES delivery
-and the checkpoint are separate operations: a process loss after provider acceptance
-but before the checkpoint commits can still repeat that individual send.
-`BackgroundServices:Retention:MarketingBroadcastDeliveriesDays` retains successful
-delivery checkpoints for 31 days by default, covering the thirty-day failed-job
-retry window and a daily cleanup interval. Every page carries the same UTC expiry,
-thirty days after the broadcast was queued. Expired pages stop before reading
-checkpoints or sending, so an old manual retry cannot replay emails after cleanup.
-The retention window must be at least 31 days or zero to disable the purge.
-Account erasure removes the user's checkpoints in the erasure transaction. Account
-reset keeps them so a pending broadcast retry still skips delivered recipients.
+Marketing broadcasts persist one `MarketingDelivery` row per recipient, page by page,
+and schedule one `SendMarketingEmailJob.ExecuteRecipientAsync` per row on the `marketing`
+queue. `Marketing:BroadcastPageSize` defaults to 500 and `Marketing:MaxSendsPerSecond`
+to ten. Recipient jobs share a distributed advisory lock; the separate queue keeps
+their waits away from reminder workers. Sends are paced by the greater of
+`Marketing:SendDelayMilliseconds` and the configured rate. The rate is capped at
+fourteen, matching the verified SES quota. SES requests have a thirty-second timeout.
+A retried broadcast sends only pending recipients, including after cancellation or
+a restart. Successful sends set `MarketingDelivery.SentAtUtc`. SES delivery and the
+database commit are separate operations: a process loss after provider acceptance
+but before the commit can still repeat that individual send.
+`BackgroundServices:Retention:MarketingDeliveriesDays` purges sent rows after 31 days
+by default; zero disables the purge. Pending rows stay recoverable. Account erasure
+deletes the account's delivery rows by recipient id and email in the erasure
+transaction. Account reset keeps them so a pending broadcast retry still skips
+delivered recipients. The legacy `SendMarketingBroadcastPageJob` transition shim
+imports unsent recipients from persisted page payloads into `MarketingDeliveries`.
+It reads the unmapped `MarketingBroadcastDeliveries` checkpoints so recorded
+successes are skipped, and the next durable-delivery recovery tick dispatches
+the imported rows through the paced recipient jobs. Replaying a page adds no
+duplicate recipient rows. The legacy Hangfire signature and `MarketingRecipient`
+argument type remain loadable until no legacy page job remains in Hangfire storage.
+In a later release, remove that shim and argument type and drop the unmapped
+`MarketingBroadcastDeliveries` table together, after verifying the Hangfire drain
+and recording the rolling migration barrier for thomasluizon/orbit-tickets#1956.
 Waitlist confirmation is also queued and no longer waits on SES in the request.
 
 ### Application history retention
@@ -637,9 +642,11 @@ To roll out the transactional sender to production:
 5. In Render, open the production API service `orbit-api` > **Environment**. Confirm it inherits `Ses__FromEmail = "Orbit <contact@useorbit.org>"` from the linked `orbit-production-api` environment group, with no service override, and confirm its deploy with the updated environment succeeds.
 6. Receive one real production transactional email in Gmail web. Confirm the From address is `Orbit <contact@useorbit.org>`, the Orbit icon appears in the sender header, and **Show original** reports passing, aligned SPF, DKIM, and DMARC: MAIL FROM `bounce.useorbit.org` and DKIM signing domain `useorbit.org`. The Workspace profile photo route needs this received-email check; configuration alone does not prove the avatar appears.
 
-Terraform creates `/orbit/production/api/BotProtection__SecretKey` and `/orbit/staging/api/BotProtection__SecretKey` as SecureString parameters from the managed Turnstile widget. Both API environment groups read the corresponding parameter. `BotProtection__Enabled` remains `false` in both API environment groups while client and release smoke readiness is pending. `BotProtection__AllowedHostnames__N` is derived from the managed widget domains: production accepts `app.useorbit.org`, `api.useorbit.org`, `useorbit.org` and `www.useorbit.org`; staging accepts `app-staging.useorbit.org` and `api-staging.useorbit.org`. Both API hosts are explicit widget domains so the exact intersection retains the API-hosted OAuth widgets. The same allowlist is used for public authentication, waitlist and onboarding checks. The public `turnstile_site_key` output is for the client builds.
+Terraform creates `/orbit/production/api/BotProtection__SecretKey` and `/orbit/staging/api/BotProtection__SecretKey` as SecureString parameters from the managed Turnstile widget. Both API environment groups read the corresponding parameter and receive `BotProtection__SiteKey` from the widget's `sitekey`. The staging landing also receives the managed `PUBLIC_TURNSTILE_SITE_KEY`. `BotProtection__Enabled` remains `false` in both API environment groups while client and release smoke readiness is pending. `BotProtection__AllowedHostnames__N` is derived from the managed widget domains: production accepts `app.useorbit.org`, `api.useorbit.org`, `useorbit.org` and `www.useorbit.org`; staging accepts `app-staging.useorbit.org`, `api-staging.useorbit.org` and `orbit-landing-staging.onrender.com`. Both API hosts are explicit widget domains so the exact intersection retains the API-hosted OAuth widgets. The same allowlist is used for public authentication, waitlist and onboarding checks. The public `turnstile_site_key` output is for the client builds.
 
-Enablement requires the `orbit-ui-mobile` GitHub Actions repository variable `EXPO_PUBLIC_TURNSTILE_SITE_KEY`, a shipped and verified Android Open build that submits tokens, and a production release smoke that passes Turnstile with a valid token. Verify web and landing submissions and the production `MinSupportedVersion` prerequisite described in the root README. Then change `BotProtection__Enabled` to `true` for staging in code, review and apply only `render_env_group.staging_api`, and run the tokenless and real-client acceptance checks before doing the same for `render_env_group.production_api`. Include any widget domain dependency in the reviewed targeted plan. Never run an untargeted production apply. Setting the affected flag to `false` and applying that API environment group is the kill switch.
+Terraform generates independent 64-character bypass secrets as SecureStrings at `/orbit/production/api/BotProtection__SmokeBypassSecret` and `/orbit/staging/api/BotProtection__SmokeBypassSecret`, and supplies each API group with its own `BotProtection__SmokeBypassSecret`. In `orbit-api` GitHub Settings > Environments > `staging` and `production` > Environment secrets, set `SMOKE_BOT_BYPASS` to the matching Parameter Store value. The release smoke sends it as `X-Orbit-Smoke-Bypass` on both sign-in requests. Bypass requires both a fixed-time match against the non-empty configured secret and an email matching the API's `SMOKE_TEST_EMAIL`; every other request still verifies Turnstile. Missing GitHub secrets do not break smoke while enforcement is off. Provision `/orbit/staging/api/SMOKE_TEST_EMAIL` to match the staging GitHub smoke email as well as its `TEST_ACCOUNTS` entry.
+
+Enablement requires the `orbit-ui-mobile` GitHub Actions repository variable `EXPO_PUBLIC_TURNSTILE_SITE_KEY`, a shipped and verified Android Open build that submits tokens, and both environments' smoke bypass secrets. Verify web and landing submissions and the production `MinSupportedVersion` prerequisite described in the root README. First apply the widget domains, staging landing build key and both API environment groups with enforcement off, including the generated SSM dependencies in the reviewed targeted plan. Redeploy the staging landing so its built widget key takes effect. Then change `BotProtection__Enabled` to `true` for staging in code, review and apply only `render_env_group.staging_api`, pass the staging release smoke and tokenless and real-client acceptance checks, and only then enable `render_env_group.production_api`. Never run an untargeted production apply. Setting the affected flag to `false` and applying that API environment group is the kill switch.
 
 ## DNS cutover
 
@@ -766,8 +773,8 @@ Production requires the latest trusted smoke status and matching staging health.
 `force_unstaged` requires `override_reason`; the summary and production deployment
 payload retain that reason. It does not bypass CI or the export gate.
 
-Configure GitHub Actions environment secrets `SMOKE_TEST_EMAIL` and
-`SMOKE_TEST_CODE` in both `staging` and `production`. On staging, provision that
+Configure GitHub Actions environment secrets `SMOKE_TEST_EMAIL`,
+`SMOKE_TEST_CODE` and `SMOKE_BOT_BYPASS` in both `staging` and `production`. On staging, provision that
 account and retain its email and six-digit code in the API's `TEST_ACCOUNTS` value
 in AWS Systems Manager Parameter Store at `/orbit/staging/api/TEST_ACCOUNTS`.
 Reseeding staging copies production, so provision the dedicated staging account

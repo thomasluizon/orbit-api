@@ -50,7 +50,8 @@ public sealed partial class PushNotificationServiceTests
         {
             commands.Reads = commands.Deletes = 0;
             var service = new ObservingPushService(db, _vapidSettings, new HttpClient());
-            await service.SendManyAsync(users.Select(u => new PushDelivery(u.Id, "Title", "Body")).ToArray());
+            var delivered = await service.TrySendManyAsync(users.Select(u => new PushDelivery(u.Id, "Title", "Body")).ToArray());
+            delivered.Should().BeEquivalentTo(Enumerable.Range(0, separateUsers ? count - 1 : 1));
             service.Chunks.Should().Equal(count == 501 ? [500, 1] : [30]);
             commands.Reads.Should().Be(1);
             commands.Deletes.Should().Be(1);

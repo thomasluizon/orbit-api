@@ -302,7 +302,7 @@ public class UpdateHabitCommandHandler(
             await unitOfWork.SaveChangesAsync(cancellationToken);
         }
 
-        CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, state.Today);
+        await CacheInvalidationHelper.InvalidateUserAiCachesAsync(cache, request.UserId, state.Today);
 
         return Result.Success();
     }

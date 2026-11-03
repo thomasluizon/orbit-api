@@ -150,7 +150,7 @@ public partial class BulkLogHabitsCommandHandler(
         }, cancellationToken);
 
         if (attempt.FirstItemError is { } error) LogBulkLogItemError(logger, error, attempt.ItemErrorCount);
-        CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, today, preserveDailyNarrative: true);
+        await CacheInvalidationHelper.InvalidateUserAiCachesAsync(cache, request.UserId, today, preserveDailyNarrative: true);
 
         return Result.Success(attempt.Result);
     }

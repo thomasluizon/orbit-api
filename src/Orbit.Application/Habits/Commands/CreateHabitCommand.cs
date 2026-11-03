@@ -152,7 +152,7 @@ public partial class CreateHabitCommandHandler(
         await ProcessGamificationSafeAsync(request.UserId, cancellationToken);
         await ProcessOnboardingChecklistSafeAsync(request.UserId, OnboardingChecklistSignal.HabitCreated, cancellationToken);
 
-        CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, today);
+        await CacheInvalidationHelper.InvalidateUserAiCachesAsync(cache, request.UserId, today);
 
         return Result.Success(habitId);
     }

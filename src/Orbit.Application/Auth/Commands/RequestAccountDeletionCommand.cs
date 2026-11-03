@@ -22,7 +22,7 @@ public class RequestAccountDeletionCommandHandler(
         if (user is null)
             return Result.Failure(ErrorMessages.UserNotFound);
 
-        var challenge = challengeService.Issue(EmailChallengeOperation.AccountDeletion, user.Email);
+        var challenge = await challengeService.IssueAsync(EmailChallengeOperation.AccountDeletion, user.Email, cancellationToken);
         if (challenge.IsFailure)
             return challenge.PropagateError();
 

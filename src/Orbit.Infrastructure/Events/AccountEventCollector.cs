@@ -7,16 +7,19 @@ using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Events;
 using Orbit.Infrastructure.Persistence;
+using Orbit.Infrastructure.Services;
 
 namespace Orbit.Infrastructure.Events;
 
-public sealed class AccountEventCollector(IAccountEventBus bus, IHttpContextAccessor httpContextAccessor)
+public sealed class AccountEventCollector(IAccountEventBus bus, IHttpContextAccessor httpContextAccessor, AuthValidationCache? validationCache = null)
     : SaveChangesInterceptor, IAccountEventCollector
 {
     private readonly Dictionary<Guid, List<AccountChange>> _pending = [];
     private readonly HashSet<Guid> _resyncUsers = [];
     private readonly HashSet<Guid> _revokedSessions = [];
     private readonly HashSet<Guid> _deletedUsers = [];
+    private readonly HashSet<Guid> _authUsers = [];
+    private HashSet<Guid>? _stagedAuthUsers;
     private Dictionary<Guid, List<AccountChange>>? _staged;
     private HashSet<Guid>? _stagedRevokedSessions;
     private HashSet<Guid>? _stagedDeletedUsers;
@@ -43,6 +46,18 @@ public sealed class AccountEventCollector(IAccountEventBus bus, IHttpContextAcce
             _stagedDeletedUsers = context.ChangeTracker.Entries<User>()
                 .Where(entry => entry.State == EntityState.Deleted)
                 .Select(entry => entry.Entity.Id).ToHashSet();
+            _stagedAuthUsers = context.ChangeTracker.Entries()
+                .Where(entry => entry.State is EntityState.Modified or EntityState.Deleted)
+                .Select(entry => entry.Entity switch
+                {
+                    ApiKey key => key.UserId,
+                    UserSession session => session.UserId,
+                    User user when entry.State == EntityState.Deleted || entry.Properties.Any(property => property.IsModified &&
+                        property.Metadata.Name is nameof(User.IsDeactivated) or nameof(User.SubscriptionPlan)
+                            or nameof(User.SubscriptionExpiresAtUtc) or nameof(User.BonusProExpiresAtUtc)
+                            or nameof(User.IsLifetimePro) or nameof(User.TrialEndsAt)) => user.Id,
+                    _ => Guid.Empty
+                }).Where(userId => userId != Guid.Empty).ToHashSet();
             var candidate = httpContextAccessor.HttpContext?.Request.Headers["X-Orbit-Event-Origin"].ToString();
             _origin = candidate is { Length: > 0 and <= 128 } ? candidate : null;
         }
@@ -64,6 +79,9 @@ public sealed class AccountEventCollector(IAccountEventBus bus, IHttpContextAcce
         }
         if (_stagedRevokedSessions is not null)
             _revokedSessions.UnionWith(_stagedRevokedSessions);
+        if (_stagedAuthUsers is not null)
+            _authUsers.UnionWith(_stagedAuthUsers);
+        _stagedAuthUsers = null;
         if (_stagedDeletedUsers is not null)
             _deletedUsers.UnionWith(_stagedDeletedUsers);
         _stagedRevokedSessions = null;
@@ -79,6 +97,7 @@ public sealed class AccountEventCollector(IAccountEventBus bus, IHttpContextAcce
         DbContextErrorEventData eventData, CancellationToken cancellationToken = default)
     {
         _staged = null;
+        _stagedAuthUsers = null;
         _stagedRevokedSessions = null;
         _stagedDeletedUsers = null;
         return base.SaveChangesFailedAsync(eventData, cancellationToken);
@@ -86,13 +105,16 @@ public sealed class AccountEventCollector(IAccountEventBus bus, IHttpContextAcce
 
     public void Flush()
     {
+        _authUsers.UnionWith(_resyncUsers);
+        foreach (var userId in _authUsers)
+            validationCache?.InvalidateUser(userId);
         foreach (var userId in _pending.Keys.Concat(_resyncUsers).Distinct())
         {
             var changes = _pending.GetValueOrDefault(userId) ?? [];
             bus.Publish(userId, new AccountEventPayload(1, Collapse(changes), _origin), _resyncUsers.Contains(userId));
         }
-        foreach (var sessionId in _revokedSessions)
-            bus.CloseSession(sessionId);
+        if (_revokedSessions.Count > 0)
+            bus.CloseSessions(_revokedSessions.ToArray());
         foreach (var userId in _deletedUsers)
             bus.CloseAccount(userId);
         Clear();
@@ -104,7 +126,9 @@ public sealed class AccountEventCollector(IAccountEventBus bus, IHttpContextAcce
         _resyncUsers.Clear();
         _revokedSessions.Clear();
         _deletedUsers.Clear();
+        _authUsers.Clear();
         _staged = null;
+        _stagedAuthUsers = null;
         _stagedRevokedSessions = null;
         _stagedDeletedUsers = null;
         _origin = null;

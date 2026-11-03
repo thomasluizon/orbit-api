@@ -87,7 +87,7 @@ public partial class AgentExecutionAndSanitizerTests
         catalog.GetOperation(operation.Id).Returns(operation);
         catalog.GetCapability(capability.Id).Returns(capability);
         var policy = Substitute.For<IAgentPolicyEvaluator>();
-        policy.Evaluate(Arg.Any<AgentPolicyEvaluationContext>())
+        policy.EvaluateAsync(Arg.Any<AgentPolicyEvaluationContext>())
             .Returns(new AgentPolicyDecision(AgentPolicyDecisionStatus.Allowed, capability));
         return CreateExecutor(catalog, policyEvaluator: policy, auditService: audit, logger: logger,
             toolRegistry: new AiToolRegistry([new StubTool(operation.Id, (_, _, token) => execute(token), isReadOnly: true)]));

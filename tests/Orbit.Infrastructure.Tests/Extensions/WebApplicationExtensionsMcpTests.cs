@@ -300,7 +300,7 @@ public class WebApplicationExtensionsMcpTests
         var moderation = ModerationTestDouble.Clean();
         var catalog = new AgentCatalogService();
         var policy = Substitute.For<IAgentPolicyEvaluator>();
-        policy.Evaluate(Arg.Any<AgentPolicyEvaluationContext>())
+        policy.EvaluateAsync(Arg.Any<AgentPolicyEvaluationContext>())
             .Returns(new AgentPolicyDecision(AgentPolicyDecisionStatus.Allowed, catalog.GetCapabilityByMcpTool("get_daily_summary")));
         await using var services = new ServiceCollection()
             .AddSingleton(moderation)

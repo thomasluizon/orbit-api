@@ -31,7 +31,7 @@ public class AuthSignupDispatchTests
         result.Value.Token.Should().Be("access");
         result.Value.RefreshToken.Should().Be("refresh");
         scenario.Calls.Should().Equal("upsert", "save", "session", "commit", "dispatch");
-        scenario.Cache.TryGetValue("verify:person@example.com", out _).Should().BeFalse();
+        ChallengeTestDatabase.For(scenario.Cache).HasCode("verify:person@example.com").Should().BeFalse();
     }
 
     [Theory]
@@ -111,8 +111,9 @@ public class AuthSignupDispatchTests
                 return new GoogleSignInFlow(_users, _work, _sessions, new SignupJobDispatcher(_jobs, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance), _jobs, new AccountReactivation(Substitute.For<IGenericRepository<OwedSubscriptionCancellation>>())).CompleteAsync(
                     "person@example.com", "Person", language, referral, null, null, CancellationToken.None);
 
-            Cache.Set("verify:person@example.com", new VerificationEntry("123456", 0, DateTime.UtcNow));
-            return new VerifyCodeCommandHandler(Cache, _users, _work, _sessions, new SignupJobDispatcher(_jobs, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance), _jobs, new AccountReactivation(Substitute.For<IGenericRepository<OwedSubscriptionCancellation>>())).Handle(
+            ChallengeTestDatabase.For(Cache).Seed("verify:person@example.com", "123456");
+            return new VerifyCodeCommandHandler(
+            ChallengeTestDatabase.For(Cache).Store(), _users, _work, _sessions, new SignupJobDispatcher(_jobs, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance), _jobs, new AccountReactivation(Substitute.For<IGenericRepository<OwedSubscriptionCancellation>>())).Handle(
                 new VerifyCodeCommand("person@example.com", "123456", language, referral), CancellationToken.None);
         }
 

@@ -82,7 +82,7 @@ public class AiController(
     {
         var userId = HttpContext.GetUserId();
         var authMethod = HttpContext.User.GetAgentAuthMethod();
-        var decision = policyEvaluator.Evaluate(new AgentPolicyEvaluationContext(
+        var decision = await policyEvaluator.EvaluateAsync(new AgentPolicyEvaluationContext(
             capabilityId,
             userId,
             AgentExecutionSurface.Metadata,

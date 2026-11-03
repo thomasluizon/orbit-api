@@ -20,7 +20,8 @@ public class GetTagsQueryHandler(
 {
     public async Task<Result<IReadOnlyList<TagResponse>>> Handle(GetTagsQuery request, CancellationToken cancellationToken)
     {
-        var cacheKey = ReferenceCacheKeys.Tags(request.UserId);
+        var cacheVersion = await CacheInvalidationHelper.VersionSuffixAsync(cache, request.UserId, cancellationToken);
+        var cacheKey = ReferenceCacheKeys.Tags(request.UserId) + cacheVersion;
         if (!request.BypassCache && cache.TryGetValue(cacheKey, out IReadOnlyList<TagResponse>? cached) && cached is not null)
             return Result.Success(cached);
 

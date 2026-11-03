@@ -170,7 +170,7 @@ public class UpdateMarketingConsentCommandHandlerTests
 
         var broadcast = new SendMarketingBroadcastCommandHandler(
             _userRepo, _contactRepo, Substitute.For<Hangfire.IBackgroundJobClient>(),
-            Substitute.For<IMarketingUnsubscribeTokenService>(),
+            Substitute.For<IMarketingUnsubscribeTokenService>(), Substitute.For<IGenericRepository<MarketingDelivery>>(), _unitOfWork,
             Options.Create(new MarketingSettings { ApiBaseUrl = "https://api.useorbit.org", SendDelayMilliseconds = 0 }),
             NullLogger<SendMarketingBroadcastCommandHandler>.Instance, TimeProvider.System);
 

@@ -29,15 +29,16 @@ public class GetApiKeysQueryHandler(
 {
     public async Task<Result<IReadOnlyList<ApiKeyResponse>>> Handle(GetApiKeysQuery request, CancellationToken cancellationToken)
     {
+        var cacheVersion = await CacheInvalidationHelper.VersionSuffixAsync(cache, request.UserId, cancellationToken);
         var gateCheck = await payGate.CanReadApiKeys(request.UserId, cancellationToken);
         if (gateCheck.IsFailure)
             return gateCheck.PropagateError<IReadOnlyList<ApiKeyResponse>>();
 
         var requiresStepUp = await authorization.IsRequiredAsync(cancellationToken);
-        if (requiresStepUp && !authorization.HasGrant(request.UserId))
+        if (requiresStepUp && !await authorization.HasGrantAsync(request.UserId))
             return Result.Failure<IReadOnlyList<ApiKeyResponse>>(ErrorMessages.ApiKeyCreationChallengeRequired);
 
-        var cacheKey = ReferenceCacheKeys.ApiKeys(request.UserId);
+        var cacheKey = ReferenceCacheKeys.ApiKeys(request.UserId) + cacheVersion;
         if (!request.BypassCache && cache.TryGetValue(cacheKey, out IReadOnlyList<ApiKeyResponse>? cached) && cached is not null)
             return Result.Success(cached);
 

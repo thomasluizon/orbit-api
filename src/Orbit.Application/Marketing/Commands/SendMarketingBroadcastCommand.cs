@@ -21,6 +21,8 @@ public partial class SendMarketingBroadcastCommandHandler(
     IGenericRepository<MarketingContact> contactRepository,
     IBackgroundJobClient backgroundJobClient,
     IMarketingUnsubscribeTokenService unsubscribeTokenService,
+    IGenericRepository<MarketingDelivery> deliveryRepository,
+    IUnitOfWork unitOfWork,
     IOptions<MarketingSettings> marketingSettings,
     ILogger<SendMarketingBroadcastCommandHandler> logger,
     TimeProvider clock)
@@ -41,24 +43,23 @@ public partial class SendMarketingBroadcastCommandHandler(
 
         var pageSize = Math.Clamp(_settings.BroadcastPageSize, 1, 500);
         var broadcastId = Guid.NewGuid();
-        var expiresAtUtc = clock.GetUtcNow().UtcDateTime.AddDays(SendMarketingBroadcastPageJob.RetryWindowDays);
-        var pending = new List<MarketingRecipient>(pageSize);
-        var pageNumber = 0;
+        var nowAtUtc = clock.GetUtcNow().UtcDateTime;
+        var pending = new List<MarketingDelivery>(pageSize);
         var total = 0;
-        void Flush()
+        async Task Flush()
         {
             if (pending.Count == 0) return;
-            var page = pending.ToArray();
-            var number = pageNumber++;
-            backgroundJobClient.Enqueue<SendMarketingBroadcastPageJob>(job => job.ExecuteAsync(
-                broadcastId, number, request, page, expiresAtUtc, CancellationToken.None));
+            await PersistAndDispatchAsync(pending, cancellationToken);
+            unitOfWork.ResetTracking();
             pending.Clear();
         }
-        void Add(MarketingRecipient recipient)
+        async Task Add(Guid recipientId, string email, string language)
         {
-            pending.Add(recipient);
+            pending.Add(MarketingDelivery.Create(broadcastId, recipientId, email, language,
+                request.SubjectEn, request.SubjectPt, request.BodyHtmlEn, request.BodyHtmlPt,
+                nowAtUtc.AddMilliseconds((long)total * Math.Max(0, _settings.SendDelayMilliseconds))));
             total++;
-            if (pending.Count == pageSize) Flush();
+            if (pending.Count == pageSize) await Flush();
         }
 
         Guid? cursor = null;
@@ -75,7 +76,7 @@ public partial class SendMarketingBroadcastCommandHandler(
                 && (contact.UnsubscribedAtUtc != null || contact.SuppressedAtUtc != null), cancellationToken))
                 .Select(contact => contact.Email).ToHashSet(StringComparer.Ordinal);
             foreach (var user in users.Where(user => !blocked.Contains(user.Email.Trim().ToLowerInvariant())))
-                Add(new MarketingRecipient(user.Id, user.Email, user.Language ?? "en"));
+                await Add(user.Id, user.Email, user.Language ?? "en");
             if (users.Count < pageSize) break;
         }
         cursor = null;
@@ -91,12 +92,37 @@ public partial class SendMarketingBroadcastCommandHandler(
             var userEmails = (await userRepository.FindIgnoringFiltersAsync(user => emails.Contains(user.Email.ToLower()),
                 cancellationToken: cancellationToken)).Select(user => user.Email.Trim().ToLowerInvariant()).ToHashSet(StringComparer.Ordinal);
             foreach (var contact in contacts.Where(contact => !userEmails.Contains(contact.Email)))
-                Add(new MarketingRecipient(contact.Id, contact.Email, contact.Language));
+                await Add(contact.Id, contact.Email, contact.Language);
             if (contacts.Count < pageSize) break;
         }
-        Flush();
+        await Flush();
         LogBroadcastQueued(logger, total, request.SubjectEn);
         return Result.Success(new MarketingBroadcastResult(total, false));
+    }
+
+    private async Task PersistAndDispatchAsync(List<MarketingDelivery> deliveries, CancellationToken cancellationToken)
+    {
+        foreach (var delivery in deliveries)
+            await deliveryRepository.AddAsync(delivery, cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        await unitOfWork.ExecuteOnceInTransactionAsync(async token =>
+        {
+            await unitOfWork.AcquireAdvisoryLockAsync("marketing-dispatch", token);
+            foreach (var delivery in deliveries)
+            {
+                await deliveryRepository.ReloadAsync(delivery, token);
+                if (delivery.SentAtUtc is not null || delivery.BackgroundJobId is not null)
+                    continue;
+                var jobId = backgroundJobClient.Schedule<SendMarketingEmailJob>(job => job.ExecuteRecipientAsync(
+                    delivery.BroadcastId, delivery.RecipientId, delivery.Email, delivery.Language),
+                    new DateTimeOffset(delivery.NotBeforeAtUtc));
+                if (jobId is not null)
+                    delivery.RecordDispatch(jobId, clock.GetUtcNow().UtcDateTime);
+                else
+                    delivery.DeferRecovery(clock.GetUtcNow().UtcDateTime);
+            }
+            await unitOfWork.SaveChangesAsync(token);
+        }, cancellationToken);
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Marketing broadcast preview sent; subject={Subject}")]

@@ -20,12 +20,16 @@ namespace Orbit.Infrastructure.Tests.Configuration;
 public class BotProtectionTerraformTests
 {
     [Theory]
-    [InlineData("production", "production", true)]
-    [InlineData("staging", "staging", true)]
-    [InlineData("production", "staging", false)]
-    [InlineData("staging", "production", false)]
-    public async Task ProvisionedPolicy_AdmitsOAuthHostOnlyInItsEnvironment(
-        string apiEnvironment, string widgetEnvironment, bool accepted)
+    [InlineData("production", "production", true, false)]
+    [InlineData("staging", "staging", true, false)]
+    [InlineData("production", "staging", false, false)]
+    [InlineData("staging", "production", false, false)]
+    [InlineData("production", "production", true, true)]
+    [InlineData("staging", "staging", true, true)]
+    [InlineData("production", "staging", false, true)]
+    [InlineData("staging", "production", false, true)]
+    public async Task ProvisionedPolicy_AdmitsWidgetHostOnlyInItsEnvironment(
+        string apiEnvironment, string widgetEnvironment, bool accepted, bool landing)
     {
         var root = RepositoryRoot();
         using var fixture = JsonDocument.Parse(File.ReadAllText(Path.Combine(root,
@@ -41,7 +45,9 @@ public class BotProtectionTerraformTests
         var callback = Regex.Match(environmentBlock.Value,
             "Google__AllowedRedirectUris__\\d+\\s*=\\s*\"(https://api[^\"]+/oauth/google/callback)\"");
         callback.Success.Should().BeTrue("the OAuth login page and callback are hosted by the API");
-        var hostname = new Uri(callback.Groups[1].Value).Host;
+        var hostname = landing
+            ? widgetEnvironment == "production" ? "useorbit.org" : "orbit-landing-staging.onrender.com"
+            : new Uri(callback.Groups[1].Value).Host;
         var hostnames = fixture.RootElement.GetProperty("environments").GetProperty(apiEnvironment)
             .EnumerateObject().Select(value => value.Value.GetString()!).ToArray();
         var verifier = Substitute.For<ITurnstileVerificationService>();
@@ -54,12 +60,14 @@ public class BotProtectionTerraformTests
         }), verifier, NullLogger<RequireBotProtectionFilter>.Instance);
         var http = new DefaultHttpContext();
         http.Request.Method = "POST";
-        http.Request.Path = "/oauth/send-code";
+        http.Request.Path = landing ? "/api/waitlist/join" : "/oauth/send-code";
         var context = new ActionExecutingContext(
             new ActionContext(http, new RouteData(), new ControllerActionDescriptor()), [],
             new Dictionary<string, object?>
             {
-                ["request"] = new OAuthController.SendCodeRequest("person@example.com", TurnstileToken: "oauth-token")
+                ["request"] = landing
+                    ? new WaitlistController.JoinWaitlistRequest("person@example.com", TurnstileToken: "oauth-token")
+                    : new OAuthController.SendCodeRequest("person@example.com", TurnstileToken: "oauth-token")
             }, new object());
         var ran = false;
 
@@ -69,7 +77,7 @@ public class BotProtectionTerraformTests
             return Task.FromResult(new ActionExecutedContext(context, context.Filters, context.Controller));
         });
 
-        ran.Should().Be(accepted, $"{apiEnvironment} must admit only its own OAuth hosting origin ({hostname})");
+        ran.Should().Be(accepted, $"{apiEnvironment} must admit only its own widget hosting origins ({hostname})");
         if (accepted)
             context.Result.Should().BeNull();
         else

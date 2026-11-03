@@ -29,7 +29,7 @@ public class JoinWaitlistCommandHandlerTests
             ApiBaseUrl = "https://api.useorbit.org"
         });
         _jobs.Create(Arg.Do<Job>(job => _queued.Add(job)), Arg.Any<IState>());
-        _handler = new JoinWaitlistCommandHandler(_cache, _tokenService, _jobs, settings);
+        _handler = new JoinWaitlistCommandHandler(ChallengeTestDatabase.For(_cache).Store(), _tokenService, _jobs, settings);
     }
 
     [Fact]

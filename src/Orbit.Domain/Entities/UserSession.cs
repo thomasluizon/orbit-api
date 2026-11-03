@@ -4,6 +4,7 @@ namespace Orbit.Domain.Entities;
 
 public class UserSession : Entity
 {
+    public User? User { get; private set; }
     public Guid UserId { get; private set; }
     public string TokenHash { get; private set; } = null!;
     public DateTime? ExpiresAtUtc { get; private set; }

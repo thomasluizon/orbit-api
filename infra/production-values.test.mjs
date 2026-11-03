@@ -26,10 +26,39 @@ test('production API values are pinned', () => {
 })
 test('api_secret_keys covers every required API secret', () => {
   const keys = [...configuration.split('api_secret_keys = toset([')[1].split('])')[0].matchAll(/"([^"]+)"/g)].map(match => match[1])
-  assert.deepEqual(keys.sort(), ['AI__ApiKey', 'Encryption__Key', 'Firebase__CredentialsJson', 'GooglePlay__ServiceAccountJson', 'Google__ClientSecret', 'Jwt__SecretKey', 'Marketing__UnsubscribeSigningKey', 'PostHog__ApiKey', 'SMOKE_TEST_CODE', 'SMOKE_TEST_EMAIL', 'Sentry__Dsn', 'Stripe__SecretKey', 'Stripe__WebhookSecret', 'TEST_ACCOUNTS', 'Vapid__PrivateKey', 'Waitlist__SigningKey', 'Wns__ClientSecret'].sort())
+  assert.deepEqual(keys.sort(), ['AI__ApiKey', 'Encryption__Key', 'Firebase__CredentialsJson', 'GooglePlay__ServiceAccountJson', 'Google__ClientSecret', 'Jwt__SecretKey', 'Marketing__UnsubscribeSigningKey', 'PostHog__ApiKey', 'SMOKE_TEST_CODE', 'SMOKE_TEST_EMAIL', 'Sentry__Dsn', 'Stripe__SecretKey', 'Stripe__WebhookSecret', 'Vapid__PrivateKey', 'Waitlist__SigningKey', 'Wns__ClientSecret'].sort())
   assert.match(configuration, /for_each = setunion\(local.api_secret_keys, local.api_eval_secret_keys\["production"\]\)/)
-  for (const key of ['BotProtection__SecretKey', 'Auth__BffForwardingSecret', 'Storage__S3__AccessKeyId', 'Storage__S3__SecretAccessKey', 'OnboardingSecurity__SigningSecret', 'Ses__AccessKeyId', 'Ses__SecretAccessKey'])
+  assert.match(configuration, /for_each = setunion\(local.api_secret_keys, local.api_eval_secret_keys\["staging"\], toset\(\["TEST_ACCOUNTS"\]\)\)/)
+  for (const key of ['BotProtection__SecretKey', 'BotProtection__SmokeBypassSecret', 'Auth__BffForwardingSecret', 'Storage__S3__AccessKeyId', 'Storage__S3__SecretAccessKey', 'OnboardingSecurity__SigningSecret', 'Ses__AccessKeyId', 'Ses__SecretAccessKey'])
     assert.ok(configuration.includes(key), `Terraform-managed secret ${key} must reach the API group`)
+})
+test('both API groups receive the managed widget site key and independent SSM smoke bypass secrets', () => {
+  const password = configuration.split('resource "random_password" "smoke_bypass_secret" {')[1]?.split('\n}')[0]
+  assert.ok(password)
+  assert.match(password, /for_each = toset\(\["production", "staging"\]\)/)
+  assert.match(password, /length\s*=\s*64/)
+  assert.match(password, /special\s*=\s*false/)
+  const parameter = configuration.split('resource "aws_ssm_parameter" "smoke_bypass_secret" {')[1]?.split('\n}')[0]
+  assert.ok(parameter)
+  assert.match(parameter, /name\s*=\s*"\/orbit\/\$\{each.key\}\/api\/BotProtection__SmokeBypassSecret"/)
+  assert.match(parameter, /type\s*=\s*"SecureString"/)
+  assert.match(parameter, /value\s*=\s*each.value.result/)
+  for (const environment of ['production', 'staging']) {
+    const group = configuration.split(`resource "render_env_group" "${environment}_api" {`)[1].split('\nresource ')[0]
+    assert.match(group, /BotProtection__SiteKey\s*=\s*\{ value = cloudflare_turnstile_widget.orbit.sitekey \}/)
+    assert.ok(group.includes(`BotProtection__SmokeBypassSecret = { value = aws_ssm_parameter.smoke_bypass_secret["${environment}"].value }`))
+  }
+})
+test('staging landing uses the managed widget and its host is admitted only by staging', () => {
+  const host = 'orbit-landing-staging.onrender.com'
+  const landing = text('staging.tf').split('resource "render_static_site" "staging_landing" {')[1].split('\nresource ')[0]
+  assert.match(landing, /PUBLIC_TURNSTILE_SITE_KEY\s*=\s*\{ value = cloudflare_turnstile_widget.orbit.sitekey \}/)
+  assert.doesNotMatch(landing, /1x00000000000000000000AA/)
+  const widget = text('cloudflare.tf').split('resource "cloudflare_turnstile_widget" "orbit" {')[1].split('\n}')[0]
+  assert.ok(widget.includes(`"${host}"`))
+  const policy = text('onboarding.tf').split('  bot_protection_landing_hostnames = {')[1].split('\n  }')[0]
+  assert.match(policy, /staging\s*=\s*\["orbit-landing-staging.onrender.com"\]/)
+  assert.doesNotMatch(policy.split('staging')[0], /orbit-landing-staging/)
 })
 test('production web values point at production hosts', () => {
   const web = configuration.split('  production_web_values = {')[1].split('  staging_web_values =')[0]

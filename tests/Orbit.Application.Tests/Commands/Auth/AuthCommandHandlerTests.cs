@@ -38,15 +38,15 @@ public class AuthCommandHandlerTests
     [Fact]
     public async Task SendCode_Valid_CachesCodeAndEnqueuesEmail()
     {
-        var handler = new SendCodeCommandHandler(_cache, _backgroundJobClient);
+        var handler = new SendCodeCommandHandler(ChallengeTestDatabase.For(_cache).Store(), ChallengeTestDatabase.Environment(), _backgroundJobClient);
         var command = new SendCodeCommand(TestEmail);
 
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        _cache.TryGetValue($"verify:{TestEmail}", out VerificationEntry? entry).Should().BeTrue();
+        var entry = ChallengeTestDatabase.For(_cache).Row($"verify:{TestEmail}");
         entry.Should().NotBeNull();
-        entry!.Code.Should().HaveLength(6);
+        entry!.CodeHash.Should().HaveCount(32);
         entry.Attempts.Should().Be(0);
         _backgroundJobClient.Received(1).Create(
             Arg.Is<Job>(job =>
@@ -61,11 +61,9 @@ public class AuthCommandHandlerTests
     [Fact]
     public async Task SendCode_RateLimit_ReturnsFailure_AndDoesNotEnqueue()
     {
-        var existingEntry = new VerificationEntry("123456", 0, DateTime.UtcNow);
-        _cache.Set($"verify:{TestEmail}", existingEntry,
-            new MemoryCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5) });
+        ChallengeTestDatabase.For(_cache).Seed($"verify:{TestEmail}", "123456");
 
-        var handler = new SendCodeCommandHandler(_cache, _backgroundJobClient);
+        var handler = new SendCodeCommandHandler(ChallengeTestDatabase.For(_cache).Store(), ChallengeTestDatabase.Environment(), _backgroundJobClient);
         var command = new SendCodeCommand(TestEmail);
 
         var result = await handler.Handle(command, CancellationToken.None);
@@ -84,7 +82,8 @@ public class AuthCommandHandlerTests
         _authSessionService.CreateSessionAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new SessionTokens("jwt-token", "refresh-token")));
 
-        var handler = new VerifyCodeCommandHandler(_cache, _userRepo, _unitOfWork, _authSessionService, new SignupJobDispatcher(_backgroundJobClient, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance), _backgroundJobClient, new AccountReactivation(Substitute.For<IGenericRepository<OwedSubscriptionCancellation>>()));
+        var handler = new VerifyCodeCommandHandler(
+            ChallengeTestDatabase.For(_cache).Store(), _userRepo, _unitOfWork, _authSessionService, new SignupJobDispatcher(_backgroundJobClient, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance), _backgroundJobClient, new AccountReactivation(Substitute.For<IGenericRepository<OwedSubscriptionCancellation>>()));
         var command = new VerifyCodeCommand(TestEmail, "123456");
 
         var result = await handler.Handle(command, CancellationToken.None);
@@ -92,7 +91,7 @@ public class AuthCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.Token.Should().Be("jwt-token");
         result.Value.Email.Should().Be(TestEmail);
-        _cache.TryGetValue($"verify:{TestEmail}", out _).Should().BeFalse();
+        ChallengeTestDatabase.For(_cache).HasCode($"verify:{TestEmail}").Should().BeFalse();
     }
 
     [Fact]
@@ -100,25 +99,26 @@ public class AuthCommandHandlerTests
     {
         SetupCacheWithCode("123456");
 
-        var handler = new VerifyCodeCommandHandler(_cache, _userRepo, _unitOfWork, _authSessionService, new SignupJobDispatcher(_backgroundJobClient, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance), _backgroundJobClient, new AccountReactivation(Substitute.For<IGenericRepository<OwedSubscriptionCancellation>>()));
+        var handler = new VerifyCodeCommandHandler(
+            ChallengeTestDatabase.For(_cache).Store(), _userRepo, _unitOfWork, _authSessionService, new SignupJobDispatcher(_backgroundJobClient, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance), _backgroundJobClient, new AccountReactivation(Substitute.For<IGenericRepository<OwedSubscriptionCancellation>>()));
         var command = new VerifyCodeCommand(TestEmail, "999999");
 
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Be(ErrorMessages.InvalidVerificationCode.Message);
-        _cache.TryGetValue($"verify-attempts:{TestEmail}", out int attempts).Should().BeTrue();
+        var attempts = ChallengeTestDatabase.For(_cache).Attempts($"verify-attempts:{TestEmail}");
         attempts.Should().Be(1);
     }
 
     [Fact]
     public async Task VerifyCode_MaxAttempts_ReturnsFailure()
     {
-        _cache.Set($"verify-attempts:{TestEmail}", 3,
-            new MemoryCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(15) });
         SetupCacheWithCode("123456");
+        ChallengeTestDatabase.For(_cache).SetAttempts($"verify-attempts:{TestEmail}", 3);
 
-        var handler = new VerifyCodeCommandHandler(_cache, _userRepo, _unitOfWork, _authSessionService, new SignupJobDispatcher(_backgroundJobClient, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance), _backgroundJobClient, new AccountReactivation(Substitute.For<IGenericRepository<OwedSubscriptionCancellation>>()));
+        var handler = new VerifyCodeCommandHandler(
+            ChallengeTestDatabase.For(_cache).Store(), _userRepo, _unitOfWork, _authSessionService, new SignupJobDispatcher(_backgroundJobClient, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance), _backgroundJobClient, new AccountReactivation(Substitute.For<IGenericRepository<OwedSubscriptionCancellation>>()));
         var command = new VerifyCodeCommand(TestEmail, "123456");
 
         var result = await handler.Handle(command, CancellationToken.None);
@@ -134,7 +134,8 @@ public class AuthCommandHandlerTests
         _authSessionService.CreateSessionAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new SessionTokens("jwt-token", "refresh-token")));
 
-        var handler = new VerifyCodeCommandHandler(_cache, _userRepo, _unitOfWork, _authSessionService, new SignupJobDispatcher(_backgroundJobClient, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance), _backgroundJobClient, new AccountReactivation(Substitute.For<IGenericRepository<OwedSubscriptionCancellation>>()));
+        var handler = new VerifyCodeCommandHandler(
+            ChallengeTestDatabase.For(_cache).Store(), _userRepo, _unitOfWork, _authSessionService, new SignupJobDispatcher(_backgroundJobClient, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance), _backgroundJobClient, new AccountReactivation(Substitute.For<IGenericRepository<OwedSubscriptionCancellation>>()));
         var command = new VerifyCodeCommand(TestEmail, "123456");
 
         var result = await handler.Handle(command, CancellationToken.None);
@@ -153,7 +154,8 @@ public class AuthCommandHandlerTests
         _authSessionService.CreateSessionAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new SessionTokens("jwt-token", "refresh-token")));
 
-        var handler = new VerifyCodeCommandHandler(_cache, _userRepo, _unitOfWork, _authSessionService, new SignupJobDispatcher(_backgroundJobClient, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance), _backgroundJobClient, new AccountReactivation(Substitute.For<IGenericRepository<OwedSubscriptionCancellation>>()));
+        var handler = new VerifyCodeCommandHandler(
+            ChallengeTestDatabase.For(_cache).Store(), _userRepo, _unitOfWork, _authSessionService, new SignupJobDispatcher(_backgroundJobClient, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance), _backgroundJobClient, new AccountReactivation(Substitute.For<IGenericRepository<OwedSubscriptionCancellation>>()));
         var command = new VerifyCodeCommand(TestEmail, "123456");
 
         var result = await handler.Handle(command, CancellationToken.None);
@@ -165,9 +167,7 @@ public class AuthCommandHandlerTests
 
     private void SetupCacheWithCode(string code)
     {
-        var entry = new VerificationEntry(code, 0, DateTime.UtcNow);
-        _cache.Set($"verify:{TestEmail}", entry,
-            new MemoryCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5) });
+        ChallengeTestDatabase.For(_cache).Seed($"verify:{TestEmail}", code);
     }
 
     private void SetupExistingUser(User user)

@@ -370,6 +370,7 @@ jobs:
         env:
           SMOKE_TEST_EMAIL: ${{ secrets.SMOKE_TEST_EMAIL }}
           SMOKE_TEST_CODE: ${{ secrets.SMOKE_TEST_CODE }}
+          SMOKE_BOT_BYPASS: ${{ secrets.SMOKE_BOT_BYPASS }}
         run: node tools/release-smoke.mjs https://api.useorbit.org
 
       - name: Record deployment
@@ -571,6 +572,7 @@ jobs:
         env:
           SMOKE_TEST_EMAIL: ${{ secrets.SMOKE_TEST_EMAIL }}
           SMOKE_TEST_CODE: ${{ secrets.SMOKE_TEST_CODE }}
+          SMOKE_BOT_BYPASS: ${{ secrets.SMOKE_BOT_BYPASS }}
         run: node tools/release-smoke.mjs https://api-staging.useorbit.org --write
 
       - name: Record staging smoke result

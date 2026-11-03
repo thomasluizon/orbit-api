@@ -27,6 +27,41 @@ namespace Orbit.Infrastructure.Tests.Services;
 
 public sealed class PlanCommittedOutcomeTests
 {
+    [Fact]
+    public async Task Execute_AwaitsPolicyBeforeCommittingAndRepairingPlan()
+    {
+        using var fixture = new Fixture();
+        var id = await fixture.ProposeAsync();
+        var execution = fixture.Pending.GetExecution(fixture.UserId, id)!;
+        var confirmation = fixture.Pending.Confirm(fixture.UserId, id)!;
+        var policyRelease = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        fixture.PausePolicyUntil(policyRelease.Task);
+        fixture.FaultPlans("done", id);
+
+        var executing = fixture.Executor.ExecuteAsync(new(fixture.UserId, "create_goal", execution.Arguments,
+            AgentExecutionSurface.Chat, AgentAuthMethod.Jwt, ConfirmationToken: confirmation.ConfirmationToken));
+
+        executing.IsCompleted.Should().BeFalse();
+        fixture.Db.Goals.Should().BeEmpty();
+        fixture.Db.AgentAuditLogs.Should().BeEmpty();
+        fixture.Pending.GetConfirmedExecution(fixture.UserId, execution.CapabilityId,
+            AgentOperationFingerprint.Compute("create_goal", execution.Arguments.GetRawText()), confirmation.ConfirmationToken)
+            .Should().NotBeNull();
+
+        policyRelease.SetResult();
+        var response = await executing;
+
+        response.Operation.Status.Should().Be(AgentOperationStatus.Succeeded);
+        fixture.AssertError(id);
+        fixture.Db.ChangeTracker.Clear();
+        (await fixture.Db.Goals.SingleAsync()).Title.Should().Be("Read books");
+        var outcome = await fixture.Db.AgentAuditLogs.SingleAsync(entry =>
+            entry.SourceName == ConversationPlanUpdates.ExecutionAuditSource && entry.TargetId == id.ToString());
+        outcome.OutcomeStatus.Should().Be(AgentOperationStatus.Succeeded);
+        fixture.Pending.GetExecution(fixture.UserId, id).Should().BeNull();
+        (await fixture.ReloadAsync()).Steps.Last().Status.Should().Be("done");
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -195,6 +230,7 @@ public sealed class PlanCommittedOutcomeTests
         private readonly IPendingOperationChangePreviewer _previewer;
         private readonly IAgentAuditService _audit = Substitute.For<IAgentAuditService>();
         private readonly IConversationPlanStore _plans = Substitute.For<IConversationPlanStore>();
+        private readonly IAgentPolicyEvaluator _policy = Substitute.For<IAgentPolicyEvaluator>();
         private readonly List<(LogLevel Level, string Text)> _logs = [];
         internal OrbitDbContext Db => _conversation.Db;
         internal Guid UserId => _conversation.User.Id;
@@ -213,16 +249,8 @@ public sealed class PlanCommittedOutcomeTests
             Pending = new(Db, Options.Create(new AgentPlatformSettings()), _conversation.Flags);
             _previewer = new PendingOperationChangePreviewer(new GenericRepository<Habit>(Db), new GenericRepository<Goal>(Db),
                 new GenericRepository<Tag>(Db), Substitute.For<IUserDateService>(), _tools);
-            var policy = Substitute.For<IAgentPolicyEvaluator>();
-            policy.Evaluate(Arg.Any<AgentPolicyEvaluationContext>()).Returns(call =>
-            {
-                var context = call.Arg<AgentPolicyEvaluationContext>();
-                var capability = _catalog.GetCapabilityByChatTool("create_goal")!;
-                return Pending.TryConsumeFreshConfirmation(UserId, capability.Id,
-                    context.OperationFingerprint!, context.ConfirmationToken!, false)
-                    ? new AgentPolicyDecision(AgentPolicyDecisionStatus.Allowed, capability, ConsumedConfirmation: true)
-                    : new AgentPolicyDecision(AgentPolicyDecisionStatus.Denied, capability);
-            });
+            _policy.EvaluateAsync(Arg.Any<AgentPolicyEvaluationContext>()).Returns(call =>
+                EvaluatePolicy(call.Arg<AgentPolicyEvaluationContext>()));
             _audit.RecordAsync(Arg.Any<AgentAuditEntry>(), Arg.Any<CancellationToken>()).Returns(async call =>
             {
                 using var db = _conversation.Database.CreateContext();
@@ -232,11 +260,27 @@ public sealed class PlanCommittedOutcomeTests
             var ownership = Substitute.For<IAgentTargetOwnershipService>();
             ownership.GetDenialReasonAsync(Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<JsonElement>(), Arg.Any<CancellationToken>())
                 .Returns((string?)null);
-            Executor = new(_catalog, policy, _audit, ownership,
+            Executor = new(_catalog, _policy, _audit, ownership,
                 Substitute.For<IAgentStepUpAuthorizationBridge>(), _tools, _previewer, Pending, unit,
                 new Logger<AgentOperationExecutor>(_logs), plans: _plans);
             Revisions = new(Pending, _previewer, new RevisePendingOperationRequestValidator(), _tools, plans: _plans, logger: new Logger<PendingOperationRevisionService>(_logs));
         }
+
+        private AgentPolicyDecision EvaluatePolicy(AgentPolicyEvaluationContext context)
+        {
+            var capability = _catalog.GetCapabilityByChatTool("create_goal")!;
+            return Pending.TryConsumeFreshConfirmation(UserId, capability.Id,
+                context.OperationFingerprint!, context.ConfirmationToken!, false)
+                ? new AgentPolicyDecision(AgentPolicyDecisionStatus.Allowed, capability, ConsumedConfirmation: true)
+                : new AgentPolicyDecision(AgentPolicyDecisionStatus.Denied, capability);
+        }
+
+        internal void PausePolicyUntil(Task release) =>
+            _policy.EvaluateAsync(Arg.Any<AgentPolicyEvaluationContext>()).Returns(async call =>
+            {
+                await release;
+                return EvaluatePolicy(call.Arg<AgentPolicyEvaluationContext>());
+            });
 
         internal async Task<Guid> ProposeAsync(bool changeSet = false, bool recordPlan = true)
         {

@@ -561,7 +561,7 @@ public partial class ProcessUserChatCommandHandlerTests
         var registry = new AiToolRegistry([tool, .. otherTools]);
         var catalog = new AgentCatalogService([tool, .. otherTools]);
         var policy = Substitute.For<IAgentPolicyEvaluator>();
-        policy.Evaluate(Arg.Any<AgentPolicyEvaluationContext>()).Returns(call =>
+        policy.EvaluateAsync(Arg.Any<AgentPolicyEvaluationContext>()).Returns(call =>
         {
             var context = call.ArgAt<AgentPolicyEvaluationContext>(0);
             var capability = catalog.GetCapability(context.CapabilityId)!;

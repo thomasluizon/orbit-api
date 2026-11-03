@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using Orbit.Application.Habits.Commands;
 using Microsoft.EntityFrameworkCore;
@@ -224,14 +224,14 @@ public partial class AgentOperationExecutor(
         return DeniedResponse(execution, execution.Summary, denialReason, denialReason);
     }
 
-    private AgentPolicyDecision EvaluatePolicy(OperationExecutionContext execution)
+    private Task<AgentPolicyDecision> EvaluatePolicyAsync(OperationExecutionContext execution)
     {
         var grantedScopes = GetGrantedScopes(execution.Request);
         var operationFingerprint = AgentOperationFingerprint.Compute(
             execution.Operation.Id,
             execution.Arguments.GetRawText());
 
-        return policyEvaluator.Evaluate(new AgentPolicyEvaluationContext(
+        return policyEvaluator.EvaluateAsync(new AgentPolicyEvaluationContext(
             execution.Capability.Id,
             execution.Request.UserId,
             execution.Request.Surface,
@@ -459,7 +459,7 @@ public partial class AgentOperationExecutor(
             changeSetMembers = prepared.Members;
         }
 
-        var policyDecision = EvaluatePolicy(execution);
+        var policyDecision = await EvaluatePolicyAsync(execution);
         policyState.Decision = policyDecision;
 
         if (policyDecision.Status == AgentPolicyDecisionStatus.Denied)

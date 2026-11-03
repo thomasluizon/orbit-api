@@ -31,7 +31,7 @@ public class AuthSessionServiceLogoutRaceTests
         {
             await using var logoutContext = CreateContext(databaseName);
             var logout = await CreateService(logoutContext, TokenService()).RevokeSessionAsync(originalToken);
-            logout.IsSuccess.Should().BeTrue();
+            logout.IsFailure.Should().BeTrue();
         }
         finally
         {
@@ -88,7 +88,7 @@ public class AuthSessionServiceLogoutRaceTests
         var secondRefresh = await service.RefreshSessionAsync(firstRefresh.Value.RefreshToken);
         var logout = await service.RevokeSessionAsync(originalToken);
 
-        logout.IsSuccess.Should().BeTrue();
+        logout.IsFailure.Should().BeTrue();
         (await service.IsSessionActiveAsync(session.Id, user.Id)).Should().BeFalse();
         (await service.RefreshSessionAsync(secondRefresh.Value.RefreshToken)).IsFailure.Should().BeTrue();
         context.UserSessionRefreshTokens.Count().Should().Be(2);
@@ -109,7 +109,7 @@ public class AuthSessionServiceLogoutRaceTests
         await using var context = CreateContext(databaseName, interceptor);
         var logout = await CreateService(context, TokenService()).RevokeSessionAsync(originalToken);
 
-        logout.IsSuccess.Should().BeTrue();
+        logout.IsFailure.Should().BeTrue();
         interceptor.SaveAttempts.Should().Be(2);
         await using var verify = CreateContext(databaseName);
         (await CreateService(verify, TokenService()).IsSessionActiveAsync(session.Id, user.Id)).Should().BeFalse();

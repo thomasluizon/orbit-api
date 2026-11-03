@@ -57,40 +57,61 @@ public partial class PushNotificationService(
         CancellationToken cancellationToken = default) =>
         await SendCoreAsync(userId, title, body, url, cancellationToken, null);
 
-    public async Task SendReminderToUserAsync(Guid userId, string title, string body,
+    public Task<bool> TrySendReminderToUserAsync(Guid userId, string title, string body,
         IReadOnlyDictionary<string, string> data, string? url = null, CancellationToken cancellationToken = default) =>
-        await SendCoreAsync(userId, title, body, url, cancellationToken, data);
+        SendCoreAsync(userId, title, body, url, cancellationToken, data);
 
     public async Task SendManyAsync(IReadOnlyList<PushDelivery> deliveries, CancellationToken cancellationToken = default) =>
         await SendManyCoreAsync(deliveries, cancellationToken);
 
-    private Task<bool> SendCoreAsync(Guid userId, string title, string body, string? url,
-        CancellationToken cancellationToken, IReadOnlyDictionary<string, string>? data) =>
-        SendManyCoreAsync([new(userId, title, body, url, data)], cancellationToken);
+    public Task<IReadOnlySet<int>> TrySendManyAsync(IReadOnlyList<PushDelivery> deliveries, CancellationToken cancellationToken = default) =>
+        SendManyCoreAsync(deliveries, cancellationToken);
 
-    private async Task<bool> SendManyCoreAsync(IReadOnlyList<PushDelivery> deliveries, CancellationToken ct)
+    public Task<IReadOnlySet<int>> TrySendManyAsync(IReadOnlyList<PushDelivery> deliveries,
+        Func<int, Task> onDelivered, CancellationToken cancellationToken = default) =>
+        SendManyCoreAsync(deliveries, cancellationToken, onDelivered);
+
+    private async Task<bool> SendCoreAsync(Guid userId, string title, string body, string? url,
+        CancellationToken cancellationToken, IReadOnlyDictionary<string, string>? data) =>
+        (await SendManyCoreAsync([new(userId, title, body, url, data)], cancellationToken)).Count > 0;
+
+    private async Task<IReadOnlySet<int>> SendManyCoreAsync(IReadOnlyList<PushDelivery> deliveries, CancellationToken ct,
+        Func<int, Task>? onDelivered = null)
     {
-        if (deliveries.Count == 0) return false;
+        if (deliveries.Count == 0) return new HashSet<int>();
         var ids = deliveries.Select(d => d.UserId).Distinct().ToArray();
         var subscriptions = (await dbContext.PushSubscriptions.AsNoTracking()
             .Where(s => ids.Contains(s.UserId)).ToListAsync(ct)).ToLookup(s => s.UserId);
-        var sends = deliveries.SelectMany(d => subscriptions[d.UserId].Select(s => new PendingPush(s,
+        var sends = deliveries.SelectMany((d, index) => subscriptions[d.UserId].Select(s => new PendingPush(s, index,
             d with { Title = SanitizeForDelivery(d.Title, MaxTitleBytes), Body = SanitizeForDelivery(d.Body, MaxBodyBytes) }))).ToList();
         var stale = new ConcurrentBag<Domain.Entities.PushSubscription>();
-        var delivered = 0;
-        var fcmTask = SendFcm(sends.Where(s => s.Subscription.Transport == PushTransport.Fcm).ToList(), stale, ct);
-        await Parallel.ForEachAsync(sends.Where(s => s.Subscription.Transport != PushTransport.Fcm),
+        var delivered = new ConcurrentDictionary<int, byte>();
+        var fcmTask = onDelivered is null
+            ? SendFcm(sends.Where(s => s.Subscription.Transport == PushTransport.Fcm).ToList(), stale, delivered, ct)
+            : Task.CompletedTask;
+        var individualSends = onDelivered is null ? sends.Where(s => s.Subscription.Transport != PushTransport.Fcm) : sends;
+        var individualTask = Parallel.ForEachAsync(individualSends,
             new ParallelOptions { MaxDegreeOfParallelism = DeliveryConcurrency, CancellationToken = ct }, async (send, token) =>
         {
             var sub = send.Subscription;
             var d = send.Delivery;
             using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);
             deadline.CancelAfter(AttemptTimeout);
+            bool success;
             try
             {
-                bool success;
                 switch (sub.Transport)
                 {
+                    case PushTransport.Fcm:
+                        var messaging = FirebaseMessaging.DefaultInstance;
+                        if (messaging is null)
+                        {
+                            if (logger.IsEnabled(LogLevel.Warning)) LogFcmNotInitialized(logger, 1);
+                            return;
+                        }
+                        await messaging.SendAsync(CreateFcmMessage(sub.Endpoint, d.Title, d.Body, d.Url, d.Data), token);
+                        success = true;
+                        break;
                     case PushTransport.Apns:
                         var apns = await apnsSender.SendAsync(sub.Endpoint, d.Title, d.Body, d.Url, deadline.Token, sub.ApnsTopic, d.Data);
                         if (apns == ApnsDeliveryOutcome.Stale) stale.Add(sub);
@@ -106,14 +127,17 @@ public partial class PushNotificationService(
                             new PushMessage(CreateWebPushPayload(d.Title, d.Body, d.Url, d.Data)) { TimeToLive = 3600 }, stale, token);
                         break;
                 }
-                if (success) Interlocked.Exchange(ref delivered, 1);
             }
             catch (Exception ex) when (!token.IsCancellationRequested)
             {
-                LogWebPushFailedGeneric(logger, ex, sub.Endpoint);
+                if (sub.Transport == PushTransport.Fcm) RecordFcmFailure(sub, ex, stale);
+                else LogWebPushFailedGeneric(logger, ex, sub.Endpoint);
+                return;
             }
+            if (success && delivered.TryAdd(send.DeliveryIndex, 0) && onDelivered is not null)
+                await onDelivered(send.DeliveryIndex);
         });
-        if (await fcmTask) delivered = 1;
+        await Task.WhenAll(fcmTask, individualTask);
         foreach (var group in stale.DistinctBy(s => s.Id).GroupBy(s => s.UserId))
         {
             Expression<Func<Domain.Entities.PushSubscription, bool>> guard = s => false;
@@ -129,7 +153,7 @@ public partial class PushNotificationService(
             }
             await dbContext.PushSubscriptions.Where(guard).ExecuteDeleteAsync(ct);
         }
-        return delivered != 0;
+        return delivered.Keys.ToHashSet();
     }
 
     private sealed class ReplaceParameter(ParameterExpression source, ParameterExpression target) : ExpressionVisitor
@@ -137,22 +161,21 @@ public partial class PushNotificationService(
         protected override Expression VisitParameter(ParameterExpression node) => node == source ? target : base.VisitParameter(node);
     }
 
-    private sealed record PendingPush(Domain.Entities.PushSubscription Subscription, PushDelivery Delivery);
+    private sealed record PendingPush(Domain.Entities.PushSubscription Subscription, int DeliveryIndex, PushDelivery Delivery);
 
     internal virtual Task<BatchResponse> SendFcmBatchAsync(IReadOnlyList<Message> messages, CancellationToken ct) =>
         FirebaseMessaging.DefaultInstance!.SendEachAsync(messages, ct);
 
-    private async Task<bool> SendFcm(List<PendingPush> sends,
-        ConcurrentBag<Domain.Entities.PushSubscription> stale, CancellationToken ct)
+    private async Task SendFcm(List<PendingPush> sends,
+        ConcurrentBag<Domain.Entities.PushSubscription> stale, ConcurrentDictionary<int, byte> delivered, CancellationToken ct)
     {
-        if (sends.Count == 0) return false;
+        if (sends.Count == 0) return;
         var messaging = FirebaseMessaging.DefaultInstance;
         if (messaging is null)
         {
             if (logger.IsEnabled(LogLevel.Warning)) LogFcmNotInitialized(logger, sends.Count);
-            return false;
+            return;
         }
-        var delivered = 0;
         foreach (var chunk in sends.Chunk(500))
         {
             try
@@ -163,7 +186,7 @@ public partial class PushNotificationService(
                 for (var i = 0; i < response.Responses.Count; i++)
                 {
                     var result = response.Responses[i];
-                    if (result.IsSuccess) delivered = 1;
+                    if (result.IsSuccess) delivered.TryAdd(chunk[i].DeliveryIndex, 0);
                     else RecordFcmFailure(chunk[i].Subscription, result.Exception, stale);
                 }
             }
@@ -178,7 +201,7 @@ public partial class PushNotificationService(
                     {
                         var d = send.Delivery;
                         await messaging.SendAsync(CreateFcmMessage(send.Subscription.Endpoint, d.Title, d.Body, d.Url, d.Data), token);
-                        Interlocked.Exchange(ref delivered, 1);
+                        delivered.TryAdd(send.DeliveryIndex, 0);
                     }
                     catch (Exception failure) when (!token.IsCancellationRequested)
                     {
@@ -187,7 +210,6 @@ public partial class PushNotificationService(
                 });
             }
         }
-        return delivered != 0;
     }
 
     private void RecordFcmFailure(Domain.Entities.PushSubscription sub, Exception? failure,

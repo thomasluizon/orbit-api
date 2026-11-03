@@ -13,8 +13,29 @@ namespace Orbit.Infrastructure.Tests.Extensions;
 /// section/key must throw a specific <see cref="InvalidOperationException"/> at
 /// boot rather than surfacing as a null-reference deep in a request path.
 /// </summary>
+[Collection("ProcessEnvironment")]
 public class StartupConfigValidationTests
 {
+    [Theory]
+    [InlineData("review@example.com:123456")]
+    [InlineData("")]
+    public void ValidateOrbitSecuritySettings_ProductionWithTestAccounts_Throws(string accounts)
+    {
+        var previous = Environment.GetEnvironmentVariable("TEST_ACCOUNTS");
+        try
+        {
+            Environment.SetEnvironmentVariable("TEST_ACCOUNTS", accounts);
+            var builder = BuildWith(ValidJwt());
+            builder.Environment.EnvironmentName = "Production";
+            Action validate = () => builder.ValidateOrbitSecuritySettings();
+            validate.Should().Throw<InvalidOperationException>().WithMessage("*TEST_ACCOUNTS*");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("TEST_ACCOUNTS", previous);
+        }
+    }
+
     [Theory]
     [InlineData(0, 0)]
     [InlineData(-1, 0)]
@@ -140,6 +161,31 @@ public class StartupConfigValidationTests
         reader.Should().BeOfType<S3ObjectStorageService>().And.BeSameAs(writer);
         var readUrl = await reader.CreateReadUrlAsync(objectKey);
         new Uri(readUrl).Host.Should().Contain("orbit-uploads-staging-713285551626");
+    }
+
+    [Fact]
+    public void SingletonCostEstimator_ResolvesWithScopeValidationEnabled()
+    {
+        var builder = BuildWith(ValidInfrastructure());
+        builder.AddOrbitDatabase().AddOrbitAiServices().AddOrbitInfrastructure();
+        using var provider = builder.Services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
+        Action resolve = () => provider.GetRequiredService<Orbit.Infrastructure.AI.IAiRequestCostEstimator>();
+        resolve.Should().NotThrow("the singleton estimator must use the singleton memory cache");
+    }
+
+    [Fact]
+    public void AddOrbitDatabase_ResolvesContextAndAuthInvalidationWithoutAiServices()
+    {
+        var builder = BuildWith(ValidInfrastructure());
+        builder.Services.AddHttpContextAccessor();
+        builder.AddOrbitDatabase();
+        using var provider = builder.Services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
+        using var scope = provider.CreateScope();
+
+        Action resolve = () => scope.ServiceProvider.GetRequiredService<Orbit.Infrastructure.Persistence.OrbitDbContext>();
+
+        resolve.Should().NotThrow();
+        scope.ServiceProvider.GetRequiredService<Orbit.Infrastructure.Services.AuthValidationCache>().Should().NotBeNull();
     }
 
     private static WebApplicationBuilder BuildWith(Dictionary<string, string?> values)

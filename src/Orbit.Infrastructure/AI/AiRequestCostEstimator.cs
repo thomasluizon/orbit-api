@@ -13,7 +13,7 @@ public interface IAiRequestCostEstimator
     Task<long> EstimateMicroDollarsAsync(string requestJson, CancellationToken cancellationToken);
 }
 
-public sealed class AiRequestCostEstimator(IMemoryCache cache, IOptions<AiSettings> settings) : IAiRequestCostEstimator
+public sealed class AiRequestCostEstimator(MemoryCache cache, IOptions<AiSettings> settings) : IAiRequestCostEstimator
 {
     private static readonly Lazy<TiktokenTokenizer> Tokenizer = new(() => TiktokenTokenizer.CreateForEncoding("o200k_base"));
 

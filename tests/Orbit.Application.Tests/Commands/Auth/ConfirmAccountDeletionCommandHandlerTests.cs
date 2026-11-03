@@ -24,6 +24,8 @@ public class ConfirmAccountDeletionCommandHandlerTests
     private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly IBackgroundJobClient _jobs = Substitute.For<IBackgroundJobClient>();
+    private readonly IAuthSessionService _sessions = Substitute.For<IAuthSessionService>();
+    private readonly IGenericRepository<ApiKey> _keys = Substitute.For<IGenericRepository<ApiKey>>();
     private readonly ConfirmAccountDeletionCommandHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
@@ -31,10 +33,15 @@ public class ConfirmAccountDeletionCommandHandlerTests
 
     public ConfirmAccountDeletionCommandHandlerTests()
     {
+        _unitOfWork.ExecuteInTransactionAsync(
+            Arg.Any<Func<CancellationToken, Task<Orbit.Domain.Common.Result<DateTime>>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.Arg<Func<CancellationToken, Task<Orbit.Domain.Common.Result<DateTime>>>>()(call.Arg<CancellationToken>()));
+        _sessions.RevokeAllSessionsAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Orbit.Domain.Common.Result.Success());
+        _keys.FindTrackedAsync(Arg.Any<System.Linq.Expressions.Expression<Func<ApiKey, bool>>>(), Arg.Any<CancellationToken>()).Returns(Array.Empty<ApiKey>());
         _handler = new ConfirmAccountDeletionCommandHandler(
-            new EmailChallengeService(_cache, TimeProvider.System),
+            new EmailChallengeService(ChallengeTestDatabase.For(_cache).Store(TimeProvider.System)),
             _userRepo,
-            _unitOfWork, _jobs);
+            _unitOfWork, _jobs, _sessions, _keys);
     }
 
     [Fact]
@@ -67,7 +74,7 @@ public class ConfirmAccountDeletionCommandHandlerTests
         result.Value.Should().BeAfter(DateTime.UtcNow);
         user.IsDeactivated.Should().BeTrue();
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
-        _cache.TryGetValue($"delete:{TestEmail}", out _).Should().BeFalse();
+        ChallengeTestDatabase.For(_cache).HasCode($"delete:{TestEmail}").Should().BeFalse();
     }
 
     [Fact]
@@ -223,7 +230,7 @@ public class ConfirmAccountDeletionCommandHandlerTests
         user.IsDeactivated.Should().BeFalse();
         user.ScheduledDeletionAt.Should().BeNull();
         _jobs.DidNotReceive().Create(Arg.Any<Job>(), Arg.Any<IState>());
-        _cache.TryGetValue($"delete-attempts:{TestEmail}", out int attempts).Should().BeTrue();
+        var attempts = ChallengeTestDatabase.For(_cache).Attempts($"delete-attempts:{TestEmail}");
         attempts.Should().Be(1);
     }
 
@@ -280,8 +287,7 @@ public class ConfirmAccountDeletionCommandHandlerTests
         SetupUser(user);
         SetupDeletionCode(TestEmail, "123456");
 
-        _cache.Set($"delete-attempts:{TestEmail}", 3,
-            new MemoryCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(15) });
+        ChallengeTestDatabase.For(_cache).SetAttempts($"delete:{TestEmail}", 3);
 
         var command = new ConfirmAccountDeletionCommand(UserId, "123456");
 
@@ -297,7 +303,7 @@ public class ConfirmAccountDeletionCommandHandlerTests
     public void Command_IsNotConcurrencyRetryable_BecauseItConsumesTheOtpBeforeSaving()
     {
         typeof(ConfirmAccountDeletionCommand).Should().NotBeAssignableTo<IConcurrencyRetryable>(
-            "the handler removes the OTP from cache before SaveChangesAsync, so a transparent retry would re-enter, "
+            "the handler consumes the OTP before SaveChangesAsync, so a transparent retry would re-enter, "
             + "find the code consumed, and silently fail with DeletionCodeExpired");
     }
 
@@ -393,8 +399,6 @@ public class ConfirmAccountDeletionCommandHandlerTests
 
     private void SetupDeletionCode(string email, string code)
     {
-        var entry = new VerificationEntry(code, 0, DateTime.UtcNow);
-        _cache.Set($"delete:{email.ToLowerInvariant()}", entry,
-            new MemoryCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(10) });
+        ChallengeTestDatabase.For(_cache).Seed($"delete:{email.ToLowerInvariant()}", code);
     }
 }

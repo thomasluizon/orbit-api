@@ -126,7 +126,7 @@ public sealed class CreateHabitToolPersistenceTests
         var registry = new AiToolRegistry([tool]);
         var catalog = new AgentCatalogService([tool]);
         var policy = Substitute.For<IAgentPolicyEvaluator>();
-        policy.Evaluate(Arg.Any<AgentPolicyEvaluationContext>()).Returns(call =>
+        policy.EvaluateAsync(Arg.Any<AgentPolicyEvaluationContext>()).Returns(call =>
             new AgentPolicyDecision(AgentPolicyDecisionStatus.Allowed,
                 catalog.GetCapability(call.Arg<AgentPolicyEvaluationContext>().CapabilityId)));
         var ownership = Substitute.For<IAgentTargetOwnershipService>();

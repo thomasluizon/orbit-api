@@ -72,7 +72,7 @@ public class ApplyOnboardingCommandHandler(
         if (result.IsSuccess && result.Value.Applied)
         {
             var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
-            CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, userToday);
+            await CacheInvalidationHelper.InvalidateUserAiCachesAsync(cache, request.UserId, userToday);
         }
 
         return result;

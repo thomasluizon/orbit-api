@@ -30,7 +30,7 @@ public class RestoreTagCommandHandler(
         tag.Restore();
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        cache.Remove(ReferenceCacheKeys.Tags(request.UserId));
+        await CacheInvalidationHelper.InvalidateReferenceCacheAsync(cache, request.UserId, ReferenceCacheKeys.Tags(request.UserId));
 
         return Result.Success();
     }

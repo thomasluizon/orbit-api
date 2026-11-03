@@ -1,4 +1,4 @@
-﻿using System.Linq.Expressions;
+using System.Linq.Expressions;
 using FluentAssertions;
 using Hangfire;
 using Hangfire.Common;
@@ -53,7 +53,7 @@ public class ApiKeyCreationChallengeFlowTests
         _backgroundJobClient.Create(Arg.Do<Job>(job => _enqueuedJob = job), Arg.Any<IState>());
 
         _appConfigService.GetAsync(AppConfigKeys.MaxActiveApiKeys, 5, Arg.Any<CancellationToken>()).Returns(5);
-        _challengeService = new EmailChallengeService(_cache, _timeProvider);
+        _challengeService = new EmailChallengeService(ChallengeTestDatabase.For(_cache).Store(_timeProvider));
         _requestHandler = new RequestApiKeyCreationChallengeCommandHandler(
             _challengeService,
             _userRepository,
@@ -130,7 +130,7 @@ public class ApiKeyCreationChallengeFlowTests
 
         result.IsFailure.Should().BeTrue();
         result.ErrorCode.Should().Be(ErrorCodes.CodeExpired);
-        _challengeService.HasAuthorization(EmailChallengeOperation.ApiKeyManagement, UserId).Should().BeFalse();
+        (await _challengeService.HasAuthorizationAsync(EmailChallengeOperation.ApiKeyManagement, UserId)).Should().BeFalse();
     }
 
     [Fact]
@@ -187,8 +187,8 @@ public class ApiKeyCreationChallengeFlowTests
 
     private string CachedCode()
     {
-        _cache.TryGetValue($"api-key-create:{Email}", out VerificationEntry? entry).Should().BeTrue();
-        return entry!.Code;
+        ChallengeTestDatabase.For(_cache).Row($"api-key-create:{Email}")!.CodeHash.Should().HaveCount(32);
+        return (string)_enqueuedJob!.Args[1];
     }
 
     private sealed class MutableTimeProvider(DateTimeOffset now) : TimeProvider

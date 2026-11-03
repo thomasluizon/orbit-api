@@ -27,7 +27,7 @@ public class RequestAccountDeletionCommandHandlerTests
     {
         _backgroundJobClient.Create(Arg.Do<Job>(job => _enqueuedJob = job), Arg.Any<IState>());
         _handler = new RequestAccountDeletionCommandHandler(
-            new EmailChallengeService(_cache, TimeProvider.System),
+            new EmailChallengeService(ChallengeTestDatabase.For(_cache).Store(TimeProvider.System)),
             _userRepo,
             _backgroundJobClient);
     }
@@ -41,8 +41,8 @@ public class RequestAccountDeletionCommandHandlerTests
         var result = await _handler.Handle(new RequestAccountDeletionCommand(UserId), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        _cache.TryGetValue($"delete:{user.Email}", out VerificationEntry? entry).Should().BeTrue();
-        AssertEnqueuedDeletionEmail(user.Email, entry!.Code, "en");
+        ChallengeTestDatabase.For(_cache).Row($"delete:{user.Email}")!.CodeHash.Should().HaveCount(32);
+        AssertEnqueuedDeletionEmail(user.Email, (string)_enqueuedJob!.Args[1], "en");
     }
 
     [Fact]
@@ -55,8 +55,8 @@ public class RequestAccountDeletionCommandHandlerTests
         var result = await _handler.Handle(new RequestAccountDeletionCommand(UserId), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        _cache.TryGetValue($"delete:{user.Email}", out VerificationEntry? entry).Should().BeTrue();
-        AssertEnqueuedDeletionEmail(user.Email, entry!.Code, "pt-BR");
+        ChallengeTestDatabase.For(_cache).Row($"delete:{user.Email}")!.CodeHash.Should().HaveCount(32);
+        AssertEnqueuedDeletionEmail(user.Email, (string)_enqueuedJob!.Args[1], "pt-BR");
     }
 
     [Fact]
@@ -64,8 +64,7 @@ public class RequestAccountDeletionCommandHandlerTests
     {
         var user = User.Create("Test User", "test@example.com").Value;
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
-        _cache.Set($"delete:{user.Email}", new VerificationEntry("111111", 0, DateTime.UtcNow),
-            new MemoryCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(10) });
+        ChallengeTestDatabase.For(_cache).Seed($"delete:{user.Email}", "111111");
 
         var result = await _handler.Handle(new RequestAccountDeletionCommand(UserId), CancellationToken.None);
 

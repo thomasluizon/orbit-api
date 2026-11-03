@@ -34,7 +34,7 @@ public partial class ProcessUserChatCommandHandlerTests
         _userDateService.GetUserTimeZoneAsync(UserId, Arg.Any<CancellationToken>()).Returns(TimeZoneInfo.Utc);
         var catalog = new AgentCatalogService(tools);
         var policy = Substitute.For<IAgentPolicyEvaluator>();
-        policy.Evaluate(Arg.Any<AgentPolicyEvaluationContext>()).Returns(call =>
+        policy.EvaluateAsync(Arg.Any<AgentPolicyEvaluationContext>()).Returns(call =>
         {
             var capability = catalog.GetCapability(call.Arg<AgentPolicyEvaluationContext>().CapabilityId)!;
             return new AgentPolicyDecision(AgentPolicyDecisionStatus.ConfirmationRequired, capability,

@@ -48,7 +48,7 @@ public class GamificationAccessParityTests
             new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, user.Id.ToString())], "Test")));
         var evaluator = new AgentPolicyEvaluator(db, new AgentCatalogService(), Substitute.For<IPendingAgentOperationStore>(),
             Substitute.For<IAgentStepUpAuthorizationBridge>(), flags);
-        var astra = evaluator.Evaluate(new(AgentCapabilityIds.GamificationRead, user.Id,
+        var astra = await evaluator.EvaluateAsync(new(AgentCapabilityIds.GamificationRead, user.Id,
             AgentExecutionSurface.Chat, AgentAuthMethod.Jwt, [], "get_gamification_overview", "Gamification"));
         rest.IsSuccess.Should().Be(pro || enabled);
         mcp.IsError.GetValueOrDefault().Should().Be(!(pro || enabled));

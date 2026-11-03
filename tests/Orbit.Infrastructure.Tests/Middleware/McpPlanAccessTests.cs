@@ -15,6 +15,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Caching.Memory;
 using ModelContextProtocol;
 using ModelContextProtocol.Protocol;
 using NSubstitute;
@@ -85,7 +86,7 @@ public class McpPlanAccessTests
             Substitute.For<IAppConfigService>(), Substitute.For<IUserDateService>(), Substitute.For<IFeatureFlagService>());
         var catalog = new AgentCatalogService();
         var policy = Substitute.For<IAgentPolicyEvaluator>();
-        policy.Evaluate(Arg.Any<AgentPolicyEvaluationContext>())
+        policy.EvaluateAsync(Arg.Any<AgentPolicyEvaluationContext>())
             .Returns(new AgentPolicyDecision(
                 AgentPolicyDecisionStatus.Allowed, catalog.GetCapabilityByMcpTool(toolName)));
         var rateLimiter = Substitute.For<IDistributedRateLimitService>();
@@ -98,6 +99,17 @@ public class McpPlanAccessTests
         builder.Configuration["Jwt:Audience"] = "orbit-test";
         builder.AddOrbitAuthentication();
         var usage = Substitute.For<IApiKeyUsageTracker>();
+        var authenticationStore = Substitute.For<IApiKeyAuthenticationStore>();
+        authenticationStore.FindAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(call =>
+        {
+            var candidate = keys.SingleOrDefault(row => row.KeyPrefix == call.Arg<string>());
+            return candidate is null ? null : new ApiKeyAuthenticationCandidate(candidate, user.IsDeactivated, user.HasProAccess, user.PlanExpiresAt);
+        });
+        builder.Services.AddSingleton(authenticationStore);
+        builder.Services.AddSingleton<MemoryCache>(_ => new MemoryCache(new MemoryCacheOptions()));
+        builder.Services.AddSingleton(Options.Create(new AuthCacheSettings()));
+        builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
+        builder.Services.AddSingleton<AuthValidationCache>();
         builder.Services.AddSingleton(usage);
         builder.Services.AddSingleton(Orbit.Infrastructure.Tests.ModerationTestDouble.Clean());
         builder.Services.AddSingleton(keyRepository);
@@ -191,7 +203,8 @@ public class McpPlanAccessTests
             await rateLimiter.DidNotReceive().TryAcquireAsync(
                 Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
         }
-        await userRepository.Received().GetByIdAsync(user.Id, Arg.Any<CancellationToken>());
+        await authenticationStore.Received(1).FindAsync(key.KeyPrefix, Arg.Any<CancellationToken>());
+        await userRepository.DidNotReceive().GetByIdAsync(user.Id, Arg.Any<CancellationToken>());
     }
 
     [Theory]

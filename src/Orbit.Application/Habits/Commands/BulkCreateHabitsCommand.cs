@@ -99,7 +99,7 @@ public class BulkCreateHabitsCommandHandler(
             cancellationToken);
 
         if (result.IsSuccess)
-            CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, userToday);
+            await CacheInvalidationHelper.InvalidateUserAiCachesAsync(cache, request.UserId, userToday);
 
         return result;
     }

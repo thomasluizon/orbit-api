@@ -175,7 +175,7 @@ public class WaitlistControllerTests
                 cfg.AddOpenBehavior(typeof(ValidationBehavior<,>));
             })
             .AddScoped<IValidator<JoinWaitlistCommand>, JoinWaitlistCommandValidator>()
-            .AddMemoryCache()
+            .AddSingleton<Orbit.Application.Auth.Services.IEmailChallengeStore>(new ChallengeTestDatabase().Store())
             .AddSingleton(_jobs)
             .AddSingleton(_emailService)
             .AddSingleton(_tokenService)

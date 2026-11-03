@@ -42,7 +42,7 @@ public class McpMutationReplayTests
         });
         var catalog = new AgentCatalogService([tool]);
         var policy = Substitute.For<IAgentPolicyEvaluator>();
-        policy.Evaluate(Arg.Any<AgentPolicyEvaluationContext>()).Returns(new AgentPolicyDecision(
+        policy.EvaluateAsync(Arg.Any<AgentPolicyEvaluationContext>()).Returns(new AgentPolicyDecision(
             AgentPolicyDecisionStatus.Allowed, catalog.GetCapabilityByChatTool("assign_tags")));
         using var services = new ServiceCollection().AddScoped(_ => factory.CreateContext()).BuildServiceProvider();
         var executor = new AgentOperationExecutor(catalog, policy, new AgentAuditService(services.GetRequiredService<IServiceScopeFactory>()),

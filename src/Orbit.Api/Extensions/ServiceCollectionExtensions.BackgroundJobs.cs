@@ -82,10 +82,9 @@ public static partial class ServiceCollectionExtensions
             options.Queues = ["marketing"];
             options.WorkerCount = 1;
         });
-        builder.Services.AddScoped<SendMarketingBroadcastPageJob>();
-        builder.Services.AddScoped<IMarketingBroadcastDeliveryStore, MarketingBroadcastDeliveryStore>();
         builder.Services.AddScoped<Orbit.Application.Waitlist.Commands.SendWaitlistConfirmationJob>();
         builder.Services.AddScoped<SendMarketingEmailJob>();
+        builder.Services.AddScoped<SendMarketingBroadcastPageJob>();
         builder.Services.AddScoped<ProactivePushJob>();
         builder.Services.AddScoped<DeliverReferralRewardJob>();
     }
@@ -108,6 +107,8 @@ public static partial class ServiceCollectionExtensions
         AddScheduledJob<StreakGoalSyncService>(builder);
         AddScheduledJob<SyncCleanupService>(builder);
         AddScheduledJob<PlayNotificationCleanupService>(builder);
+        AddScheduledJob<AuthStateCleanupService>(builder);
+        AddScheduledJob<DurableDeliveryRecoveryService>(builder);
         AddScheduledJob<CalendarAutoSyncService>(builder);
         AddScheduledJob<NotionAutoSyncService>(builder);
         AddScheduledJob<AiUsageSummaryService>(builder);

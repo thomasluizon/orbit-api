@@ -241,7 +241,7 @@ internal static partial class McpHttpGate
             return;
         }
         var services = ResolveMcpServices(context);
-        var outcome = EvaluateToolPolicy(context, body, toolCall, services);
+        var outcome = await EvaluateToolPolicyAsync(context, body, toolCall, services);
         if (outcome.Audit is null)
             await next();
         else if (outcome.Reason is not null)
@@ -251,7 +251,7 @@ internal static partial class McpHttpGate
             await ExecuteAuthorizedMcpToolCallAsync(context, next, services.AuditService, outcome.Audit);
     }
 
-    private static PolicyOutcome EvaluateToolPolicy(HttpContext context, string body,
+    private static async Task<PolicyOutcome> EvaluateToolPolicyAsync(HttpContext context, string body,
         McpToolCallRequest toolCall, McpServices services)
     {
         var capability = services.CatalogService.GetCapabilityByMcpTool(toolCall.ToolName);
@@ -262,7 +262,7 @@ internal static partial class McpHttpGate
         if (capability.ConfirmationRequirement is AgentConfirmationRequirement.FreshConfirmation or AgentConfirmationRequirement.StepUp)
             return new(null);
         var sourceName = toolCall.OperationId ?? toolCall.ToolName;
-        var decision = services.PolicyEvaluator.Evaluate(new AgentPolicyEvaluationContext(capability.Id,
+        var decision = await services.PolicyEvaluator.EvaluateAsync(new AgentPolicyEvaluationContext(capability.Id,
             context.User.GetUserId(), AgentExecutionSurface.Mcp, context.User.GetAgentAuthMethod(),
             context.User.GetGrantedAgentScopes(), sourceName, $"{sourceName} requested via MCP",
             toolCall.OperationFingerprint, IsReadOnlyCredential: context.User.IsReadOnlyCredential()));

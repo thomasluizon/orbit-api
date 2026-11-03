@@ -10,7 +10,7 @@ locals {
 
   bot_protection_landing_hostnames = {
     production = ["useorbit.org", "www.useorbit.org"]
-    staging    = []
+    staging    = ["orbit-landing-staging.onrender.com"]
   }
 
   bot_protection_api_hostnames = {

@@ -16,16 +16,16 @@ public sealed class ApiKeyManagementAuthorization(
         appConfigService.GetAsync(AppConfigKeys.RequireApiKeyCreationStepUp, false, cancellationToken);
 
     /// <summary>Opens the grant after a door verified the emailed code.</summary>
-    public void Grant(Guid userId, TimeSpan lifetime) =>
-        challengeService.AuthorizeOnce(EmailChallengeOperation.ApiKeyManagement, userId, lifetime);
+    public Task GrantAsync(Guid userId, TimeSpan lifetime) =>
+        challengeService.AuthorizeOnceAsync(EmailChallengeOperation.ApiKeyManagement, userId, lifetime);
 
     /// <summary>Reads the grant without spending it. Listing and revoking use this.</summary>
-    public bool HasGrant(Guid userId) =>
-        challengeService.HasAuthorization(EmailChallengeOperation.ApiKeyManagement, userId);
+    public Task<bool> HasGrantAsync(Guid userId) =>
+        challengeService.HasAuthorizationAsync(EmailChallengeOperation.ApiKeyManagement, userId);
 
     /// <summary>Spends the grant. Only the creation of new key material uses this.</summary>
-    public bool TryConsumeGrant(Guid userId) =>
-        challengeService.TryConsumeAuthorization(EmailChallengeOperation.ApiKeyManagement, userId);
+    public Task<bool> TryConsumeGrantAsync(Guid userId) =>
+        challengeService.TryConsumeAuthorizationAsync(EmailChallengeOperation.ApiKeyManagement, userId);
 
     public async Task<AgentConfirmationRequirement?> GetRequiredConfirmationAsync(
         string capabilityId,
@@ -39,10 +39,10 @@ public sealed class ApiKeyManagementAuthorization(
             : null;
     }
 
-    public void OnStepUpVerified(string capabilityId, Guid userId)
+    public async Task OnStepUpVerifiedAsync(string capabilityId, Guid userId)
     {
         if (IsApiKeyCapability(capabilityId))
-            Grant(userId, GrantLifetime);
+            await GrantAsync(userId, GrantLifetime);
     }
 
     private static bool IsApiKeyCapability(string capabilityId) =>

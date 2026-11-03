@@ -66,7 +66,7 @@ public sealed class SesEmailServiceTests
     }
 
     [Fact]
-    public async Task SendMarketing_NonThrottleFailure_LogsOnceAndReturns()
+    public async Task SendMarketing_NonThrottleFailure_LogsOnceAndThrowsForDurableRetry()
     {
         var logger = Substitute.For<ILogger<SesEmailService>>();
         logger.IsEnabled(LogLevel.Error).Returns(true);
@@ -74,7 +74,8 @@ public sealed class SesEmailServiceTests
             .Returns(Task.FromException<SendEmailResponse>(new InvalidOperationException("SES unavailable")));
         var service = new SesEmailService(_client, Options.Create(new SesSettings()),
             Options.Create(new FrontendSettings { BaseUrl = "https://app.useorbit.org" }), logger);
-        await service.SendMarketingEmailAsync("recipient@example.com", "News", "<p>Update</p>", "en", "https://api.useorbit.org/u");
+        var send = () => service.SendMarketingEmailAsync("recipient@example.com", "News", "<p>Update</p>", "en", "https://api.useorbit.org/u");
+        await send.Should().ThrowAsync<InvalidOperationException>();
         await _client.Received(1).SendEmailAsync(Arg.Any<SendEmailRequest>(), Arg.Any<CancellationToken>());
         logger.ReceivedCalls().Count(c => c.GetMethodInfo().Name == "Log" && c.GetArguments()[0] is LogLevel.Error)
             .Should().Be(1);
@@ -159,7 +160,8 @@ public sealed class SesEmailServiceTests
     {
         _client.SendEmailAsync(Arg.Any<SendEmailRequest>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromException<SendEmailResponse>(new TooManyRequestsException("throttled")));
-        await _service.SendMarketingEmailAsync("recipient@example.com", "News", "<p>Update</p>", "en", "https://api.useorbit.org/u");
+        await FluentActions.Invoking(() => _service.SendMarketingEmailAsync("recipient@example.com", "News", "<p>Update</p>", "en", "https://api.useorbit.org/u"))
+            .Should().ThrowAsync<TooManyRequestsException>();
         await _client.Received(5).SendEmailAsync(Arg.Any<SendEmailRequest>(), Arg.Any<CancellationToken>());
     }
 

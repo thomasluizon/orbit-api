@@ -20,7 +20,7 @@ public sealed class AppendChecklistItemCommandHandler(IGenericRepository<Habit> 
         var result = habit.AppendChecklistItem(request.Text);
         if (result.IsFailure) return result.PropagateError<Guid>();
         await work.SaveChangesAsync(ct);
-        CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, await dates.GetUserTodayAsync(request.UserId, ct));
+        await CacheInvalidationHelper.InvalidateUserAiCachesAsync(cache, request.UserId, await dates.GetUserTodayAsync(request.UserId, ct));
         return Result.Success(habit.Id);
     }
 

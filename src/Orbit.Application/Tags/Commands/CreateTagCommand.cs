@@ -34,7 +34,7 @@ public class CreateTagCommandHandler(
         await tagRepository.AddAsync(result.Value, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        cache.Remove(ReferenceCacheKeys.Tags(request.UserId));
+        await CacheInvalidationHelper.InvalidateReferenceCacheAsync(cache, request.UserId, ReferenceCacheKeys.Tags(request.UserId));
 
         return Result.Success(result.Value.Id);
     }

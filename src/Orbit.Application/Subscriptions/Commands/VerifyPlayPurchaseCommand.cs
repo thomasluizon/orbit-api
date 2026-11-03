@@ -18,6 +18,7 @@ public partial class VerifyPlayPurchaseCommandHandler(
     IUnitOfWork unitOfWork,
     IPlayBillingService playBilling,
     IPlayReferralCouponConsumer referralCouponConsumer,
+    IGenericRepository<PendingCouponCancellation> couponCancellationRepository,
     IOptions<GooglePlaySettings> playSettings,
     ILogger<VerifyPlayPurchaseCommandHandler> logger) : IRequestHandler<VerifyPlayPurchaseCommand, Result<PlayVerifyResponse>>
 {
@@ -67,19 +68,14 @@ public partial class VerifyPlayPurchaseCommandHandler(
         var consumedCouponId = referralCouponConsumer.ConsumeOnNewPurchase(user, state, request.PurchaseToken);
 
         user.SetPlaySubscription(request.PurchaseToken, state.ExpiresAt, state.Interval, state.IsInGracePeriod);
+        if (!string.IsNullOrEmpty(consumedCouponId))
+            await couponCancellationRepository.AddAsync(PendingCouponCancellation.Create(user.Id, consumedCouponId), cancellationToken);
         var verifyResult = await SavePlayTokenAsync(request, user, cancellationToken);
         if (verifyResult.IsSuccess)
         {
-            await CancelConsumedCouponAsync(request.UserId, consumedCouponId, cancellationToken);
             LogPlayPurchaseVerified(logger, request.UserId, state.ExpiresAt);
         }
         return verifyResult;
-    }
-
-    private async Task CancelConsumedCouponAsync(Guid userId, string? couponId, CancellationToken cancellationToken)
-    {
-        if (!string.IsNullOrEmpty(couponId))
-            await referralCouponConsumer.CancelConsumedCouponAsync(userId, couponId, cancellationToken);
     }
 
     private async Task<Result<PlayVerifyResponse>> SavePlayTokenAsync(

@@ -1,7 +1,7 @@
 {
   "sourceHashes": {
-    "infra/onboarding.tf": "D9DE878E6F35F149E3990E2820E8CA61EF8B411FD9067E0A08DD818C290A4791",
-    "infra/cloudflare.tf": "1BC17165C197E28369AF8CB15E07CDD7AED7A7CC61ED26DD99D0B3FAB017514B"
+    "infra/onboarding.tf": "8F26D237DA489AF46B078F5294D1A5923C994B9FE246D8E46DEFF4E2D8749E8F",
+    "infra/cloudflare.tf": "0AFBB53F08181867189E314990D3CB7CC1B894DDF5F487BB447D622F3527F65C"
   },
   "environments": {
     "production": {
@@ -12,7 +12,8 @@
     },
     "staging": {
       "BotProtection__AllowedHostnames__0": "api-staging.useorbit.org",
-      "BotProtection__AllowedHostnames__1": "app-staging.useorbit.org"
+      "BotProtection__AllowedHostnames__1": "app-staging.useorbit.org",
+      "BotProtection__AllowedHostnames__2": "orbit-landing-staging.onrender.com"
     }
   }
 }

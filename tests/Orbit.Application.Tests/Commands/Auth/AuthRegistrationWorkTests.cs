@@ -71,8 +71,9 @@ public class AuthRegistrationWorkTests
         else
         {
             using var cache = new MemoryCache(new MemoryCacheOptions());
-            cache.Set("verify:person@example.com", new VerificationEntry("123456", 0, DateTime.UtcNow));
-            var handler = new VerifyCodeCommandHandler(cache, users, work, sessions, new SignupJobDispatcher(jobs, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance), jobs, new AccountReactivation(Substitute.For<IGenericRepository<OwedSubscriptionCancellation>>()));
+            ChallengeTestDatabase.For(cache).Seed("verify:person@example.com", "123456");
+            var handler = new VerifyCodeCommandHandler(
+            ChallengeTestDatabase.For(cache).Store(), users, work, sessions, new SignupJobDispatcher(jobs, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance), jobs, new AccountReactivation(Substitute.For<IGenericRepository<OwedSubscriptionCancellation>>()));
             (await handler.Handle(new VerifyCodeCommand("person@example.com", "123456", ReferralCode: withExtras ? "friend" : null),
                 CancellationToken.None)).IsSuccess.Should().BeTrue();
         }

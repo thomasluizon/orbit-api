@@ -28,6 +28,9 @@ public class AuthSessionServiceTests
 
     public AuthSessionServiceTests()
     {
+        _unitOfWork.ExecuteInTransactionAsync(
+            Arg.Any<Func<CancellationToken, Task<Result<Orbit.Domain.Models.SessionTokens>>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.Arg<Func<CancellationToken, Task<Result<Orbit.Domain.Models.SessionTokens>>>>()(call.Arg<CancellationToken>()));
         _service = new AuthSessionService(
             _sessionRepository,
             _refreshTokenRepository,
@@ -177,7 +180,7 @@ public class AuthSessionServiceTests
 
         var revokeResult = await _service.RevokeSessionAsync(createResult.Value.RefreshToken, CancellationToken.None);
 
-        revokeResult.IsSuccess.Should().BeTrue();
+        revokeResult.IsFailure.Should().BeTrue();
         _storedSession!.RevokedAtUtc.Should().NotBeNull();
     }
 

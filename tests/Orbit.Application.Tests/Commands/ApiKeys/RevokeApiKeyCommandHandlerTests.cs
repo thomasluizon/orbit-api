@@ -1,4 +1,4 @@
-﻿using System.Linq.Expressions;
+using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using FluentAssertions;
 using Microsoft.Extensions.Caching.Memory;
@@ -14,7 +14,7 @@ using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Tests.Commands.ApiKeys;
 
-public class RevokeApiKeyCommandHandlerTests
+public class RevokeApiKeyCommandHandlerTests : IAsyncLifetime
 {
     private readonly IGenericRepository<ApiKey> _apiKeyRepo = Substitute.For<IGenericRepository<ApiKey>>();
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
@@ -35,8 +35,7 @@ public class RevokeApiKeyCommandHandlerTests
                 false,
                 Arg.Any<CancellationToken>())
             .Returns(true);
-        _challengeService = new EmailChallengeService(_cache, TimeProvider.System);
-        AuthorizeManagement();
+        _challengeService = new EmailChallengeService(ChallengeTestDatabase.For(_cache).Store(TimeProvider.System));
         _handler = new RevokeApiKeyCommandHandler(
             _apiKeyRepo,
             _payGate,
@@ -44,6 +43,9 @@ public class RevokeApiKeyCommandHandlerTests
             _cache,
             new ApiKeyManagementAuthorization(_appConfigService, _challengeService));
     }
+
+    public Task InitializeAsync() => AuthorizeAsync();
+    public Task DisposeAsync() => Task.CompletedTask;
 
     [Fact]
     public async Task Handle_WithoutChallenge_ReturnsNamedRefusalAndRevokesNothing()
@@ -60,7 +62,7 @@ public class RevokeApiKeyCommandHandlerTests
             _payGate,
             _unitOfWork,
             emptyCache,
-            new ApiKeyManagementAuthorization(_appConfigService, new EmailChallengeService(emptyCache, TimeProvider.System)));
+            new ApiKeyManagementAuthorization(_appConfigService, new EmailChallengeService(ChallengeTestDatabase.For(emptyCache).Store(TimeProvider.System))));
 
         var result = await handler.Handle(
             new RevokeApiKeyCommand(UserId, apiKey.Id),
@@ -87,7 +89,7 @@ public class RevokeApiKeyCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         apiKey.IsRevoked.Should().BeTrue();
-        _challengeService.HasAuthorization(EmailChallengeOperation.ApiKeyManagement, UserId).Should().BeTrue();
+        (await _challengeService.HasAuthorizationAsync(EmailChallengeOperation.ApiKeyManagement, UserId)).Should().BeTrue();
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
@@ -99,7 +101,7 @@ public class RevokeApiKeyCommandHandlerTests
                 Arg.Any<Expression<Func<ApiKey, bool>>>(),
                 Arg.Any<CancellationToken>())
             .Returns(new List<ApiKey> { apiKey });
-        _challengeService.TryConsumeAuthorization(EmailChallengeOperation.ApiKeyManagement, UserId);
+        await _challengeService.TryConsumeAuthorizationAsync(EmailChallengeOperation.ApiKeyManagement, UserId);
 
         var result = await _handler.Handle(
             new RevokeApiKeyCommand(UserId, apiKey.Id),
@@ -116,8 +118,8 @@ public class RevokeApiKeyCommandHandlerTests
     {
         var (apiKey, _) = ApiKey.Create(UserId, "Protected key").Value;
         var expiringCache = new MemoryCache(new MemoryCacheOptions());
-        var challengeService = new EmailChallengeService(expiringCache, TimeProvider.System);
-        challengeService.AuthorizeOnce(
+        var challengeService = new EmailChallengeService(ChallengeTestDatabase.For(expiringCache).Store(TimeProvider.System));
+        await challengeService.AuthorizeOnceAsync(
             EmailChallengeOperation.ApiKeyManagement,
             UserId,
             TimeSpan.FromMilliseconds(1));
@@ -145,10 +147,10 @@ public class RevokeApiKeyCommandHandlerTests
     public async Task Handle_NonProWithOrWithoutChallenge_ReturnsPayGateRefusal(bool authorize)
     {
         var cache = new MemoryCache(new MemoryCacheOptions());
-        var challengeService = new EmailChallengeService(cache, TimeProvider.System);
+        var challengeService = new EmailChallengeService(ChallengeTestDatabase.For(cache).Store(TimeProvider.System));
         if (authorize)
         {
-            challengeService.AuthorizeOnce(
+            await challengeService.AuthorizeOnceAsync(
                 EmailChallengeOperation.ApiKeyManagement,
                 UserId,
                 TimeSpan.FromMinutes(10));
@@ -282,7 +284,7 @@ public class RevokeApiKeyCommandHandlerTests
         await _unitOfWork.Received(2).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
-    private void AuthorizeManagement() => _challengeService.AuthorizeOnce(
+    private Task AuthorizeAsync() => _challengeService.AuthorizeOnceAsync(
         EmailChallengeOperation.ApiKeyManagement,
         UserId,
         TimeSpan.FromMinutes(10));
@@ -291,11 +293,13 @@ public class RevokeApiKeyCommandHandlerTests
     {
         var (key, _) = ApiKey.Create(UserId, "Owner key").Value;
         var attacker = Guid.NewGuid();
-        _challengeService.AuthorizeOnce(EmailChallengeOperation.ApiKeyManagement, attacker, TimeSpan.FromMinutes(10));
+        await _challengeService.AuthorizeOnceAsync(EmailChallengeOperation.ApiKeyManagement, attacker, TimeSpan.FromMinutes(10));
+        (await _challengeService.HasAuthorizationAsync(EmailChallengeOperation.ApiKeyManagement, attacker)).Should().BeTrue();
         _apiKeyRepo.FindTrackedAsync(Arg.Any<Expression<Func<ApiKey, bool>>>(), Arg.Any<CancellationToken>())
             .Returns(call => new[] { key }.Where(call.Arg<Expression<Func<ApiKey, bool>>>().Compile()).ToList());
         var result = await _handler.Handle(new RevokeApiKeyCommand(attacker, key.Id), default);
         result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be(ErrorCodes.ApiKeyNotFound);
         key.IsRevoked.Should().BeFalse();
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
