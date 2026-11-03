@@ -764,8 +764,27 @@ are in [HabitRanking.md](../src/Orbit.Api/OpenApi/HabitRanking.md).
 
 ### API release admission
 
-Release API requires successful `API Tests` and `Guards` push runs on the selected
-main SHA and their successful check runs before an image build. Staging signs in
+Release API requires completed successful `API Tests` (`test.yml`) and `Guards`
+(`guards.yml`) runs triggered by `push` or `workflow_dispatch` on `main`, each at
+exactly the selected SHA, and their successful check runs before an image build.
+Pull request runs and runs for another branch or SHA do not qualify.
+
+For a bot-merged commit without push CI, confirm `main` still points to the selected
+commit and dispatch both workflows:
+
+```sh
+gh workflow run test.yml --ref main --repo thomasluizon/orbit-api
+gh workflow run guards.yml --ref main --repo thomasluizon/orbit-api
+```
+
+Wait for both runs to complete successfully and verify each run's `head_sha` equals
+the selected SHA, then rerun Release API. Dispatch uses the commit at `main` when
+the event is created; if `main` has advanced, those runs cannot qualify for the
+older selected SHA. Select the current `main` commit and obtain its CI evidence
+before releasing it. The workflows check out the dispatched commit without a
+`ref` override and isolate dispatch concurrency by run id.
+
+Staging signs in
 with a dedicated smoke account, reads the habit count, creates a throwaway general
 task and deletes it. The workflow marks `api-staging-smoke` pending before building
 and records success only after health, image and authenticated smoke checks pass.

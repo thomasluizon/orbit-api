@@ -76,6 +76,15 @@ Pre-commit hook: a git-level `pre-commit` (lefthook, `lefthook.yml`) runs `dotne
 
 Render (Docker, manual API releases through `release.yml`) + Supabase PostgreSQL (session pooler) + Amazon SES (email) + Firebase (FCM) + Stripe.
 
+Release admission requires completed successful `API Tests` and `Guards` runs from
+`push` or `workflow_dispatch` on `main` at exactly the selected SHA, plus successful
+check runs. For a bot-merged commit without push CI, confirm `main` is still at that
+commit, run `gh workflow run test.yml --ref main --repo thomasluizon/orbit-api` and
+`gh workflow run guards.yml --ref main --repo thomasluizon/orbit-api`, verify both
+runs succeed with that `head_sha`, then rerun Release API. Runs for another SHA or
+branch, including pull request runs, do not qualify. See
+[API release admission](infra/README.md#api-release-admission) for recovery details.
+
 ## Generated gating matrix
 
 Run `node tools/gating-matrix.mjs` to write `gating-matrix.json` at the repository root. The file is not committed.
