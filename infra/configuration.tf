@@ -87,7 +87,7 @@ locals {
     Ses__TransactionalConfigurationSet = aws_sesv2_configuration_set.staging["transactional"].configuration_set_name
     Ses__MarketingConfigurationSet     = aws_sesv2_configuration_set.staging["marketing"].configuration_set_name
     Ses__TopicArn                      = aws_sns_topic.ses_events_staging.arn
-    BotProtection__Enabled             = "false"
+    BotProtection__Enabled             = "true"
     ASPNETCORE_ENVIRONMENT             = "Staging"
     Database__MigrateOnStartup         = "true"
     DesktopAuth__RedirectUri           = "org.useorbit.desktop.staging://auth/callback"
