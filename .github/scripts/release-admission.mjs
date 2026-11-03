@@ -8,9 +8,13 @@ export function requireReason(force, reason) {
 }
 export async function requireCI(api, repo, sha) {
   for (const workflow of ['test.yml', 'guards.yml']) {
-    const { workflow_runs: runs } = await api(`repos/${repo}/actions/workflows/${workflow}/runs?head_sha=${sha}&branch=main&event=push&per_page=1`)
-    const run = runs?.[0]
-    if (run?.head_sha !== sha || run.status !== 'completed' || run.conclusion !== 'success') throw new Error(`Release requires successful ${workflow === 'test.yml' ? 'API Tests' : 'Guards'} on ${sha}`)
+    let run
+    for (let page = 1; ; page++) {
+      const { workflow_runs: runs = [] } = await api(`repos/${repo}/actions/workflows/${workflow}/runs?head_sha=${sha}&branch=main&per_page=100&page=${page}`)
+      run = runs.find(item => item.head_sha === sha && item.head_branch === 'main' && ['push', 'workflow_dispatch'].includes(item.event) && item.status === 'completed' && item.conclusion === 'success')
+      if (run || runs.length < 100) break
+    }
+    if (!run) throw new Error(`Release requires successful ${workflow === 'test.yml' ? 'API Tests' : 'Guards'} (${workflow}) on ${sha}; dispatch test.yml and guards.yml on main at that commit, then rerun the release`)
     const checks = await api(`repos/${repo}/check-suites/${run.check_suite_id}/check-runs?per_page=100`)
     if (!checks.check_runs?.some(check => check.head_sha === sha && check.status === 'completed' && check.conclusion === 'success')) throw new Error(`No successful check runs for ${workflow} on ${sha}`)
   }

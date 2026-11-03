@@ -12,7 +12,7 @@ test('override requires a written reason', () => {
 })
 for (const conclusion of ['failure', null, 'skipped']) {
   test(`CI refuses ${conclusion}`, async () => {
-    await assert.rejects(requireCI(async () => ({ workflow_runs: [{ head_sha: sha, status: 'completed', conclusion }] }), 'owner/repo', sha), /API Tests/)
+    await assert.rejects(requireCI(async () => ({ workflow_runs: [{ head_sha: sha, head_branch: 'main', event: 'push', status: 'completed', conclusion }] }), 'owner/repo', sha), /API Tests/)
   })
 }
 test('CI requires both successful workflows and their check runs', async () => {
@@ -20,12 +20,55 @@ test('CI requires both successful workflows and their check runs', async () => {
   await requireCI(async path => {
     paths.push(path)
     return path.includes('/check-suites/') ? { check_runs: [{ head_sha: sha, status: 'completed', conclusion: 'success' }] }
-      : { workflow_runs: [{ head_sha: sha, status: 'completed', conclusion: 'success', check_suite_id: 123 }] }
+      : { workflow_runs: [{ head_sha: sha, head_branch: 'main', event: 'push', status: 'completed', conclusion: 'success', check_suite_id: 123 }] }
   }, 'owner/repo', sha)
   assert.equal(paths.length, 4)
   assert.match(paths[2], /guards.yml/)
   await assert.rejects(requireCI(async () => ({ workflow_runs: [] }), 'owner/repo', sha), /API Tests/)
 })
+const successfulRun = { head_sha: sha, head_branch: 'main', event: 'workflow_dispatch', status: 'completed', conclusion: 'success', check_suite_id: 123 }
+function ciApi(runs) {
+  return async path => {
+    if (path.includes('/check-suites/')) return { check_runs: [{ head_sha: sha, status: 'completed', conclusion: 'success' }] }
+    const query = new URL(path, 'https://api.github.com/').searchParams
+    return { workflow_runs: runs.filter(run => !query.has('event') || run.event === query.get('event')) }
+  }
+}
+test('CI accepts dispatched evidence at the selected main SHA', async () => {
+  await requireCI(ciApi([successfulRun]), 'owner/repo', sha)
+})
+for (const [label, changes] of [
+  ['another SHA', { head_sha: 'b'.repeat(40) }],
+  ['a pull request', { event: 'pull_request' }],
+  ['another branch', { head_branch: 'feature/other' }],
+]) {
+  test(`CI rejects dispatched evidence from ${label} with recovery instructions`, async () => {
+    await assert.rejects(requireCI(ciApi([{ ...successfulRun, ...changes }]), 'owner/repo', sha), error => {
+      assert.match(error.message, /API Tests.*test\.yml/)
+      assert.ok(error.message.includes(sha))
+      assert.match(error.message, /dispatch test\.yml and guards\.yml on main at that commit, then rerun the release/)
+      return true
+    })
+  })
+}
+test('CI finds qualifying dispatch evidence among unrelated runs', async () => {
+  await requireCI(ciApi([{ ...successfulRun, event: 'pull_request' }, { ...successfulRun, conclusion: 'failure' }, successfulRun]), 'owner/repo', sha)
+})
+for (const workflow of ['test.yml', 'guards.yml']) {
+  test(`${workflow} supports dispatch with event checkout and isolated concurrency`, () => {
+    const source = readFileSync(new URL(`../workflows/${workflow}`, import.meta.url), 'utf8')
+    assert.match(source, /^on:\n(?:[ \t].*\n)*  workflow_dispatch:/m)
+    const conditions = [...source.matchAll(/^[ \t]*if:[ \t]*(.*)/gm)]
+    for (const [, condition] of conditions) {
+      if (/github\.event_name\s*==\s*['"]push['"]/.test(condition)) assert.match(condition, /workflow_dispatch/)
+    }
+    for (const checkout of source.split(/- uses: actions\/checkout@[^\n]+/).slice(1)) {
+      assert.doesNotMatch(checkout.split(/\n\s*- (?:name|uses|run):/)[0], /^\s+ref:/m)
+    }
+    assert.match(source, /group:.*github\.run_id/)
+    assert.match(source, /cancel-in-progress: \$\{\{ github\.event_name == 'pull_request' \}\}/)
+  })
+}
 test('smoke requires latest trusted success, without a stale success fallback', async () => {
   for (const state of ['failure', 'pending']) {
     await assert.rejects(requireSmoke(async () => [
