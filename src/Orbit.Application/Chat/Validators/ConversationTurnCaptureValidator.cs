@@ -1,5 +1,6 @@
 using System.Text.Json;
 using FluentValidation;
+using Orbit.Domain.Models;
 
 namespace Orbit.Application.Chat.Validators;
 
@@ -25,7 +26,7 @@ public sealed class ConversationTurnCaptureValidator : AbstractValidator<Convers
         try
         {
             using var document = JsonDocument.Parse(json);
-            return document.RootElement.ValueKind == JsonValueKind.Object;
+            return document.RootElement.ValueKind == JsonValueKind.Object && (AstraPlan.Read(json)?.IsValid() ?? true);
         }
         catch (JsonException)
         {

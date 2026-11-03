@@ -252,7 +252,7 @@ public partial class ProcessUserChatCommandHandlerTests
         result.IsSuccess.Should().BeTrue(result.Error);
         var request = _aiIntentService.ReceivedCalls().SelectMany(call => call.GetArguments().OfType<AiToolRequest>()).Single();
         JsonSerializer.Serialize(request.ToolDeclarations).Should().NotContain("proposed_habit_title");
-        request.ToolDeclarations.Should().ContainSingle();
+        request.ToolDeclarations.Should().HaveCount(2);
         JsonSerializer.SerializeToElement(request.ToolDeclarations[0]).GetProperty("name").GetString().Should().Be("ask");
         result.Value.Parts!.OfType<ChatBlockPart>().Should().BeEmpty();
         await _blockStore.DidNotReceiveWithAnyArgs().AddAsync(default!, default);

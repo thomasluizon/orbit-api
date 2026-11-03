@@ -36,7 +36,7 @@ public partial class ProcessUserChatCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue(result.Error);
         var request = (AiToolRequest)_aiIntentService.ReceivedCalls().Single(invocation => invocation.GetMethodInfo().Name == "SendWithToolsAsync").GetArguments()[0]!;
-        var declaration = JsonSerializer.SerializeToElement(request.ToolDeclarations.Single());
+        var declaration = DeclaredTool(request, tool.Name);
         var fields = declaration.GetProperty("parameters").GetProperty("properties");
         fields.TryGetProperty("orbit_read_complete", out _).Should().BeTrue();
         fields.TryGetProperty("orbit_write_complete", out _).Should().BeFalse();

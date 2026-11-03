@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Orbit.Application.Chat;
 using Orbit.Application.Chat.Validators;
@@ -15,13 +16,14 @@ using Orbit.Infrastructure.Persistence;
 
 namespace Orbit.Infrastructure.Services;
 
-public sealed class ConversationTurnRecorder(
+public sealed partial class ConversationTurnRecorder(
     OrbitDbContext db,
     IUnitOfWork work,
     IFeatureFlagService flags,
     IEncryptionService encryption,
     IObjectStorageService storage,
-    IOptions<AiSettings> aiSettings) : IConversationTurnRecorder
+    IOptions<AiSettings> aiSettings,
+    ILogger<ConversationTurnRecorder> logger) : IConversationTurnRecorder
 {
     public const int HistoryRows = 10;
     public const int ImageHistoryRows = 6;
@@ -83,13 +85,18 @@ public sealed class ConversationTurnRecorder(
                 && item.ConversationId == conversationId && item.CreatedAtUtc == turn.CreatedAtUtc
                 && item.PreviewFingerprint != null).OrderBy(item => item.Id).ToListAsync(token);
             var outcomes = JsonSerializer.Serialize(previews.Select(Preview));
+            var responseJson = turn.ResponseJson;
+            var plan = AstraPlan.Read(responseJson);
+            foreach (var preview in previews.Select(Preview))
+                plan = plan?.PreviewOutcome(preview.PendingOperationId, preview.Outcome);
+            responseJson = AstraPlan.Write(responseJson, plan);
             var userRow = ConversationTurn.Create(turn.UserId, turn.TurnId, "user", turn.CreatedAtUtc, null,
                 turn.UserContent, "[]", conversationId: conversationId, turnOrder: order,
                 imageObjectKey: imageKey, imageContentType: imageKey is null ? null : turn.ImageMimeType, imageSha256: imageSha256);
             var assistantRow = ConversationTurn.Create(turn.UserId, turn.TurnId, "assistant", turn.CreatedAtUtc,
-                turn.UsedModel ? aiSettings.Value.Model : null, turn.AssistantContent, turn.ToolCallsJson, turn.ResponseJson,
+                turn.UsedModel ? aiSettings.Value.Model : null, turn.AssistantContent, turn.ToolCallsJson, responseJson,
                 conversationId, order + 1, summaries, outcomes,
-                modelContextJson: BuildModelContext(turn.AssistantContent, turn.ResponseJson, summaries, outcomes));
+                modelContextJson: BuildModelContext(turn.AssistantContent, responseJson, summaries, outcomes));
             if (userRow.IsFailure || assistantRow.IsFailure)
                 throw new InvalidOperationException(userRow.IsFailure ? userRow.Error : assistantRow.Error);
             db.ConversationTurns.AddRange(userRow.Value, assistantRow.Value);
@@ -137,6 +144,7 @@ public sealed class ConversationTurnRecorder(
             return Result.Failure<StoredConversationHistory>(ConversationErrors.NotFound);
         var rows = await db.ConversationTurns.AsNoTracking().Where(row => row.UserId == userId && row.ConversationId == conversationId)
             .OrderByDescending(row => row.TurnOrder).Take(HistoryRows).ToListAsync(cancellationToken);
+        await ReconcilePlansAsync(userId, rows, cancellationToken);
         rows.Reverse();
         var image = rows.TakeLast(ImageHistoryRows).LastOrDefault(row => row.ImageObjectKey is not null);
         var messages = new List<ChatHistoryMessage>();
@@ -184,11 +192,12 @@ public sealed class ConversationTurnRecorder(
             && (!beforeOrder.HasValue || row.TurnOrder < beforeOrder))
             .OrderByDescending(row => row.TurnOrder).Take(pageSize + 1).ToListAsync(cancellationToken);
         if (rows.Count == 0) return null;
+        await ReconcilePlansAsync(userId, rows, cancellationToken);
         var hasMore = rows.Count > pageSize;
         var selected = rows.Take(pageSize).Reverse().ToArray();
         return new(conversationId.Value, selected.Select(row => new ConversationDisplayTurn(row.TurnId, row.TurnOrder!.Value,
             row.Role, row.CreatedAtUtc, row.Content, row.ResponseJson, row.PreviewOutcomesJson,
-            row.ImageObjectKey is null ? null : new($"{row.TurnId}{Path.GetExtension(row.ImageObjectKey)}", row.ImageContentType!, row.ImageSha256!, $"/api/chat/conversations/{conversationId}/images/{row.TurnId}"))).ToArray(),
+            row.ImageObjectKey is null ? null : new($"{row.TurnId}{Path.GetExtension(row.ImageObjectKey)}", row.ImageContentType!, row.ImageSha256!, $"/api/chat/conversations/{conversationId}/images/{row.TurnId}"), AstraPlan.Read(row.ResponseJson))).ToArray(),
             hasMore ? selected[0].TurnOrder : null);
     }
 

@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using FluentAssertions;
 using NSubstitute;
+using Orbit.Application.Chat;
 using Orbit.Application.Chat.Commands;
 using Orbit.Domain.Common;
 using Orbit.Domain.Models;
@@ -81,7 +82,7 @@ public sealed partial class ChatWriteHoldHandlerTests
         sent!.DynamicContext.Should().Contain(old.Id.ToString());
         JsonSerializer.SerializeToElement(sent.ToolDeclarations).EnumerateArray()
             .Select(tool => tool.GetProperty("name").GetString()).Should()
-            .BeEquivalentTo(_toolRegistry.GetAll().Select(tool => tool.Name));
+            .BeEquivalentTo(_toolRegistry.GetAll().Select(tool => tool.Name).Append(PlanToolDeclaration.Name));
         result.IsSuccess.Should().BeTrue(result.Error);
         var pending = result.Value.PendingOperations.Should().ContainSingle().Which;
         if (revise)

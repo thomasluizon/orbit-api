@@ -14,5 +14,8 @@ public partial class ProcessUserChatCommandHandler
         results.PendingOperations.RemoveAll(pending => combined.MemberIds.Contains(pending.Id));
         results.PendingOperations.Add(combined.PendingOperation);
         results.PendingWriteCalls[combined.PendingOperation.Id] = (AccountChangeSet.OperationName, combined.PendingOperation);
+        if (results.Recording?.Plan is { } plan)
+            foreach (var step in plan.Steps.Where(step => step.PendingOperationId is { } id && combined.MemberIds.Contains(id)))
+                await ChangePlanStepAsync(request, results, step.Id, "pending", pendingId: combined.PendingOperation.Id);
     }
 }

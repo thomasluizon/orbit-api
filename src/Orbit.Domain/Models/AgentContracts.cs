@@ -271,7 +271,8 @@ public record AgentOperationResult(
 public record AgentExecuteOperationResponse(
     AgentOperationResult Operation,
     PendingAgentOperation? PendingOperation = null,
-    AgentPolicyDenial? PolicyDenial = null);
+    AgentPolicyDenial? PolicyDenial = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] AstraPlan? Plan = null);
 
 public record AgentPolicyDenial(
     string OperationId,

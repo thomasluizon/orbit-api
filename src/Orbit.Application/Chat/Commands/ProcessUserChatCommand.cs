@@ -78,7 +78,8 @@ public record ChatResponse(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ChatEvalTrace? EvalTrace = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<ChatFollowUp>? FollowUpContext = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? MessageAllowanceConsumed = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Guid? ConversationId = null)
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Guid? ConversationId = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] AstraPlan? Plan = null)
 {
     [JsonIgnore]
     public TurnFactSet GroundingFacts { get; init; } = TurnFactSet.Empty;
@@ -231,7 +232,8 @@ public partial class ProcessUserChatCommandHandler(
                     recording.MessageAllowanceConsumed);
                 response = Result.Success(negotiated with
                 {
-                    ConversationId = recording.ServerEnabled && recording.Enabled ? recording.ConversationId : null
+                    ConversationId = recording.ServerEnabled && recording.Enabled ? recording.ConversationId : null,
+                    Plan = recording.Plan
                 });
             }
         }
@@ -579,6 +581,7 @@ public partial class ProcessUserChatCommandHandler(
             aiStreamSink,
             cancellationToken);
         await CombinePendingChangesAsync(request, executionResults, cancellationToken);
+        await FinishPlanAsync(request, executionResults);
         cancellationToken.ThrowIfCancellationRequested();
         var recoveredPreviewOnly = toolLoopResult.ProviderError is not null && !HasSucceededWrite(executionResults);
         toolLoopResult = RecoverOutcomeContinuation(request, executionResults, toolLoopResult, userLanguage, cancellationToken);

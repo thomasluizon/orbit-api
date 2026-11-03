@@ -224,7 +224,7 @@ public sealed partial class AstraApprovalPathTests : IDisposable
     }
 
     private (AgentOperationExecutor, PendingAgentOperationStore, PendingOperationRevisionService) Build(IAiTool tool,
-        IAgentStepUpAuthorizationBridge? authorization = null)
+        IAgentStepUpAuthorizationBridge? authorization = null, IConversationPlanStore? plans = null)
     {
         var registry = new AiToolRegistry([tool]);
         var catalog = new AgentCatalogService([tool]);
@@ -246,7 +246,7 @@ public sealed partial class AstraApprovalPathTests : IDisposable
             .Returns(call => call.Arg<Func<CancellationToken, Task<AgentExecuteOperationResponse>>>()(call.Arg<CancellationToken>()));
         var executor = new AgentOperationExecutor(catalog, policy, Substitute.For<IAgentAuditService>(),
             ownership, bridge, registry, previewer, store, unit,
-            NullLogger<AgentOperationExecutor>.Instance);
+            NullLogger<AgentOperationExecutor>.Instance, plans: plans);
         return (executor, store, new PendingOperationRevisionService(store, previewer,
             new RevisePendingOperationRequestValidator(), registry));
     }

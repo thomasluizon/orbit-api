@@ -47,7 +47,7 @@ public partial class ProcessUserChatCommandHandler
         var systemPrompt = string.Join(
             Environment.NewLine,
             ai.PromptBuilder.BuildStatic(promptRequest),
-            ai.CatalogService.BuildStaticSupplement());
+            ai.CatalogService.BuildStaticSupplement(), PlanToolDeclaration.Instruction);
         var habitTargets = HabitTargetContext.Build(context.PromptHabits, context.UserHabits);
         var accountContext = string.Join(
             Environment.NewLine,
@@ -118,6 +118,9 @@ public partial class ProcessUserChatCommandHandler
                 parameters = ChatToolSchema(tool, request.ClientContext, UsesComposition(request, context))
             })
             .ToList();
+        if (toolDeclarations.Count > 0)
+            toolDeclarations.Add(PlanToolDeclaration.Declaration);
+        toolDeclarations = toolDeclarations.OrderBy(declaration => JsonSerializer.SerializeToElement(declaration).GetProperty("name").GetString(), StringComparer.Ordinal).ToList();
 
         if (turn.ChoiceSelection is { } selection)
             dynamicContext = string.Join(Environment.NewLine, dynamicContext, selection.ToModelContext());

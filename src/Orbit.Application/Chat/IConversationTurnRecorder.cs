@@ -17,7 +17,8 @@ public sealed record StoredConversationHistory(bool Exists, IReadOnlyList<ChatHi
 public sealed record ConversationPage(Guid ConversationId, IReadOnlyList<ConversationDisplayTurn> Turns, long? BeforeOrder);
 
 public sealed record ConversationDisplayTurn(Guid TurnId, long Order, string Role, DateTime CreatedAtUtc,
-    string? Content, string? ResponseJson, string PreviewOutcomesJson, ConversationImageReference? Image);
+    string? Content, string? ResponseJson, string PreviewOutcomesJson, ConversationImageReference? Image,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] AstraPlan? Plan = null);
 
 public sealed record ConversationImageReference(string FileName, string ContentType, string Sha256, string? Url = null);
 public sealed record StoredConversationImage(Stream Data, string ContentType);

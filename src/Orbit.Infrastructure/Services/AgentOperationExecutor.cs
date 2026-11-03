@@ -22,7 +22,7 @@ public partial class AgentOperationExecutor(
     IPendingOperationChangePreviewer changePreviewer,
     IPendingAgentOperationStore pendingOperationStore,
     IUnitOfWork unitOfWork,
-    ILogger<AgentOperationExecutor> logger, ReadBlockFactory? readBlocks = null) : IAgentOperationExecutor, Orbit.Application.Chat.Commands.IAgentMutationRunner
+    ILogger<AgentOperationExecutor> logger, ReadBlockFactory? readBlocks = null, IConversationPlanStore? plans = null) : IAgentOperationExecutor, Orbit.Application.Chat.Commands.IAgentMutationRunner
 {
     private const string UnknownOperationCapabilityId = "unknown";
     private static readonly JsonElement EmptyArguments = JsonDocument.Parse("{}").RootElement.Clone();
@@ -30,6 +30,32 @@ public partial class AgentOperationExecutor(
     public async Task<AgentExecuteOperationResponse> ExecuteAsync(
         AgentExecuteOperationRequest request,
         CancellationToken cancellationToken = default)
+    {
+        var operation = catalogService.GetOperation(request.OperationId);
+        var arguments = request.Arguments.ValueKind == JsonValueKind.Undefined ? EmptyArguments : request.Arguments;
+        var pending = request.ConfirmationToken is { } token && operation is { IsMutation: true } && plans is not null
+            ? pendingOperationStore.GetConfirmedExecution(request.UserId, operation.CapabilityId,
+                AgentOperationFingerprint.Compute(operation.Id, arguments.GetRawText()), token) : null;
+        var response = await ExecuteCoreAsync(request, cancellationToken);
+        if (pending is not null && plans is not null)
+        {
+            var succeeded = response.Operation.Status == AgentOperationStatus.Succeeded && !IsPartialMutation(response.Operation.Payload);
+            await TryAuditAsync(new AuditContext(request with { OperationId = ConversationPlanUpdates.ExecutionAuditSource },
+                pending.CapabilityId, response.Operation.RiskClass, AgentPolicyDecisionStatus.Allowed,
+                succeeded ? AgentOperationStatus.Succeeded : AgentOperationStatus.Failed,
+                "Record pending operation execution outcome", null, TargetId: pending.PendingOperationId.ToString()));
+            response = response with
+            {
+                Plan = await ConversationPlanUpdates.AfterCommitAsync(plans, request.UserId, pending.PendingOperationId,
+                    succeeded ? "done" : "failed", logger, cancellationToken)
+            };
+        }
+        return response;
+    }
+
+    private async Task<AgentExecuteOperationResponse> ExecuteCoreAsync(
+        AgentExecuteOperationRequest request,
+        CancellationToken cancellationToken)
     {
         var arguments = request.Arguments.ValueKind == JsonValueKind.Undefined
             ? EmptyArguments

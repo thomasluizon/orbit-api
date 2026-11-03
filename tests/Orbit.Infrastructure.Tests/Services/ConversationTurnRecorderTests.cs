@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
@@ -117,7 +118,7 @@ public class ConversationTurnRecorderTests
             await adminDb.SaveChangesAsync();
         }
         var recorder = new ConversationTurnRecorder(fixture.Db, new UnitOfWork(fixture.Db, new DatabaseConnectionSettings()), flags,
-            fixture.Encryption, fixture.Storage, Options.Create(new AiSettings { Model = "recording-model" }));
+            fixture.Encryption, fixture.Storage, Options.Create(new AiSettings { Model = "recording-model" }), NullLogger<ConversationTurnRecorder>.Instance);
 
         (await recorder.RecordAsync(capture)).Should().BeFalse();
 
@@ -382,7 +383,7 @@ public class ConversationTurnRecorderTests
         internal IFeatureFlagService Flags { get; } = Substitute.For<IFeatureFlagService>();
         internal IEncryptionService Encryption { get; }
         internal ConversationTurnRecorder Store { get; }
-        internal Fixture(bool enabled = true, IInterceptor? interceptor = null)
+        internal Fixture(bool enabled = true, IInterceptor? interceptor = null, ILogger<ConversationTurnRecorder>? logger = null)
         {
             var encryption = new EncryptionService(Options.Create(new EncryptionSettings { Key = Convert.ToBase64String(new byte[32]) }), NullLogger<EncryptionService>.Instance);
             Encryption = encryption;
@@ -393,7 +394,8 @@ public class ConversationTurnRecorderTests
             Flags.GetEnabledKeysForUserAsync(User.Id, Arg.Any<CancellationToken>(), Arg.Any<bool>()).Returns(enabled ? new[] { FeatureFlagKeys.AstraConversationRecording } : []);
             Flags.ResolveForUser(User.Id).Returns([new(FeatureFlagKeys.AstraConversationRecording, enabled, null)]);
             Storage.ReadPrivateAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(_ => new MemoryStream(Image));
-            Store = new(Db, new UnitOfWork(Db, new DatabaseConnectionSettings()), Flags, encryption, Storage, Options.Create(new AiSettings { Model = "recording-model" }));
+            Store = new(Db, new UnitOfWork(Db, new DatabaseConnectionSettings()), Flags, encryption, Storage, Options.Create(new AiSettings { Model = "recording-model" }),
+                logger ?? NullLogger<ConversationTurnRecorder>.Instance);
         }
         internal ConversationTurnCapture Capture(bool image = false) => new(User.Id, Guid.NewGuid(), DateTime.UtcNow,
             "User private message", "Assistant private reply", "[]", true, ConversationId: ConversationId,

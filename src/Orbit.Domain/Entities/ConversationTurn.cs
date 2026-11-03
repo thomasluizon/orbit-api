@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Orbit.Domain.Common;
+using Orbit.Domain.Models;
 
 namespace Orbit.Domain.Entities;
 
@@ -64,7 +65,7 @@ public sealed class ConversationTurn : Entity
             if (responseJson is not null)
             {
                 using var response = JsonDocument.Parse(responseJson);
-                if (role != "assistant" || response.RootElement.ValueKind != JsonValueKind.Object)
+                if (!IsValidResponse(role, responseJson, response.RootElement.ValueKind))
                     return Result.Failure<ConversationTurn>("Only assistant turns can store a response object.");
             }
         }
@@ -93,6 +94,9 @@ public sealed class ConversationTurn : Entity
         });
     }
 
+    private static bool IsValidResponse(string role, string json, JsonValueKind kind) => role == "assistant"
+        && kind == JsonValueKind.Object && (AstraPlan.Read(json)?.IsValid() ?? true);
+
     private static bool IsValidImage(Guid userId, Guid? conversationId, string role, string? key, string? mime, string? sha256)
     {
         if (key is null) return mime is null && sha256 is null;
@@ -114,6 +118,15 @@ public sealed class ConversationTurn : Entity
         previews[index] = new(pendingOperationId, outcome, arguments, revision);
         var json = JsonSerializer.Serialize(previews);
         PreviewOutcomesJson = json;
+        ResponseJson = AstraPlan.Write(ResponseJson, AstraPlan.Read(ResponseJson)?.PreviewOutcome(pendingOperationId, outcome));
+        ModelContextJson = null;
+    }
+
+    public void UpdatePlan(AstraPlan plan)
+    {
+        if (Role != "assistant" || AstraPlan.Read(ResponseJson)?.Id != plan.Id)
+            throw new ArgumentException("Conversation plan is unavailable.", nameof(plan));
+        ResponseJson = AstraPlan.Write(ResponseJson, plan);
         ModelContextJson = null;
     }
 }

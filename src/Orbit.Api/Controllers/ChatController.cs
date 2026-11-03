@@ -123,7 +123,7 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
     [DistributedRateLimit("ai-resolve", blockAnswersOnly: true)]
     [RequestSizeLimit(MaxChatRequestBytes)]
     [RequestFormLimits(MultipartBodyLengthLimit = MaxChatRequestBytes)]
-    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType<ChatStreamEvent>(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]

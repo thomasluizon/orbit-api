@@ -1,5 +1,9 @@
 # Selecting an OpenAPI artifact
 
+The additive Astra turn plan, progress events and approval outcomes for
+thomasluizon/orbit-tickets#1976 are documented in [AstraPlans.md](AstraPlans.md).
+Deploy this API before the paired shared schemas and plan renderer.
+
 AI provider credit exhaustion returns HTTP 424 with the existing error body shape:
 `{"error":"...","errorCode":"AI_PROVIDER_QUOTA_EXHAUSTED"}`. This additive code
 means automatic retries must stop for the request. It is separate from the person's
