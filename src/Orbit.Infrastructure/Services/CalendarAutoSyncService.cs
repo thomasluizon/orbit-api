@@ -66,7 +66,6 @@ public partial class CalendarAutoSyncService(
     {
         using var scope = scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
-        var mediator = scope.ServiceProvider.GetRequiredService<IMediator>();
 
         var nowUtc = timeProvider.GetUtcNow().UtcDateTime;
         var cutoff = nowUtc - DedupeWindow;
@@ -79,7 +78,8 @@ public partial class CalendarAutoSyncService(
                 && (u.IsLifetimePro
                     || (u.SubscriptionPlan == UserPlan.Pro && u.SubscriptionExpiresAtUtc > nowUtc)
                     || u.BonusProExpiresAtUtc > nowUtc))
-            .OrderBy(u => u.GoogleCalendarLastSyncedAt ?? DateTime.MinValue)
+            .OrderBy(u => u.GoogleCalendarLastAttemptAtUtc ?? DateTime.MinValue)
+            .ThenBy(u => u.Id)
             .Take(BatchSize)
             .Select(u => u.Id)
             .ToListAsync(ct);
@@ -89,21 +89,31 @@ public partial class CalendarAutoSyncService(
         LogTickStarted(logger, userIds.Count);
 
         int succeeded = 0;
-        foreach (var userId in userIds)
+        await Parallel.ForEachAsync(userIds, new ParallelOptions
         {
-            if (ct.IsCancellationRequested) break;
-
+            MaxDegreeOfParallelism = Math.Clamp(configuration.GetValue("CalendarSync:Parallelism", 4), 1, 8),
+            CancellationToken = ct
+        }, async (userId, tickToken) =>
+        {
+            using var userScope = scopeFactory.CreateScope();
+            using var deadline = CancellationTokenSource.CreateLinkedTokenSource(tickToken);
+            deadline.CancelAfter(TimeSpan.FromSeconds(Math.Clamp(configuration.GetValue("CalendarSync:UserDeadlineSeconds", 90), 1, 300)));
             try
             {
-                var result = await mediator.Send(new RunCalendarAutoSyncCommand(userId), ct);
-                if (result.IsSuccess)
-                    succeeded++;
+                var userDb = userScope.ServiceProvider.GetRequiredService<OrbitDbContext>();
+                var user = await userDb.Users.SingleOrDefaultAsync(u => u.Id == userId, deadline.Token);
+                if (user is null) return;
+                user.MarkCalendarSyncAttempt(nowUtc);
+                await userDb.SaveChangesAsync(deadline.Token);
+                var mediator = userScope.ServiceProvider.GetRequiredService<IMediator>();
+                var result = await mediator.Send(new RunCalendarAutoSyncCommand(userId), deadline.Token);
+                if (result.IsSuccess) Interlocked.Increment(ref succeeded);
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (Exception ex) when (ex is not OperationCanceledException || !tickToken.IsCancellationRequested)
             {
                 LogUserSyncFailed(logger, ex, userId);
             }
-        }
+        });
 
         if (succeeded > 0)
             LogTickCompleted(logger, succeeded, userIds.Count);

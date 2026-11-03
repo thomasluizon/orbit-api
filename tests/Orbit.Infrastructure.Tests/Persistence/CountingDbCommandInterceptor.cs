@@ -5,9 +5,8 @@ namespace Orbit.Infrastructure.Tests.Persistence;
 
 /// <summary>
 /// Counts the SQL reader commands EF actually sends to the database so a test can assert a query's
-/// round-trip count is invariant to row volume — the signature of an N+1 regression is a count that
-/// grows with the seed. Only the reader hooks are counted because every read the query-shape tests
-/// exercise resolves through <c>ToListAsync</c>.
+/// round-trip count is invariant to row volume. Captures reader and non-query commands, including
+/// writes that use RETURNING through the reader hooks.
 /// </summary>
 internal sealed class CountingDbCommandInterceptor : DbCommandInterceptor
 {
@@ -18,6 +17,7 @@ internal sealed class CountingDbCommandInterceptor : DbCommandInterceptor
 
     internal int CommandCount => Volatile.Read(ref _commandCount);
     internal int SelectCommandCount => Volatile.Read(ref _selectCommandCount);
+    internal int WriteCommandCount => CommandCount - SelectCommandCount;
     internal IReadOnlyList<CapturedDbCommand> Commands => _commands.ToArray();
 
     internal void Reset()
@@ -36,6 +36,23 @@ internal sealed class CountingDbCommandInterceptor : DbCommandInterceptor
         return base.ReaderExecuting(command, eventData, result);
     }
 
+    public override InterceptionResult<int> NonQueryExecuting(
+        DbCommand command, CommandEventData eventData, InterceptionResult<int> result)
+    {
+        Interlocked.Increment(ref _commandCount);
+        CountSelect(command);
+        return base.NonQueryExecuting(command, eventData, result);
+    }
+
+    public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(
+        DbCommand command, CommandEventData eventData, InterceptionResult<int> result,
+        CancellationToken cancellationToken = default)
+    {
+        Interlocked.Increment(ref _commandCount);
+        CountSelect(command);
+        return base.NonQueryExecutingAsync(command, eventData, result, cancellationToken);
+    }
+
     public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
         DbCommand command,
         CommandEventData eventData,
@@ -49,14 +66,18 @@ internal sealed class CountingDbCommandInterceptor : DbCommandInterceptor
 
     public override DbDataReader ReaderExecuted(
         DbCommand command, CommandExecutedEventData eventData, DbDataReader result) =>
-        new RowCountingDbDataReader(result, _captured[command]);
+        TrackRows(command, result);
 
     public override ValueTask<DbDataReader> ReaderExecutedAsync(
         DbCommand command,
         CommandExecutedEventData eventData,
         DbDataReader result,
         CancellationToken cancellationToken = default) =>
-        ValueTask.FromResult<DbDataReader>(new RowCountingDbDataReader(result, _captured[command]));
+        ValueTask.FromResult(TrackRows(command, result));
+
+    private DbDataReader TrackRows(DbCommand command, DbDataReader result) =>
+        result is Npgsql.NpgsqlDataReader && !IsSelect(command.CommandText)
+            ? result : new RowCountingDbDataReader(result, _captured[command]);
 
     private void CountSelect(DbCommand command)
     {
@@ -67,9 +88,25 @@ internal sealed class CountingDbCommandInterceptor : DbCommandInterceptor
                 .ToArray());
         _commands.Enqueue(captured);
         _captured[command] = captured;
-        if (command.CommandText.TrimStart().StartsWith("SELECT", StringComparison.OrdinalIgnoreCase))
+        if (IsSelect(command.CommandText))
             Interlocked.Increment(ref _selectCommandCount);
     }
+    private static bool IsSelect(string sql)
+    {
+        var depth = 0;
+        foreach (System.Text.RegularExpressions.Match match in System.Text.RegularExpressions.Regex.Matches(sql,
+            """--[^\r\n]*|/\*[\s\S]*?\*/|'(?:''|[^'])*'|"(?:""|[^"])*"|[()]|[A-Za-z_]+"""))
+        {
+            var token = match.Value;
+            if (token == "(") { depth++; continue; }
+            if (token == ")") { depth--; continue; }
+            if (depth != 0 || !char.IsAsciiLetter(token[0])) continue;
+            if (token.Equals("SELECT", StringComparison.OrdinalIgnoreCase)) return true;
+            if (new[] { "INSERT", "UPDATE", "DELETE", "MERGE", "CREATE", "DROP", "ALTER" }.Contains(token, StringComparer.OrdinalIgnoreCase)) return false;
+        }
+        return false;
+    }
+
 }
 
 internal sealed class CapturedDbCommand(string sql, IReadOnlyList<string> parameters)

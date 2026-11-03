@@ -23,11 +23,7 @@ public class AchievementProgressService(
     IGenericRepository<Goal> goalRepository,
     IUserDateService userDateService) : IAchievementProgressService
 {
-    private const int TotalCompletionWindowDays = 2750;
     private const int InitialStreakWindowDays = 64;
-    private const int TimeOfDayWindowDays = 90;
-    private const int EarlyBeforeHour = 7;
-    private const int NightFromHour = 22;
 
     public async Task<AchievementProgressMetrics> LoadAsync(
         User user, IReadOnlySet<string> earnedIds, CancellationToken cancellationToken)
@@ -44,7 +40,7 @@ public class AchievementProgressService(
         var maxCurrentStreak = await LoadMaxCurrentStreakAsync(
             goodHabits, earnedIds, today, user.WeekStartDay, userTimeZone, cancellationToken);
 
-        var totalCompletionCutoff = today.AddDays(-TotalCompletionWindowDays);
+        var totalCompletionCutoff = today.AddDays(-AppConstants.TotalCompletionWindowDays);
         var totalCompletions = habitIds.Count == 0
             ? 0
             : await habitLogRepository.CountAsync(
@@ -98,7 +94,7 @@ public class AchievementProgressService(
             {
                 var metrics = HabitMetricsCalculator.CalculateProjected(
                     habit, logsByHabit[habit.Id], today, weekStartDay, userTimeZone, out var logStart);
-                if (windowDays < GamificationService.StreakLogWindowDays && logStart < cutoff)
+                if (windowDays < AppConstants.StreakLogWindowDays && logStart < cutoff)
                     continuingHabits.Add(habit);
                 else
                     maxCurrentStreak = Math.Max(maxCurrentStreak, metrics.CurrentStreak);
@@ -106,7 +102,7 @@ public class AchievementProgressService(
 
             pendingHabits = continuingHabits;
             previousCutoff = cutoff;
-            windowDays = Math.Min(windowDays * 2, GamificationService.StreakLogWindowDays);
+            windowDays = Math.Min(windowDays * 2, AppConstants.StreakLogWindowDays);
         }
 
         return maxCurrentStreak;
@@ -116,27 +112,7 @@ public class AchievementProgressService(
         IReadOnlyList<Guid> habitIds, IReadOnlySet<string> earnedIds,
         TimeZoneInfo userTimeZone, CancellationToken cancellationToken)
     {
-        if (habitIds.Count == 0)
-            return (0, 0);
-        if (earnedIds.Contains(AchievementDefinitions.EarlyBird) && earnedIds.Contains(AchievementDefinitions.NightOwl))
-            return (0, 0);
-
-        var createdAtUtcCutoff = DateTime.UtcNow.AddDays(-TimeOfDayWindowDays);
-        var logs = await habitLogRepository.ProjectAsync(
-            l => habitIds.Contains(l.HabitId) && l.CreatedAtUtc >= createdAtUtcCutoff,
-            query => query.Select(log => log.CreatedAtUtc), cancellationToken);
-
-        var early = 0;
-        var night = 0;
-        foreach (var createdAtUtc in logs)
-        {
-            var localHour = TimeZoneInfo.ConvertTimeFromUtc(createdAtUtc, userTimeZone).Hour;
-            if (localHour < EarlyBeforeHour)
-                early++;
-            else if (localHour >= NightFromHour)
-                night++;
-        }
-
-        return (early, night);
+        var counts = await TimeOfDayAchievementCounts.ReadAsync(habitLogRepository, habitIds, earnedIds, userTimeZone, cancellationToken);
+        return (counts.Early, counts.Night);
     }
 }

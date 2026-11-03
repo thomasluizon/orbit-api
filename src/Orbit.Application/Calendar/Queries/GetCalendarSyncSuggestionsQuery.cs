@@ -19,6 +19,9 @@ public record CalendarSyncSuggestionItem(
     CalendarEventItem Event,
     DateTime DiscoveredAtUtc);
 
+public sealed record CalendarHabitMatch(string? GoogleEventId, string Title, DateOnly NextDueDate, TimeOnly? DueTime);
+public sealed record CalendarSuggestionRead(Guid Id, string GoogleEventId, string RawEventJson, DateTime StartDateUtc, DateTime DiscoveredAtUtc);
+
 public partial class GetCalendarSyncSuggestionsQueryHandler(
     IGenericRepository<GoogleCalendarSyncSuggestion> suggestionRepository,
     IGenericRepository<Habit> habitRepository,
@@ -42,17 +45,16 @@ public partial class GetCalendarSyncSuggestionsQueryHandler(
             ? null
             : new HashSet<string>(selectedCalendarIds, StringComparer.Ordinal);
 
-        var suggestions = await suggestionRepository.FindAsync(
+        var suggestions = await suggestionRepository.ProjectAsync(
             s => s.UserId == request.UserId && s.DismissedAtUtc == null && s.ImportedAtUtc == null,
-            cancellationToken);
+            q => q.Select(s => new CalendarSuggestionRead(s.Id, s.GoogleEventId, s.RawEventJson, s.StartDateUtc, s.DiscoveredAtUtc)), cancellationToken);
 
         if (suggestions.Count == 0)
             return Result.Success(new List<CalendarSyncSuggestionItem>());
 
         var userToday = request.AsOf ?? await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
-        var habits = await habitRepository.FindAsync(
-            h => h.UserId == request.UserId,
-            cancellationToken);
+        var habits = await habitRepository.ProjectAsync(h => h.UserId == request.UserId,
+            q => q.Select(h => new CalendarHabitMatch(h.GoogleEventId, h.Title, h.NextDueDate, h.DueTime)), cancellationToken);
 
         var importedEventIds = habits
             .Where(h => !string.IsNullOrWhiteSpace(h.GoogleEventId))
@@ -68,10 +70,12 @@ public partial class GetCalendarSyncSuggestionsQueryHandler(
 
         var timeZone = TimeZoneHelper.FindTimeZone(user.TimeZone, logger, request.UserId);
         var candidates = new List<(CalendarSyncSuggestionItem Item, string LegacyKey)>();
+        var malformed = 0;
         foreach (var suggestion in suggestions.OrderBy(s => s.StartDateUtc))
         {
             var item = TryBuildSuggestionItem(
-                suggestion, userToday, request.DateTo, importedEventIds, selectedCalendars, timeZone, request.UserId);
+                suggestion, userToday, request.DateTo, importedEventIds, selectedCalendars, timeZone, request.UserId, out var invalid);
+            if (invalid) malformed++;
             if (item is not null)
             {
                 candidates.Add((
@@ -80,6 +84,7 @@ public partial class GetCalendarSyncSuggestionsQueryHandler(
             }
         }
 
+        if (malformed > 0) LogDeserializeSuggestionsFailed(logger, request.UserId, malformed);
         var candidatesPerLegacyKey = candidates
             .GroupBy(candidate => candidate.LegacyKey, StringComparer.Ordinal)
             .ToDictionary(group => group.Key, group => group.Count(), StringComparer.Ordinal);
@@ -94,17 +99,18 @@ public partial class GetCalendarSyncSuggestionsQueryHandler(
     }
 
     private CalendarSyncSuggestionItem? TryBuildSuggestionItem(
-        GoogleCalendarSyncSuggestion suggestion,
+        CalendarSuggestionRead suggestion,
         DateOnly userToday, DateOnly? dateTo,
         HashSet<string> importedEventIds,
         HashSet<string>? selectedCalendars,
         TimeZoneInfo timeZone,
-        Guid userId)
+        Guid userId, out bool invalid)
     {
+        invalid = false;
         if (importedEventIds.Contains(suggestion.GoogleEventId)) return null;
 
         var sourceEvent = DeserializeEvent(suggestion);
-        if (sourceEvent is null) return null;
+        if (sourceEvent is null) { invalid = true; return null; }
         if (sourceEvent.HasUnrepresentableRecurrenceAfterProjection(timeZone)) return null;
 
         var eventItem = sourceEvent.ProjectTo(timeZone);
@@ -144,21 +150,20 @@ public partial class GetCalendarSyncSuggestionsQueryHandler(
         return DateOnly.FromDateTime(localStart);
     }
 
-    private CalendarEventItem? DeserializeEvent(GoogleCalendarSyncSuggestion suggestion)
+    private static CalendarEventItem? DeserializeEvent(CalendarSuggestionRead suggestion)
     {
         try
         {
             return StoredCalendarEventJson.Deserialize(suggestion.RawEventJson);
         }
-        catch (JsonException ex)
+        catch (JsonException)
         {
-            LogDeserializeSuggestionFailed(logger, ex, suggestion.Id);
             return null;
         }
     }
 
-    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Failed to deserialize sync suggestion {SuggestionId}")]
-    private static partial void LogDeserializeSuggestionFailed(ILogger logger, Exception ex, Guid suggestionId);
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Failed to deserialize {Count} sync suggestions for user {UserId}")]
+    private static partial void LogDeserializeSuggestionsFailed(ILogger logger, Guid userId, int count);
 
     [LoggerMessage(EventId = 2, Level = LogLevel.Debug, Message = "Omitted the end time of calendar event {EventId} for user {UserId}: the projected end does not follow the projected start on the projected start date")]
     private static partial void LogProjectedEndTimeOmitted(ILogger logger, string eventId, Guid userId);

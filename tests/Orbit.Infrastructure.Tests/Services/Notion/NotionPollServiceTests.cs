@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Hosting;
 using System.Text.Json;
 using FluentAssertions;
@@ -18,6 +19,77 @@ namespace Orbit.Infrastructure.Tests.Services.Notion;
 
 public class NotionPollServiceTests
 {
+    [Fact]
+    public async Task TruncatedPoll_PreservesUnseenTasksAndWarns()
+    {
+        using var test = new NotionTestContext();
+        await test.SeedConnectionAsync();
+        var pages = new List<JsonElement>();
+        await foreach (var page in NotionTestContext.Pages(600)) pages.Add(page);
+        var mapper = new NotionTaskMapper(NotionExamples.Source());
+        foreach (var page in pages)
+            test.Db.NotionTasks.Add(mapper.Map(page, test.User.Id, new DateOnly(2026, 9, 15),
+                TimeZoneInfo.Utc, test.Clock.Now.UtcDateTime)!);
+        await test.Db.SaveChangesAsync();
+        test.Db.ChangeTracker.Clear();
+        test.Api.QueryAsync(Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(_ => ReadPages(pages));
+        var logger = Substitute.For<ILogger<NotionPollService>>();
+        await new NotionPollService(test.Db, test.Gate, test.Api, test.Dates, test.UnitOfWork,
+            test.Clock, test.Analytics, logger).PollAsync(test.User.Id, default);
+        (await test.Db.NotionTasks.Select(task => task.PageId).ToArrayAsync())
+            .Should().BeEquivalentTo(pages.Select(page => page.GetProperty("id").GetGuid()));
+        logger.ReceivedCalls().Should().Contain(call => call.GetMethodInfo().Name == "Log"
+            && (LogLevel)call.GetArguments()[0]! == LogLevel.Warning
+            && call.GetArguments()[2]!.ToString()!.Contains("truncated", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task FiveHundredUnmappedInputRows_PreserveTheUnreachedHundredTasks()
+    {
+        using var test = new NotionTestContext();
+        await test.SeedConnectionAsync();
+        var ids = new List<Guid>();
+        var mapper = new NotionTaskMapper(NotionExamples.Source());
+        await foreach (var page in NotionTestContext.Pages(600))
+        {
+            ids.Add(page.GetProperty("id").GetGuid());
+            test.Db.NotionTasks.Add(mapper.Map(page, test.User.Id, new DateOnly(2026, 9, 15),
+                TimeZoneInfo.Utc, test.Clock.Now.UtcDateTime)!);
+        }
+        await test.Db.SaveChangesAsync();
+        test.Db.ChangeTracker.Clear();
+        using var http = new NotionHttpStub();
+        http.Responses.Enqueue(NotionHttpStub.List([NotionExamples.Source()], false));
+        http.Responses.Enqueue(NotionHttpStub.Json(NotionExamples.Source()));
+        foreach (var chunk in ids.Chunk(100))
+        {
+            var pages = chunk.Select(id =>
+            {
+                var page = NotionExamples.Page(due: null);
+                page["id"] = id;
+                page["properties"]!["Status"]!["status"] = null;
+                return NotionExamples.Element(page);
+            }).ToArray();
+            http.Responses.Enqueue(NotionHttpStub.List(pages, true, Guid.NewGuid().ToString()));
+        }
+        var logger = Substitute.For<ILogger<NotionPollService>>();
+        await new NotionPollService(test.Db, test.Gate, http.Api, test.Dates, test.UnitOfWork,
+            test.Clock, test.Analytics, logger).PollAsync(test.User.Id, default);
+        (await test.Db.NotionTasks.Select(task => task.PageId).ToArrayAsync()).Should().BeEquivalentTo(ids.Skip(500));
+        http.Requests.Should().HaveCount(7);
+        http.Responses.Should().ContainSingle();
+        logger.ReceivedCalls().Should().ContainSingle(call => call.GetMethodInfo().Name == "Log"
+            && (LogLevel)call.GetArguments()[0]! == LogLevel.Warning
+            && call.GetArguments()[2]!.ToString()!.Contains("500 input rows and 0 mapped tasks", StringComparison.Ordinal));
+    }
+
+    private static async IAsyncEnumerable<JsonElement> ReadPages(IEnumerable<JsonElement> pages)
+    {
+        await Task.CompletedTask;
+        foreach (var page in pages) yield return page;
+    }
+
     [Fact]
     public async Task PollPersistsWhenProviderMaterializesTimestampsAtMicrosecondPrecision()
     {

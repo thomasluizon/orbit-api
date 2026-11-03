@@ -12,9 +12,9 @@ public static class SlipPatternDetectionService
     public static SlipPattern? DetectPattern(
         IReadOnlyList<HabitLog> logs,
         Guid habitId,
-        TimeZoneInfo userTimeZone)
+        TimeZoneInfo userTimeZone, DateTime? nowAtUtc = null)
     {
-        var createdAtUtcCutoff = DateTime.UtcNow.AddDays(-LookbackDays);
+        var createdAtUtcCutoff = (nowAtUtc ?? DateTime.UtcNow).AddDays(-LookbackDays);
         var recentLogs = logs.Where(l => l.Value > 0 && l.CreatedAtUtc >= createdAtUtcCutoff).ToList();
 
         if (recentLogs.Count < MinTotalLogs)

@@ -48,13 +48,9 @@ public class BulkSkipHabitsCommandHandler(
         {
             var habitMap = await BulkHabitLoader.LoadHabitsWithRecentLogsAsync(
                 habitRepository, request.Items.Select(i => i.HabitId), request.UserId, today, ct);
-            foreach (var habit in habitMap.Values)
-            {
-                if (!await habitRepository.TryRefreshAsync(habit, ct))
-                    return false;
-            }
+            if (!await habitRepository.TryRefreshRangeAsync(habitMap.Values.ToArray(), ct)) return false;
             var dueDateResolution = await HabitDueDateResolutionLoader.LoadAsync(request.UserId,
-                habitLogRepository, habitMap.Values, today.AddDays(-AppConstants.MaxRangeDays), ct);
+                habitLogRepository, habitMap.Values, today.AddDays(-AppConstants.MaxReadRangeDays), ct);
 
             for (int i = 0; i < request.Items.Count; i++)
             {
@@ -84,10 +80,10 @@ public class BulkSkipHabitsCommandHandler(
                 }
             }
 
-            foreach (var result in results.Where(r => r.Status == BulkItemStatus.Success))
-                await HabitReminderInbox.MarkReadAsync(notifications, request.UserId, result.HabitId,
-                    habitMap[result.HabitId].Schedule is HabitSchedule.OneTime or HabitSchedule.General
-                        ? today : request.Items[result.Index].Date ?? today, ct);
+            await HabitReminderInbox.MarkReadBatchAsync(notifications, request.UserId,
+                results.Where(r => r.Status == BulkItemStatus.Success).Select(result => (
+                    result.HabitId, habitMap[result.HabitId].Schedule is HabitSchedule.OneTime or HabitSchedule.General
+                        ? today : request.Items[result.Index].Date ?? today)), ct);
             if (results.Any(result => result.Status == BulkItemStatus.Success))
                 await unitOfWork.SaveChangesAsync(ct);
             return true;
@@ -112,7 +108,7 @@ public class BulkSkipHabitsCommandHandler(
         var ownership = OwnershipValidation.AllResolved(ids, selected, h => h.Id, ErrorMessages.HabitNotFound);
         if (ownership.IsFailure)
             return ownership;
-        var resolution = await HabitDueDateResolutionLoader.LoadAsync(request.UserId, logs, selected, today.AddDays(-AppConstants.MaxRangeDays), ct);
+        var resolution = await HabitDueDateResolutionLoader.LoadAsync(request.UserId, logs, selected, today.AddDays(-AppConstants.MaxReadRangeDays), ct);
         var byId = selected.ToDictionary(h => h.Id);
         Result? generalRejection = null;
         var hasEligibleItem = false;

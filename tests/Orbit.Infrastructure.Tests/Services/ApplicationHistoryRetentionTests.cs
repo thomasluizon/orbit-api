@@ -12,6 +12,7 @@ using Orbit.Domain.Enums;
 using Orbit.Domain.Models;
 using Orbit.Infrastructure.Services;
 using Orbit.Infrastructure.Tests.Persistence;
+using Orbit.Infrastructure.Tests.Sync;
 
 namespace Orbit.Infrastructure.Tests.Services;
 
@@ -215,7 +216,7 @@ public sealed class ApplicationHistoryRetentionTests
         deleted.DeletedAtUtc.Should().Be(NowAtUtc);
         deleted.UpdatedAtUtc.Should().Be(NowAtUtc);
         rows.Single(row => row.Id == tombstone.Id).DeletedAtUtc.Should().Be(NowAtUtc.AddDays(-1));
-        var controller = new SyncController(db, NullLogger<SyncController>.Instance)
+        var controller = new SyncController(db, NullLogger<SyncController>.Instance, SyncBatchTestSender.Create(db))
         {
             ControllerContext = new ControllerContext
             {

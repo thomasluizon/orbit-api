@@ -49,6 +49,76 @@ public class RollingMigrationGateTests
     }
 
     [Fact]
+    public void BoundedReadExpansion_RequiresRecordedCompatibilityEvidenceFromTheReleasedBase()
+    {
+        const string id = "20261102113348_AddBoundedReadState";
+        var migration = new AddBoundedReadState { ActiveProvider = "Npgsql.EntityFrameworkCore.PostgreSQL" };
+        var root = RepositoryRoot();
+
+        RollingMigrationGate.Check(id, migration.UpOperations).Should()
+            .ContainSingle().Which.Should().Contain(nameof(SqlOperation));
+        CheckBoundedReadBarrier(root, ReadBarriers(root)).Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData(typeof(RestoreBoundedReadIndexes))]
+    [InlineData(typeof(CompleteBoundedReadIndexes))]
+    public void BoundedReadIndexRecovery_RequiresRecordedCompatibilityEvidenceFromTheReleasedBase(Type type)
+    {
+        var migration = (Migration)(Activator.CreateInstance(type) ?? throw new InvalidOperationException());
+        migration.ActiveProvider = "Npgsql.EntityFrameworkCore.PostgreSQL";
+        var id = type.GetCustomAttribute<MigrationAttribute>()!.Id;
+        var root = RepositoryRoot();
+
+        RollingMigrationGate.Check(id, migration.UpOperations).Should()
+            .ContainSingle().Which.Should().Contain(nameof(SqlOperation));
+        RollingMigrationGate.Check(id, migration.UpOperations, ReadBarriers(root),
+            (commit, descendant) => Git(root, "merge-base", "--is-ancestor", commit, descendant).ExitCode == 0,
+            MigrationBaseRef(root)).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void BoundedReadExpansion_UsesPullRequestBaseWithoutALocalBaseBranch()
+    {
+        var root = RepositoryRoot();
+        var checkout = Path.Combine(Path.GetTempPath(), $"orbit-migration-base-{Guid.NewGuid():N}");
+        try
+        {
+            Git(root, "init", "--bare", checkout).ExitCode.Should().Be(0);
+            var sourceRef = MigrationBaseRef(root);
+            var source = Git(root, "rev-parse", "--verify", sourceRef);
+            source.ExitCode.Should().Be(0, source.Error);
+            var fetched = Git(checkout, "fetch", "--no-tags", root,
+                $"{source.Output.Trim()}:refs/remotes/origin/review-target");
+            fetched.ExitCode.Should().Be(0, fetched.Error);
+            Git(checkout, "show-ref", "--heads").Output.Should().BeEmpty();
+
+            CheckBoundedReadBarrier(checkout, ReadBarriers(root),
+                key => key == "GITHUB_BASE_REF" ? "review-target" : null).Should().BeEmpty();
+        }
+        finally
+        {
+            if (Directory.Exists(checkout)) Directory.Delete(checkout, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData("origin/configured", "target", "refs/heads/pushed", "origin/configured")]
+    [InlineData(null, "target", "refs/pull/1066/merge", "origin/target")]
+    [InlineData(null, "", "refs/heads/released", "origin/released")]
+    public void MigrationBase_UsesGuardOverrideThenPullRequestTargetThenPushedBranch(
+        string? configured, string? pullRequestBase, string? pushedRef, string expected)
+    {
+        MigrationBaseRef(RepositoryRoot(), key => key switch
+        {
+            "ORBIT_MIGRATION_GUARD_BASE" => configured,
+            "GITHUB_BASE_REF" => pullRequestBase,
+            "GITHUB_REF" => pushedRef,
+            _ => null
+        }).Should().Be(expected);
+    }
+
+    [Fact]
     public void ProactiveLedgerContract_RequiresRecordedWebAndBackgroundDrainEvidence()
     {
         const string id = "20261023111014_DropSentProactiveCheckins";
@@ -445,6 +515,30 @@ public class RollingMigrationGateTests
     }
 
     private static Dictionary<string, DeploymentBarrier> Barriers(string id) => new() { [id] = CompleteBarrier() };
+
+    private static IReadOnlyList<string> CheckBoundedReadBarrier(string root,
+        IReadOnlyDictionary<string, DeploymentBarrier> barriers, Func<string, string?>? readEnvironment = null)
+    {
+        var migration = new AddBoundedReadState { ActiveProvider = "Npgsql.EntityFrameworkCore.PostgreSQL" };
+        return RollingMigrationGate.Check("20261102113348_AddBoundedReadState", migration.UpOperations, barriers,
+            (commit, descendant) => Git(root, "merge-base", "--is-ancestor", commit, descendant).ExitCode == 0,
+            MigrationBaseRef(root, readEnvironment));
+    }
+
+    private static string MigrationBaseRef(string root, Func<string, string?>? readEnvironment = null)
+    {
+        readEnvironment ??= Environment.GetEnvironmentVariable;
+        var configured = readEnvironment("ORBIT_MIGRATION_GUARD_BASE");
+        if (!string.IsNullOrWhiteSpace(configured)) return configured;
+        var pullRequestBase = readEnvironment("GITHUB_BASE_REF");
+        if (!string.IsNullOrWhiteSpace(pullRequestBase)) return $"origin/{pullRequestBase}";
+        var pushedRef = readEnvironment("GITHUB_REF");
+        if (pushedRef?.StartsWith("refs/heads/", StringComparison.Ordinal) == true)
+            return $"origin/{pushedRef["refs/heads/".Length..]}";
+        var remoteHead = Git(root, "symbolic-ref", "refs/remotes/origin/HEAD");
+        remoteHead.ExitCode.Should().Be(0, "set ORBIT_MIGRATION_GUARD_BASE when the default remote branch is unavailable: {0}", remoteHead.Error);
+        return remoteHead.Output.Trim();
+    }
 
     private static Dictionary<string, DeploymentBarrier> ReadBarriers(string root) =>
         ParseBarriers(File.ReadAllText(Path.Combine(root, ".github", "migration-contracts.json")));

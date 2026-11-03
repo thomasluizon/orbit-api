@@ -27,7 +27,7 @@ public static class RepeatReminderPlanner
             return null;
         var candidateAtUtc = nowAtUtc > firstAtUtc ? nowAtUtc : firstAtUtc;
         var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(nowAtUtc, zone));
-        var lastDayNumber = Math.Min(DateOnly.MaxValue.DayNumber, today.DayNumber + AppConstants.MaxRangeDays);
+        var lastDayNumber = Math.Min(DateOnly.MaxValue.DayNumber, today.DayNumber + AppConstants.MaxReadRangeDays);
         while (true)
         {
             if (RepeatReminderClock.MoveIntoWindow(candidateAtUtc, options, zone) is not { } windowAtUtc)

@@ -12,4 +12,6 @@ public record AchievementDefinition(
     string IconKey,
     ProgressMetric Metric = ProgressMetric.None,
     int? ProgressTarget = null,
-    bool IsRetired = false);
+    bool IsRetired = false,
+    string? NamePt = null,
+    string? DescriptionPt = null);

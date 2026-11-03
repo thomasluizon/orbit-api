@@ -20,6 +20,7 @@ public class GetHabitsCompletionTrendsQueryHandlerTests
 
     public GetHabitsCompletionTrendsQueryHandlerTests()
     {
+        Orbit.Tests.Shared.RepositoryProjections.FromFind<Habit, HabitCompletionDates>(_habitRepo, includes: true);
         _handler = new GetHabitsCompletionTrendsQueryHandler(_userRepo, _habitRepo, _featureFlags);
         _featureFlags.GetEnabledKeysForUserAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(new List<string>());

@@ -508,7 +508,7 @@ public class GoalCompletionServiceTests
             new FoundingAchievementReader(dbContext));
         return new GamificationService(
             repos,
-            Substitute.For<IPushNotificationService>(),
+            Substitute.For<Hangfire.IBackgroundJobClient>(),
             Substitute.For<IUserDateService>(),
             new XpAwarder(new GenericRepository<XpAwardLog>(dbContext)),
             unitOfWork,
@@ -557,6 +557,7 @@ public class GoalCompletionServiceTests
         public Task AcquireUserRowLockAsync(Guid userId, CancellationToken cancellationToken = default) =>
             inner.AcquireUserRowLockAsync(userId, cancellationToken);
 
+        public void AfterCommit(Action callback) => inner.AfterCommit(callback);
         public bool HasActiveTransaction => inner.HasActiveTransaction;
 
         public void DiscardChanges() => inner.DiscardChanges();
@@ -599,6 +600,7 @@ public class GoalCompletionServiceTests
         public Task AcquireUserRowLockAsync(Guid userId, CancellationToken cancellationToken = default) =>
             inner.AcquireUserRowLockAsync(userId, cancellationToken);
 
+        public void AfterCommit(Action callback) => inner.AfterCommit(callback);
         public bool HasActiveTransaction => inner.HasActiveTransaction;
 
         public void DiscardChanges() => inner.DiscardChanges();
@@ -660,6 +662,7 @@ public class GoalCompletionServiceTests
         public Task AcquireUserRowLockAsync(Guid userId, CancellationToken cancellationToken = default) =>
             inner.AcquireUserRowLockAsync(userId, cancellationToken);
 
+        public void AfterCommit(Action callback) => inner.AfterCommit(callback);
         public bool HasActiveTransaction => inner.HasActiveTransaction;
 
         public void DiscardChanges() => inner.DiscardChanges();

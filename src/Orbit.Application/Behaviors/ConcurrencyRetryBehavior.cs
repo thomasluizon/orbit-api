@@ -1,4 +1,5 @@
 using MediatR;
+using Orbit.Application.Common;
 using Microsoft.EntityFrameworkCore;
 using Orbit.Domain.Interfaces;
 
@@ -14,8 +15,6 @@ public sealed class ConcurrencyRetryBehavior<TRequest, TResponse>(
     IUnitOfWork unitOfWork) : IPipelineBehavior<TRequest, TResponse>
     where TRequest : class
 {
-    private const int MaxAttempts = 3;
-
     public async Task<TResponse> Handle(
         TRequest request,
         RequestHandlerDelegate<TResponse> next,
@@ -24,19 +23,6 @@ public sealed class ConcurrencyRetryBehavior<TRequest, TResponse>(
         if (request is not IConcurrencyRetryable)
             return await next(cancellationToken);
 
-        var attempt = 1;
-        while (true)
-        {
-            try
-            {
-                return await next(cancellationToken);
-            }
-            catch (DbUpdateConcurrencyException) when (attempt < MaxAttempts)
-            {
-                unitOfWork.ResetTracking();
-            }
-
-            attempt++;
-        }
+        return await ConcurrencyRetry.RunAsync(unitOfWork, ct => next(ct), cancellationToken);
     }
 }

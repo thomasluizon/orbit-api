@@ -70,6 +70,8 @@ public class AccountResetRepository(OrbitDbContext context, IAccountEventCollect
             .Where(ua => ua.UserId == userId)
             .ExecuteDeleteAsync(cancellationToken);
 
+        await context.XpDailyTotals.Where(row => row.UserId == userId).ExecuteDeleteAsync(cancellationToken);
+
         await context.XpAwardLogs
             .Where(award => award.UserId == userId)
             .ExecuteDeleteAsync(cancellationToken);

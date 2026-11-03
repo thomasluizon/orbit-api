@@ -3,6 +3,7 @@ namespace Orbit.Domain.Interfaces;
 public interface IUnitOfWork : IDisposable
 {
     bool HasActiveTransaction { get; }
+    void AfterCommit(Action callback);
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
     Task ExecuteInTransactionAsync(

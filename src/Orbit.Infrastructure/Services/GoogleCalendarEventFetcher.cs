@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+using Microsoft.Extensions.Configuration;
 using Google.Apis.Calendar.v3.Data;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Calendar.Queries;
@@ -9,25 +11,38 @@ namespace Orbit.Infrastructure.Services;
 
 internal sealed partial class GoogleCalendarEventFetcher(
     IGoogleCalendarApi api,
-    ILogger<GoogleCalendarEventFetcher> logger) : ICalendarEventFetcher
+    ILogger<GoogleCalendarEventFetcher> logger, IConfiguration? configuration = null) : ICalendarEventFetcher, IDisposable
 {
+    private readonly SemaphoreSlim _requests = new(Math.Clamp(configuration?.GetValue("CalendarSync:FetchParallelism", 4) ?? 4, 1, 8));
+
+    public void Dispose() => _requests.Dispose();
+
+    private async Task<T> RequestAsync<T>(Func<Task<T>> operation, CancellationToken ct)
+    {
+        await _requests.WaitAsync(ct);
+        try { return await operation(); }
+        finally { _requests.Release(); }
+    }
+
     public async Task<List<CalendarEventItem>> FetchAsync(
         string accessToken,
         IReadOnlyCollection<string>? selectedCalendarIds,
         DateTime? updatedMin,
         CancellationToken ct, CalendarReadWindow? window = null)
     {
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        deadline.CancelAfter(TimeSpan.FromSeconds(Math.Clamp(configuration?.GetValue("CalendarSync:FetchDeadlineSeconds", 90) ?? 90, 1, 300)));
+        ct = deadline.Token;
         var calendars = await ListCalendarEntries(accessToken, ct);
         var targets = SelectTargetCalendars(calendars, selectedCalendarIds);
 
-        var items = new List<CalendarEventItem>();
-        foreach (var calendar in targets)
+        var batches = new List<CalendarEventItem>[targets.Count];
+        await Parallel.ForEachAsync(Enumerable.Range(0, targets.Count), new ParallelOptions
+        { MaxDegreeOfParallelism = 4, CancellationToken = ct }, async (index, token) =>
         {
-            ct.ThrowIfCancellationRequested();
-            items.AddRange(await FetchCalendarEvents(accessToken, calendar, updatedMin, ct, window));
-        }
-
-        return items;
+            batches[index] = await FetchCalendarEvents(accessToken, targets[index], updatedMin, token, window);
+        });
+        return batches.SelectMany(batch => batch).ToList();
     }
 
     public async Task<List<CalendarListItem>> ListCalendarsAsync(string accessToken, CancellationToken ct)
@@ -49,7 +64,7 @@ internal sealed partial class GoogleCalendarEventFetcher(
     {
         try
         {
-            return await api.ListCalendarsAsync(accessToken, ct);
+            return await RequestAsync(() => api.ListCalendarsAsync(accessToken, ct), ct);
         }
         catch (Google.GoogleApiException ex)
         {
@@ -76,7 +91,7 @@ internal sealed partial class GoogleCalendarEventFetcher(
         IReadOnlyList<Event> events;
         try
         {
-            events = await api.ListEventsAsync(accessToken, calendar.Id, updatedMin, ct, window);
+            events = await RequestAsync(() => api.ListEventsAsync(accessToken, calendar.Id, updatedMin, ct, window), ct);
         }
         catch (Google.GoogleApiException ex) when (ClassifyGoogleError(ex) != CalendarFetchErrorKind.Transient)
         {
@@ -99,7 +114,7 @@ internal sealed partial class GoogleCalendarEventFetcher(
     {
         var items = new List<CalendarEventItem>();
         var seenRecurringMasters = new HashSet<string>(StringComparer.Ordinal);
-        var masterRecurrenceCache = new Dictionary<string, MasterRecurrence>(StringComparer.Ordinal);
+        var masterRecurrenceCache = new MasterCache();
         var expandedOccurrences = events
             .Where(ev => ev.RecurringEventId is not null
                 && !string.IsNullOrWhiteSpace(ev.Summary)
@@ -114,6 +129,14 @@ internal sealed partial class GoogleCalendarEventFetcher(
                     .Select(start => start!.Value)
                     .ToList(),
                 StringComparer.Ordinal);
+
+        var masters = events.Where(ev => ev.RecurringEventId != null && ev.Recurrence == null
+                && !string.IsNullOrWhiteSpace(ev.Summary) && ev.Status != "cancelled")
+            .DistinctBy(ev => ev.RecurringEventId).ToArray();
+        await Parallel.ForEachAsync(masters, new ParallelOptions { MaxDegreeOfParallelism = 4, CancellationToken = ct },
+            async (ev, token) => { await ResolveRecurrence(accessToken, calendarId, ev, masterRecurrenceCache, token); });
+        if (masterRecurrenceCache.Failures > 0)
+            LogFetchMastersFailed(logger, calendarId, masterRecurrenceCache.Failures);
 
         foreach (var ev in events)
         {
@@ -138,6 +161,12 @@ internal sealed partial class GoogleCalendarEventFetcher(
     /// The recurrence facts that live on the master event rather than on an expanded instance: the
     /// rule itself, and the IANA zone the master expands that rule in.
     /// </summary>
+    private sealed class MasterCache
+    {
+        internal readonly ConcurrentDictionary<string, MasterRecurrence> Rows = new(StringComparer.Ordinal);
+        internal int Failures;
+    }
+
     private readonly record struct MasterRecurrence(string? Rule, string? TimeZone);
 
     private static CalendarEventItem MapEvent(
@@ -178,7 +207,7 @@ internal sealed partial class GoogleCalendarEventFetcher(
         string accessToken,
         string calendarId,
         Event ev,
-        Dictionary<string, MasterRecurrence> masterRecurrenceCache,
+        MasterCache masterRecurrenceCache,
         CancellationToken ct)
     {
         if (ev.Recurrence is not null)
@@ -187,13 +216,13 @@ internal sealed partial class GoogleCalendarEventFetcher(
         if (ev.RecurringEventId is null)
             return default;
 
-        if (masterRecurrenceCache.TryGetValue(ev.RecurringEventId, out var cached))
+        if (masterRecurrenceCache.Rows.TryGetValue(ev.RecurringEventId, out var cached))
             return cached;
 
         MasterRecurrence recurrence;
         try
         {
-            var master = await api.GetEventAsync(accessToken, calendarId, ev.RecurringEventId, ct);
+            var master = await RequestAsync(() => api.GetEventAsync(accessToken, calendarId, ev.RecurringEventId, ct), ct);
             recurrence = ReadRecurrence(master);
         }
         catch (Google.GoogleApiException ex) when (ClassifyGoogleError(ex) != CalendarFetchErrorKind.Transient)
@@ -202,11 +231,11 @@ internal sealed partial class GoogleCalendarEventFetcher(
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            LogFetchMasterRruleFailed(logger, ex, ev.RecurringEventId);
+            Interlocked.Increment(ref masterRecurrenceCache.Failures);
             recurrence = default;
         }
 
-        masterRecurrenceCache[ev.RecurringEventId] = recurrence;
+        masterRecurrenceCache.Rows[ev.RecurringEventId] = recurrence;
         return recurrence;
     }
 
@@ -301,8 +330,8 @@ internal sealed partial class GoogleCalendarEventFetcher(
         return ex.Message;
     }
 
-    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Failed to fetch master event RRULE for recurring event {EventId}")]
-    private static partial void LogFetchMasterRruleFailed(ILogger logger, Exception ex, string? eventId);
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Failed to read {Count} recurring masters for calendar {CalendarId}")]
+    private static partial void LogFetchMastersFailed(ILogger logger, string calendarId, int count);
 
     [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Skipped Google Calendar {CalendarId} after a fetch error")]
     private static partial void LogCalendarFetchSkipped(ILogger logger, Exception ex, string calendarId);

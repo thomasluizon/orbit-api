@@ -55,7 +55,7 @@ public class BulkSkipHabitsToolTests
         var unit = Substitute.For<IUnitOfWork>();
         unit.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task<bool>>>(), Arg.Any<CancellationToken>())
             .Returns(call => call.Arg<Func<CancellationToken, Task<bool>>>()(call.Arg<CancellationToken>()));
-        _habitRepo.TryRefreshAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>()).Returns(true);
+        _habitRepo.TryRefreshRangeAsync(Arg.Any<IReadOnlyCollection<Habit>>(), Arg.Any<CancellationToken>()).Returns(true);
         _habitRepo.FindTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>()).Returns(habits.ToList());
         using var cache = new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions());

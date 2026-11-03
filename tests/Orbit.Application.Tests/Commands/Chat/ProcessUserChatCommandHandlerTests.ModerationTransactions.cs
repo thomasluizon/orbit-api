@@ -127,6 +127,7 @@ public partial class ProcessUserChatCommandHandlerTests
     /// </summary>
     private sealed class CancellationSensitiveUnitOfWork(IUnitOfWork inner) : IUnitOfWork
     {
+        public void AfterCommit(Action callback) => inner.AfterCommit(callback);
         public bool HasActiveTransaction { get; private set; }
         public bool IsAborted { get; private set; }
         public int Commits { get; private set; }

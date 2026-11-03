@@ -1,4 +1,6 @@
 using MediatR;
+using Orbit.Domain.Models;
+using Orbit.Domain.ValueObjects;
 using Microsoft.EntityFrameworkCore;
 using Orbit.Application.Common;
 using Orbit.Application.Habits.Services;
@@ -58,7 +60,7 @@ public class GetHabitWidgetQueryHandler(
             request.UserId,
             habitLogRepository,
             habits,
-            today.AddDays(-AppConstants.MaxRangeDays),
+            today.AddDays(-AppConstants.MaxReadRangeDays),
             cancellationToken);
         var lookup = habits.ToLookup(h => h.ParentHabitId);
         var todayItems = BuildItems(lookup, today, user.WeekStartDay, dueDateResolution);
@@ -96,14 +98,32 @@ public class GetHabitWidgetQueryHandler(
         DateOnly today,
         CancellationToken cancellationToken)
     {
-        var logFrom = today.AddDays(-AppConstants.MaxRangeDays);
+        var logFrom = today.AddDays(-AppConstants.MaxReadRangeDays);
         var logTo = today.AddDays(1);
 
-        return await habitRepository.FindAsync(
+        var rows = await habitRepository.ProjectAsync(
             h => h.UserId == userId && h.Schedule != HabitSchedule.General,
-            q => q.Include(h => h.Logs.Where(l => l.Date >= logFrom && l.Date <= logTo)),
+            query => query.Select(h => new WidgetHabitRow(
+                new HabitScheduleSnapshot(h.Id, h.ParentHabitId, h.FrequencyUnit, h.FrequencyQuantity,
+                    h.IntervalWeeks, h.NextDueDate, h.ScheduledStartDate, h.OriginalDayOfMonth,
+                    h.EndDate, h.CreatedAtUtc, h.DeletedAtUtc, h.IsDeleted, h.IsBadHabit,
+                    h.IsCompleted, h.Days.ToList(), h.Schedule, h.StartDate),
+                h.Title, h.Position, h.DueTime, h.ChecklistItems,
+                h.Logs.Where(l => l.Date >= logFrom && l.Date <= logTo)
+                    .Select(l => new WidgetLogRow(l.HabitId, l.Date, l.Value)).ToList())).AsSplitQuery(),
             cancellationToken);
+        return rows.Select(row =>
+        {
+            var habit = Habit.FromScheduleSnapshot(row.Schedule, userId);
+            habit.LoadWidgetFieldsForRead(row.Title, row.Position, row.DueTime, row.ChecklistItems);
+            habit.LoadScheduleLogsForRead(row.Logs.Select(log => HabitLog.FromSummaryRead(log.HabitId, log.Date, log.Value)));
+            return habit;
+        }).ToList();
     }
+
+    public sealed record WidgetLogRow(Guid HabitId, DateOnly Date, decimal Value);
+    public sealed record WidgetHabitRow(HabitScheduleSnapshot Schedule, string Title, int? Position, TimeOnly? DueTime,
+        IReadOnlyList<ChecklistItem> ChecklistItems, IReadOnlyList<WidgetLogRow> Logs);
 
     private static bool ShouldShowTomorrow(List<HabitWidgetItem> todayItems)
     {

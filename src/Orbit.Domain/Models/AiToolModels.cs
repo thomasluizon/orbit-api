@@ -45,6 +45,8 @@ public sealed class AiConversationContext
     public object Messages { get; init; } = null!;
     /// <summary>Opaque options object. Only consumed by AiIntentService.</summary>
     public object Options { get; init; } = null!;
+    /// <summary>Encoded image inputs reused by every stateless provider round.</summary>
+    public object? ImageInputs { get; init; }
     /// <summary>User attributed to each model round in this conversation.</summary>
     public Guid? UserId { get; init; }
     public string Purpose { get; init; } = "chat";

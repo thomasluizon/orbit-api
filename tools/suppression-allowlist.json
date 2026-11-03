@@ -160,6 +160,18 @@
         "count": 2,
         "reason": "cutoff removes sync tombstones by elapsed RetentionPeriod against DeletedAtUtc, independently of user calendar dates. suggestionCutoff removes unimported calendar suggestions by DiscoveredAtUtc age after SuggestionRetentionPeriod."
       }
+    },
+    "src/Orbit.Infrastructure/AI/StreamingImageRequest.cs": {
+      "OPENAI001": {
+        "count": 1,
+        "reason": "Streams image request bytes through the Responses protocol overload while retaining SDK response models."
+      }
+    },
+    "src/Orbit.Infrastructure/Services/SlipAlertSchedulerService.cs": {
+      "ORBIT0004": {
+        "count": 1,
+        "reason": "The UTC date bounds the cached slip snapshot and retention probe across timezone skew. Alert dates and send windows are evaluated in each user timezone on every tick."
+      }
     }
   },
   "suppressMessage": {

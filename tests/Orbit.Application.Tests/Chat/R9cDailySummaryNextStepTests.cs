@@ -63,7 +63,7 @@ public partial class ProcessUserChatCommandHandlerTests
             .Returns(habits.SelectMany(habit => habit.Logs)
                 .Select(log => new HabitSummaryLogFact(log.HabitId, log.Date, log.Value)).ToList());
         var schedule = DailySummaryScheduleFixture.Project(habits, Today);
-        _mediator.Send(Arg.Any<GetHabitScheduleQuery>(), Arg.Any<CancellationToken>())
+        _mediator.Send(Arg.Any<GetDailySummaryScheduleQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new PaginatedResponse<HabitScheduleItem>(schedule, 1, 100, schedule.Count, 1)));
         var sentence = capture.RootElement.GetProperty("summaryResult").GetProperty("summary").GetString()!;
         if (language == "en")

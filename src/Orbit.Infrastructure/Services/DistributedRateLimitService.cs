@@ -37,6 +37,9 @@ public class DistributedRateLimitService(OrbitDbContext dbContext, TimeProvider 
             ["streak-repair"] = new(TimeSpan.FromMinutes(1), PermitLimit: 10, SegmentCount: 1),
             ["admin-broadcast"] = new(TimeSpan.FromHours(1), PermitLimit: 5, SegmentCount: 1),
             ["marketing-unsubscribe"] = new(TimeSpan.FromMinutes(1), PermitLimit: 20, SegmentCount: 4),
+            ["stripe-webhook"] = new(TimeSpan.FromMinutes(1), PermitLimit: 600, SegmentCount: 4),
+            ["calendar-sync"] = new(TimeSpan.FromMinutes(5), PermitLimit: 1, SegmentCount: 1),
+            ["data-export"] = new(TimeSpan.FromHours(1), PermitLimit: 3, SegmentCount: 1),
             ["ses-events"] = new(TimeSpan.FromMinutes(1), PermitLimit: 600, SegmentCount: 4),
             ["mcp"] = new(TimeSpan.FromMinutes(1), PermitLimit: 60, SegmentCount: 4),
             ["mcp-ai"] = new(TimeSpan.FromMinutes(1), PermitLimit: 15, SegmentCount: 4)

@@ -456,7 +456,7 @@ public class StreakGoalSyncServiceTests
             new FoundingAchievementReader(dbContext));
         return new GamificationService(
             repos,
-            Substitute.For<IPushNotificationService>(),
+            Substitute.For<Hangfire.IBackgroundJobClient>(),
             Substitute.For<IUserDateService>(),
             new XpAwarder(new GenericRepository<XpAwardLog>(dbContext)),
             unitOfWork,

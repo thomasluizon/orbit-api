@@ -58,7 +58,7 @@ public class SkipHabitCommandHandler(
         }
 
         var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
-        var loggableWindowStart = today.AddDays(-AppConstants.MaxRangeDays);
+        var loggableWindowStart = today.AddDays(-AppConstants.MaxReadRangeDays);
 
         var habit = await repos.Habits.FindOneTrackedAsync(
             h => h.Id == request.HabitId && h.UserId == request.UserId,
@@ -164,7 +164,7 @@ public class SkipHabitCommandHandler(
         var today = await dates.GetUserTodayAsync(request.UserId, ct);
         var weekStart = await dates.GetUserWeekStartDayAsync(request.UserId, ct);
         var resolution = await HabitDueDateResolutionLoader.LoadAsync(request.UserId, logs, [habit],
-            today.AddDays(-AppConstants.MaxRangeDays), ct);
+            today.AddDays(-AppConstants.MaxReadRangeDays), ct);
         return SkipHabitArgumentChecks.Check(habit, request.Date ?? today, today, weekStart,
             allowOverdue: true, dueDateResolved: resolution.Contains(habit.Id), enforceWindow: true);
     }

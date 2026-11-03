@@ -41,6 +41,15 @@ public partial class DistributedRateLimitServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task DataExport_AllowsThreeAttemptsAndBoundsTheFourth()
+    {
+        for (var attempt = 0; attempt < 3; attempt++)
+            (await _service.TryAcquireAsync("data-export", "user:export")).Allowed.Should().BeTrue();
+        (await _service.TryAcquireAsync("data-export", "user:export")).Allowed.Should().BeFalse();
+        (await _service.TryAcquireAsync("data-export", "user:other")).Allowed.Should().BeTrue();
+    }
+
+    [Fact]
     public async Task TryAcquireAsync_AuthPolicy_BlocksAfterPermitLimit()
     {
         DistributedRateLimitDecision finalDecision = new(true, 0, 0, DateTime.UtcNow);

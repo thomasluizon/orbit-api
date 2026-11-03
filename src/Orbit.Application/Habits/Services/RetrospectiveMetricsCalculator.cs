@@ -191,7 +191,7 @@ public static class RetrospectiveMetricsCalculator
         for (var from = recurrenceStart; from <= dateTo;)
         {
             var to = DateOnly.FromDayNumber(Math.Min(
-                from.DayNumber + AppConstants.MaxRangeDays, dateTo.DayNumber));
+                from.DayNumber + AppConstants.MaxReadRangeDays, dateTo.DayNumber));
             occurrences.AddRange(resolveScheduledDates(habit, from, to));
             if (to == dateTo)
                 break;

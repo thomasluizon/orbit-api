@@ -31,7 +31,7 @@ public sealed class ChatTurnStream(
         var candidate = ChatTurn.Create(command.UserId, ChatTurnIdentity.HashKey(key), ChatTurnIdentity.Fingerprint(command),
             TimeProvider.System.GetUtcNow().UtcDateTime.Add(options.Value.Timeout));
         var (turn, claimed) = await store.ClaimAsync(candidate, transportToken);
-        if (turn.Fingerprint != candidate.Fingerprint)
+        if (!ChatTurnIdentity.Matches(turn.Fingerprint, command))
             return new ConflictObjectResult(new { code = "CHAT_TURN_KEY_CONFLICT", error = await ChatErrorLocalization.MessageAsync(http, "CHAT_TURN_KEY_CONFLICT", "The turn key belongs to another payload.") });
 
         var connected = true;

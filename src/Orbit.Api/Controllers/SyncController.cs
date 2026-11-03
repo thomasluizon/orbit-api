@@ -1,13 +1,13 @@
 using Asp.Versioning;
+using MediatR;
+using Orbit.Application.Sync.Commands;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Storage;
 using Orbit.Api.Extensions;
 using Orbit.Application.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
-using Orbit.Domain.Events;
 using Orbit.Infrastructure.Persistence;
 
 namespace Orbit.Api.Controllers;
@@ -17,7 +17,7 @@ namespace Orbit.Api.Controllers;
 [ApiVersion(1.0)]
 [ApiVersion(2.0)]
 [Route("api/[controller]")]
-public partial class SyncController(OrbitDbContext dbContext, ILogger<SyncController> logger, IAccountEventCollector? eventCollector = null) : ControllerBase
+public partial class SyncController(OrbitDbContext dbContext, ILogger<SyncController> logger, ISender sender) : ControllerBase
 {
     private static readonly TimeSpan MaxSyncWindow = TimeSpan.FromDays(AppConstants.MaxSyncWindowDays);
 
@@ -252,82 +252,11 @@ public partial class SyncController(OrbitDbContext dbContext, ILogger<SyncContro
         if (request.Mutations.Count > 100)
             return BadRequest(ErrorMessages.TooManyMutations.Format(100).ToErrorBody());
 
-        var results = new List<SyncMutationResult>();
-        var processed = 0;
-        var failed = 0;
-
-        var supportsTransactions = dbContext.Database.IsRelational();
-        var strategy = dbContext.Database.CreateExecutionStrategy();
-        var mutationCount = Math.Min(request.Mutations.Count, 100);
-        for (int i = 0; i < mutationCount; i++)
-        {
-            var mutation = request.Mutations[i];
-            var index = i;
-            try
-            {
-                await ApplyMutationWithRetryAsync(userId, mutation, supportsTransactions, strategy, cancellationToken);
-                results.Add(new SyncMutationResult(index, "success"));
-                processed++;
-            }
-            catch (Exception ex)
-            {
-                LogMutationFailed(logger, index, mutation.Entity, mutation.Action, ex);
-                results.Add(new SyncMutationResult(index, "failed", ErrorMessages.MutationFailed.Message));
-                failed++;
-            }
-        }
-
-        LogSyncBatch(logger, userId, processed, failed);
-        return Ok(new SyncBatchResponse(processed, failed, results));
-    }
-
-    private const int MaxMutationAttempts = 3;
-
-    private async Task ApplyMutationWithRetryAsync(
-        Guid userId,
-        SyncMutation mutation,
-        bool supportsTransactions,
-        IExecutionStrategy strategy,
-        CancellationToken cancellationToken)
-    {
-        var attempt = 1;
-        while (true)
-        {
-            try
-            {
-                if (supportsTransactions)
-                {
-                    await strategy.ExecuteAsync(async () =>
-                    {
-                        await using var tx = await dbContext.Database.BeginTransactionAsync(cancellationToken);
-                        try
-                        {
-                            await ProcessMutation(userId, mutation, cancellationToken);
-                            await dbContext.SaveChangesAsync(cancellationToken);
-                            await tx.CommitAsync(cancellationToken);
-                        }
-                        catch
-                        {
-                            dbContext.ChangeTracker.Clear();
-                            eventCollector?.Clear();
-                            throw;
-                        }
-                    });
-                }
-                else
-                {
-                    await ProcessMutation(userId, mutation, cancellationToken);
-                    await dbContext.SaveChangesAsync(cancellationToken);
-                }
-                return;
-            }
-            catch (DbUpdateConcurrencyException) when (attempt < MaxMutationAttempts)
-            {
-                dbContext.ChangeTracker.Clear();
-            }
-
-            attempt++;
-        }
+        var result = await sender.Send(new ProcessSyncBatchCommand(userId,
+            request.Mutations.Select(m => new Orbit.Application.Sync.Commands.SyncMutation(m.Entity, m.Action, m.Id, m.Data)).ToList()), cancellationToken);
+        if (result.IsFailure) return result.ToErrorResult();
+        return Ok(new SyncBatchResponse(result.Value.Processed, result.Value.Failed,
+            result.Value.Results.Select(r => new SyncMutationResult(r.Index, r.Status, r.Error)).ToList()));
     }
 
     private static SyncHabitDto MapHabit(Habit habit)
@@ -436,9 +365,4 @@ public partial class SyncController(OrbitDbContext dbContext, ILogger<SyncContro
     [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Sync changes requested by user {UserId} since {Since}")]
     private static partial void LogSyncChanges(ILogger logger, Guid userId, DateTime since);
 
-    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "Sync batch processed for user {UserId}: {Processed} succeeded, {Failed} failed")]
-    private static partial void LogSyncBatch(ILogger logger, Guid userId, int processed, int failed);
-
-    [LoggerMessage(EventId = 3, Level = LogLevel.Warning, Message = "Sync mutation {Index} failed for entity {Entity} action {Action}")]
-    private static partial void LogMutationFailed(ILogger logger, int index, string entity, string action, Exception ex);
 }

@@ -27,7 +27,12 @@ internal record CalendarMapContext(
     DateOnly? DateFrom = null,
     DateOnly? DateTo = null,
     DateOnly? ReferenceDate = null,
-    DateOnly? UserToday = null);
+    DateOnly? UserToday = null)
+{
+    public IReadOnlyDictionary<Guid, string> ParentTitles { get; } = ChildLookup.SelectMany(group => group)
+        .ToDictionary(habit => habit.Id, habit => habit.Title);
+    public string? ParentTitle(Guid? parentId) => parentId.HasValue ? ParentTitles.GetValueOrDefault(parentId.Value) : null;
+}
 
 public class GetCalendarMonthQueryHandler(
     IGenericRepository<Habit> habitRepository,
@@ -221,7 +226,7 @@ public class GetCalendarMonthQueryHandler(
             Schedule: habit.Schedule,
             StartDate: habit.StartDate,
             ParentHabitId: habit.ParentHabitId,
-            ParentTitle: ctx.ChildLookup.SelectMany(group => group).FirstOrDefault(parent => parent.Id == habit.ParentHabitId)?.Title);
+            ParentTitle: ctx.ParentTitle(habit.ParentHabitId));
     }
 
     private static (int? Target, int? Completed) CalculateFlexibleProgress(
@@ -292,7 +297,7 @@ public class GetCalendarMonthQueryHandler(
             Schedule: child.Schedule,
             StartDate: child.StartDate,
             ParentHabitId: child.ParentHabitId,
-            ParentTitle: ctx.ChildLookup.SelectMany(group => group).FirstOrDefault(parent => parent.Id == child.ParentHabitId)?.Title);
+            ParentTitle: ctx.ParentTitle(child.ParentHabitId));
     }
 
     private static bool HasAnyDescendantDue(

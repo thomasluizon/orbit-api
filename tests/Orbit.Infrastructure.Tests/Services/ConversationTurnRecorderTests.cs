@@ -187,6 +187,26 @@ public class ConversationTurnRecorderTests
             .OnlyContain(state => state.ConfirmedAtUtc != null);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ImageStream_RejectsCorruptedStorageBytesOnCompletion(bool asynchronous)
+    {
+        using var fixture = new Fixture();
+        var capture = fixture.Capture(image: true);
+        await fixture.Store.RecordAsync(capture);
+        fixture.Storage.ReadPrivateAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(_ => new MemoryStream([4, 3, 2, 1]));
+        var image = await fixture.Store.ReadImageAsync(fixture.User.Id, fixture.ConversationId, capture.TurnId);
+        await using var stream = image!.Data;
+        Func<Task> consume = asynchronous ? () => stream.CopyToAsync(Stream.Null) : () =>
+        {
+            stream.CopyTo(Stream.Null);
+            return Task.CompletedTask;
+        };
+        await consume.Should().ThrowAsync<InvalidOperationException>().WithMessage("Conversation image checksum did not match.");
+    }
+
     [Fact]
     public async Task FlagOff_PendingTransitionsAndRecording_DoNotReadOrUpdateStoredTurns()
     {
@@ -252,12 +272,13 @@ public class ConversationTurnRecorderTests
     }
 
     [Fact]
-    public async Task History_ImageOnlyWithinLastThreeExchanges_AndLatestPageUsesDisplayOrder()
+    public async Task History_ReloadsOnlyRecentAttachments_AndLatestPageUsesDisplayOrder()
     {
         using var fixture = new Fixture();
         await fixture.Store.RecordAsync(fixture.Capture(image: true));
         var history = await fixture.Store.LoadHistoryAsync(fixture.User.Id, fixture.ConversationId);
         history.Value.Messages[0].ImageData.Should().Equal(Fixture.Image);
+        await fixture.Storage.Received(1).ReadPrivateAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
         for (var index = 0; index < 3; index++) await fixture.Store.RecordAsync(fixture.Capture());
         history = await fixture.Store.LoadHistoryAsync(fixture.User.Id, fixture.ConversationId);
         history.Value.Messages.Should().OnlyContain(message => message.ImageData == null);
@@ -371,7 +392,7 @@ public class ConversationTurnRecorderTests
             Db.SaveChanges();
             Flags.GetEnabledKeysForUserAsync(User.Id, Arg.Any<CancellationToken>(), Arg.Any<bool>()).Returns(enabled ? new[] { FeatureFlagKeys.AstraConversationRecording } : []);
             Flags.ResolveForUser(User.Id).Returns([new(FeatureFlagKeys.AstraConversationRecording, enabled, null)]);
-            Storage.ReadPrivateAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(Image);
+            Storage.ReadPrivateAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(_ => new MemoryStream(Image));
             Store = new(Db, new UnitOfWork(Db, new DatabaseConnectionSettings()), Flags, encryption, Storage, Options.Create(new AiSettings { Model = "recording-model" }));
         }
         internal ConversationTurnCapture Capture(bool image = false) => new(User.Id, Guid.NewGuid(), DateTime.UtcNow,

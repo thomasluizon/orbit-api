@@ -14,6 +14,11 @@ public interface IGenericRepository<T> where T : Entity
         Func<IQueryable<T>, IQueryable<TResult>> projection,
         CancellationToken cancellationToken = default);
 
+    IAsyncEnumerable<TResult> StreamAsync<TResult>(
+        Expression<Func<T, bool>> predicate,
+        Func<IQueryable<T>, IQueryable<TResult>> projection,
+        CancellationToken cancellationToken = default);
+
     /// <summary>
     /// Loads untracked entities with global query filters disabled and optional navigations included.
     /// Historical reads use this when a later soft delete must not erase an earlier period.
@@ -30,6 +35,8 @@ public interface IGenericRepository<T> where T : Entity
     /// guard against current state.
     /// </summary>
     Task ReloadAsync(T entity, CancellationToken cancellationToken = default);
+    Task ReloadRangeAsync(IReadOnlyCollection<T> entities, CancellationToken cancellationToken = default);
+    Task<bool> TryRefreshRangeAsync(IReadOnlyCollection<T> entities, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Refreshes an unchanged entity from the database. Pending changes to a timestamped entity

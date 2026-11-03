@@ -17,7 +17,7 @@ public class UpdateTagCommandValidator : AbstractValidator<UpdateTagCommand>
         RuleFor(x => x.Name)
             .NotEmpty()
             .WithFieldCopy(ValidationCopyKeys.TagNameRequired)
-            .MaximumLength(50)
+            .MaximumLength(AppConstants.MaxTagNameLength)
             .WithFieldCopy(ValidationCopyKeys.TagNameLength);
 
         RuleFor(x => x.Color)

@@ -25,6 +25,7 @@ public class GetHabitFullDetailQueryHandlerTests
 
     public GetHabitFullDetailQueryHandlerTests()
     {
+        Orbit.Tests.Shared.RepositoryProjections.FromFind<HabitLog, HabitFullDetailLogReadRow>(_habitLogRepo);
         _handler = new GetHabitFullDetailQueryHandler(_habitRepo, _habitLogRepo, _userRepo, _userDateService, repeatReminderReader: Substitute.For<IRepeatReminderReader>());
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
     }

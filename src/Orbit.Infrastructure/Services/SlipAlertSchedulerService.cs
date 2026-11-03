@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Orbit.Application.Chat;
 using Orbit.Domain.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -23,6 +24,9 @@ public partial class SlipAlertSchedulerService(
     TimeProvider? timeProvider = null) : ScheduledServiceBase, IScheduledJob
 {
     private const int DefaultMorningHour = 8;
+    private readonly SemaphoreSlim _tickGate = new(1, 1);
+    private SlipSnapshot? _snapshot;
+    private TimeProvider Clock => timeProvider ?? TimeProvider.System;
     private const int MaxTimeZoneSkewDays = 1;
 
     private readonly int _concurrency = Math.Clamp(configuration.GetValue("BackgroundServices:SlipAlertConcurrency", 4), 1, 8);
@@ -53,43 +57,32 @@ public partial class SlipAlertSchedulerService(
 
     internal async Task CheckAndSendAlerts(CancellationToken ct)
     {
+        await _tickGate.WaitAsync(ct);
+        try { await CheckAndSendCore(ct); }
+        finally { _tickGate.Release(); }
+    }
+
+    private async Task CheckAndSendCore(CancellationToken ct)
+    {
         using var scope = scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
-        var nowAtUtc = (timeProvider ?? TimeProvider.System).GetUtcNow().UtcDateTime;
+        var nowAtUtc = Clock.GetUtcNow().UtcDateTime;
+#pragma warning disable ORBIT0004
         var utcDate = DateOnly.FromDateTime(nowAtUtc);
-        var endDateFloor = utcDate.AddDays(-MaxTimeZoneSkewDays);
-        var zones = await db.Users.AsNoTracking().Select(u => u.TimeZone).Distinct().ToListAsync(ct);
-        var openZones = zones.Where(id =>
-        {
-            var local = TimeOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(nowAtUtc, TimeZoneHelper.FindTimeZone(id, logger, Guid.Empty)));
-            return Enumerable.Range(8, 15).Any(hour => IsWithinSendWindow(local, new TimeOnly(hour, 0)));
-        }).ToArray();
-        if (openZones.Length == 0) return;
+#pragma warning restore ORBIT0004
+        var probe = await ReadProbeAsync(db, utcDate, ct);
+        if (_snapshot is null || _snapshot.UtcDate != utcDate || _snapshot.Probe != probe)
+            _snapshot = await LoadSnapshotAsync(db, utcDate, probe, ct);
+        var snapshot = _snapshot;
         var pending = new List<PendingSlip>();
-        Guid? after = null;
-        while (true)
+        foreach (var habits in snapshot.Habits.Chunk(256))
         {
-            var habits = await db.Habits.AsNoTracking()
-                .Where(h => !h.IsCompleted && h.IsBadHabit && h.SlipAlertEnabled
-                    && (!h.EndDate.HasValue || h.EndDate.Value >= endDateFloor)
-                    && (after == null || h.Id.CompareTo(after.Value) > 0)
-                    && db.Users.Any(u => u.Id == h.UserId && openZones.Contains(u.TimeZone)))
-                .OrderBy(h => h.Id).Take(256).ToListAsync(ct);
-            if (habits.Count == 0) break;
-            var userIds = habits.Select(h => h.UserId).Distinct().ToArray();
-            var users = await LoadProUsersAsync(db, userIds, nowAtUtc, ct);
-            var habitIds = habits.Select(h => h.Id).ToArray();
-            var sentFloor = utcDate.AddDays(-(7 + MaxTimeZoneSkewDays));
-            var sent = (await db.SentSlipAlerts.AsNoTracking()
-                .Where(a => habitIds.Contains(a.HabitId) && a.WeekStart >= sentFloor).ToListAsync(ct)).ToLookup(a => a.HabitId);
-            var cutoff = utcDate.AddDays(-60);
-            var logs = (await db.HabitLogs.AsNoTracking()
-                .Where(l => habitIds.Contains(l.HabitId) && l.Date >= cutoff).ToListAsync(ct)).ToLookup(l => l.HabitId);
             var due = new List<SlipCandidate>();
             foreach (var habit in habits)
             {
-                if (!users.TryGetValue(habit.UserId, out var user)) continue;
-                var candidate = FindDue(habit, user, logs[habit.Id].ToList(), sent[habit.Id], nowAtUtc);
+                if (!snapshot.Users.TryGetValue(habit.UserId, out var user) || !user.HasProAccess(nowAtUtc)) continue;
+                var candidate = FindDue(habit, user, snapshot.LogsByHabit.GetValueOrDefault(habit.Id) ?? [],
+                    snapshot.SentWeeksByHabit.GetValueOrDefault(habit.Id) ?? [], nowAtUtc);
                 if (candidate is not null) due.Add(candidate);
             }
             var generated = new ConcurrentBag<PendingSlip>();
@@ -116,25 +109,135 @@ public partial class SlipAlertSchedulerService(
                 }
             });
             pending.AddRange(generated);
-            after = habits[^1].Id;
-            if (habits.Count < 256) break;
         }
         var accepted = await SaveClaimsAsync(db, pending, ct);
+        foreach (var item in accepted)
+        {
+            if (!snapshot.SentWeeksByHabit.TryGetValue(item.Habit.Id, out var weeks))
+                snapshot.SentWeeksByHabit[item.Habit.Id] = weeks = [];
+            weeks.Add(item.WeekStart);
+        }
         if (accepted.Count > 0)
             await scope.ServiceProvider.GetRequiredService<IPushNotificationService>().SendManyAsync(accepted.Select(p =>
                 new PushDelivery(p.Habit.UserId, p.Title, p.Body, NotificationUrls.Home)).ToArray(), ct);
     }
 
-    private static Task<Dictionary<Guid, User>> LoadProUsersAsync(OrbitDbContext db, Guid[] userIds,
-        DateTime nowAtUtc, CancellationToken ct) =>
-        db.Users.AsNoTracking().Where(u => userIds.Contains(u.Id) && (u.IsLifetimePro
-            || u.SubscriptionPlan == UserPlan.Pro && u.SubscriptionExpiresAtUtc > nowAtUtc
-            || u.BonusProExpiresAtUtc > nowAtUtc || u.TrialEndsAt > nowAtUtc)).ToDictionaryAsync(u => u.Id, ct);
+    private sealed record SlipSnapshot(DateOnly UtcDate, string Probe, IReadOnlyList<Habit> Habits,
+        Dictionary<Guid, SlipUser> Users, Dictionary<Guid, List<HabitLog>> LogsByHabit,
+        Dictionary<Guid, HashSet<DateOnly>> SentWeeksByHabit);
 
-    private sealed record SlipCandidate(Habit Habit, User User, SlipPattern Pattern, DateOnly WeekStart);
+    private sealed record SlipUser(Guid Id, string? TimeZone, int WeekStartDay, string? Language,
+        bool IsLifetimePro, UserPlan SubscriptionPlan, DateTime? SubscriptionExpiresAtUtc,
+        DateTime? BonusProExpiresAtUtc, DateTime? TrialEndsAt)
+    {
+        public bool HasProAccess(DateTime nowAtUtc) => IsLifetimePro
+            || SubscriptionPlan == UserPlan.Pro && SubscriptionExpiresAtUtc > nowAtUtc
+            || BonusProExpiresAtUtc > nowAtUtc || TrialEndsAt > nowAtUtc;
+    }
+
+    private static async Task<string> ReadProbeAsync(OrbitDbContext db, DateOnly utcDate, CancellationToken ct)
+    {
+        var floor = utcDate.AddDays(-MaxTimeZoneSkewDays);
+        var cutoff = utcDate.AddDays(-60);
+        if (!db.Database.IsRelational())
+        {
+            var habitVersions = await db.Habits.Where(h => h.IsBadHabit && h.SlipAlertEnabled && !h.IsCompleted)
+                .OrderBy(h => h.Id).Select(h => new { h.Id, h.ReminderProbeVersion }).ToListAsync(ct);
+            var userVersions = await db.Users.OrderBy(u => u.Id).Select(u => new
+            {
+                u.Id,
+                u.ReminderPreferencesVersion,
+                u.IsLifetimePro,
+                u.SubscriptionPlan,
+                u.SubscriptionExpiresAtUtc,
+                u.BonusProExpiresAtUtc,
+                u.TrialEndsAt
+            }).ToListAsync(ct);
+            var logVersions = await db.HabitLogs.Where(l => l.Date >= cutoff).OrderBy(l => l.Id)
+                .Select(l => new { l.Id, l.UpdatedAtUtc }).ToListAsync(ct);
+            return ReadRevision.Hash(new { habitVersions, userVersions, logVersions });
+        }
+        var rows = await db.Database.SqlQuery<SlipProbe>($"""
+            WITH eligible AS MATERIALIZED (
+                SELECT "Id", "UserId", "ReminderProbeVersion" FROM "Habits"
+                WHERE NOT "IsDeleted" AND NOT "IsCompleted" AND "IsBadHabit" AND "SlipAlertEnabled"
+                    AND ("EndDate" IS NULL OR "EndDate" >= {floor})
+            )
+            SELECT md5(COALESCE((SELECT string_agg(CAST("Id" AS text) || ':' || CAST("ReminderProbeVersion" AS text), ',' ORDER BY "Id") FROM eligible), '')
+                || COALESCE((SELECT string_agg(CAST(u."Id" AS text) || ':' || CAST(u."ReminderPreferencesVersion" AS text)
+                    || ':' || CAST(u."IsLifetimePro" AS text) || ':' || CAST(u."Plan" AS text)
+                    || ':' || COALESCE(CAST(u."PlanExpiresAt" AS text), '')
+                    || ':' || COALESCE(CAST(u."BonusProExpiresAtUtc" AS text), '')
+                    || ':' || COALESCE(CAST(u."TrialEndsAt" AS text), ''), ',' ORDER BY u."Id")
+                    FROM "Users" u WHERE NOT u."IsDeactivated" AND u."Id" IN (SELECT "UserId" FROM eligible)), '')
+                || COALESCE((SELECT string_agg(CAST(l."Id" AS text) || ':' || CAST(l."UpdatedAtUtc" AS text), ',' ORDER BY l."Id")
+                    FROM "HabitLogs" l WHERE NOT l."IsDeleted" AND l."Date" >= {cutoff}
+                        AND l."HabitId" IN (SELECT "Id" FROM eligible)), '')) AS "Fingerprint"
+            """).ToListAsync(ct);
+        return rows.Single().Fingerprint;
+    }
+
+    private sealed class SlipProbe
+    {
+        public string Fingerprint { get; set; } = string.Empty;
+    }
+
+    private static async Task<SlipSnapshot> LoadSnapshotAsync(OrbitDbContext db, DateOnly utcDate, string probe, CancellationToken ct)
+    {
+        var floor = utcDate.AddDays(-MaxTimeZoneSkewDays);
+        var allHabits = new List<Habit>();
+        var allUsers = new Dictionary<Guid, SlipUser>();
+        var allLogs = new Dictionary<Guid, List<HabitLog>>();
+        var allSent = new Dictionary<Guid, HashSet<DateOnly>>();
+        Guid? after = null;
+        while (true)
+        {
+            var rows = await db.Habits.AsNoTracking().Where(h => h.IsBadHabit && h.SlipAlertEnabled && !h.IsCompleted
+                    && (!h.EndDate.HasValue || h.EndDate >= floor)
+                    && (after == null || h.Id.CompareTo(after.Value) > 0))
+                .OrderBy(h => h.Id).Take(256)
+                .Select(h => new
+                {
+                    h.UserId,
+                    h.Title,
+                    Snapshot = new HabitScheduleSnapshot(h.Id, h.ParentHabitId,
+                    h.FrequencyUnit, h.FrequencyQuantity, h.IntervalWeeks, h.NextDueDate, h.ScheduledStartDate,
+                    h.OriginalDayOfMonth, h.EndDate, h.CreatedAtUtc, h.DeletedAtUtc, h.IsDeleted, h.IsBadHabit,
+                    h.IsCompleted, h.Days.ToList(), h.Schedule, h.StartDate)
+                }).ToListAsync(ct);
+            if (rows.Count == 0) break;
+            var habits = rows.Select(row =>
+            {
+                var habit = Habit.FromScheduleSnapshot(row.Snapshot, row.UserId);
+                habit.LoadScheduleCandidateFieldsForRead(row.Title, null, null, []);
+                return habit;
+            }).ToArray();
+            var userIds = habits.Select(h => h.UserId).Distinct().ToArray();
+            var users = await db.Users.AsNoTracking().Where(u => userIds.Contains(u.Id))
+                .Select(u => new SlipUser(u.Id, u.TimeZone, u.WeekStartDay, u.Language,
+                    u.IsLifetimePro, u.SubscriptionPlan, u.SubscriptionExpiresAtUtc,
+                    u.BonusProExpiresAtUtc, u.TrialEndsAt)).ToDictionaryAsync(u => u.Id, ct);
+            var habitIds = habits.Select(h => h.Id).ToArray();
+            var sentFloor = utcDate.AddDays(-(7 + MaxTimeZoneSkewDays));
+            var sent = await db.SentSlipAlerts.AsNoTracking().Where(a => habitIds.Contains(a.HabitId) && a.WeekStart >= sentFloor)
+                .Select(a => new { a.HabitId, a.WeekStart }).ToListAsync(ct);
+            var cutoff = utcDate.AddDays(-60);
+            var logs = await db.HabitLogs.AsNoTracking().Where(l => habitIds.Contains(l.HabitId) && l.Date >= cutoff)
+                .Select(l => HabitLog.FromScheduleRead(l.Id, l.HabitId, l.Date, l.Value, 0, l.CreatedAtUtc, null, null, null)).ToListAsync(ct);
+            allHabits.AddRange(habits);
+            foreach (var pair in users) allUsers[pair.Key] = pair.Value;
+            foreach (var group in logs.GroupBy(l => l.HabitId)) allLogs[group.Key] = group.ToList();
+            foreach (var group in sent.GroupBy(a => a.HabitId)) allSent[group.Key] = group.Select(a => a.WeekStart).ToHashSet();
+            after = habits[^1].Id;
+            if (habits.Length < 256) break;
+        }
+        return new(utcDate, probe, allHabits, allUsers, allLogs, allSent);
+    }
+
+    private sealed record SlipCandidate(Habit Habit, SlipUser User, SlipPattern Pattern, DateOnly WeekStart);
     private sealed record PendingSlip(Habit Habit, DateOnly WeekStart, string Title, string Body);
 
-    private SlipCandidate? FindDue(Habit habit, User user, List<HabitLog> logs, IEnumerable<SentSlipAlert> sent, DateTime nowAtUtc)
+    private SlipCandidate? FindDue(Habit habit, SlipUser user, List<HabitLog> logs, HashSet<DateOnly> sent, DateTime nowAtUtc)
     {
         var zone = TimeZoneHelper.FindTimeZone(user.TimeZone, logger, user.Id);
         var local = TimeZoneInfo.ConvertTimeFromUtc(nowAtUtc, zone);
@@ -142,8 +245,8 @@ public partial class SlipAlertSchedulerService(
         if (habit.EndDate.HasValue && habit.EndDate.Value < today) return null;
         if (!HabitScheduleService.IsActiveIntervalWeek(habit, today, user.WeekStartDay)) return null;
         var weekStart = WeekMath.WeekStart(today, user.WeekStartDay);
-        if (sent.Any(a => a.WeekStart == weekStart)) return null;
-        var pattern = SlipPatternDetectionService.DetectPattern(logs, habit.Id, zone);
+        if (sent.Contains(weekStart)) return null;
+        var pattern = SlipPatternDetectionService.DetectPattern(logs, habit.Id, zone, nowAtUtc);
         if (pattern is null || local.DayOfWeek != pattern.DayOfWeek
             || !IsWithinSendWindow(TimeOnly.FromDateTime(local), CalculateAlertTime(pattern.PeakHour))) return null;
         return new(habit, user, pattern, weekStart);

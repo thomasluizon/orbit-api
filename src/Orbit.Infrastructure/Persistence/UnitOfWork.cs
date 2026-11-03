@@ -14,7 +14,15 @@ public sealed class UnitOfWork(
     HabitScheduleSnapshotStore? scheduleSnapshots = null)
     : IUnitOfWork, IAsyncDisposable
 {
+    private readonly List<Action> _afterCommit = [];
     public bool HasActiveTransaction => context.Database.CurrentTransaction is not null;
+
+    public void AfterCommit(Action callback)
+    {
+        ArgumentNullException.ThrowIfNull(callback);
+        if (HasActiveTransaction) _afterCommit.Add(callback);
+        else callback();
+    }
 
     public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
@@ -57,17 +65,26 @@ public sealed class UnitOfWork(
 
         try
         {
-            return await VerifiedTransaction.ExecuteAsync(context, operation, () =>
+            var result = await VerifiedTransaction.ExecuteAsync(context, operation, () =>
             {
                 context.ChangeTracker.Clear();
                 scheduleSnapshots?.Invalidate();
                 eventCollector?.Clear();
+                _afterCommit.Clear();
             }, deadline.OperationToken, deadline.CompletionToken, verifyCommit);
+            DispatchAfterCommit();
+            return result;
         }
         catch (OperationCanceledException) when (deadline.IsExpired)
         {
+            _afterCommit.Clear();
             throw new TimeoutException(
                 $"Transaction exceeded the {databaseSettings.TransactionTimeoutSeconds}s timeout and was rolled back.");
+        }
+        catch
+        {
+            _afterCommit.Clear();
+            throw;
         }
     }
 
@@ -100,9 +117,11 @@ public sealed class UnitOfWork(
                     context.ChangeTracker.Clear();
                     scheduleSnapshots?.Invalidate();
                     eventCollector?.Clear();
+                    _afterCommit.Clear();
                     throw;
                 }
             });
+            DispatchAfterCommit();
         }
         catch (OperationCanceledException) when (deadline.IsExpired)
         {
@@ -122,6 +141,7 @@ public sealed class UnitOfWork(
         using var completionCts = CancellationTokenSource.CreateLinkedTokenSource(context.TransactionCompletionToken ?? CancellationToken.None);
         completionCts.CancelAfter(TimeSpan.FromSeconds(databaseSettings.CommandTimeoutSeconds));
         var name = $"orbit_{Guid.NewGuid():N}";
+        var callbackCount = _afterCommit.Count;
         await transaction.CreateSavepointAsync(name, completionCts.Token);
         try
         {
@@ -137,6 +157,7 @@ public sealed class UnitOfWork(
                 context.ChangeTracker.Clear();
                 scheduleSnapshots?.Invalidate();
                 eventCollector?.Clear();
+                _afterCommit.RemoveRange(callbackCount, _afterCommit.Count - callbackCount);
             }
             throw;
         }
@@ -175,6 +196,13 @@ public sealed class UnitOfWork(
     {
         context.ChangeTracker.Clear();
         scheduleSnapshots?.Invalidate();
+    }
+
+    private void DispatchAfterCommit()
+    {
+        var callbacks = _afterCommit.ToArray();
+        _afterCommit.Clear();
+        foreach (var callback in callbacks) callback();
     }
 
     public void Dispose()

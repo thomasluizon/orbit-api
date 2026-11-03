@@ -4,7 +4,7 @@ namespace Orbit.Domain.Models;
 
 public sealed class HabitCalendarWindow
 {
-    public const int MaxRangeDays = 62;
+    public const int MaxCalendarWindowDays = 62;
     public DateOnly From { get; }
     public DateOnly To { get; }
 
@@ -12,7 +12,7 @@ public sealed class HabitCalendarWindow
 
     public static Result<HabitCalendarWindow> Create(DateOnly from, DateOnly to)
     {
-        if (from.DayNumber < 31 || to < from || to.DayNumber - from.DayNumber >= MaxRangeDays)
+        if (from.DayNumber < 31 || to < from || to.DayNumber - from.DayNumber >= MaxCalendarWindowDays)
             return Result.Failure<HabitCalendarWindow>(DomainErrors.HabitCalendarRangeInvalid);
         return Result.Success(new HabitCalendarWindow(from, to));
     }

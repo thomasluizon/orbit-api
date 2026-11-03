@@ -27,4 +27,27 @@ public partial class AiIntentServiceStreamingTests
         messages.Last().GetProperty("content")[0].GetProperty("text").GetString().Should().Be(request.UserMessage);
 
     }
+    [Fact]
+    public async Task ThreeRounds_RetainAttachmentInEveryRequest()
+    {
+        var toolRound = ResponsesTestData.Response();
+        toolRound.OutputItems.Add(OpenAI.Responses.ResponseItem.CreateFunctionCallItem("call", "query_habits", BinaryData.FromString("{}")));
+        var handler = new SequenceSseHandler(
+            System.ClientModel.Primitives.ModelReaderWriter.Write(toolRound).ToString(),
+            System.ClientModel.Primitives.ModelReaderWriter.Write(toolRound).ToString(), ResponsesTestData.Text("Done."));
+        var (service, _) = BuildService(handler);
+        var first = await service.SendWithToolsAsync(new AiToolRequest("Inspect", "system", [new { name = "query_habits" }],
+            ImageData: [137, 80, 78, 71], ImageMimeType: "image/png"));
+        first.IsSuccess.Should().BeTrue(first.Error);
+        var second = await service.ContinueWithToolResultsAsync(first.Value.ConversationContext!,
+            [new("query_habits", "call", true, null, null, null)]);
+        second.IsSuccess.Should().BeTrue(second.Error);
+        var third = await service.ContinueWithToolResultsAsync(second.Value.ConversationContext!,
+            [new("query_habits", "call", true, null, null, null)]);
+        third.IsSuccess.Should().BeTrue(third.Error);
+        handler.RequestBodies.Should().HaveCount(3);
+        handler.RequestBodies[0].Should().Contain("data:image/png;base64,");
+        handler.RequestBodies.Should().OnlyContain(body => body.Contains("data:image/png;base64,iVBORw==", StringComparison.Ordinal));
+    }
+
 }

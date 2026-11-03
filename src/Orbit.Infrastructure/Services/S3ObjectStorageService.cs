@@ -27,12 +27,10 @@ public sealed class S3ObjectStorageService(IAmazonS3 client, IOptions<S3StorageS
         }, deadline.Token);
     }
 
-    public async Task<byte[]> ReadPrivateAsync(string objectKey, CancellationToken cancellationToken = default)
+    public async Task<Stream> ReadPrivateAsync(string objectKey, CancellationToken cancellationToken = default)
     {
-        using var response = await client.GetObjectAsync(_settings.Bucket, objectKey, cancellationToken);
-        using var stream = new MemoryStream();
-        await response.ResponseStream.CopyToAsync(stream, cancellationToken);
-        return stream.ToArray();
+        var response = await client.GetObjectAsync(_settings.Bucket, objectKey, cancellationToken);
+        return response.ResponseStream;
     }
 
     public async Task DeletePrivateAsync(string objectKey, CancellationToken cancellationToken = default)

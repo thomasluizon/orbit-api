@@ -144,6 +144,8 @@ public static partial class ServiceCollectionExtensions
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Notification>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.XpAwardLog>>(),
                 sp.GetRequiredService<IFoundingAchievementReader>()));
+        builder.Services.AddScoped<IXpHistoryStore, XpHistoryStore>();
+        builder.Services.AddScoped<BoundedReadStateBackfill>();
         builder.Services.AddScoped<IXpAwarder, Orbit.Application.Gamification.Services.XpAwarder>();
         builder.Services.AddScoped<IGamificationService, GamificationService>();
         builder.Services.AddScoped<Orbit.Application.Gamification.Services.IAchievementProgressService, Orbit.Application.Gamification.Services.AchievementProgressService>();
@@ -151,6 +153,7 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<IHabitLogReader, HabitLogReader>();
         builder.Services.AddScoped<IHabitScheduleLogReader, HabitScheduleLogReader>();
         builder.Services.AddScoped<IHabitRankingReader, HabitRankingReader>();
+        builder.Services.AddScoped<INotificationInboxAggregateReader, NotificationInboxAggregateReader>();
         builder.Services.AddScoped<IHabitSummaryLogReader, HabitSummaryLogReader>();
         builder.Services.AddScoped<IHabitSchedulePageLoader, HabitSchedulePageLoader>();
         builder.Services.AddScoped<IRepeatReminderReader, RepeatReminderReader>();

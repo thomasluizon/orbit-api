@@ -218,6 +218,7 @@ public partial class AiSummaryServiceTests
         }
 
         var repo = Substitute.For<IGenericRepository<Habit>>();
+        Orbit.Tests.Shared.RepositoryProjections.FromFind<Habit, Guid>(repo);
         repo.ProjectAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
                 Arg.Any<Func<IQueryable<Habit>, IQueryable<HabitScheduleCandidate>>>(), Arg.Any<CancellationToken>())
             .Returns(call => call.ArgAt<Func<IQueryable<Habit>, IQueryable<HabitScheduleCandidate>>>(1)(

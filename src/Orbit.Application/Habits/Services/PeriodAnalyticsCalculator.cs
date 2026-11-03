@@ -47,7 +47,7 @@ public static class PeriodAnalyticsCalculator
             var dates = new List<DateOnly>();
             for (var start = window.From; start <= window.To;)
             {
-                var end = DateOnly.FromDayNumber(Math.Min(start.DayNumber + AppConstants.MaxRangeDays, window.To.DayNumber));
+                var end = DateOnly.FromDayNumber(Math.Min(start.DayNumber + AppConstants.MaxReadRangeDays, window.To.DayNumber));
                 dates.AddRange(HabitScheduleService.GetHistoricalScheduledDates(habit, start, end, zone, weekStartDay));
                 if (end == window.To) break;
                 start = end.AddDays(1);

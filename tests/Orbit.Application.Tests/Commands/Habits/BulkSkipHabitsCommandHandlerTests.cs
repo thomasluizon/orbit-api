@@ -26,7 +26,7 @@ public class BulkSkipHabitsCommandHandlerTests
 
     public BulkSkipHabitsCommandHandlerTests()
     {
-        _habitRepo.TryRefreshAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>()).Returns(true);
+        _habitRepo.TryRefreshRangeAsync(Arg.Any<IReadOnlyCollection<Habit>>(), Arg.Any<CancellationToken>()).Returns(true);
         _handler = new BulkSkipHabitsCommandHandler(
             _habitRepo, _habitLogRepo, _userDateService, _unitOfWork, _cache, Substitute.For<IGenericRepository<Notification>>());
 
@@ -75,7 +75,7 @@ public class BulkSkipHabitsCommandHandlerTests
     {
         var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Habit 1", FrequencyUnit.Day, 1, DueDate: Today)).Value;
         SetupHabitsForUser(new List<Habit> { habit });
-        _habitRepo.TryRefreshAsync(habit, Arg.Any<CancellationToken>()).Returns(false);
+        _habitRepo.TryRefreshRangeAsync(Arg.Any<IReadOnlyCollection<Habit>>(), Arg.Any<CancellationToken>()).Returns(false);
 
         var result = await _handler.Handle(
             new BulkSkipHabitsCommand(UserId, [new(habit.Id)]), CancellationToken.None);

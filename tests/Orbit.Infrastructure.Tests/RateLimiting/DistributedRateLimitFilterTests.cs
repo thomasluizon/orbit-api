@@ -199,11 +199,43 @@ public class DistributedRateLimitFilterTests
     }
 
     [Fact]
-    public async Task ConcurrentChatLimit_SecondRequest_ReturnsMatchingRateLimitResponse()
+    public async Task CalendarSync_SecondManualRequestIsRejectedBeforeInvokingTheAction()
+    {
+        using var factory = new Orbit.Infrastructure.Tests.Persistence.SqliteOrbitDbContextFactory();
+        var service = new DistributedRateLimitService(factory.Context, TimeProvider.System);
+        var userId = Guid.NewGuid();
+        using var provider = new ServiceCollection().AddSingleton<IDistributedRateLimitService>(service)
+            .AddSingleton(_authSessionService)
+            .AddSingleton(new BffClientIpResolver(Options.Create(new BffForwardingSettings())))
+            .AddSingleton(_logger).BuildServiceProvider();
+        var attribute = typeof(CalendarController).GetMethod(nameof(CalendarController.RunSyncNow))!
+            .GetCustomAttribute<DistributedRateLimitAttribute>()!;
+        var filter = (IAsyncActionFilter)attribute.CreateInstance(provider);
+        var calls = 0;
+        var (first, _) = CreateAuthenticatedExecutingContext(userId);
+        await filter.OnActionExecutionAsync(first, () =>
+        {
+            calls++;
+            return Task.FromResult(CreateExecutedContext(first));
+        });
+        var (second, _) = CreateAuthenticatedExecutingContext(userId);
+        await filter.OnActionExecutionAsync(second, () =>
+        {
+            calls++;
+            return Task.FromResult(CreateExecutedContext(second));
+        });
+        calls.Should().Be(1);
+        second.Result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(429);
+    }
+
+    [Theory]
+    [InlineData("chat-in-flight")]
+    [InlineData("transcription-in-flight")]
+    public async Task ConcurrentChatLimit_SecondRequest_ReturnsMatchingRateLimitResponse(string policy)
     {
         var userId = Guid.NewGuid();
         _service.TryAcquireLeaseAsync(
-                ConcurrentChatLimitFilter.PolicyName,
+                policy,
                 $"user:{userId}",
                 1,
                 TimeSpan.FromMinutes(5),
@@ -211,7 +243,7 @@ public class DistributedRateLimitFilterTests
             .Returns(new DistributedRateLimitDecision(false, 1, 1, DateTime.UtcNow.AddMinutes(4)));
         var filter = new ConcurrentChatLimitFilter(
             _service,
-            Substitute.For<ILogger<ConcurrentChatLimitFilter>>());
+            Substitute.For<ILogger<ConcurrentChatLimitFilter>>(), policy);
         var (context, httpContext) = CreateAuthenticatedExecutingContext(userId);
         httpContext.TraceIdentifier = "req_concurrent_chat";
 
@@ -596,6 +628,45 @@ public class DistributedRateLimitFilterTests
             .Select(call => call.GetArguments()[2]!.ToString()).ToArray();
         logs.Should().Contain(message => message!.Contains(key, StringComparison.Ordinal));
         logs.Should().OnlyContain(message => !message!.Contains("a@example.com", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("chat-in-flight")]
+    [InlineData("transcription-in-flight")]
+    public async Task CombinedChatLimit_UsesTheActionLeasePolicyAndReleasesItOnce(string policy)
+    {
+        var userId = Guid.NewGuid();
+        var partition = $"user:{userId}";
+        var rateLimit = new DistributedRateLimitDecision(true, 1, 10, DateTime.UtcNow.AddMinutes(1));
+        var lease = new DistributedRateLimitDecision(true, 1, 1, DateTime.UtcNow.AddMinutes(5));
+        _service.TryAcquireWithLeaseAsync("chat", partition, Arg.Any<string>(), 1,
+                TimeSpan.FromMinutes(5), Arg.Any<CancellationToken>()).Returns((rateLimit, lease));
+        var filter = new DistributedRateLimitFilter("chat", _service, _authSessionService,
+            new BffClientIpResolver(Options.Create(new BffForwardingSettings())), _logger);
+        var concurrent = new ConcurrentChatLimitFilter(_service,
+            Substitute.For<ILogger<ConcurrentChatLimitFilter>>(), policy);
+        var (context, _) = CreateAuthenticatedExecutingContext(userId);
+        context.Filters.Add(concurrent);
+        var invoked = false;
+
+        await filter.OnActionExecutionAsync(context, async () =>
+        {
+            await concurrent.OnActionExecutionAsync(context, () =>
+            {
+                invoked = true;
+                return Task.FromResult(CreateExecutedContext(context));
+            });
+            return CreateExecutedContext(context);
+        });
+
+        invoked.Should().BeTrue();
+        await _service.Received(1).TryAcquireWithLeaseAsync("chat", partition, policy, 1,
+            TimeSpan.FromMinutes(5), context.HttpContext.RequestAborted);
+        await _service.DidNotReceive().TryAcquireLeaseAsync(Arg.Any<string>(), Arg.Any<string>(),
+            Arg.Any<int>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>());
+        await _service.Received(1).ReleaseLeaseAsync(policy, partition, lease.WindowEndsAtUtc, CancellationToken.None);
+        _service.ReceivedCalls().Count(call => call.GetMethodInfo().Name == nameof(IDistributedRateLimitService.ReleaseLeaseAsync))
+            .Should().Be(1);
     }
 
     private void SetupAllowedLease(Guid userId)

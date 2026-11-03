@@ -19,8 +19,6 @@ public class AuthSessionService(
     IUnitOfWork unitOfWork,
     IOptions<JwtSettings> jwtSettings, AuthValidationCache? validationCache = null) : IAuthSessionService
 {
-    private const int MaxRevokeAllAttempts = 3;
-    private const int MaxRevokeSessionAttempts = 3;
 
     private readonly JwtSettings _jwtSettings = jwtSettings.Value;
 
@@ -119,61 +117,60 @@ public class AuthSessionService(
     private async Task RevokeRotatedSessionAsync(Guid sessionId, string previousHash, CancellationToken cancellationToken)
     {
         unitOfWork.ResetTracking();
-        for (var attempt = 0; attempt < MaxRevokeSessionAttempts; attempt++)
+        try
         {
-            var current = await userSessionRepository.GetByIdAsync(sessionId, cancellationToken);
-            if (current is null || current.TokenHash == previousHash || current.RevokedAtUtc is not null)
-                return;
-            current.Revoke(DateTime.UtcNow);
-            try
+            await ConcurrencyRetry.RunAsync(unitOfWork, async ct =>
             {
-                await unitOfWork.SaveChangesAsync(cancellationToken);
+                var current = await userSessionRepository.GetByIdAsync(sessionId, ct);
+                if (current is null || current.TokenHash == previousHash || current.RevokedAtUtc is not null)
+                    return false;
+                current.Revoke(DateTime.UtcNow);
+                await unitOfWork.SaveChangesAsync(ct);
                 validationCache?.InvalidateUser(current.UserId);
-                return;
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                unitOfWork.ResetTracking();
-            }
+                return true;
+            }, cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            unitOfWork.ResetTracking();
         }
     }
 
     public async Task<Result> RevokeSessionAsync(string refreshToken, CancellationToken cancellationToken = default)
     {
         var tokenHash = HashToken(refreshToken);
-        for (var attempt = 0; attempt < MaxRevokeSessionAttempts; attempt++)
+        try
         {
-            var session = await userSessionRepository.FindOneTrackedAsync(
-                s => s.TokenHash == tokenHash,
-                cancellationToken: cancellationToken);
-
-            var reused = session is null;
-            if (session is null)
+            return await ConcurrencyRetry.RunAsync(unitOfWork, async ct =>
             {
-                var previousToken = await refreshTokenRepository.FindOneTrackedAsync(
-                    token => token.TokenHash == tokenHash,
-                    cancellationToken: cancellationToken);
-                if (previousToken is not null)
-                    session = await userSessionRepository.GetByIdAsync(previousToken.UserSessionId, cancellationToken);
-            }
+                var session = await userSessionRepository.FindOneTrackedAsync(
+                    s => s.TokenHash == tokenHash,
+                    cancellationToken: ct);
 
-            if (session is null)
-                return Result.Failure(ErrorMessages.InvalidSession);
+                var reused = session is null;
+                if (session is null)
+                {
+                    var previousToken = await refreshTokenRepository.FindOneTrackedAsync(
+                        token => token.TokenHash == tokenHash,
+                        cancellationToken: ct);
+                    if (previousToken is not null)
+                        session = await userSessionRepository.GetByIdAsync(previousToken.UserSessionId, ct);
+                }
 
-            session.Revoke(DateTime.UtcNow);
-            try
-            {
-                await unitOfWork.SaveChangesAsync(cancellationToken);
+                if (session is null)
+                    return Result.Failure(ErrorMessages.InvalidSession);
+
+                session.Revoke(DateTime.UtcNow);
+                await unitOfWork.SaveChangesAsync(ct);
                 validationCache?.InvalidateUser(session.UserId);
                 return reused ? Result.Failure(ErrorMessages.InvalidSession) : Result.Success();
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                unitOfWork.ResetTracking();
-            }
+            }, cancellationToken);
         }
-
-        return Result.Failure(ErrorMessages.InvalidSession);
+        catch (DbUpdateConcurrencyException)
+        {
+            unitOfWork.ResetTracking();
+            return Result.Failure(ErrorMessages.InvalidSession);
+        }
     }
 
     public Task<Result> RevokeAllSessionsAsync(Guid userId, CancellationToken cancellationToken = default)
@@ -185,31 +182,30 @@ public class AuthSessionService(
         await unitOfWork.AcquireUserRowLockAsync(userId, token);
         var nowUtc = DateTime.UtcNow;
 
-        for (var attempt = 0; attempt < MaxRevokeAllAttempts; attempt++)
+        try
         {
-            var activeSessions = await userSessionRepository.FindTrackedAsync(
-                s => s.UserId == userId && s.RevokedAtUtc == null,
-                token);
-
-            if (activeSessions.Count == 0)
-                return Result.Success();
-
-            foreach (var session in activeSessions)
-                session.Revoke(nowUtc);
-
-            try
+            return await ConcurrencyRetry.RunAsync(unitOfWork, async ct =>
             {
-                await unitOfWork.SaveChangesAsync(token);
+                var activeSessions = await userSessionRepository.FindTrackedAsync(
+                    s => s.UserId == userId && s.RevokedAtUtc == null,
+                    ct);
+
+                if (activeSessions.Count == 0)
+                    return Result.Success();
+
+                foreach (var session in activeSessions)
+                    session.Revoke(nowUtc);
+
+                await unitOfWork.SaveChangesAsync(ct);
                 validationCache?.InvalidateUser(userId);
                 return Result.Success();
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                unitOfWork.ResetTracking();
-            }
+            }, token);
         }
-
-        return Result.Failure(ErrorMessages.InvalidSession);
+        catch (DbUpdateConcurrencyException)
+        {
+            unitOfWork.ResetTracking();
+            return Result.Failure(ErrorMessages.InvalidSession);
+        }
     }, cancellationToken);
 
     public async Task<bool> HasSessionForTokenAsync(string refreshToken, CancellationToken cancellationToken = default)

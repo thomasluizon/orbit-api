@@ -17,9 +17,35 @@ public class DurableStateMigrationReplayTests
     [Fact]
     public void BranchMigrations_FollowTheMergedBaseSchema()
     {
-        var baseId = typeof(PersistMarketingBroadcastDeliveries).GetCustomAttribute<MigrationAttribute>()!.Id;
+        var baseId = typeof(CompleteBoundedReadIndexes).GetCustomAttribute<MigrationAttribute>()!.Id;
         foreach (var type in new[] { typeof(CompleteDurableAuthAndDeliveryState) })
             string.CompareOrdinal(type.GetCustomAttribute<MigrationAttribute>()!.Id, baseId).Should().BePositive();
+    }
+
+    [Theory]
+    [InlineData("0")]
+    [InlineData("20261102193912_CompleteBoundedReadIndexes")]
+    public void MergedMigrations_GenerateInTimestampOrderFromEmptyAndMainSchemas(string fromMigration)
+    {
+        using var db = Context("Host=unused;Database=unused");
+        var migrations = db.GetService<IMigrationsAssembly>().Migrations.Keys
+            .Where(id => string.CompareOrdinal(id, fromMigration) > 0).ToArray();
+        migrations.Should().BeInAscendingOrder(StringComparer.Ordinal);
+        migrations.Should().ContainInOrder(MigrationId, "20261102220044_UnmapMarketingBroadcastDeliveries");
+        var script = db.GetService<IMigrator>().GenerateScript(fromMigration);
+        var previous = -1;
+        foreach (var migration in migrations)
+        {
+            var history = script.IndexOf($"VALUES ('{migration}'", StringComparison.Ordinal);
+            history.Should().BeGreaterThan(previous);
+            previous = history;
+        }
+        script.Should().Contain("CREATE TABLE IF NOT EXISTS \"EmailChallenges\"");
+        if (fromMigration == "0")
+            script.IndexOf("CREATE TABLE \"XpDailyTotals\"", StringComparison.Ordinal)
+                .Should().BeLessThan(script.IndexOf("CREATE TABLE IF NOT EXISTS \"EmailChallenges\"", StringComparison.Ordinal));
+        else
+            script.Should().NotContain("CREATE TABLE \"XpDailyTotals\"");
     }
 
     [Fact]
@@ -130,7 +156,7 @@ public class DurableStateMigrationReplayTests
                 VALUES (gen_random_uuid(), gen_random_uuid(), gen_random_uuid(), 'recovered@example.test', 'en',
                     'subject', 'subject', 'body', 'body', now());
                 """);
-        }, "20261102152831_PersistMarketingBroadcastDeliveries");
+        }, "20261102193912_CompleteBoundedReadIndexes");
 
     private static Task<bool> IndexValid(OrbitDbContext db, string name)
         => db.Database.SqlQueryRaw<bool>("""

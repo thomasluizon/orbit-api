@@ -8,7 +8,6 @@ using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.Configuration;
-using System.ClientModel.Primitives;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 
