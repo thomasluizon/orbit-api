@@ -35,7 +35,7 @@ public class ProfileToolsTests
         string result = string.Empty;
 
         var request = await CapturedRequestAsync(async () =>
-            result = await _tools.SetProactiveAstra(_user, enabled));
+            result = (await _tools.SetProactiveAstra(_user, enabled)).AsText());
 
         request.OperationId.Should().Be("set_proactive_astra");
         request.Arguments.GetProperty("enabled").GetBoolean().Should().Be(enabled);
@@ -49,7 +49,7 @@ public class ProfileToolsTests
     {
         StubExecutor(AgentOperationStatus.Denied, policyReason: "pro_required");
 
-        var result = await _tools.SetProactiveAstra(_user, false);
+        var result = (await _tools.SetProactiveAstra(_user, false)).AsText();
 
         result.Should().Be("Error: pro_required");
     }
@@ -88,7 +88,7 @@ public class ProfileToolsTests
         _mediator.Send(Arg.Any<GetProfileQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(profile));
 
-        var result = await _tools.GetProfile(_user);
+        var result = (await _tools.GetProfile(_user)).AsText();
 
         result.Should().Contain("Alex");
         result.Should().Contain("alex@example.com");
@@ -103,7 +103,7 @@ public class ProfileToolsTests
         _mediator.Send(Arg.Any<GetProfileQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Failure<ProfileResponse>("User not found"));
 
-        var result = await _tools.GetProfile(_user);
+        var result = (await _tools.GetProfile(_user)).AsText();
 
         result.Should().StartWith("Error: ");
     }
@@ -114,7 +114,7 @@ public class ProfileToolsTests
         StubExecutor(AgentOperationStatus.Succeeded);
 
         string result = string.Empty;
-        var request = await CapturedRequestAsync(async () => result = await _tools.SetTimezone(_user, "America/New_York"));
+        var request = await CapturedRequestAsync(async () => result = (await _tools.SetTimezone(_user, "America/New_York")).AsText());
 
         request.OperationId.Should().Be("update_profile_preferences");
         request.Arguments.GetRawText().Should().Contain("set_timezone");
@@ -126,7 +126,7 @@ public class ProfileToolsTests
     {
         StubExecutor(AgentOperationStatus.Failed, policyReason: "Invalid timezone");
 
-        var result = await _tools.SetTimezone(_user, "Invalid/Zone");
+        var result = (await _tools.SetTimezone(_user, "Invalid/Zone")).AsText();
 
         result.Should().StartWith("Error: ");
     }
@@ -137,7 +137,7 @@ public class ProfileToolsTests
         StubExecutor(AgentOperationStatus.Succeeded);
 
         string result = string.Empty;
-        var request = await CapturedRequestAsync(async () => result = await _tools.SetLanguage(_user, "pt-BR"));
+        var request = await CapturedRequestAsync(async () => result = (await _tools.SetLanguage(_user, "pt-BR")).AsText());
 
         request.OperationId.Should().Be("update_profile_preferences");
         request.Arguments.GetRawText().Should().Contain("set_language");
@@ -149,7 +149,7 @@ public class ProfileToolsTests
     {
         StubExecutor(AgentOperationStatus.Failed, policyReason: "Invalid language");
 
-        var result = await _tools.SetLanguage(_user, "xx");
+        var result = (await _tools.SetLanguage(_user, "xx")).AsText();
 
         result.Should().StartWith("Error: ");
     }
@@ -160,7 +160,7 @@ public class ProfileToolsTests
         StubExecutor(AgentOperationStatus.Succeeded);
 
         string result = string.Empty;
-        var request = await CapturedRequestAsync(async () => result = await _tools.SetAiSummary(_user, true));
+        var request = await CapturedRequestAsync(async () => result = (await _tools.SetAiSummary(_user, true)).AsText());
 
         request.OperationId.Should().Be("set_ai_summary");
         result.Should().Be("AI summary enabled");
@@ -171,7 +171,7 @@ public class ProfileToolsTests
     {
         StubExecutor(AgentOperationStatus.Succeeded);
 
-        var result = await _tools.SetAiSummary(_user, false);
+        var result = (await _tools.SetAiSummary(_user, false)).AsText();
 
         result.Should().Be("AI summary disabled");
     }
@@ -181,7 +181,7 @@ public class ProfileToolsTests
     {
         StubExecutor(AgentOperationStatus.Failed, policyReason: "Not found");
 
-        var result = await _tools.SetAiSummary(_user, true);
+        var result = (await _tools.SetAiSummary(_user, true)).AsText();
 
         result.Should().StartWith("Error: ");
     }
@@ -192,7 +192,7 @@ public class ProfileToolsTests
         StubExecutor(AgentOperationStatus.Succeeded);
 
         string result = string.Empty;
-        var request = await CapturedRequestAsync(async () => result = await _tools.SetWeekStartDay(_user, 0));
+        var request = await CapturedRequestAsync(async () => result = (await _tools.SetWeekStartDay(_user, 0)).AsText());
 
         request.OperationId.Should().Be("update_profile_preferences");
         request.Arguments.GetRawText().Should().Contain("set_week_start_day");
@@ -204,7 +204,7 @@ public class ProfileToolsTests
     {
         StubExecutor(AgentOperationStatus.Succeeded);
 
-        var result = await _tools.SetWeekStartDay(_user, 1);
+        var result = (await _tools.SetWeekStartDay(_user, 1)).AsText();
 
         result.Should().Contain("Monday");
     }
@@ -214,7 +214,7 @@ public class ProfileToolsTests
     {
         StubExecutor(AgentOperationStatus.Failed, policyReason: "Invalid");
 
-        var result = await _tools.SetWeekStartDay(_user, 5);
+        var result = (await _tools.SetWeekStartDay(_user, 5)).AsText();
 
         result.Should().StartWith("Error: ");
     }
@@ -225,7 +225,7 @@ public class ProfileToolsTests
         StubExecutor(AgentOperationStatus.Succeeded);
 
         string result = string.Empty;
-        var request = await CapturedRequestAsync(async () => result = await _tools.SetClockFormat(_user, false));
+        var request = await CapturedRequestAsync(async () => result = (await _tools.SetClockFormat(_user, false)).AsText());
 
         request.OperationId.Should().Be("update_profile_preferences");
         request.Arguments.GetProperty("action").GetString().Should().Be("set_clock_format");
@@ -238,7 +238,7 @@ public class ProfileToolsTests
     {
         StubExecutor(AgentOperationStatus.Failed, policyReason: "Invalid");
 
-        var result = await _tools.SetClockFormat(_user, false);
+        var result = (await _tools.SetClockFormat(_user, false)).AsText();
 
         result.Should().StartWith("Error: ");
     }

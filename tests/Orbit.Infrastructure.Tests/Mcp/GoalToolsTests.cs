@@ -61,7 +61,7 @@ public class GoalToolsTests
         _mediator.Send(Arg.Any<GetGoalsQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(paginated));
 
-        var result = await _tools.ListGoals(_user);
+        var result = (await _tools.ListGoals(_user)).AsText();
 
         result.Should().Contain("Run 100km");
         result.Should().Contain("25/100 km");
@@ -82,7 +82,7 @@ public class GoalToolsTests
         try
         {
             CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("ar-SA");
-            var result = await _tools.ListGoals(_user);
+            var result = (await _tools.ListGoals(_user)).AsText();
 
             result.Should().Contain("3.5/10.5 miles (33%)");
             result.Should().Contain("Deadline: 12/31/2026");
@@ -100,7 +100,7 @@ public class GoalToolsTests
         _mediator.Send(Arg.Any<GetGoalsQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(paginated));
 
-        var result = await _tools.ListGoals(_user);
+        var result = (await _tools.ListGoals(_user)).AsText();
 
         result.Should().Contain("No goals found");
     }
@@ -111,7 +111,7 @@ public class GoalToolsTests
         _mediator.Send(Arg.Any<GetGoalsQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Failure<PaginatedResponse<GoalDto>>("Something went wrong"));
 
-        var result = await _tools.ListGoals(_user);
+        var result = (await _tools.ListGoals(_user)).AsText();
 
         result.Should().StartWith("Error: ");
     }
@@ -128,7 +128,7 @@ public class GoalToolsTests
         _mediator.Send(Arg.Any<GetGoalByIdQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(detail));
 
-        var result = await _tools.GetGoal(_user, goalId.ToString());
+        var result = (await _tools.GetGoal(_user, goalId.ToString())).AsText();
 
         result.Should().Contain("Read 12 books");
         result.Should().Contain("3/12 books");
@@ -151,7 +151,7 @@ public class GoalToolsTests
         try
         {
             CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("ar-SA");
-            var result = await _tools.GetGoal(_user, goalId.ToString());
+            var result = (await _tools.GetGoal(_user, goalId.ToString())).AsText();
 
             result.Should().Contain("Progress: 3.5/10.5 miles (33.3%)");
             result.Should().Contain("Deadline: 12/31/2026");
@@ -172,7 +172,7 @@ public class GoalToolsTests
         _mediator.Send(Arg.Any<GetGoalByIdQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Failure<GoalDetailDto>("Goal not found"));
 
-        var result = await _tools.GetGoal(_user, Guid.NewGuid().ToString());
+        var result = (await _tools.GetGoal(_user, Guid.NewGuid().ToString())).AsText();
 
         result.Should().StartWith("Error: ");
     }
@@ -184,7 +184,7 @@ public class GoalToolsTests
         StubExecutor(AgentOperationStatus.Succeeded, targetId: newId.ToString(), targetName: "New Goal");
 
         string result = string.Empty;
-        var request = await CapturedRequestAsync(async () => result = await _tools.CreateGoal(_user, "New Goal", 100, "km"));
+        var request = await CapturedRequestAsync(async () => result = (await _tools.CreateGoal(_user, "New Goal", 100, "km")).AsText());
 
         request.OperationId.Should().Be("create_goal");
         result.Should().Contain("Created goal 'New Goal'");
@@ -196,7 +196,7 @@ public class GoalToolsTests
     {
         StubExecutor(AgentOperationStatus.Failed, policyReason: "Pro required");
 
-        var result = await _tools.CreateGoal(_user, "Goal", 100, "km");
+        var result = (await _tools.CreateGoal(_user, "Goal", 100, "km")).AsText();
 
         result.Should().StartWith("Error: ");
     }
@@ -208,7 +208,7 @@ public class GoalToolsTests
         StubExecutor(AgentOperationStatus.Succeeded, targetId: goalId.ToString());
 
         string result = string.Empty;
-        var request = await CapturedRequestAsync(async () => result = await _tools.UpdateGoal(_user, goalId.ToString(), "Updated", 200, "km"));
+        var request = await CapturedRequestAsync(async () => result = (await _tools.UpdateGoal(_user, goalId.ToString(), "Updated", 200, "km")).AsText());
 
         request.OperationId.Should().Be("update_goal");
         result.Should().Contain("Updated goal");
@@ -219,7 +219,7 @@ public class GoalToolsTests
     {
         StubExecutor(AgentOperationStatus.Failed, policyReason: "Goal not found");
 
-        var result = await _tools.UpdateGoal(_user, Guid.NewGuid().ToString(), "Title", 100, "km");
+        var result = (await _tools.UpdateGoal(_user, Guid.NewGuid().ToString(), "Title", 100, "km")).AsText();
 
         result.Should().StartWith("Error: ");
     }
@@ -230,7 +230,7 @@ public class GoalToolsTests
         StubExecutor(AgentOperationStatus.Succeeded);
 
         string result = string.Empty;
-        var request = await CapturedRequestAsync(async () => result = await _tools.DeleteGoal(_user, Guid.NewGuid().ToString()));
+        var request = await CapturedRequestAsync(async () => result = (await _tools.DeleteGoal(_user, Guid.NewGuid().ToString())).AsText());
 
         request.OperationId.Should().Be("delete_goal");
         result.Should().Contain("Deleted goal");
@@ -241,7 +241,7 @@ public class GoalToolsTests
     {
         StubExecutor(AgentOperationStatus.PendingConfirmation);
 
-        var result = await _tools.DeleteGoal(_user, Guid.NewGuid().ToString());
+        var result = (await _tools.DeleteGoal(_user, Guid.NewGuid().ToString())).AsText();
 
         result.Should().Contain("Confirmation required");
     }
@@ -251,7 +251,7 @@ public class GoalToolsTests
     {
         StubExecutor(AgentOperationStatus.Failed, policyReason: "Goal not found");
 
-        var result = await _tools.DeleteGoal(_user, Guid.NewGuid().ToString());
+        var result = (await _tools.DeleteGoal(_user, Guid.NewGuid().ToString())).AsText();
 
         result.Should().StartWith("Error: ");
     }
@@ -264,7 +264,7 @@ public class GoalToolsTests
         var goalId = Guid.NewGuid();
         var habitId = Guid.NewGuid();
         string result = string.Empty;
-        var request = await CapturedRequestAsync(async () => result = await _tools.LinkHabitsToGoal(_user, goalId.ToString(), habitId.ToString()));
+        var request = await CapturedRequestAsync(async () => result = (await _tools.LinkHabitsToGoal(_user, goalId.ToString(), habitId.ToString())).AsText());
 
         request.OperationId.Should().Be("link_habits_to_goal");
         result.Should().Contain("Linked 1 habits");
@@ -275,7 +275,7 @@ public class GoalToolsTests
     {
         StubExecutor(AgentOperationStatus.Failed, policyReason: "Not found");
 
-        var result = await _tools.LinkHabitsToGoal(_user, Guid.NewGuid().ToString(), Guid.NewGuid().ToString());
+        var result = (await _tools.LinkHabitsToGoal(_user, Guid.NewGuid().ToString(), Guid.NewGuid().ToString())).AsText();
 
         result.Should().StartWith("Error: ");
     }
@@ -287,7 +287,7 @@ public class GoalToolsTests
         StubExecutor(AgentOperationStatus.Succeeded, targetId: goalId.ToString());
 
         string result = string.Empty;
-        var request = await CapturedRequestAsync(async () => result = await _tools.UpdateGoalProgress(_user, goalId.ToString(), 50));
+        var request = await CapturedRequestAsync(async () => result = (await _tools.UpdateGoalProgress(_user, goalId.ToString(), 50)).AsText());
 
         request.OperationId.Should().Be("update_goal_progress");
         result.Should().Contain("Updated progress");
@@ -299,7 +299,7 @@ public class GoalToolsTests
     {
         StubExecutor(AgentOperationStatus.Failed, policyReason: "Not found");
 
-        var result = await _tools.UpdateGoalProgress(_user, Guid.NewGuid().ToString(), 50);
+        var result = (await _tools.UpdateGoalProgress(_user, Guid.NewGuid().ToString(), 50)).AsText();
 
         result.Should().StartWith("Error: ");
     }
@@ -311,7 +311,7 @@ public class GoalToolsTests
         StubExecutor(AgentOperationStatus.Succeeded, targetId: goalId.ToString());
 
         string result = string.Empty;
-        var request = await CapturedRequestAsync(async () => result = await _tools.UpdateGoalStatus(_user, goalId.ToString(), "Completed"));
+        var request = await CapturedRequestAsync(async () => result = (await _tools.UpdateGoalStatus(_user, goalId.ToString(), "Completed")).AsText());
 
         request.OperationId.Should().Be("update_goal_status");
         result.Should().Contain("Updated goal");
@@ -323,7 +323,7 @@ public class GoalToolsTests
     {
         StubExecutor(AgentOperationStatus.Failed, policyReason: "Not found");
 
-        var result = await _tools.UpdateGoalStatus(_user, Guid.NewGuid().ToString(), "Completed");
+        var result = (await _tools.UpdateGoalStatus(_user, Guid.NewGuid().ToString(), "Completed")).AsText();
 
         result.Should().StartWith("Error: ");
     }
@@ -335,7 +335,7 @@ public class GoalToolsTests
         _mediator.Send(Arg.Any<GetGoalMetricsQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(metrics));
 
-        var result = await _tools.GetGoalMetrics(_user, Guid.NewGuid().ToString());
+        var result = (await _tools.GetGoalMetrics(_user, Guid.NewGuid().ToString())).AsText();
 
         result.Should().Contain("75.5%");
         result.Should().Contain("1.20/day");
@@ -353,7 +353,7 @@ public class GoalToolsTests
         try
         {
             CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("pt-BR");
-            var result = await _tools.GetGoalMetrics(_user, Guid.NewGuid().ToString());
+            var result = (await _tools.GetGoalMetrics(_user, Guid.NewGuid().ToString())).AsText();
 
             result.Should().Contain("Progress: 75.5%");
             result.Should().Contain("Velocity: 1.20/day");
@@ -376,7 +376,7 @@ public class GoalToolsTests
         try
         {
             CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("ar-SA");
-            var result = await _tools.GetGoalMetrics(_user, Guid.NewGuid().ToString());
+            var result = (await _tools.GetGoalMetrics(_user, Guid.NewGuid().ToString())).AsText();
 
             result.Should().Contain("Linked habit performance:");
             result.Should().Contain("Morning run: weekly 86%, streak 3d");
@@ -393,7 +393,7 @@ public class GoalToolsTests
         _mediator.Send(Arg.Any<GetGoalMetricsQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Failure<GoalMetrics>("Goal not found"));
 
-        var result = await _tools.GetGoalMetrics(_user, Guid.NewGuid().ToString());
+        var result = (await _tools.GetGoalMetrics(_user, Guid.NewGuid().ToString())).AsText();
 
         result.Should().StartWith("Error: ");
     }
@@ -405,7 +405,7 @@ public class GoalToolsTests
         _mediator.Send(Arg.Any<GetGoalReviewQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(response));
 
-        var result = await _tools.GetGoalReview(_user);
+        var result = (await _tools.GetGoalReview(_user)).AsText();
 
         result.Should().Contain("You are on track!");
         result.Should().Contain("Goal Review");
@@ -417,7 +417,7 @@ public class GoalToolsTests
         _mediator.Send(Arg.Any<GetGoalReviewQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Failure<GoalReviewResponse>("Pro required"));
 
-        var result = await _tools.GetGoalReview(_user);
+        var result = (await _tools.GetGoalReview(_user)).AsText();
 
         result.Should().StartWith("Error: ");
     }
@@ -429,7 +429,7 @@ public class GoalToolsTests
 
         var json = $"[{{\"id\":\"{Guid.NewGuid()}\",\"position\":0}}]";
         string result = string.Empty;
-        var request = await CapturedRequestAsync(async () => result = await _tools.ReorderGoals(_user, json));
+        var request = await CapturedRequestAsync(async () => result = (await _tools.ReorderGoals(_user, json)).AsText());
 
         request.OperationId.Should().Be("reorder_goals");
         result.Should().Contain("Reordered 1 goals");
@@ -441,7 +441,7 @@ public class GoalToolsTests
         StubExecutor(AgentOperationStatus.Failed, policyReason: "Invalid");
 
         var json = "[]";
-        var result = await _tools.ReorderGoals(_user, json);
+        var result = (await _tools.ReorderGoals(_user, json)).AsText();
 
         result.Should().StartWith("Error: ");
     }

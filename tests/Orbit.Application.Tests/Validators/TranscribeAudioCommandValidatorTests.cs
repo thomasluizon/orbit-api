@@ -10,7 +10,7 @@ public class TranscribeAudioCommandValidatorTests
 
     private static TranscribeAudioCommand ValidCommand() => new(
         UserId: Guid.NewGuid(),
-        Audio: [1, 2, 3],
+        Audio: new MemoryStream([1, 2, 3]),
         FileName: "clip.webm");
 
     [Fact]
@@ -23,7 +23,7 @@ public class TranscribeAudioCommandValidatorTests
     [Fact]
     public void Validate_EmptyAudio_HasError()
     {
-        var result = _validator.TestValidate(ValidCommand() with { Audio = [] });
+        var result = _validator.TestValidate(ValidCommand() with { Audio = new MemoryStream() });
         result.ShouldHaveValidationErrorFor(x => x.Audio);
     }
 

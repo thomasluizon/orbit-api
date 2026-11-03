@@ -38,7 +38,8 @@ public partial class GoogleTokenService(
         if (user.GoogleAccessToken is null)
             return null;
 
-        if (user.GoogleRefreshToken is null)
+        if (user.GoogleAccessTokenExpiresAtUtc > TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(1)
+            || user.GoogleRefreshToken is null)
             return user.GoogleAccessToken;
 
         var outcome = await TryRefreshAsync(user, ct);
@@ -78,6 +79,10 @@ public partial class GoogleTokenService(
 
             return ParseErrorResponse(user.Id, body, response.StatusCode);
         }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             if (logger.IsEnabled(LogLevel.Warning))
@@ -101,7 +106,11 @@ public partial class GoogleTokenService(
             return new GoogleTokenRefreshOutcome(null, GoogleTokenRefreshResult.TransientFailure, "missing_access_token");
         }
 
-        user.SetGoogleTokens(newAccessToken, rotatedRefreshToken);
+        var response = Newtonsoft.Json.JsonConvert.DeserializeObject<Google.Apis.Auth.OAuth2.Responses.TokenResponse>(body);
+        var expiresAtUtc = response?.ExpiresInSeconds is > 0 and <= int.MaxValue
+            ? TimeProvider.System.GetUtcNow().UtcDateTime.AddSeconds(response.ExpiresInSeconds.Value)
+            : (DateTime?)null;
+        user.SetGoogleTokens(newAccessToken, rotatedRefreshToken, expiresAtUtc);
         return new GoogleTokenRefreshOutcome(newAccessToken, GoogleTokenRefreshResult.Success, null);
     }
 

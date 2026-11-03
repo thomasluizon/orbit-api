@@ -254,19 +254,19 @@ public sealed partial class DistributedRateLimitFilter(
 }
 
 [AttributeUsage(AttributeTargets.Method)]
-public sealed class ConcurrentChatLimitAttribute : Attribute, IFilterFactory
+public sealed class ConcurrentChatLimitAttribute(string policyName = ConcurrentChatLimitFilter.PolicyName) : Attribute, IFilterFactory
 {
     public bool IsReusable => false;
 
     public IFilterMetadata CreateInstance(IServiceProvider serviceProvider)
         => new ConcurrentChatLimitFilter(
             serviceProvider.GetRequiredService<IDistributedRateLimitService>(),
-            serviceProvider.GetRequiredService<ILogger<ConcurrentChatLimitFilter>>());
+            serviceProvider.GetRequiredService<ILogger<ConcurrentChatLimitFilter>>(), policyName);
 }
 
 public sealed partial class ConcurrentChatLimitFilter(
     IDistributedRateLimitService distributedRateLimitService,
-    ILogger<ConcurrentChatLimitFilter> logger) : IAsyncActionFilter
+    ILogger<ConcurrentChatLimitFilter> logger, string policyName = ConcurrentChatLimitFilter.PolicyName) : IAsyncActionFilter
 {
     internal const string PolicyName = "chat-in-flight";
     private static readonly TimeSpan LeaseDuration = TimeSpan.FromMinutes(5);
@@ -284,7 +284,7 @@ public sealed partial class ConcurrentChatLimitFilter(
 
         var partitionKey = $"user:{context.HttpContext.GetUserId()}";
         var decision = await distributedRateLimitService.TryAcquireLeaseAsync(
-            PolicyName,
+            policyName,
             partitionKey,
             AppConstants.MaxConcurrentChatRequestsPerUser,
             LeaseDuration,
@@ -320,7 +320,7 @@ public sealed partial class ConcurrentChatLimitFilter(
         finally
         {
             await distributedRateLimitService.ReleaseLeaseAsync(
-                PolicyName,
+                policyName,
                 partitionKey,
                 decision.WindowEndsAtUtc,
                 CancellationToken.None);

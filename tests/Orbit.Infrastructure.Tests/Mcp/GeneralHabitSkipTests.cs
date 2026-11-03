@@ -49,6 +49,7 @@ public sealed class GeneralHabitSkipTests : IDisposable
         _user = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, _userId.ToString())], "Test"));
         _dates.GetUserTodayAsync(_userId, Arg.Any<CancellationToken>()).Returns(Today);
         _repository.TryRefreshAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>()).Returns(true);
+        _repository.TryRefreshRangeAsync(Arg.Any<IReadOnlyCollection<Habit>>(), Arg.Any<CancellationToken>()).Returns(true);
         _repository.FindOneTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>())
             .Returns(call => _habits.SingleOrDefault(call.Arg<Expression<Func<Habit, bool>>>().Compile()));
@@ -124,8 +125,8 @@ public sealed class GeneralHabitSkipTests : IDisposable
         var before = JsonSerializer.Serialize(habit);
 
         var output = bulk
-            ? await _mcp.BulkSkipHabits(_user, habit.Id.ToString())
-            : await _mcp.SkipHabit(_user, habit.Id.ToString());
+            ? (await _mcp.BulkSkipHabits(_user, habit.Id.ToString())).AsText()
+            : (await _mcp.SkipHabit(_user, habit.Id.ToString())).AsText();
 
         output.Should().Be($"Error: {DomainErrors.CannotSkipGeneralHabit.Message}");
         _outcomes.Should().ContainSingle().Which.ErrorCode.Should().Be(DomainErrors.CannotSkipGeneralHabit.Code);
@@ -140,7 +141,7 @@ public sealed class GeneralHabitSkipTests : IDisposable
         var recurring = AddHabit(HabitSchedule.Recurring);
         var before = JsonSerializer.Serialize(general);
 
-        var output = await _mcp.BulkSkipHabits(_user, string.Join(',', _habits.Select(habit => habit.Id)));
+        var output = (await _mcp.BulkSkipHabits(_user, string.Join(',', _habits.Select(habit => habit.Id)))).AsText();
 
         output.Should().Contain("Skipped 2 of 3").And.Contain(DomainErrors.CannotSkipGeneralHabit.Code);
         oneTime.NextDueDate.Should().Be(Today.AddDays(1));

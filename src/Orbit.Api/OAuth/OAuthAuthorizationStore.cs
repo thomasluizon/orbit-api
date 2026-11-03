@@ -8,17 +8,19 @@ namespace Orbit.Api.OAuth;
 public sealed class OAuthAuthorizationStore(IOAuthStateStore states, TimeProvider timeProvider)
 {
     private static readonly TimeSpan CodeExpiry = TimeSpan.FromMinutes(5);
+    internal static readonly TimeSpan BrowserBindingLifetime = TimeSpan.FromMinutes(30);
+    internal const int MaxPendingGoogleRequestsPerIp = 20;
     internal const int MaxPendingGoogleRequests = 1_000;
 
     public GoogleAuthorizationRequest? TryCreateGoogleRequest(string clientId, string redirectUri, string clientState,
-        string codeChallenge, string? nonce, string googleRedirectUri, string language, IReadOnlyList<string>? scopes = null)
+        string codeChallenge, string? nonce, string googleRedirectUri, string language, IReadOnlyList<string>? scopes = null, string clientIp = "unknown", string? browserBindingHash = null)
     {
         var verifier = NewSecret();
         var challenge = Challenge(verifier);
         var request = new GoogleAuthorizationRequest(NewSecret(), clientId, redirectUri, clientState,
-            codeChallenge, nonce, googleRedirectUri, language, verifier, challenge, timeProvider.GetUtcNow(), scopes);
+            codeChallenge, nonce, googleRedirectUri, language, verifier, challenge, timeProvider.GetUtcNow(), scopes, browserBindingHash);
         return states.Put(request.GoogleState, "google", JsonSerializer.Serialize(request),
-            timeProvider.GetUtcNow().UtcDateTime.Add(CodeExpiry), MaxPendingGoogleRequests) ? request : null;
+            timeProvider.GetUtcNow().UtcDateTime.Add(CodeExpiry), MaxPendingGoogleRequests, Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(clientIp))), MaxPendingGoogleRequestsPerIp) ? request : null;
     }
 
     public GoogleAuthorizationRequest? ConsumeGoogleRequest(string state) =>
@@ -28,9 +30,7 @@ public sealed class OAuthAuthorizationStore(IOAuthStateStore states, TimeProvide
         IReadOnlyList<string>? scopes = null, bool isReadOnly = false)
     {
         var code = NewSecret();
-#pragma warning disable ORBIT0004 // CreateCode stamps AuthorizationEntry.CreatedAt for the authorization code TTL, independently of the user timezone. https://github.com/thomasluizon/orbit-tickets/issues/230
-        var entry = new AuthorizationEntry(userId, codeChallenge, redirectUri, clientId, nonce, DateTime.UtcNow, scopes, isReadOnly);
-#pragma warning restore ORBIT0004
+        var entry = new AuthorizationEntry(userId, codeChallenge, redirectUri, clientId, nonce, timeProvider.GetUtcNow().UtcDateTime, scopes, isReadOnly);
         states.Put(code, "code", JsonSerializer.Serialize(entry), timeProvider.GetUtcNow().UtcDateTime.Add(CodeExpiry));
         return code;
     }
@@ -40,13 +40,15 @@ public sealed class OAuthAuthorizationStore(IOAuthStateStore states, TimeProvide
         var entry = Deserialize<AuthorizationEntry>(states.Take(code, "code", timeProvider.GetUtcNow().UtcDateTime));
         if (entry is null)
             return null;
-#pragma warning disable ORBIT0004 // ExchangeCode compares elapsed time since AuthorizationEntry.CreatedAt with CodeExpiry before accepting a code. https://github.com/thomasluizon/orbit-tickets/issues/230
-        if (DateTime.UtcNow - entry.CreatedAt > CodeExpiry)
-#pragma warning restore ORBIT0004
+        if (timeProvider.GetUtcNow().UtcDateTime - entry.CreatedAt > CodeExpiry)
             return null;
         return entry.RedirectUri == redirectUri && CryptographicOperations.FixedTimeEquals(
             Encoding.ASCII.GetBytes(Challenge(codeVerifier)), Encoding.ASCII.GetBytes(entry.CodeChallenge)) ? entry : null;
     }
+
+    public string CreateBrowserBinding(string state) => Put("browser", state, BrowserBindingLifetime);
+    public string? ReadBrowserBinding(string secret) =>
+        Deserialize<string>(states.Read(secret, "browser", timeProvider.GetUtcNow().UtcDateTime));
 
     public string CreatePendingConsent(ConsentEntry entry) => Put("consent", entry, CodeExpiry);
     public ConsentTicket? ReadPendingConsent(string secret)
@@ -97,7 +99,7 @@ public sealed class OAuthAuthorizationStore(IOAuthStateStore states, TimeProvide
 }
 
 public record ConsentEntry(Guid UserId, string CodeChallenge, string RedirectUri, string ClientId,
-    string State, string? Nonce, string Language, IReadOnlyList<string>? Scopes = null, string? ClientName = null);
+    string State, string? Nonce, string Language, IReadOnlyList<string>? Scopes = null, string? ClientName = null, string? BrowserBindingHash = null);
 public sealed record ConsentTicket(ConsentEntry Entry, bool IsConsumed);
 public record RefreshEntry(Guid UserId, Guid ApiKeyId, string ClientId, Guid FamilyId = default, DateTime? FamilyExpiresAtUtc = null);
 
@@ -123,4 +125,5 @@ public record GoogleAuthorizationRequest(
     string GoogleCodeVerifier,
     string GoogleCodeChallenge,
     DateTimeOffset CreatedAtUtc,
-    IReadOnlyList<string>? Scopes = null);
+    IReadOnlyList<string>? Scopes = null,
+    string? BrowserBindingHash = null);

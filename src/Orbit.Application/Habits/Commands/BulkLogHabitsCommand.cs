@@ -56,23 +56,18 @@ public partial class BulkLogHabitsCommandHandler(
     {
         var today = await services.UserDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         var weekStartDay = await services.UserDateService.GetUserWeekStartDayAsync(request.UserId, cancellationToken);
-        var results = new List<BulkLogItemResult>();
-        var previousStreak = 0;
-        var currentStreak = 0;
-
-        var habitMap = await BulkHabitLoader.LoadHabitsWithRecentLogsAsync(
-            habitRepository, request.Items.Select(i => i.HabitId), request.UserId, today, cancellationToken);
-        var dueDateResolution = await HabitDueDateResolutionLoader.LoadAsync(request.UserId,
-            habitLogRepository,
-            habitMap.Values,
-            today.AddDays(-AppConstants.MaxRangeDays),
-            cancellationToken);
-
         /** A completion log and its due-date advance are both inputs a streak repair reads. */
-        await HabitCeilingLock.ExecuteAsync(unitOfWork, request.UserId, async ct =>
+        var attempt = await HabitCeilingLock.ExecuteAsync(unitOfWork, request.UserId, async ct =>
         {
-            previousStreak = (await services.UserStreakService.CalculateAsync(request.UserId, ct))?.CurrentStreak ?? 0;
-            currentStreak = previousStreak;
+            var results = new List<BulkLogItemResult>();
+            Exception? firstItemError = null;
+            var itemErrorCount = 0;
+            var habitMap = await BulkHabitLoader.LoadHabitsWithRecentLogsAsync(
+                habitRepository, request.Items.Select(i => i.HabitId), request.UserId, today, ct);
+            var dueDateResolution = await HabitDueDateResolutionLoader.LoadAsync(request.UserId,
+                habitLogRepository, habitMap.Values, today.AddDays(-AppConstants.MaxReadRangeDays), ct);
+            var previousStreak = (await services.UserStreakService.CalculateAsync(request.UserId, ct))?.CurrentStreak ?? 0;
+            var currentStreak = previousStreak;
             var derivedParentIds = new HashSet<Guid>();
 
             for (int i = 0; i < request.Items.Count; i++)
@@ -111,7 +106,8 @@ public partial class BulkLogHabitsCommandHandler(
                 }
                 catch (Exception ex)
                 {
-                    LogBulkLogItemError(logger, ex, item.HabitId);
+                    firstItemError ??= ex;
+                    itemErrorCount++;
                     results.Add(new BulkLogItemResult(
                         Index: i,
                         Status: BulkItemStatus.Failed,
@@ -125,9 +121,9 @@ public partial class BulkLogHabitsCommandHandler(
                 .Where(r => r.Status == BulkItemStatus.Success && r.LogId is not null)
                 .Select(r => r.HabitId)
                 .ToHashSet();
-            foreach (var result in results.Where(r => r.Status == BulkItemStatus.Success && r.LogId is not null))
-                await HabitReminderInbox.MarkReadAsync(services.Notifications, request.UserId, result.HabitId,
-                    request.Items[result.Index].Date ?? today, ct);
+            await HabitReminderInbox.MarkReadBatchAsync(services.Notifications, request.UserId,
+                results.Where(r => r.Status == BulkItemStatus.Success && r.LogId is not null)
+                    .Select(r => (r.HabitId, request.Items[r.Index].Date ?? today)), ct);
             var goalIds = habitMap.Values
                 .Where(h => changedHabitIds.Contains(h.Id))
                 .SelectMany(h => h.Goals)
@@ -149,13 +145,14 @@ public partial class BulkLogHabitsCommandHandler(
                     async c => currentStreak = (await services.UserStreakService.RecalculateAsync(
                         request.UserId, cancellationToken: c))?.CurrentStreak ?? 0,
                     ct);
-
             }
+            return (Result: new BulkLogResult(results, previousStreak, currentStreak), FirstItemError: firstItemError, ItemErrorCount: itemErrorCount);
         }, cancellationToken);
 
+        if (attempt.FirstItemError is { } error) LogBulkLogItemError(logger, error, attempt.ItemErrorCount);
         CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, today, preserveDailyNarrative: true);
 
-        return Result.Success(new BulkLogResult(results, previousStreak, currentStreak));
+        return Result.Success(attempt.Result);
     }
 
     private async Task<BulkLogItemResult> ProcessLogItem(
@@ -211,8 +208,8 @@ public partial class BulkLogHabitsCommandHandler(
             LogId: logResult.Value.Id);
     }
 
-    [LoggerMessage(EventId = 1, Level = LogLevel.Error, Message = "Error processing bulk item {HabitId}")]
-    private static partial void LogBulkLogItemError(ILogger logger, Exception ex, Guid habitId);
+    [LoggerMessage(EventId = 1, Level = LogLevel.Error, Message = "Bulk logging failed for {FailureCount} items")]
+    private static partial void LogBulkLogItemError(ILogger logger, Exception ex, int failureCount);
 
     [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Gamification processing failed for bulk log by user {UserId}")]
     private static partial void LogGamificationBulkLogFailed(ILogger logger, Exception ex, Guid userId);

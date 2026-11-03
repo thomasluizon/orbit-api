@@ -185,7 +185,9 @@ public partial class AiIntentServiceStreamingTests
         input[1].GetRawText().Should().Contain("account context");
         input[2].GetRawText().Should().Contain("cria essa tarefa unica")
             .And.Contain("2026-12-31").And.Contain(proposal.Id.ToString()).And.Contain(outcome);
-        input[3].GetRawText().Should().Contain("input_image").And.Contain("data:image/png;base64,");
+        input[3].GetProperty("content")[0].GetProperty("type").GetString().Should().Be("input_image");
+        input[3].GetProperty("content")[0].GetProperty("image_url").GetString()
+            .Should().Be("data:image/png;base64," + Convert.ToBase64String(ConversationTurnRecorderTests.Fixture.Image));
         input[4].GetRawText().Should().Contain("dynamic context");
         input[5].GetRawText().Should().Contain("ta criando na data certa?");
         input.Count(item => item.GetRawText().Contains("<conversation_history>", StringComparison.Ordinal)).Should().Be(1);

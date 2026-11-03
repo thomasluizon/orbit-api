@@ -39,12 +39,13 @@ public class OAuthLoginPageTests : IDisposable
             Substitute.For<IGenericRepository<ApiKey>>(),
             Substitute.For<IUnitOfWork>(),
             googleSettings, _configuration,
-            Substitute.For<ILogger<OAuthController>>(), Substitute.For<IOAuthClientMetadataService>());
+            Substitute.For<ILogger<OAuthController>>(), OAuthTestClient.Metadata(), Substitute.For<IGenericRepository<OAuthClient>>());
 
         var httpContext = new DefaultHttpContext();
         httpContext.Request.Scheme = "https";
         httpContext.Request.Host = new HostString("api.useorbit.org");
         _controller.ControllerContext = new ControllerContext { HttpContext = httpContext };
+        OAuthTestClient.Bind(httpContext, _authStore, "state", "client-state");
     }
 
     public void Dispose()
@@ -54,7 +55,7 @@ public class OAuthLoginPageTests : IDisposable
     }
 
     private static string RenderPage(string language = "en") => OAuthLoginPage.Render(
-        "client-123", "https://claude.ai/callback", "client-state",
+        "https://claude.ai/oauth/mcp-oauth-client-metadata", "https://claude.ai/api/mcp/auth_callback", "client-state",
         "mcp-challenge", "S256", "mcp-nonce", error: null, language: language);
 
     private async Task<string> RenderThroughController(string acceptLanguage)
@@ -62,8 +63,8 @@ public class OAuthLoginPageTests : IDisposable
         _controller.HttpContext.Request.Headers.AcceptLanguage = acceptLanguage;
         return (await _controller.Authorize(new OAuthController.AuthorizeRequest
         {
-            ClientId = "client-123",
-            RedirectUri = "https://claude.ai/callback",
+            ClientId = "https://claude.ai/oauth/mcp-oauth-client-metadata",
+            RedirectUri = "https://claude.ai/api/mcp/auth_callback",
             ResponseType = "code",
             State = "client-state",
             CodeChallenge = "mcp-challenge",
@@ -78,21 +79,21 @@ public class OAuthLoginPageTests : IDisposable
     public async Task EveryPage_LinksBrandIconsAndUsesTheSharedShell(string language)
     {
         _controller.Request.Headers.AcceptLanguage = language;
-        var consentTicket = _authStore.CreatePendingConsent(new ConsentEntry(Guid.NewGuid(), "challenge",
-            "https://claude.ai/callback", "client", "state", null, language));
+        var consentTicket = OAuthTestClient.Consent(_authStore, _controller.HttpContext, new ConsentEntry(Guid.NewGuid(), "challenge",
+            "https://claude.ai/api/mcp/auth_callback", "https://claude.ai/oauth/mcp-oauth-client-metadata", "state", null, language, ClientName: "Claude"));
         var consent = _controller.Consent(consentTicket).Should().BeOfType<ContentResult>().Subject;
         var invalid = (await _controller.GoogleCallback("unknown", null, null, CancellationToken.None))
             .Should().BeOfType<ContentResult>().Subject;
         invalid.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
         invalid.ContentType.Should().Be("text/html");
-        var invalidStart = (await _controller.GoogleStart("client", "https://claude.ai/callback", "", "challenge", "S256"))
+        var invalidStart = (await _controller.GoogleStart(OAuthTestClient.ClientId, OAuthTestClient.RedirectUri, "", "challenge", "S256"))
             .Should().BeOfType<ContentResult>().Subject;
         var invalidConsent = _controller.Consent("missing").Should().BeOfType<ContentResult>().Subject;
-        var invalidGrant = _controller.GrantConsent("missing", "requested").Should().BeOfType<ContentResult>().Subject;
-        foreach (var errorPage in new[] { invalidStart, invalidConsent, invalidGrant })
+        _controller.GrantConsent("missing", "requested").Should().BeOfType<BadRequestObjectResult>();
+        foreach (var errorPage in new[] { invalidStart, invalidConsent })
             errorPage.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
         foreach (var page in new[] { RenderPage(language), consent.Content!, invalid.Content!,
-                     invalidStart.Content!, invalidConsent.Content!, invalidGrant.Content! })
+                     invalidStart.Content!, invalidConsent.Content! })
         {
             page.Should().Contain($"<html lang=\"{language}\">");
             page.Should().Contain("<link rel=\"icon\" href=\"/favicon.ico\" sizes=\"16x16 32x32 48x48\">");
@@ -113,9 +114,9 @@ public class OAuthLoginPageTests : IDisposable
     [Fact]
     public void Render_AppleConfigured_PreservesMcpAuthorizationParameters()
     {
-        var html = OAuthLoginPage.Render("client", "https://claude.ai/callback", "client-state", "challenge", "S256", appleSignInEnabled: true);
+        var html = OAuthLoginPage.Render("https://claude.ai/oauth/mcp-oauth-client-metadata", "https://claude.ai/api/mcp/auth_callback", "client-state", "challenge", "S256", appleSignInEnabled: true);
         html.Should().Contain("Sign in with Apple").And.Contain("/oauth/apple/start?").And.Contain("code_challenge=challenge");
-        OAuthLoginPage.Render("client", "https://claude.ai/callback", "client-state", "challenge", "S256").Should().NotContain("id=\"apple\"");
+        OAuthLoginPage.Render("https://claude.ai/oauth/mcp-oauth-client-metadata", "https://claude.ai/api/mcp/auth_callback", "client-state", "challenge", "S256").Should().NotContain("id=\"apple\"");
     }
 
     [Fact]
@@ -213,10 +214,10 @@ public class OAuthLoginPageTests : IDisposable
     [InlineData("pt-BR")]
     public void EveryPage_UsesOneFocusIndicatorForEachControl(string language)
     {
-        var login = OAuthLoginPage.Render("client", "https://claude.ai/callback", "state", "challenge", "S256",
+        var login = OAuthLoginPage.Render("https://claude.ai/oauth/mcp-oauth-client-metadata", "https://claude.ai/api/mcp/auth_callback", "state", "challenge", "S256",
             language: language, appleSignInEnabled: true);
-        var ticket = _authStore.CreatePendingConsent(new ConsentEntry(Guid.NewGuid(), "challenge",
-            "https://claude.ai/callback", "client", "state", null, language));
+        var ticket = OAuthTestClient.Consent(_authStore, _controller.HttpContext, new ConsentEntry(Guid.NewGuid(), "challenge",
+            "https://claude.ai/api/mcp/auth_callback", "https://claude.ai/oauth/mcp-oauth-client-metadata", "state", null, language, ClientName: "Claude"));
         var consent = _controller.Consent(ticket).Should().BeOfType<ContentResult>().Subject.Content!;
         _controller.Request.Headers.AcceptLanguage = language;
         var invalid = _controller.Consent("missing").Should().BeOfType<ContentResult>().Subject.Content!;
@@ -351,7 +352,7 @@ public class OAuthLoginPageTests : IDisposable
     [Fact]
     public void Page_EscapesSiteKeyInsideTheRequestJson()
     {
-        var page = OAuthLoginPage.Render("client", "https://claude.ai/callback", "state", "challenge", "S256",
+        var page = OAuthLoginPage.Render("https://claude.ai/oauth/mcp-oauth-client-metadata", "https://claude.ai/api/mcp/auth_callback", "state", "challenge", "S256",
             botProtectionEnabled: true, turnstileSiteKey: "</script><script>alert(1)</script>");
 
         page.Should().NotContain("</script><script>alert(1)</script>");

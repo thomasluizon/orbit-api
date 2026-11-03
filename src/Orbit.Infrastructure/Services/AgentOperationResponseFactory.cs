@@ -15,14 +15,14 @@ internal static class AgentOperationResponseFactory
                 AgentRiskClass.Low,
                 AgentConfirmationRequirement.None,
                 AgentOperationStatus.UnsupportedByPolicy,
-                PolicyReason: "unsupported_by_policy",
+                PolicyReason: Orbit.Application.Common.AgentPolicyReasons.UnsupportedByPolicy,
                 Access: access),
             PolicyDenial: new AgentPolicyDenial(
                 operationId,
                 operationId,
                 AgentRiskClass.Low,
                 AgentConfirmationRequirement.None,
-                "unsupported_by_policy"));
+                Orbit.Application.Common.AgentPolicyReasons.UnsupportedByPolicy));
     }
 
     public static AgentExecuteOperationResponse MissingTool(

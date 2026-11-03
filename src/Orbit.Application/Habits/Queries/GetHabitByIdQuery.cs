@@ -170,7 +170,7 @@ public class GetHabitByIdQueryHandler(
 
 internal static class HabitDetailDescendantLogLoader
 {
-    private const int DescendantLogLookbackDays = AppConstants.MaxRangeDays;
+    private const int DescendantLogLookbackDays = AppConstants.MaxReadRangeDays;
 
     public static async Task<IReadOnlyDictionary<Guid, IReadOnlyCollection<HabitLog>>> LoadAsync(
         IGenericRepository<HabitLog> habitLogRepository,

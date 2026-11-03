@@ -52,7 +52,7 @@ public class CalendarToolsTests
         _mediator.Send(Arg.Any<GetCalendarEventsQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(events));
 
-        var result = await _tools.GetCalendarEvents(_user);
+        var result = (await _tools.GetCalendarEvents(_user)).AsText();
 
         result.Should().Contain("Team Meeting");
         result.Should().Contain("2026-04-03");
@@ -67,7 +67,7 @@ public class CalendarToolsTests
         _mediator.Send(Arg.Any<GetCalendarEventsQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new List<CalendarEventItem>()));
 
-        var result = await _tools.GetCalendarEvents(_user);
+        var result = (await _tools.GetCalendarEvents(_user)).AsText();
 
         result.Should().Contain("No upcoming calendar events found");
     }
@@ -78,7 +78,7 @@ public class CalendarToolsTests
         _mediator.Send(Arg.Any<GetCalendarEventsQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Failure<List<CalendarEventItem>>("Calendar not connected"));
 
-        var result = await _tools.GetCalendarEvents(_user);
+        var result = (await _tools.GetCalendarEvents(_user)).AsText();
 
         result.Should().StartWith("Error: ");
     }
@@ -88,7 +88,7 @@ public class CalendarToolsTests
     {
         StubExecutor(AgentOperationStatus.Succeeded);
 
-        var result = await _tools.ManageCalendarSync(_user, "run_sync");
+        var result = (await _tools.ManageCalendarSync(_user, "run_sync")).AsText();
 
         var calls = _executor.ReceivedCalls()
             .Where(call => call.GetMethodInfo().Name == nameof(IAgentOperationExecutor.ExecuteAsync))
@@ -105,7 +105,7 @@ public class CalendarToolsTests
     {
         StubExecutor(AgentOperationStatus.Failed, policyReason: "feature_disabled:calendar_integration");
 
-        var result = await _tools.ManageCalendarSync(_user, "run_sync");
+        var result = (await _tools.ManageCalendarSync(_user, "run_sync")).AsText();
 
         result.Should().StartWith("Error: ");
     }

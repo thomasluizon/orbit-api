@@ -1,4 +1,5 @@
 using Asp.Versioning;
+using Orbit.Api.RateLimiting;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -90,14 +91,17 @@ public partial class SubscriptionController(
 
 #pragma warning disable S6932 // HandleWebhook preserves the raw Stripe body and Stripe-Signature header for webhook signature verification before dispatch. https://github.com/thomasluizon/orbit-tickets/issues/230
     [HttpPost("webhook")]
+    [DistributedRateLimit("stripe-webhook")]
+    [RequestSizeLimit(1024 * 1024)]
     [AllowAnonymous]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> HandleWebhook(CancellationToken cancellationToken)
     {
-        var json = await new StreamReader(HttpContext.Request.Body).ReadToEndAsync(cancellationToken);
+        using var body = new MemoryStream((int)(Request.ContentLength ?? 0));
+        await Request.Body.CopyToAsync(body, cancellationToken);
         var signature = Request.Headers["Stripe-Signature"].ToString();
-        var command = new HandleWebhookCommand(json, signature);
+        var command = new HandleWebhookCommand(body.GetBuffer().AsMemory(0, (int)body.Length), signature);
         var result = await mediator.Send(command, cancellationToken);
         if (result.IsSuccess) return Ok();
         if (logger.IsEnabled(LogLevel.Error))
@@ -123,6 +127,7 @@ public partial class SubscriptionController(
 
 #pragma warning disable S6932 // HandlePlayNotification validates the Authorization push token before forwarding the raw RTDN body to the handler. https://github.com/thomasluizon/orbit-tickets/issues/230
     [HttpPost("play/rtdn")]
+    [RequestSizeLimit(1024 * 1024)]
     [AllowAnonymous]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -155,6 +160,7 @@ public partial class SubscriptionController(
     }
 
     [HttpPost("app-store/notifications")]
+    [RequestSizeLimit(1024 * 1024)]
     [AllowAnonymous]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]

@@ -12,6 +12,30 @@ public class AchievementDefinitionsTests
     /// The fixture copies gamification.achievements from orbit-ui-mobile/packages/shared/src/i18n/en.json.
     /// </summary>
     [Fact]
+    public void ActiveDefinitions_CarryPortuguesePushCopy()
+    {
+        AchievementDefinitions.Active.Should().AllSatisfy(achievement =>
+        {
+            achievement.NamePt.Should().NotBeNullOrWhiteSpace(achievement.Id);
+            achievement.DescriptionPt.Should().NotBeNullOrWhiteSpace(achievement.Id);
+        });
+        AchievementDefinitions.All.Where(achievement => achievement.IsRetired).Should().AllSatisfy(achievement =>
+        {
+            achievement.NamePt.Should().BeNull();
+            achievement.DescriptionPt.Should().BeNull();
+        });
+    }
+
+    [Fact]
+    public void SharedWindows_ExceedEveryAchievementTarget()
+    {
+        Orbit.Application.Common.AppConstants.StreakLogWindowDays.Should().BeGreaterThan(
+            AchievementDefinitions.Active.Where(a => a.Metric == ProgressMetric.CurrentStreak).Max(a => a.ProgressTarget)!.Value);
+        Orbit.Application.Common.AppConstants.TotalCompletionWindowDays.Should().BeGreaterThan(
+            AchievementDefinitions.Active.Where(a => a.Metric == ProgressMetric.TotalCompletions).Max(a => a.ProgressTarget)!.Value);
+    }
+
+    [Fact]
     public void All_EnglishCopyMatchesTheAppCatalog()
     {
         using var catalog = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory,

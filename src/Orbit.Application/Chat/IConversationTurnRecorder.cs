@@ -21,7 +21,7 @@ public sealed record ConversationDisplayTurn(Guid TurnId, long Order, string Rol
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] AstraPlan? Plan = null);
 
 public sealed record ConversationImageReference(string FileName, string ContentType, string Sha256, string? Url = null);
-public sealed record StoredConversationImage(byte[] Data, string ContentType);
+public sealed record StoredConversationImage(Stream Data, string ContentType);
 
 public sealed record ConversationTurnCapture(
     Guid UserId,

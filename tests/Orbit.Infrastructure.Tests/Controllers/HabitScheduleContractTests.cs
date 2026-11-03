@@ -111,7 +111,7 @@ public class HabitScheduleContractTests
             AssertContract(calendarItem.Children.Should().ContainSingle().Subject, type, expectedStart);
         }
 
-        var controller = new SyncController(context, Substitute.For<ILogger<SyncController>>())
+        var controller = new SyncController(context, Substitute.For<ILogger<SyncController>>(), Orbit.Infrastructure.Tests.Sync.SyncBatchTestSender.Create(context))
         {
             ControllerContext = new ControllerContext
             {

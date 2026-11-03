@@ -34,6 +34,7 @@ internal sealed class NotionPollService(OrbitDbContext db, NotionAccessGate gate
         if (claimed != 1) return;
 
         var tasks = new List<NotionTask>();
+        var read = new PollReadState();
         IReadOnlyList<NotionDatabase> databases = [];
         int? failureCode = null;
         try
@@ -50,14 +51,16 @@ internal sealed class NotionPollService(OrbitDbContext db, NotionAccessGate gate
             var pageIds = new HashSet<Guid>();
             foreach (var mapper in mappers)
             {
-                if (tasks.Count == 100) break;
-                await foreach (var page in api.QueryAsync(connection.AccessToken, mapper.DataSourceId, ct))
-                {
-                    var task = mapper.Map(page, userId, today, userTimeZone, nowUtc);
-                    if (task is not null && pageIds.Add(task.PageId)) tasks.Add(task);
-                    if (tasks.Count == 100) break;
-                }
+                if (tasks.Count == 100) { read.Truncated = true; break; }
+                await ReadSourceAsync(mapper, connection.AccessToken,
+                    new PollReadContext(userId, today, userTimeZone, nowUtc), tasks, pageIds, read, ct);
             }
+        }
+        catch (NotionPaginationTruncatedException exception)
+        {
+            failureCode = 0;
+            read.Truncated = true;
+            read.InputCount += exception.InputCount;
         }
         catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
@@ -65,6 +68,10 @@ internal sealed class NotionPollService(OrbitDbContext db, NotionAccessGate gate
             logger.LogWarning("Notion poll failed for {UserId} with status {StatusCode}", userId, failureCode);
             analytics.CaptureUserEvent(userId, "notion_poll_failed", "pro", new Dictionary<string, object> { ["status_code"] = failureCode.Value });
         }
+
+        if (read.Truncated)
+            logger.LogWarning("Notion poll truncated for {UserId} after {InputCount} input rows and {MappedCount} mapped tasks; unseen tasks are retained",
+                userId, read.InputCount, tasks.Count);
 
         await unitOfWork.ExecuteInTransactionAsync(async transactionToken =>
         {
@@ -76,11 +83,43 @@ internal sealed class NotionPollService(OrbitDbContext db, NotionAccessGate gate
             if (failureCode is not null) current.FailPoll(failureCode == 401, nowUtc);
             else
             {
-                await db.NotionTasks.Where(t => t.UserId == userId).ExecuteDeleteAsync(transactionToken);
+                var reached = read.ReachedPages.ToArray();
+                await db.NotionTasks.Where(t => t.UserId == userId && (!read.Truncated || reached.Contains(t.PageId)))
+                    .ExecuteDeleteAsync(transactionToken);
                 db.NotionTasks.AddRange(tasks);
                 current.CompletePoll(JsonSerializer.Serialize(databases, JsonOptions), nowUtc);
             }
             await db.SaveChangesAsync(transactionToken);
         }, ct);
+    }
+    private sealed record PollReadContext(Guid UserId, DateOnly Today, TimeZoneInfo Zone, DateTime NowAtUtc);
+
+    private async Task ReadSourceAsync(NotionTaskMapper mapper, string token, PollReadContext context,
+        List<NotionTask> tasks, HashSet<Guid> pageIds, PollReadState read, CancellationToken ct)
+    {
+        var inputCount = 0;
+        try
+        {
+            await foreach (var page in api.QueryAsync(token, mapper.DataSourceId, ct))
+            {
+                inputCount++;
+                read.InputCount++;
+                read.ReachedPages.Add(page.GetProperty("id").GetGuid());
+                var task = mapper.Map(page, context.UserId, context.Today, context.Zone, context.NowAtUtc);
+                if (task is not null && pageIds.Add(task.PageId)) tasks.Add(task);
+                if (tasks.Count == 100 || inputCount >= 500) { read.Truncated = true; break; }
+            }
+        }
+        catch (NotionPaginationTruncatedException)
+        {
+            read.Truncated = true;
+        }
+    }
+
+    private sealed class PollReadState
+    {
+        internal bool Truncated { get; set; }
+        internal int InputCount { get; set; }
+        internal HashSet<Guid> ReachedPages { get; } = [];
     }
 }

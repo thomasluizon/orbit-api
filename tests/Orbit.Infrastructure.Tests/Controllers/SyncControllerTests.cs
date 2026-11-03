@@ -28,7 +28,7 @@ public class SyncControllerTests : IDisposable
         _dbContext = new OrbitDbContext(options);
         _dbContext.Database.EnsureCreated();
 
-        _controller = new SyncController(_dbContext, Substitute.For<ILogger<SyncController>>())
+        _controller = new SyncController(_dbContext, Substitute.For<ILogger<SyncController>>(), Orbit.Infrastructure.Tests.Sync.SyncBatchTestSender.Create(_dbContext))
         {
             ControllerContext = new ControllerContext
             {
@@ -261,6 +261,22 @@ public class SyncControllerTests : IDisposable
     }
 
     [Fact]
+    public async Task ProcessBatch_MissingAndForeignDeletes_AreSuccessfulReplaysWithoutChangingForeignRows()
+    {
+        var foreign = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, Guid.NewGuid(), "Foreign", null, null, DueDate: new DateOnly(2026, 1, 1))).Value;
+        _dbContext.Habits.Add(foreign);
+        await _dbContext.SaveChangesAsync();
+        var result = await _controller.ProcessBatch(new SyncController.SyncBatchRequest([
+            new("habit", "delete", Guid.NewGuid(), null),
+            new("habit", "delete", foreign.Id, null)
+        ]), CancellationToken.None);
+        var response = result.Should().BeOfType<OkObjectResult>().Which.Value.Should().BeOfType<SyncController.SyncBatchResponse>().Subject;
+        response.Processed.Should().Be(2);
+        response.Failed.Should().Be(0);
+        foreign.IsDeleted.Should().BeFalse();
+    }
+
+    [Fact]
     public async Task ProcessBatch_InvalidMutations_ReportFailuresAndContinue()
     {
         var notification = Notification.Create(UserId, "Reminder", "Drink water");
@@ -287,6 +303,6 @@ public class SyncControllerTests : IDisposable
             new SyncController.SyncMutationResult(1, "failed", ErrorMessages.MutationFailed.Message),
             new SyncController.SyncMutationResult(2, "failed", ErrorMessages.MutationFailed.Message),
             new SyncController.SyncMutationResult(3, "success"));
-        notification.IsRead.Should().BeTrue();
+        _dbContext.Notifications.Single(n => n.Id == notification.Id).IsRead.Should().BeTrue();
     }
 }

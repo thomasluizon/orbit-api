@@ -1,3 +1,4 @@
+using Orbit.Infrastructure.Tests.Mcp;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 #pragma warning disable OPENAI001
@@ -553,7 +554,8 @@ public partial class AgentChatWriteHoldTests : IDisposable
         chat.Operation.ErrorCode.Should().Be(code);
         chat.Operation.PolicyReason.Should().Be(validation.Error);
         chat.PendingOperation.Should().BeNull();
-        mcp.Should().Be($"Error: {validation.Error}");
+        mcp.IsError.Should().BeTrue();
+        mcp.AsText().Should().Be($"Error: {validation.Error}");
         await previewer.DidNotReceive().PreviewAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<JsonElement>(), Arg.Any<CancellationToken>());
         _dbContext.PendingAgentOperations.Should().BeEmpty();
         mediator.ReceivedCalls().Should().OnlyContain(call => call.GetArguments()[0] is CheckChatCommandQuery);

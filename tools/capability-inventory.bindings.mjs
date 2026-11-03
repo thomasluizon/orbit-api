@@ -202,6 +202,12 @@ export const readChains = {
 }
 
 export const deliberateFields = {
+  "Habit.LongestRecordedStreak": "The persisted achievement maximum is derived from completion history and cannot be edited through AI tools.",
+  "SubHabit.LongestRecordedStreak": "The persisted achievement maximum is derived from completion history and cannot be edited through AI tools.",
+  "Profile.GoogleAccessTokenExpiresAtUtc": "OAuth token expiry is managed by the provider refresh flow, not AI tools.",
+  "CalendarSync.GoogleAccessTokenExpiresAtUtc": "OAuth token expiry is managed by the provider refresh flow, not AI tools.",
+  "Profile.GoogleCalendarLastAttemptAtUtc": "The sync worker records attempts to rotate its queue; AI tools cannot edit scheduling state.",
+  "CalendarSync.GoogleCalendarLastAttemptAtUtc": "The sync worker records attempts to rotate its queue; AI tools cannot edit scheduling state.",
   "Habit.Position": "Display order is managed through reorder operations; scalar position readback is not an AI field-editing capability.",
   "SubHabit.Position": "Display order is managed through reorder operations; scalar position readback is not an AI field-editing capability.",
   "Goal.Position": "Display order is managed through reorder operations; scalar position readback is not an AI field-editing capability.",

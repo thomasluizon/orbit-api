@@ -347,6 +347,9 @@ public record GetCalendarEventsRepositories(
     IGenericRepository<Habit> Habits,
     IGenericRepository<GoogleCalendarSyncSuggestion> Suggestions);
 
+public sealed record ImportedCalendarHabit(Guid Id, string GoogleEventId);
+public sealed record PendingCalendarEvent(string GoogleEventId, string RawEventJson);
+
 public partial class GetCalendarEventsQueryHandler(
     GetCalendarEventsRepositories repos,
     IPayGateService payGate,
@@ -429,7 +432,7 @@ public partial class GetCalendarEventsQueryHandler(
 
     private async Task<string?> ResolveAccessTokenAsync(User user, CancellationToken cancellationToken, bool persist)
     {
-        if (user.GoogleRefreshToken is null)
+        if (user.GoogleRefreshToken is null || user.GoogleAccessTokenExpiresAtUtc > TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(1))
         {
             var existingAccessToken = await googleTokenService.GetValidAccessTokenAsync(user, cancellationToken);
             if (existingAccessToken is not null)
@@ -459,13 +462,13 @@ public partial class GetCalendarEventsQueryHandler(
 
     private async Task<HashSet<string>> BuildImportedEventIdSet(Guid userId, CancellationToken ct)
     {
-        var habitEventIds = (await repos.Habits.FindAsync(
-                h => h.UserId == userId && h.GoogleEventId != null, ct))
-            .Select(h => h.GoogleEventId!)
+        var habitEventIds = (await repos.Habits.ProjectAsync(h => h.UserId == userId && h.GoogleEventId != null,
+                q => q.Select(h => new ImportedCalendarHabit(h.Id, h.GoogleEventId!)), ct))
+            .Select(h => h.GoogleEventId)
             .ToList();
 
-        var pendingSuggestionEventIds = (await repos.Suggestions.FindAsync(
-                s => s.UserId == userId && s.DismissedAtUtc == null && s.ImportedAtUtc == null, ct))
+        var pendingSuggestionEventIds = (await repos.Suggestions.ProjectAsync(s => s.UserId == userId && s.DismissedAtUtc == null && s.ImportedAtUtc == null,
+                q => q.Select(s => new PendingCalendarEvent(s.GoogleEventId, s.RawEventJson)), ct))
             .Where(s => !StoredCalendarEventJson.NeedsRecurrenceEvidenceRefresh(s.RawEventJson))
             .Select(s => s.GoogleEventId)
             .ToList();
@@ -477,8 +480,8 @@ public partial class GetCalendarEventsQueryHandler(
     }
 
     private async Task<Dictionary<string, Guid>> BuildImportedHabitMap(Guid userId, CancellationToken ct)
-        => (await repos.Habits.FindAsync(
-                h => h.UserId == userId && !h.IsDeleted && h.GoogleEventId != null, ct))
+        => (await repos.Habits.ProjectAsync(h => h.UserId == userId && !h.IsDeleted && h.GoogleEventId != null,
+                q => q.Select(h => new ImportedCalendarHabit(h.Id, h.GoogleEventId!)), ct))
             .ToDictionary(h => h.GoogleEventId!, h => h.Id, StringComparer.Ordinal);
 
     [LoggerMessage(EventId = 2, Level = LogLevel.Error, Message = "Google Calendar API error for user {UserId}")]

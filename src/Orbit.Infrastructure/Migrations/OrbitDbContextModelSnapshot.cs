@@ -260,6 +260,9 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("UserId")
+                        .HasAnnotation("Npgsql:CreatedConcurrently", true);
+
                     b.HasIndex("Date", "Model", "Purpose", "UserId")
                         .IsUnique();
 
@@ -1271,6 +1274,9 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
+                    b.Property<int?>("LongestRecordedStreak")
+                        .HasColumnType("integer");
+
                     b.Property<DateOnly>("NextDueDate")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("date")
@@ -1795,6 +1801,32 @@ namespace Orbit.Infrastructure.Migrations
                     b.ToTable("NotionTasks");
                 });
 
+            modelBuilder.Entity("Orbit.Domain.Entities.OAuthClient", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("AuthorizedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ClientName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.PrimitiveCollection<string[]>("RedirectUris")
+                        .IsRequired()
+                        .HasColumnType("text[]");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("OAuthClients");
+                });
+
             modelBuilder.Entity("Orbit.Domain.Entities.OAuthState", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1811,6 +1843,10 @@ namespace Orbit.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(30)
                         .HasColumnType("character varying(30)");
+
+                    b.Property<string>("PartitionKey")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
 
                     b.Property<string>("Payload")
                         .IsRequired()
@@ -1829,6 +1865,9 @@ namespace Orbit.Infrastructure.Migrations
                         .IsUnique();
 
                     b.HasIndex("Kind", "ExpiresAtUtc");
+
+                    b.HasIndex("Kind", "PartitionKey", "ExpiresAtUtc")
+                        .HasAnnotation("Npgsql:CreatedConcurrently", true);
 
                     b.ToTable("OAuthStates");
                 });
@@ -2600,12 +2639,18 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<string>("GoogleAccessToken")
                         .HasColumnType("text");
 
+                    b.Property<DateTime?>("GoogleAccessTokenExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<bool>("GoogleCalendarAutoSyncEnabled")
                         .HasColumnType("boolean");
 
                     b.Property<string>("GoogleCalendarAutoSyncStatus")
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
+
+                    b.Property<DateTime?>("GoogleCalendarLastAttemptAtUtc")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("GoogleCalendarLastSyncError")
                         .HasMaxLength(500)
@@ -2848,6 +2893,11 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<int>("WeekStartDay")
                         .HasColumnType("integer");
 
+                    b.Property<bool?>("XpHistoryInitialized")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
                     b.Property<uint>("xmin")
                         .IsConcurrencyToken()
                         .ValueGeneratedOnAddOrUpdate()
@@ -2881,6 +2931,9 @@ namespace Orbit.Infrastructure.Migrations
                     b.HasIndex("ReferralCode")
                         .IsUnique()
                         .HasFilter("\"ReferralCode\" IS NOT NULL");
+
+                    b.HasIndex("GoogleCalendarAutoSyncEnabled", "GoogleCalendarLastAttemptAtUtc")
+                        .HasAnnotation("Npgsql:CreatedConcurrently", true);
 
                     b.HasIndex("GoogleCalendarAutoSyncEnabled", "GoogleCalendarLastSyncedAt")
                         .HasFilter("\"GoogleCalendarAutoSyncEnabled\" = TRUE");
@@ -3015,7 +3068,36 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.HasIndex("UserId", "AwardedAtUtc");
 
+                    b.HasIndex("UserId", "Source", "SourceId")
+                        .HasAnnotation("Npgsql:CreatedConcurrently", true);
+
                     b.ToTable("XpAwardLogs");
+                });
+
+            modelBuilder.Entity("Orbit.Domain.Entities.XpDailyTotal", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("CumulativeXp")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("DailyXp")
+                        .HasColumnType("integer");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "Date")
+                        .IsUnique();
+
+                    b.ToTable("XpDailyTotals");
                 });
 
             modelBuilder.Entity("Orbit.Infrastructure.Persistence.BackgroundJobHeartbeat", b =>
@@ -3351,6 +3433,15 @@ namespace Orbit.Infrastructure.Migrations
                 });
 
             modelBuilder.Entity("Orbit.Domain.Entities.XpAwardLog", b =>
+                {
+                    b.HasOne("Orbit.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Orbit.Domain.Entities.XpDailyTotal", b =>
                 {
                     b.HasOne("Orbit.Domain.Entities.User", null)
                         .WithMany()

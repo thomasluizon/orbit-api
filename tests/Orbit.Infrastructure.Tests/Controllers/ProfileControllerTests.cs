@@ -61,14 +61,14 @@ public class ProfileControllerTests
     [Fact]
     public async Task ExportUserData_Names_The_File_With_The_Users_Today()
     {
-        _mediator.Send(Arg.Any<ExportUserDataQuery>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success(default(UserDataExport)!));
+        _mediator.Send(Arg.Any<StreamUserDataQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new StreamedUserData((_, _) => Task.CompletedTask)));
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>())
             .Returns(new DateOnly(2026, 12, 31));
 
         var result = await _controller.ExportUserData(CancellationToken.None);
 
-        result.Should().BeOfType<FileContentResult>()
+        result.Should().BeOfType<Orbit.Api.Streaming.StreamingJsonFileResult>()
             .Which.FileDownloadName.Should().Be("orbit-data-export-2026-12-31.json");
     }
 

@@ -117,6 +117,14 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
     public string? GoogleEventId { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
     public DateTime UpdatedAtUtc { get; set; } = DateTime.UtcNow;
+    public int? LongestRecordedStreak { get; private set; }
+
+    public void RecordLongestStreak(int streak)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(streak);
+        LongestRecordedStreak = Math.Max(LongestRecordedStreak ?? 0, streak);
+    }
+
     public long ReminderProbeVersion { get; private set; }
     public bool IsDeleted { get; private set; }
     public DateTime? DeletedAtUtc { get; private set; }
@@ -194,6 +202,14 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         Position = position;
         _tags.Clear();
         _tags.AddRange(tags);
+    }
+
+    public void LoadWidgetFieldsForRead(string title, int? position, TimeOnly? dueTime, IReadOnlyList<ChecklistItem> checklistItems)
+    {
+        Title = title;
+        Position = position;
+        DueTime = dueTime;
+        ChecklistItems = checklistItems.ToList();
     }
 
     public void LoadScheduleFieldsForRead(Habit candidate)

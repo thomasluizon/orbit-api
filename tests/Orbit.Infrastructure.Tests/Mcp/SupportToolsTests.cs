@@ -36,7 +36,7 @@ public class SupportToolsTests
     {
         StubExecutor(AgentOperationStatus.Succeeded);
 
-        var result = await _tools.SendSupportRequest(_user, "Subject", "Message");
+        var result = (await _tools.SendSupportRequest(_user, "Subject", "Message")).AsText();
 
         var request = (AgentExecuteOperationRequest)_executor.ReceivedCalls()
             .Single(call => call.GetMethodInfo().Name == nameof(IAgentOperationExecutor.ExecuteAsync))
@@ -50,7 +50,7 @@ public class SupportToolsTests
     {
         StubExecutor(AgentOperationStatus.Failed, policyReason: "Email service unavailable");
 
-        var result = await _tools.SendSupportRequest(_user, "Subject", "Message");
+        var result = (await _tools.SendSupportRequest(_user, "Subject", "Message")).AsText();
 
         result.Should().StartWith("Error: ");
     }

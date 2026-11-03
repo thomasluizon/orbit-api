@@ -195,7 +195,6 @@ public partial class ProcessUserChatCommandHandler(
         public const string AccountRows = "accountRows";
     }
 
-    private const string UnsupportedByPolicyReason = "unsupported_by_policy";
     private const string DescribeFeatureToolName = "describe_feature";
 
     private const int MaxSupportMessageLength = 5000;

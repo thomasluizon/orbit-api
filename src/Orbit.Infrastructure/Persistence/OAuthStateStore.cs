@@ -8,7 +8,7 @@ namespace Orbit.Infrastructure.Persistence;
 
 public sealed class OAuthStateStore(OrbitDbContext db, TimeProvider timeProvider) : IOAuthStateStore
 {
-    public bool Put(string secret, string kind, string payload, DateTime expiresAtUtc, int? capacity = null)
+    public bool Put(string secret, string kind, string payload, DateTime expiresAtUtc, int? capacity = null, string? partitionKey = null, int? partitionCapacity = null)
     {
         return VerifiedTransaction.Execute(db, PutCore);
 
@@ -22,7 +22,10 @@ public sealed class OAuthStateStore(OrbitDbContext db, TimeProvider timeProvider
                 if (db.OAuthStates.Count(state => state.Kind == kind && state.ExpiresAtUtc > nowAtUtc) >= capacity.Value)
                     return false;
             }
-            var state = OAuthState.Create(Hash(secret), kind, payload, expiresAtUtc);
+            if (partitionCapacity.HasValue && db.OAuthStates.Count(state => state.Kind == kind
+                && state.PartitionKey == partitionKey && state.ExpiresAtUtc > timeProvider.GetUtcNow().UtcDateTime) >= partitionCapacity.Value)
+                return false;
+            var state = OAuthState.Create(Hash(secret), kind, payload, expiresAtUtc, partitionKey);
             db.OAuthStates.Add(state);
             try
             {

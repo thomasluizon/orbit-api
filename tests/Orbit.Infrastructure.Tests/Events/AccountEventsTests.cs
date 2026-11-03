@@ -259,7 +259,7 @@ public class AccountEventsTests
                     new Claim(ClaimTypes.NameIdentifier, user.Id.ToString())
                 ], "test"))
             };
-            var controller = new SyncController(context, Substitute.For<ILogger<SyncController>>(), collector)
+            var controller = new SyncController(context, Substitute.For<ILogger<SyncController>>(), Orbit.Infrastructure.Tests.Sync.SyncBatchTestSender.Create(context, collector))
             {
                 ControllerContext = new ControllerContext { HttpContext = httpContext }
             };

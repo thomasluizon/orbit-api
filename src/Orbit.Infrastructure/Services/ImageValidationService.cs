@@ -8,7 +8,8 @@ namespace Orbit.Infrastructure.Services;
 
 public sealed class ImageValidationService : IImageValidationService
 {
-    private const long MaxFileSizeBytes = 20_971_520;    private static readonly HashSet<string> AllowedExtensions = new(StringComparer.OrdinalIgnoreCase)
+    private const long MaxFileSizeBytes = 20_971_520;
+    private static readonly HashSet<string> AllowedExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
         ".jpg", ".jpeg", ".png", ".webp"
     };

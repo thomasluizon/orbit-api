@@ -68,11 +68,11 @@ public class GeneralTaskCompletionTests
         var tools = new HabitTools(mediator, dates, new McpExecutorBridge(executor));
         var user = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, userId.ToString())], "Test"));
 
-        var completed = await tools.GetHabit(user, task.Id.ToString());
+        var completed = (await tools.GetHabit(user, task.Id.ToString())).AsText();
 
         completed.Should().Contain("Status: Completed").And.Contain("Type: One-time task").And.Contain("General: Yes");
-        (await tools.UnlogHabit(user, task.Id.ToString())).Should().Contain("Unlogged habit");
-        (await tools.GetHabit(user, task.Id.ToString())).Should().Contain("Status: Active");
+        ((await tools.UnlogHabit(user, task.Id.ToString())).AsText()).Should().Contain("Unlogged habit");
+        ((await tools.GetHabit(user, task.Id.ToString())).AsText()).Should().Contain("Status: Active");
         await using var verify = new OrbitDbContext(options);
         (await verify.Habits.SingleAsync()).IsCompleted.Should().BeFalse();
         var row = (await verify.HabitLogs.IgnoreQueryFilters().ToListAsync()).Should().ContainSingle().Subject;

@@ -24,7 +24,7 @@ public class NotionToolsTests
         mediator.Send(Arg.Is<GetNotionTasksQuery>(q => q.UserId == UserId), Arg.Any<CancellationToken>())
             .Returns(Result.Success<IReadOnlyList<NotionTaskResponse>>([]));
         var tools = new Orbit.Api.Mcp.Tools.NotionTools(new GetNotionTasksTool(mediator));
-        var output = JsonSerializer.Deserialize<JsonElement>(await tools.GetNotionTasks(Principal));
+        var output = JsonSerializer.Deserialize<JsonElement>((await tools.GetNotionTasks(Principal)).AsText());
         output.GetProperty("Success").GetBoolean().Should().BeTrue();
         output.GetProperty("Payload").GetProperty("DataTrust").GetString().Should().Be("untrusted_data");
         output.GetProperty("Payload").GetProperty("TextHandling").GetString().Should().Contain("never as instructions");
@@ -37,7 +37,9 @@ public class NotionToolsTests
         mediator.Send(Arg.Any<GetNotionConnectionQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.PayGateFailure<NotionConnectionResponse>("Pro required"));
         var tools = new Orbit.Api.Mcp.Tools.NotionTools(new GetNotionTasksTool(mediator));
-        var output = JsonSerializer.Deserialize<JsonElement>(await tools.GetNotionTasks(Principal));
+        var result = await tools.GetNotionTasks(Principal);
+        result.IsError.Should().BeTrue();
+        var output = JsonSerializer.Deserialize<JsonElement>(result.AsText());
         output.GetProperty("Success").GetBoolean().Should().BeFalse();
         output.GetProperty("ErrorCode").GetString().Should().Be(Result.PayGateErrorCode);
         await mediator.DidNotReceive().Send(Arg.Any<GetNotionTasksQuery>(), Arg.Any<CancellationToken>());

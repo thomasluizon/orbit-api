@@ -47,6 +47,9 @@ public sealed class BadHabitParentSlipTests : IAsyncDisposable
         PassThrough<LogHabitResponse>();
         PassThrough<LogHabitCommandHandler.PersistedLog>();
         PassThrough<ToolResult>();
+        _work.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task<(BulkLogResult, Exception?, int)>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call => call.Arg<Func<CancellationToken, Task<(BulkLogResult, Exception?, int)>>>()(call.Arg<CancellationToken>()));
         _work.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
             .Returns(call => call.Arg<Func<CancellationToken, Task>>()(call.Arg<CancellationToken>()));
         _goals.SyncDerivedGoalsAsync(Arg.Any<Guid>(), Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<DateOnly>(),

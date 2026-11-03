@@ -32,7 +32,7 @@ public class AchievementStreakWindowQueryTests(ITestOutputHelper output)
             .Select(_ => CreateHabit(user.Id, 5)).ToList();
         foreach (var habit in shortHabits)
         {
-            for (var day = 70; day <= GamificationService.StreakLogWindowDays; day++)
+            for (var day = 70; day <= Orbit.Application.Common.AppConstants.StreakLogWindowDays; day++)
                 habit.Log(Today.AddDays(-day), advanceDueDate: false).IsSuccess.Should().BeTrue();
         }
         var longHabit = CreateHabit(user.Id, 130);

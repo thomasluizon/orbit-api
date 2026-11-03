@@ -7,10 +7,8 @@ namespace Orbit.Application.Habits.Services;
 
 public static class HabitMetricsCalculator
 {
-    // Horizon must exceed the largest streak-achievement target (1000-day StreakImmortal) or those achievements can never hit 100%. https://github.com/thomasluizon/orbit-api/pull/419
-    private const int MaxStreakHorizonDays = 1100;
 
-    public static DateOnly GetStreakLogCutoff(DateOnly today) => today.AddDays(-2 * MaxStreakHorizonDays);
+    public static DateOnly GetStreakLogCutoff(DateOnly today) => today.AddDays(-AppConstants.MetricsLogWindowDays);
 
     public static HabitMetrics Calculate(
         Habit habit,
@@ -81,7 +79,7 @@ public static class HabitMetricsCalculator
         {
             var createdDate = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(
                 habit.CreatedAtUtc, userTimeZone ?? TimeZoneInfo.Utc));
-            var legacyHistoryStart = habit.NextDueDate.AddDays(-MaxStreakHorizonDays);
+            var legacyHistoryStart = habit.NextDueDate.AddDays(-AppConstants.StreakLogWindowDays);
             if (legacyHistoryStart < createdDate)
                 legacyHistoryStart = createdDate;
             if (legacyHistoryStart < habit.NextDueDate
@@ -144,7 +142,7 @@ public static class HabitMetricsCalculator
         var current = today;
         var iterations = 0;
 
-        while (iterations < MaxStreakHorizonDays && current >= startDate)
+        while (iterations < AppConstants.StreakLogWindowDays && current >= startDate)
         {
             if (HabitScheduleService.IsHabitDueOnDateForStreakLookback(
                     habit,
@@ -169,7 +167,7 @@ public static class HabitMetricsCalculator
         int weekStartDay)
     {
         var expectedDates = new List<DateOnly>();
-        var horizonStart = today.AddDays(-(MaxStreakHorizonDays - 1));
+        var horizonStart = today.AddDays(-(AppConstants.StreakLogWindowDays - 1));
         var firstDate = startDate > horizonStart ? startDate : horizonStart;
         var cursor = today;
 
@@ -277,8 +275,8 @@ public static class HabitMetricsCalculator
             .Where(log => !log.IsDeleted)
             .Select(log => log.Date)
             .ToHashSet();
-        var firstCandidate = createdDate < habit.NextDueDate.AddDays(-MaxStreakHorizonDays)
-            ? habit.NextDueDate.AddDays(-MaxStreakHorizonDays)
+        var firstCandidate = createdDate < habit.NextDueDate.AddDays(-AppConstants.StreakLogWindowDays)
+            ? habit.NextDueDate.AddDays(-AppConstants.StreakLogWindowDays)
             : createdDate;
         var candidateCount = habit.NextDueDate.DayNumber - firstCandidate.DayNumber;
         if (candidateCount <= 0)
@@ -298,7 +296,7 @@ public static class HabitMetricsCalculator
         var current = today;
         var iterations = 0;
 
-        while (iterations < MaxStreakHorizonDays && current >= startDate)
+        while (iterations < AppConstants.StreakLogWindowDays && current >= startDate)
         {
             if (habit.Days.Contains(current.DayOfWeek))
                 expectedDates.Add(current);
@@ -316,7 +314,7 @@ public static class HabitMetricsCalculator
         var current = today;
         var iterations = 0;
 
-        while (iterations < MaxStreakHorizonDays && current >= startDate)
+        while (iterations < AppConstants.StreakLogWindowDays && current >= startDate)
         {
             expectedDates.Add(current);
 

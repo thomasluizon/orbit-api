@@ -58,8 +58,8 @@ public sealed class PeriodAnalyticsToolsTests
         var tools = new HabitTools(mediator, Substitute.For<IUserDateService>(),
             new McpExecutorBridge(Substitute.For<IAgentOperationExecutor>()));
 
-        var result = await tools.GetPeriodAnalytics(principal, new(from, from.AddDays(6), "completedHabits",
-            BaselineFrom: from.AddDays(-7), BaselineTo: from.AddDays(-1), Search: "Read"));
+        var result = (await tools.GetPeriodAnalytics(principal, new(from, from.AddDays(6), "completedHabits",
+            BaselineFrom: from.AddDays(-7), BaselineTo: from.AddDays(-1), Search: "Read"))).AsText();
 
         await mediator.Received(1).Send(Arg.Is<GetPeriodAnalyticsQuery>(query => query.UserId == user.Id
             && query.Metric == "completedHabits" && query.DateFrom == from && query.Search == "Read"

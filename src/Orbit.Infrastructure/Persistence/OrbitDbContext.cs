@@ -1,3 +1,4 @@
+using Orbit.Application.Common;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
@@ -55,10 +56,12 @@ public class OrbitDbContext : DbContext
     public DbSet<Referral> Referrals => Set<Referral>();
     public DbSet<UserAchievement> UserAchievements => Set<UserAchievement>();
     public DbSet<StreakFreeze> StreakFreezes => Set<StreakFreeze>();
+    public DbSet<XpDailyTotal> XpDailyTotals => Set<XpDailyTotal>();
     public DbSet<XpAwardLog> XpAwardLogs => Set<XpAwardLog>();
     public DbSet<UserSession> UserSessions => Set<UserSession>();
     public DbSet<UserSessionRefreshToken> UserSessionRefreshTokens => Set<UserSessionRefreshToken>();
     public DbSet<AiBudgetCall> AiBudgetCalls => Set<AiBudgetCall>();
+    public DbSet<OAuthClient> OAuthClients => Set<OAuthClient>();
     public DbSet<OAuthState> OAuthStates => Set<OAuthState>();
     public DbSet<DesktopHandoff> DesktopHandoffs => Set<DesktopHandoff>();
     public DbSet<ApiKey> ApiKeys => Set<ApiKey>();
@@ -230,12 +233,19 @@ public class OrbitDbContext : DbContext
             entity.HasIndex(call => call.EvalDateUtc).HasFilter("\"EvalDateUtc\" IS NOT NULL");
             entity.HasOne<User>().WithMany().HasForeignKey(call => call.UserId).OnDelete(DeleteBehavior.Cascade);
         });
+        modelBuilder.Entity<OAuthClient>(entity =>
+        {
+            entity.Property(client => client.ClientName).HasMaxLength(OAuthClient.MaxNameLength).IsRequired();
+            entity.Property(client => client.RedirectUris).IsRequired();
+        });
         modelBuilder.Entity<OAuthState>(entity =>
         {
             entity.HasIndex(state => state.SecretHash).IsUnique();
             entity.HasIndex(state => new { state.Kind, state.ExpiresAtUtc });
             entity.Property(state => state.SecretHash).HasMaxLength(64);
             entity.Property(state => state.Kind).HasMaxLength(30);
+            entity.Property(state => state.PartitionKey).HasMaxLength(64);
+            entity.HasIndex(state => new { state.Kind, state.PartitionKey, state.ExpiresAtUtc }).IsCreatedConcurrently();
             entity.Property(state => state.Payload).HasConversion(encConverter).HasColumnType("text");
         });
         modelBuilder.Entity<DesktopHandoff>(entity =>
@@ -452,6 +462,7 @@ public class OrbitDbContext : DbContext
     {
         modelBuilder.Entity<AiUsageDaily>(entity =>
         {
+            entity.HasIndex(u => u.UserId).IsCreatedConcurrently();
             entity.HasIndex(u => new { u.Date, u.Model, u.Purpose, u.UserId })
                 .IsUnique()
                 .AreNullsDistinct(false);
@@ -463,6 +474,14 @@ public class OrbitDbContext : DbContext
 
     private static void ConfigureNotificationEntity(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<XpDailyTotal>(entity =>
+        {
+            entity.HasKey(row => row.Id);
+            entity.HasIndex(row => new { row.UserId, row.Date }).IsUnique();
+            entity.HasOne<User>().WithMany().HasForeignKey(row => row.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+        modelBuilder.Entity<XpAwardLog>().HasIndex(row => new { row.UserId, row.Source, row.SourceId }).IsCreatedConcurrently();
+
         modelBuilder.Entity<Notification>(entity =>
         {
             entity.Property(n => n.ReminderDate).HasColumnType("date");
@@ -653,10 +672,10 @@ public class OrbitDbContext : DbContext
             entity.Property(c => c.Description).HasMaxLength(500);
 
             entity.HasData(
-                AppConfig.Create("MaxHabitDepth", "5", "Maximum nesting depth for sub-habits"),
+                AppConfig.Create("MaxHabitDepth", AppConstants.MaxHabitDepth.ToString(System.Globalization.CultureInfo.InvariantCulture), "Maximum nesting depth for sub-habits"),
                 AppConfig.Create("MaxTagsPerHabit", "5", "Maximum number of tags per habit"),
                 AppConfig.Create("ReferralRewardDays", "10", "Days of Pro added per successful referral"),
-                AppConfig.Create("MaxReferrals", "10", "Maximum successful referrals per user"),
+                AppConfig.Create("MaxReferrals", AppConstants.DefaultMaxReferrals.ToString(System.Globalization.CultureInfo.InvariantCulture), "Maximum successful referrals per user"),
                 AppConfig.Create("MinSupportedVersion", "1.3.11", "Minimum supported client app version; clients below this receive HTTP 426"),
                 AppConfig.Create("ProAiMessagesPerWeek", "250", "Weekly AI message limit for Pro users"),
                 AppConfig.Create("FreeAiCallsPerDay", "110", "Daily AI call safety budget for Free users"),
@@ -828,6 +847,8 @@ public class OrbitDbContext : DbContext
 
             entity.Property(u => u.GoogleCalendarSelectedIds).HasColumnType("text");
 
+            entity.Property<bool?>(XpHistoryStore.InitializedProperty).HasDefaultValue(true);
+            entity.HasIndex(u => new { u.GoogleCalendarAutoSyncEnabled, u.GoogleCalendarLastAttemptAtUtc }).IsCreatedConcurrently();
             entity.HasIndex(u => new { u.GoogleCalendarAutoSyncEnabled, u.GoogleCalendarLastSyncedAt })
                 .HasFilter("\"GoogleCalendarAutoSyncEnabled\" = TRUE");
 

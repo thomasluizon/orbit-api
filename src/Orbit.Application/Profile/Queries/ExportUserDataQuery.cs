@@ -143,7 +143,7 @@ public class ExportUserDataQueryHandler(
         return Result.Success(export);
     }
 
-    private static ExportedApiKey MapApiKey(ApiKey apiKey)
+    internal static ExportedApiKey MapApiKey(ApiKey apiKey)
     {
         return new ExportedApiKey(
             apiKey.Id,
@@ -157,7 +157,7 @@ public class ExportUserDataQueryHandler(
             apiKey.IsRevoked);
     }
 
-    private static ExportedHabit MapHabit(Habit habit, Dictionary<Guid, List<HabitLog>> logsByHabit)
+    internal static ExportedHabit MapHabit(Habit habit, Dictionary<Guid, List<HabitLog>> logsByHabit)
     {
         var logs = logsByHabit.TryGetValue(habit.Id, out var habitLogs)
             ? habitLogs.Select(l => new ExportedHabitLog(l.Date, l.Value, l.Note, l.CreatedAtUtc)).ToList()
@@ -181,7 +181,7 @@ public class ExportUserDataQueryHandler(
             habit.IntervalWeeks);
     }
 
-    private static ExportedGoal MapGoal(
+    internal static ExportedGoal MapGoal(
         Goal goal,
         Dictionary<Guid, List<GoalProgressLog>> progressByGoal,
         IReadOnlyDictionary<Guid, int> freshProgressValues)

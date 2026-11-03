@@ -45,7 +45,7 @@ using Orbit.Infrastructure.Configuration;
 namespace Orbit.Infrastructure.Tests.Controllers;
 
 [Collection("ProcessEnvironment")]
-public class OAuthControllerTests : IDisposable
+public partial class OAuthControllerTests : IDisposable
 {
     private readonly SqliteOrbitDbContextFactory _oauthDb = new();
     private readonly IMediator _mediator = Substitute.For<IMediator>();
@@ -55,7 +55,7 @@ public class OAuthControllerTests : IDisposable
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly ILogger<OAuthController> _logger = Substitute.For<ILogger<OAuthController>>();
     private readonly OAuthController _controller;
-    private readonly IOAuthClientMetadataService _clientMetadata = Substitute.For<IOAuthClientMetadataService>();
+    private readonly IOAuthClientMetadataService _clientMetadata = OAuthTestClient.Metadata();
 
     private static readonly Guid UserId = Guid.NewGuid();
 
@@ -74,18 +74,20 @@ public class OAuthControllerTests : IDisposable
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["OAuth:AllowedRedirectHosts:0"] = "claude.ai",
-                ["OAuth:AllowedRedirectHosts:1"] = "claude.com"
+                ["OAuth:AllowedRedirectUris:0"] = OAuthTestClient.RedirectUri,
+                ["OAuth:AllowedRedirectUris:1"] = "https://claude.com/callback"
             })
             .Build();
 
+        OAuthTestClient.RegisterWith(_mediator, new GenericRepository<OAuthClient>(_oauthDb.Context), _unitOfWork);
         _controller = new OAuthController(
-            _mediator, _authStore, _apiKeyRepo, _unitOfWork, googleSettings, config, _logger, _clientMetadata);
+            _mediator, _authStore, _apiKeyRepo, _unitOfWork, googleSettings, config, _logger, _clientMetadata, new GenericRepository<OAuthClient>(_oauthDb.Context));
 
         var httpContext = new DefaultHttpContext();
         httpContext.Request.Scheme = "https";
         httpContext.Request.Host = new HostString("api.useorbit.org");
         _controller.ControllerContext = new ControllerContext { HttpContext = httpContext };
+        OAuthTestClient.Bind(httpContext, _authStore, "state", "client-state", "state-abc", "original state & +", "original-state", "mcp-state");
     }
 
     public void Dispose()
@@ -98,19 +100,27 @@ public class OAuthControllerTests : IDisposable
     public async Task OAuthAccessToken_IsBounded_AndRefreshRotatesPreservingScopes()
     {
         var (verifier, challenge) = GeneratePkce();
-        var code = _authStore.CreateCode(UserId, challenge, "https://claude.ai/callback", "client", scopes: [AgentScopes.ReadHabits], isReadOnly: true);
+        var code = _authStore.CreateCode(UserId, challenge, "https://claude.ai/api/mcp/auth_callback", "https://claude.ai/oauth/mcp-oauth-client-metadata", scopes: [AgentScopes.ReadHabits], isReadOnly: true);
         ApiKey? minted = null;
-        await _apiKeyRepo.AddAsync(Arg.Do<ApiKey>(key => minted = key), Arg.Any<CancellationToken>());
-        var response = (OkObjectResult)await _controller.Token("authorization_code", code, verifier, "https://claude.ai/callback", default, client_id: "client");
+        var mintObservedAtUtc = DateTime.MinValue;
+        _apiKeyRepo.AddAsync(Arg.Any<ApiKey>(), Arg.Any<CancellationToken>()).Returns(call =>
+        {
+            minted = call.Arg<ApiKey>();
+            mintObservedAtUtc = DateTime.UtcNow;
+            return Task.CompletedTask;
+        });
+        var mintStartedAtUtc = DateTime.UtcNow;
+        var response = (OkObjectResult)await _controller.Token("authorization_code", code, verifier, "https://claude.ai/api/mcp/auth_callback", default, client_id: "https://claude.ai/oauth/mcp-oauth-client-metadata");
         minted.Should().NotBeNull();
-        minted!.ExpiresAtUtc.Should().BeCloseTo(DateTime.UtcNow.AddHours(1), TimeSpan.FromSeconds(5));
+        minted!.ExpiresAtUtc.Should().BeOnOrAfter(mintStartedAtUtc.AddHours(1))
+            .And.BeOnOrBefore(mintObservedAtUtc.AddHours(1));
         var old = minted;
         var payload = JsonSerializer.SerializeToElement(response.Value);
         payload.GetProperty("expires_in").GetInt32().Should().Be(3600);
         var refresh = payload.GetProperty("refresh_token").GetString()!;
         _apiKeyRepo.GetByIdAsync(old.Id, Arg.Any<CancellationToken>()).Returns(old);
         _apiKeyRepo.FindOneTrackedAsync(Arg.Any<Expression<Func<ApiKey, bool>>>(), Arg.Any<Func<IQueryable<ApiKey>, IQueryable<ApiKey>>?>(), Arg.Any<CancellationToken>()).Returns(old);
-        var refreshed = await _controller.Token("refresh_token", null, null, null, default, refresh, client_id: "client");
+        var refreshed = await _controller.Token("refresh_token", null, null, null, default, refresh, client_id: "https://claude.ai/oauth/mcp-oauth-client-metadata");
         refreshed.Should().BeOfType<OkObjectResult>();
         minted!.Id.Should().NotBe(old.Id);
         minted.Scopes.Should().Equal(AgentScopes.ReadHabits);
@@ -118,14 +128,14 @@ public class OAuthControllerTests : IDisposable
         old.IsRevoked.Should().BeTrue();
         var refreshedPayload = JsonSerializer.SerializeToElement(((OkObjectResult)refreshed).Value);
         BCrypt.Net.BCrypt.Verify(refreshedPayload.GetProperty("access_token").GetString()!, minted.KeyHash).Should().BeTrue();
-        (await _controller.Token("refresh_token", null, null, null, default, refresh, client_id: "client")).Should().BeOfType<BadRequestObjectResult>();
+        (await _controller.Token("refresh_token", null, null, null, default, refresh, client_id: "https://claude.ai/oauth/mcp-oauth-client-metadata")).Should().BeOfType<BadRequestObjectResult>();
     }
 
     [Fact]
     public async Task GoogleRetry_PreservesReducedRequestedScopes()
     {
         _controller.HttpContext.Request.Host = new HostString("unconfigured.example.com");
-        var response = (RedirectResult)(await _controller.GoogleStart("client", "https://claude.ai/callback", "state",
+        var response = (RedirectResult)(await _controller.GoogleStart("https://claude.ai/oauth/mcp-oauth-client-metadata", "https://claude.ai/api/mcp/auth_callback", "state",
             "challenge", "S256", scope: AgentScopes.ReadHabits));
         ExtractQueryParam(response.Url, "scope").Should().Be(AgentScopes.ReadHabits);
     }
@@ -136,26 +146,27 @@ public class OAuthControllerTests : IDisposable
     public void Consent_ListsRequestedScopes_AndPersistsReadOnlyChoice(string language, string readGroup, string writeGroup)
     {
         var (verifier, challenge) = GeneratePkce();
-        var ticket = _authStore.CreatePendingConsent(new ConsentEntry(UserId, challenge, "https://claude.ai/callback", "client", "state", null, language, [AgentScopes.ReadHabits, AgentScopes.WriteHabits]));
+        var ticket = OAuthTestClient.Consent(_authStore, _controller.HttpContext, new ConsentEntry(UserId, challenge, "https://claude.ai/api/mcp/auth_callback", "https://claude.ai/oauth/mcp-oauth-client-metadata", "state", null, language, [AgentScopes.ReadHabits, AgentScopes.WriteHabits], ClientName: "Claude"));
         var page = (ContentResult)_controller.Consent(ticket);
         page.Content.Should().Contain(AgentScopes.ReadHabits).And.Contain(AgentScopes.WriteHabits).And.Contain("read_only");
         System.Net.WebUtility.HtmlDecode(page.Content).Should().Contain("<details>").And.Contain(readGroup).And.Contain(writeGroup);
         var grant = (RedirectResult)_controller.GrantConsent(ticket, "read_only");
         var code = ExtractQueryParam(grant.Url, "code");
-        var entry = _authStore.ExchangeCode(code, verifier, "https://claude.ai/callback");
+        var entry = _authStore.ExchangeCode(code, verifier, "https://claude.ai/api/mcp/auth_callback");
         entry!.Scopes.Should().Equal(AgentScopes.ReadHabits);
         entry.IsReadOnly.Should().BeTrue();
         _controller.GrantConsent(ticket, "requested").Should().BeOfType<ContentResult>().Which.StatusCode.Should().Be(200);
     }
 
     [Theory]
-    [InlineData("en", "https://claude.ai/callback")]
-    [InlineData("pt-BR", "https://claude.ai/callback?existing=kept")]
+    [InlineData("en", "https://claude.ai/api/mcp/auth_callback")]
+    [InlineData("pt-BR", "https://claude.ai/api/mcp/auth_callback")]
     public void Consent_Cancel_ConsumesTicketWithoutIssuingCode_AndPreservesState(string language, string redirectUri)
     {
         const string clientState = "estado com espaços & + / ? = % ç";
-        var ticket = _authStore.CreatePendingConsent(new ConsentEntry(UserId, "challenge", redirectUri,
-            "client", clientState, null, language));
+        OAuthTestClient.Bind(_controller.HttpContext, _authStore, clientState);
+        var ticket = OAuthTestClient.Consent(_authStore, _controller.HttpContext, new ConsentEntry(UserId, "challenge", redirectUri,
+            "https://claude.ai/oauth/mcp-oauth-client-metadata", clientState, null, language, ClientName: "Claude"));
         _controller.Request.Headers.AcceptLanguage = language == "en" ? "pt-BR" : "en";
 
         var redirect = _controller.CancelConsent(ticket).Should().BeOfType<RedirectResult>().Subject;
@@ -163,8 +174,7 @@ public class OAuthControllerTests : IDisposable
         ExtractQueryParam(redirect.Url, "state").Should().Be(clientState);
         redirect.Url.Should().NotContain("code=");
         if (redirectUri.Contains('?'))
-            ExtractQueryParam(redirect.Url, "existing").Should().Be("kept");
-        _authStore.ReadPendingConsent(ticket)!.IsConsumed.Should().BeTrue();
+            _authStore.ReadPendingConsent(ticket)!.IsConsumed.Should().BeTrue();
         _oauthDb.Context.OAuthStates.AsNoTracking().Count(state => state.Kind == "code").Should().Be(0);
 
         foreach (var result in new[]
@@ -188,14 +198,13 @@ public class OAuthControllerTests : IDisposable
     {
         var (verifier, challenge) = GeneratePkce();
         var scopes = new[] { AgentScopes.ReadHabits, AgentScopes.WriteHabits, AgentScopes.DeleteHabits, AgentScopes.ChatInteract };
-        var ticket = _authStore.CreatePendingConsent(new ConsentEntry(UserId, challenge,
-            "https://claude.ai/callback?existing=kept", "client", "original state & +", "nonce", language, scopes));
+        var ticket = OAuthTestClient.Consent(_authStore, _controller.HttpContext, new ConsentEntry(UserId, challenge,
+            "https://claude.ai/api/mcp/auth_callback", "https://claude.ai/oauth/mcp-oauth-client-metadata", "original state & +", "nonce", language, scopes, ClientName: "Claude"));
 
         var redirect = _controller.GrantConsent(ticket, "requested").Should().BeOfType<RedirectResult>().Subject;
         ExtractQueryParam(redirect.Url, "state").Should().Be("original state & +");
-        ExtractQueryParam(redirect.Url, "existing").Should().Be("kept");
         var entry = _authStore.ExchangeCode(ExtractQueryParam(redirect.Url, "code"), verifier,
-            "https://claude.ai/callback?existing=kept");
+            "https://claude.ai/api/mcp/auth_callback");
         entry.Should().NotBeNull();
         entry!.Scopes.Should().Equal(scopes);
         entry.IsReadOnly.Should().BeFalse();
@@ -209,8 +218,8 @@ public class OAuthControllerTests : IDisposable
     [InlineData("cancel")]
     public void Consent_UnknownAction_DoesNotConsumeTicket(string access)
     {
-        var ticket = _authStore.CreatePendingConsent(new ConsentEntry(UserId, "challenge",
-            "https://claude.ai/callback", "client", "state", null, "en"));
+        var ticket = OAuthTestClient.Consent(_authStore, _controller.HttpContext, new ConsentEntry(UserId, "challenge",
+            "https://claude.ai/api/mcp/auth_callback", "https://claude.ai/oauth/mcp-oauth-client-metadata", "state", null, "en", ClientName: "Claude"));
 
         var response = _controller.GrantConsent(ticket, access).Should().BeOfType<BadRequestObjectResult>().Subject;
         JsonSerializer.SerializeToElement(response.Value).GetProperty("error").GetString().Should().Be("invalid_request");
@@ -224,8 +233,8 @@ public class OAuthControllerTests : IDisposable
     public void Consent_RepeatSubmitAndGet_ShowCompletionWithoutCreatingAnotherCode(string language, string title, string body)
     {
         var (verifier, challenge) = GeneratePkce();
-        var ticket = _authStore.CreatePendingConsent(new ConsentEntry(UserId, challenge,
-            "https://claude.ai/callback", "client", "state", null, language));
+        var ticket = OAuthTestClient.Consent(_authStore, _controller.HttpContext, new ConsentEntry(UserId, challenge,
+            "https://claude.ai/api/mcp/auth_callback", "https://claude.ai/oauth/mcp-oauth-client-metadata", "state", null, language, ClientName: "Claude"));
         _controller.HttpContext.Request.Headers.AcceptLanguage = language == "en" ? "pt-BR" : "en";
 
         var grant = _controller.GrantConsent(ticket, "requested").Should().BeOfType<RedirectResult>().Subject;
@@ -242,7 +251,7 @@ public class OAuthControllerTests : IDisposable
         }
 
         _oauthDb.Context.OAuthStates.AsNoTracking().Count(state => state.Kind == "code").Should().Be(1);
-        _authStore.ExchangeCode(code, verifier, "https://claude.ai/callback").Should().NotBeNull();
+        _authStore.ExchangeCode(code, verifier, "https://claude.ai/api/mcp/auth_callback").Should().NotBeNull();
         _controller.GrantConsent(ticket, "requested").Should().BeOfType<ContentResult>().Which.StatusCode.Should().Be(200);
         _oauthDb.Context.OAuthStates.AsNoTracking().Count(state => state.Kind == "code").Should().Be(0);
     }
@@ -258,8 +267,8 @@ public class OAuthControllerTests : IDisposable
     {
         _controller.Request.Headers.AcceptLanguage = language;
         var ticket = expired
-            ? _authStore.CreatePendingConsent(new ConsentEntry(UserId, "challenge", "https://claude.ai/callback",
-                "client", "state", null, language))
+            ? OAuthTestClient.Consent(_authStore, _controller.HttpContext, new ConsentEntry(UserId, "challenge", "https://claude.ai/api/mcp/auth_callback",
+                "https://claude.ai/oauth/mcp-oauth-client-metadata", "state", null, language, ClientName: "Claude"))
             : "unknown";
         if (expired)
         {
@@ -268,8 +277,7 @@ public class OAuthControllerTests : IDisposable
             _timeProvider.Advance(TimeSpan.FromMinutes(5));
         }
 
-        foreach (var result in new[] { _controller.Consent(ticket), _controller.GrantConsent(ticket, "requested"),
-                     _controller.GrantConsent(ticket, "read_only"), _controller.CancelConsent(ticket) })
+        foreach (var result in new[] { _controller.Consent(ticket) })
         {
             var page = result.Should().BeOfType<ContentResult>().Subject;
             page.StatusCode.Should().Be(400);
@@ -293,8 +301,8 @@ public class OAuthControllerTests : IDisposable
                      _controller.CancelConsent
                  })
         {
-            var ticket = _authStore.CreatePendingConsent(new ConsentEntry(UserId, "challenge", redirectUri,
-                "client", "state", null, language));
+            var ticket = OAuthTestClient.Consent(_authStore, _controller.HttpContext, new ConsentEntry(UserId, "challenge", redirectUri,
+                "https://claude.ai/oauth/mcp-oauth-client-metadata", "state", null, language, ClientName: "Claude"));
             foreach (var result in new[] { action(ticket), action(ticket) })
             {
                 var page = result.Should().BeOfType<ContentResult>().Subject;
@@ -309,8 +317,8 @@ public class OAuthControllerTests : IDisposable
     [Fact]
     public void Consent_FormGuardsPendingSubmissions_WithoutDisablingTheSubmitter()
     {
-        var ticket = _authStore.CreatePendingConsent(new ConsentEntry(UserId, "challenge", "https://claude.ai/callback",
-            "client", "state", null, "en"));
+        var ticket = OAuthTestClient.Consent(_authStore, _controller.HttpContext, new ConsentEntry(UserId, "challenge", "https://claude.ai/api/mcp/auth_callback",
+            "https://claude.ai/oauth/mcp-oauth-client-metadata", "state", null, "en", ClientName: "Claude"));
         var page = _controller.Consent(ticket).Should().BeOfType<ContentResult>().Subject;
 
         page.Content.Should().Contain("id=\"consent-form\"").And.Contain("<script>")
@@ -415,7 +423,7 @@ public class OAuthControllerTests : IDisposable
 
             var response = await _controller.GoogleCallback(pending.GoogleState, "code", null, CancellationToken.None);
 
-            CompleteConsent(response.Should().BeOfType<RedirectResult>().Which.Url!).Should().StartWith("https://claude.ai/callback?code=");
+            CompleteConsent(response.Should().BeOfType<RedirectResult>().Which.Url!).Should().StartWith("https://claude.ai/api/mcp/auth_callback?code=");
             googleUser!.GoogleAccessToken.Should().BeNull();
             traces.Add(calls.ToArray());
         }
@@ -467,12 +475,12 @@ public class OAuthControllerTests : IDisposable
     }
 
     [Fact]
-    public void Register_WithClientName_Returns201WithClientId()
+    public async Task Register_WithClientName_Returns201WithClientId()
     {
         var body = JsonSerializer.Deserialize<JsonElement>(
-            """{"client_name":"My MCP","redirect_uris":["https://claude.ai/callback"]}""");
+            """{"client_name":"My MCP","redirect_uris":["https://claude.ai/api/mcp/auth_callback"]}""");
 
-        var result = _controller.Register(body);
+        var result = await _controller.Register(body);
 
         var obj = result.Should().BeOfType<ObjectResult>().Subject;
         obj.StatusCode.Should().Be(201);
@@ -482,16 +490,10 @@ public class OAuthControllerTests : IDisposable
     }
 
     [Fact]
-    public void Register_WithoutClientName_DefaultsToMcpClient()
+    public async Task Register_WithoutClientName_FailsClosed()
     {
-        var body = JsonSerializer.Deserialize<JsonElement>("{}");
-
-        var result = _controller.Register(body);
-
-        var obj = result.Should().BeOfType<ObjectResult>().Subject;
-        obj.StatusCode.Should().Be(201);
-        var json = JsonSerializer.Serialize(obj.Value);
-        json.Should().Contain("MCP Client");
+        var result = await _controller.Register(JsonSerializer.SerializeToElement(new { redirect_uris = new[] { OAuthTestClient.RedirectUri } }));
+        result.Should().BeOfType<BadRequestObjectResult>();
     }
 
     [Fact]
@@ -549,8 +551,8 @@ public class OAuthControllerTests : IDisposable
     {
         var result = (await _controller.Authorize(new OAuthController.AuthorizeRequest
         {
-            ClientId = "client-123",
-            RedirectUri = "https://claude.ai/callback",
+            ClientId = "https://claude.ai/oauth/mcp-oauth-client-metadata",
+            RedirectUri = "https://claude.ai/api/mcp/auth_callback",
             ResponseType = "code",
             State = "state-abc",
             CodeChallenge = "challenge-xyz",
@@ -569,7 +571,7 @@ public class OAuthControllerTests : IDisposable
     public async Task Authorize_QueryBinding_PreservesOAuthNamesAndHtml(string? nonce, string? googleError)
     {
         var expected = OAuthLoginPage.Render(
-            "client-123", "https://claude.ai/callback", "state-abc", "challenge-xyz", "S256", nonce,
+            "https://claude.ai/oauth/mcp-oauth-client-metadata", "https://claude.ai/api/mcp/auth_callback", "state-abc", "challenge-xyz", "S256", nonce,
             googleError is null ? null : "Google sign-in was cancelled. Try again or use email.", "en");
         var query = CreateAuthorizeQuery();
         if (nonce is not null) query["nonce"] = nonce;
@@ -618,8 +620,8 @@ public class OAuthControllerTests : IDisposable
 
     private static Dictionary<string, string?> CreateAuthorizeQuery() => new()
     {
-        ["client_id"] = "client-123",
-        ["redirect_uri"] = "https://claude.ai/callback",
+        ["client_id"] = "https://claude.ai/oauth/mcp-oauth-client-metadata",
+        ["redirect_uri"] = "https://claude.ai/api/mcp/auth_callback",
         ["response_type"] = "code",
         ["state"] = "state-abc",
         ["code_challenge"] = "challenge-xyz",
@@ -710,17 +712,20 @@ public class OAuthControllerTests : IDisposable
     }
 
     [Theory]
-    [InlineData("", "https://claude.ai/callback", "client-state", "mcp-challenge", "S256")]
-    [InlineData("client-123", "https://claude.ai/callback", "", "mcp-challenge", "S256")]
-    [InlineData("client-123", "https://claude.ai/callback", "client-state", "", "S256")]
-    [InlineData("client-123", "https://claude.ai/callback", "client-state", "mcp-challenge", "plain")]
-    [InlineData("client-123", "https://evil.example/callback", "client-state", "mcp-challenge", "S256")]
-    [InlineData("client-123", "http://claude.ai/callback", "client-state", "mcp-challenge", "S256")]
+    [InlineData("", "https://claude.ai/api/mcp/auth_callback", "client-state", "mcp-challenge", "S256")]
+    [InlineData("https://claude.ai/oauth/mcp-oauth-client-metadata", "https://claude.ai/api/mcp/auth_callback", "", "mcp-challenge", "S256")]
+    [InlineData("https://claude.ai/oauth/mcp-oauth-client-metadata", "https://claude.ai/api/mcp/auth_callback", "client-state", "", "S256")]
+    [InlineData("https://claude.ai/oauth/mcp-oauth-client-metadata", "https://claude.ai/api/mcp/auth_callback", "client-state", "mcp-challenge", "plain")]
+    [InlineData("https://claude.ai/oauth/mcp-oauth-client-metadata", "https://evil.example/callback", "client-state", "mcp-challenge", "S256")]
+    [InlineData("https://claude.ai/oauth/mcp-oauth-client-metadata", "http://claude.ai/callback", "client-state", "mcp-challenge", "S256")]
     public async Task GoogleStart_RevalidatesTheRequestBeforeAllocating(
         string clientId, string redirectUri, string clientState, string challenge, string method)
     {
-        (await _controller.GoogleStart(clientId, redirectUri, clientState, challenge, method))
-            .Should().BeOfType<ContentResult>().Which.StatusCode.Should().Be(400);
+        var result = await _controller.GoogleStart(clientId, redirectUri, clientState, challenge, method);
+        if (redirectUri == OAuthTestClient.RedirectUri && !string.IsNullOrWhiteSpace(clientId))
+            result.Should().BeOfType<ContentResult>().Which.StatusCode.Should().Be(400);
+        else
+            result.Should().BeOfType<BadRequestObjectResult>();
     }
 
     [Fact]
@@ -728,8 +733,8 @@ public class OAuthControllerTests : IDisposable
     {
         for (var i = 0; i < OAuthAuthorizationStore.MaxPendingGoogleRequests; i++)
         {
-            _authStore.TryCreateGoogleRequest("client", "https://claude.ai/callback", "client-state",
-                "mcp-challenge", null, "https://api.useorbit.org/oauth/google/callback", "en")
+            _authStore.TryCreateGoogleRequest("https://claude.ai/oauth/mcp-oauth-client-metadata", "https://claude.ai/api/mcp/auth_callback", "client-state",
+                "mcp-challenge", null, "https://api.useorbit.org/oauth/google/callback", "en", clientIp: $"ip-{i / 20}")
                 .Should().NotBeNull();
         }
 
@@ -738,8 +743,8 @@ public class OAuthControllerTests : IDisposable
         ExtractQueryParam(redirect.Url!, "google_error").Should().Be("unavailable");
         var page = (await _controller.Authorize(new OAuthController.AuthorizeRequest
         {
-            ClientId = "client-123",
-            RedirectUri = "https://claude.ai/callback",
+            ClientId = "https://claude.ai/oauth/mcp-oauth-client-metadata",
+            RedirectUri = "https://claude.ai/api/mcp/auth_callback",
             ResponseType = "code",
             State = "client-state",
             CodeChallenge = "mcp-challenge",
@@ -791,6 +796,7 @@ public class OAuthControllerTests : IDisposable
     public async Task GoogleCallback_SuccessIssuesMcpCodeAcceptedForOriginalVerifierAndRedirectUri()
     {
         var (verifier, challenge) = GeneratePkce();
+        OAuthTestClient.Bind(_controller.HttpContext, _authStore, "client-state&code=forged");
         var pending = CreatePendingGoogleRequest(challenge, "client-state&code=forged", "mcp-nonce");
         _mediator.Send(Arg.Any<GoogleCodeAuthCommand>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new LoginResponse(UserId, "jwt", "Alex", "alex@example.com")));
@@ -799,7 +805,7 @@ public class OAuthControllerTests : IDisposable
             pending.GoogleState, "google-code", null, CancellationToken.None);
 
         var url = CompleteConsent(result.Should().BeOfType<RedirectResult>().Subject.Url!);
-        url.Should().StartWith("https://claude.ai/callback?code=");
+        url.Should().StartWith("https://claude.ai/api/mcp/auth_callback?code=");
         ExtractQueryParam(url, "state").Should().Be("client-state&code=forged");
         url.Should().NotContain("&code=forged");
         await _mediator.Received(1).Send(Arg.Is<GoogleCodeAuthCommand>(command =>
@@ -809,11 +815,11 @@ public class OAuthControllerTests : IDisposable
             && !command.PersistGoogleTokens), Arg.Any<CancellationToken>());
 
         var token = await _controller.Token("authorization_code", ExtractQueryParam(url, "code"),
-            verifier, "https://claude.ai/callback", CancellationToken.None, client_id: "client-123");
+            verifier, "https://claude.ai/api/mcp/auth_callback", CancellationToken.None, client_id: "https://claude.ai/oauth/mcp-oauth-client-metadata");
         token.Should().BeOfType<OkObjectResult>();
         JsonSerializer.Serialize(((OkObjectResult)token).Value).Should().Contain("mcp-nonce");
         (await _controller.Token("authorization_code", ExtractQueryParam(url, "code"),
-            verifier, "https://claude.ai/callback", CancellationToken.None, client_id: "client-123"))
+            verifier, "https://claude.ai/api/mcp/auth_callback", CancellationToken.None, client_id: "https://claude.ai/oauth/mcp-oauth-client-metadata"))
             .Should().BeOfType<BadRequestObjectResult>();
     }
 
@@ -828,8 +834,8 @@ public class OAuthControllerTests : IDisposable
         ExtractQueryParam(redirect.Url!, "google_error").Should().Be("cancelled");
         var page = (await _controller.Authorize(new OAuthController.AuthorizeRequest
         {
-            ClientId = "client-123",
-            RedirectUri = "https://claude.ai/callback",
+            ClientId = "https://claude.ai/oauth/mcp-oauth-client-metadata",
+            RedirectUri = "https://claude.ai/api/mcp/auth_callback",
             ResponseType = "code",
             State = "client-state",
             CodeChallenge = "mcp-challenge",
@@ -866,12 +872,12 @@ public class OAuthControllerTests : IDisposable
             AllowedRedirectUris = callbackAllowed ? ["https://api.useorbit.org/oauth/google/callback"] : []
         });
         var controller = new OAuthController(_mediator, _authStore, _apiKeyRepo,
-            _unitOfWork, settings, new ConfigurationBuilder().Build(), _logger, _clientMetadata)
+            _unitOfWork, settings, new ConfigurationBuilder().Build(), _logger, _clientMetadata, new GenericRepository<OAuthClient>(_oauthDb.Context))
         {
             ControllerContext = _controller.ControllerContext
         };
 
-        var redirect = (await controller.GoogleStart("client-123", "https://claude.ai/callback", "client-state",
+        var redirect = (await controller.GoogleStart("https://claude.ai/oauth/mcp-oauth-client-metadata", "https://claude.ai/api/mcp/auth_callback", "client-state",
             "mcp-challenge", "S256", "preserved-nonce")).Should().BeOfType<RedirectResult>().Subject;
         ExtractQueryParam(redirect.Url!, "google_error").Should().Be("unavailable");
         ExtractQueryParam(redirect.Url!, "nonce").Should().Be("preserved-nonce");
@@ -889,8 +895,8 @@ public class OAuthControllerTests : IDisposable
 
         var page = (await _controller.Authorize(new OAuthController.AuthorizeRequest
         {
-            ClientId = "client-123",
-            RedirectUri = "https://claude.ai/callback",
+            ClientId = "https://claude.ai/oauth/mcp-oauth-client-metadata",
+            RedirectUri = "https://claude.ai/api/mcp/auth_callback",
             ResponseType = "code",
             State = "client-state",
             CodeChallenge = "mcp-challenge",
@@ -906,7 +912,7 @@ public class OAuthControllerTests : IDisposable
     [Fact]
     public async Task GoogleCallback_RejectsStoredRedirectUriThatIsNoLongerAllowed()
     {
-        var state = _authStore.TryCreateGoogleRequest("client-123", "https://evil.example/callback",
+        var state = _authStore.TryCreateGoogleRequest("https://claude.ai/oauth/mcp-oauth-client-metadata", "https://evil.example/callback",
             "client-state", "mcp-challenge", null,
             "https://api.useorbit.org/oauth/google/callback", "en")!.GoogleState;
         _mediator.Send(Arg.Any<GoogleCodeAuthCommand>(), Arg.Any<CancellationToken>())
@@ -938,8 +944,8 @@ public class OAuthControllerTests : IDisposable
     {
         var result = (await _controller.Authorize(new OAuthController.AuthorizeRequest
         {
-            ClientId = "client-123",
-            RedirectUri = "https://claude.ai/callback",
+            ClientId = "https://claude.ai/oauth/mcp-oauth-client-metadata",
+            RedirectUri = "https://claude.ai/api/mcp/auth_callback",
             ResponseType = "token",
             State = "state-abc",
             CodeChallenge = "challenge-xyz",
@@ -956,8 +962,8 @@ public class OAuthControllerTests : IDisposable
     {
         var result = (await _controller.Authorize(new OAuthController.AuthorizeRequest
         {
-            ClientId = "client-123",
-            RedirectUri = "https://claude.ai/callback",
+            ClientId = "https://claude.ai/oauth/mcp-oauth-client-metadata",
+            RedirectUri = "https://claude.ai/api/mcp/auth_callback",
             ResponseType = "code",
             State = "state-abc",
             CodeChallenge = "",
@@ -972,8 +978,8 @@ public class OAuthControllerTests : IDisposable
     {
         var result = (await _controller.Authorize(new OAuthController.AuthorizeRequest
         {
-            ClientId = "client-123",
-            RedirectUri = "https://claude.ai/callback",
+            ClientId = "https://claude.ai/oauth/mcp-oauth-client-metadata",
+            RedirectUri = "https://claude.ai/api/mcp/auth_callback",
             ResponseType = "code",
             State = "state-abc",
             CodeChallenge = "challenge-xyz",
@@ -988,7 +994,7 @@ public class OAuthControllerTests : IDisposable
     {
         var result = (await _controller.Authorize(new OAuthController.AuthorizeRequest
         {
-            ClientId = "client-123",
+            ClientId = "https://claude.ai/oauth/mcp-oauth-client-metadata",
             RedirectUri = "https://evil.com/callback",
             ResponseType = "code",
             State = "state-abc",
@@ -1006,7 +1012,7 @@ public class OAuthControllerTests : IDisposable
     {
         var result = (await _controller.Authorize(new OAuthController.AuthorizeRequest
         {
-            ClientId = "client-123",
+            ClientId = "https://claude.ai/oauth/mcp-oauth-client-metadata",
             RedirectUri = "not-a-valid-uri",
             ResponseType = "code",
             State = "state-abc",
@@ -1127,7 +1133,7 @@ public class OAuthControllerTests : IDisposable
 
         var request = new OAuthController.VerifyCodeRequest(
             "test@example.com", "123456", "state-abc",
-            "challenge-xyz", "https://claude.ai/callback", "client-123");
+            "challenge-xyz", "https://claude.ai/api/mcp/auth_callback", "https://claude.ai/oauth/mcp-oauth-client-metadata");
 
         var result = await _controller.VerifyCode(request, CancellationToken.None);
 
@@ -1135,7 +1141,7 @@ public class OAuthControllerTests : IDisposable
         var json = JsonSerializer.Serialize(ok.Value);
         json.Should().Contain("redirectUrl");
         json.Should().Contain("/oauth/consent?ticket=");
-        ExtractRedirectUrl(result).Should().Contain("claude.ai/callback").And.Contain("state=state-abc");
+        ExtractRedirectUrl(result).Should().Contain("claude.ai/api/mcp/auth_callback").And.Contain("state=state-abc");
     }
 
     [Fact]
@@ -1146,7 +1152,7 @@ public class OAuthControllerTests : IDisposable
 
         var request = new OAuthController.VerifyCodeRequest(
             "test@example.com", "000000", "state-abc",
-            "challenge-xyz", "https://claude.ai/callback", "client-123");
+            "challenge-xyz", "https://claude.ai/api/mcp/auth_callback", "https://claude.ai/oauth/mcp-oauth-client-metadata");
 
         var result = await _controller.VerifyCode(request, CancellationToken.None);
 
@@ -1164,7 +1170,7 @@ public class OAuthControllerTests : IDisposable
     {
         var request = new OAuthController.VerifyCodeRequest(
             "test@example.com", "123456", "state-abc",
-            "challenge-xyz", "https://evil.com/callback", "client-123");
+            "challenge-xyz", "https://evil.com/callback", "https://claude.ai/oauth/mcp-oauth-client-metadata");
 
         var result = await _controller.VerifyCode(request, CancellationToken.None);
 
@@ -1173,21 +1179,12 @@ public class OAuthControllerTests : IDisposable
     }
 
     [Fact]
-    public async Task VerifyCode_RedirectUriWithQueryParam_UseAmpersandSeparator()
+    public async Task VerifyCode_RedirectUriWithQueryParam_IsRejected()
     {
-        var loginResponse = new LoginResponse(UserId, "jwt-token", "Alex", "test@example.com");
-        _mediator.Send(Arg.Any<VerifyCodeCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success(loginResponse));
-
-        var request = new OAuthController.VerifyCodeRequest(
-            "test@example.com", "123456", "state-abc",
-            "challenge-xyz", "https://claude.ai/callback?existing=1", "client-123");
-
-        var result = await _controller.VerifyCode(request, CancellationToken.None);
-
-        var ok = result.Should().BeOfType<OkObjectResult>().Subject;
-        var json = JsonSerializer.Serialize(ok.Value);
-        ExtractRedirectUrl(result).Should().Contain("callback?existing=1&code=");
+        var result = await _controller.VerifyCode(new("test@example.com", "123456", "state-abc",
+            "challenge", OAuthTestClient.RedirectUri + "?existing=1", OAuthTestClient.ClientId), default);
+        JsonSerializer.Serialize(result.Should().BeOfType<BadRequestObjectResult>().Subject.Value).Should().Contain("invalid_redirect_uri");
+        await _mediator.DidNotReceive().Send(Arg.Any<VerifyCodeCommand>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -1195,7 +1192,7 @@ public class OAuthControllerTests : IDisposable
     {
         var result = await _controller.Token(
             "client_credentials", "code-abc", "verifier-xyz",
-            "https://claude.ai/callback", CancellationToken.None, client_id: "client-123");
+            "https://claude.ai/api/mcp/auth_callback", CancellationToken.None, client_id: "https://claude.ai/oauth/mcp-oauth-client-metadata");
 
         var bad = result.Should().BeOfType<BadRequestObjectResult>().Subject;
         var json = JsonSerializer.Serialize(bad.Value);
@@ -1207,7 +1204,7 @@ public class OAuthControllerTests : IDisposable
     {
         var result = await _controller.Token(
             "authorization_code", "nonexistent-code", "verifier-xyz",
-            "https://claude.ai/callback", CancellationToken.None, client_id: "client-123");
+            "https://claude.ai/api/mcp/auth_callback", CancellationToken.None, client_id: "https://claude.ai/oauth/mcp-oauth-client-metadata");
 
         var bad = result.Should().BeOfType<BadRequestObjectResult>().Subject;
         var json = JsonSerializer.Serialize(bad.Value);
@@ -1219,7 +1216,7 @@ public class OAuthControllerTests : IDisposable
     {
         var result = await _controller.Token(
             "authorization_code", "nonexistent-code", "verifier-xyz",
-            "https://evil.com/callback", CancellationToken.None, client_id: "client-123");
+            "https://evil.com/callback", CancellationToken.None, client_id: "https://claude.ai/oauth/mcp-oauth-client-metadata");
 
         var bad = result.Should().BeOfType<BadRequestObjectResult>().Subject;
         JsonSerializer.Serialize(bad.Value).Should().Contain("invalid_redirect_uri");
@@ -1234,11 +1231,11 @@ public class OAuthControllerTests : IDisposable
             .Replace("+", "-").Replace("/", "_").TrimEnd('=');
 
         var authCode = _authStore.CreateCode(
-            UserId, codeChallenge, "https://claude.ai/callback", "client-123");
+            UserId, codeChallenge, "https://claude.ai/api/mcp/auth_callback", "https://claude.ai/oauth/mcp-oauth-client-metadata");
 
         var result = await _controller.Token(
             "authorization_code", authCode, codeVerifier,
-            "https://claude.ai/callback", CancellationToken.None, client_id: "client-123");
+            "https://claude.ai/api/mcp/auth_callback", CancellationToken.None, client_id: "https://claude.ai/oauth/mcp-oauth-client-metadata");
 
         var ok = result.Should().BeOfType<OkObjectResult>().Subject;
         var json = JsonSerializer.Serialize(ok.Value);
@@ -1251,11 +1248,11 @@ public class OAuthControllerTests : IDisposable
     public async Task Token_MissingClientId_RejectsExchange()
     {
         var (verifier, challenge) = GeneratePkce();
-        var code = _authStore.CreateCode(UserId, challenge, "https://claude.ai/callback", "client-registered-at-authorize");
+        var code = _authStore.CreateCode(UserId, challenge, "https://claude.ai/api/mcp/auth_callback", "client-registered-at-authorize");
 
         var result = await _controller.Token(
             "authorization_code", code, verifier,
-            "https://claude.ai/callback", CancellationToken.None);
+            "https://claude.ai/api/mcp/auth_callback", CancellationToken.None);
 
         result.Should().BeOfType<BadRequestObjectResult>();
         await _apiKeyRepo.DidNotReceive().AddAsync(Arg.Any<ApiKey>(), Arg.Any<CancellationToken>());
@@ -1266,11 +1263,11 @@ public class OAuthControllerTests : IDisposable
     {
         var (_, challenge) = GeneratePkce();
         var (otherVerifier, _) = GeneratePkce();
-        var code = _authStore.CreateCode(UserId, challenge, "https://claude.ai/callback", "client-123");
+        var code = _authStore.CreateCode(UserId, challenge, "https://claude.ai/api/mcp/auth_callback", "https://claude.ai/oauth/mcp-oauth-client-metadata");
 
         var result = await _controller.Token(
             "authorization_code", code, otherVerifier,
-            "https://claude.ai/callback", CancellationToken.None, client_id: "client-123");
+            "https://claude.ai/api/mcp/auth_callback", CancellationToken.None, client_id: "https://claude.ai/oauth/mcp-oauth-client-metadata");
 
         var bad = result.Should().BeOfType<BadRequestObjectResult>().Subject;
         JsonSerializer.Serialize(bad.Value).Should().Contain("invalid_grant");
@@ -1281,7 +1278,7 @@ public class OAuthControllerTests : IDisposable
     public async Task Token_ValidExchange_CreatesReadWriteClaudeKeyWithDefaultScopes()
     {
         var (verifier, challenge) = GeneratePkce();
-        var code = _authStore.CreateCode(UserId, challenge, "https://claude.ai/callback", "client-123");
+        var code = _authStore.CreateCode(UserId, challenge, "https://claude.ai/api/mcp/auth_callback", "https://claude.ai/oauth/mcp-oauth-client-metadata");
 
         ApiKey? created = null;
         _apiKeyRepo.When(r => r.AddAsync(Arg.Any<ApiKey>(), Arg.Any<CancellationToken>()))
@@ -1289,7 +1286,7 @@ public class OAuthControllerTests : IDisposable
 
         var result = await _controller.Token(
             "authorization_code", code, verifier,
-            "https://claude.ai/callback", CancellationToken.None, client_id: "client-123");
+            "https://claude.ai/api/mcp/auth_callback", CancellationToken.None, client_id: "https://claude.ai/oauth/mcp-oauth-client-metadata");
 
         result.Should().BeOfType<OkObjectResult>();
         created.Should().NotBeNull();
@@ -1311,7 +1308,7 @@ public class OAuthControllerTests : IDisposable
     public async Task Token_ValidExchange_RevokesPriorClaudeKeysBeforeIssuingNew()
     {
         var (verifier, challenge) = GeneratePkce();
-        var code = _authStore.CreateCode(UserId, challenge, "https://claude.ai/callback", "client-123");
+        var code = _authStore.CreateCode(UserId, challenge, "https://claude.ai/api/mcp/auth_callback", "https://claude.ai/oauth/mcp-oauth-client-metadata");
 
         var priorKey = LegacyConnectorCredentialMigrationTests.CreateLegacyCredential(UserId, scopes: AgentScopes.ClaudeDefaultScopes).Entity;
         _apiKeyRepo.FindTrackedAsync(
@@ -1321,7 +1318,7 @@ public class OAuthControllerTests : IDisposable
 
         var result = await _controller.Token(
             "authorization_code", code, verifier,
-            "https://claude.ai/callback", CancellationToken.None, client_id: "client-123");
+            "https://claude.ai/api/mcp/auth_callback", CancellationToken.None, client_id: "https://claude.ai/oauth/mcp-oauth-client-metadata");
 
         result.Should().BeOfType<OkObjectResult>();
         priorKey.IsRevoked.Should().BeTrue();
@@ -1330,12 +1327,12 @@ public class OAuthControllerTests : IDisposable
     }
 
     [Fact]
-    public void Register_WithAttackerRedirectUri_ReturnsBadRequest()
+    public async Task Register_WithAttackerRedirectUri_ReturnsBadRequest()
     {
         var body = JsonSerializer.Deserialize<JsonElement>(
             """{"client_name":"Malicious MCP","redirect_uris":["https://attacker.com/callback"]}""");
 
-        var result = _controller.Register(body);
+        var result = await _controller.Register(body);
 
         var obj = result.Should().BeOfType<BadRequestObjectResult>().Subject;
         var json = JsonSerializer.Serialize(obj.Value);
@@ -1344,12 +1341,12 @@ public class OAuthControllerTests : IDisposable
     }
 
     [Fact]
-    public void Register_WithMixedValidAndInvalidRedirectUris_ReturnsBadRequest()
+    public async Task Register_WithMixedValidAndInvalidRedirectUris_ReturnsBadRequest()
     {
         var body = JsonSerializer.Deserialize<JsonElement>(
-            """{"client_name":"Test","redirect_uris":["https://claude.ai/callback","https://attacker.com/callback"]}""");
+            """{"client_name":"Test","redirect_uris":["https://claude.ai/api/mcp/auth_callback","https://attacker.com/callback"]}""");
 
-        var result = _controller.Register(body);
+        var result = await _controller.Register(body);
 
         var obj = result.Should().BeOfType<BadRequestObjectResult>().Subject;
         var json = JsonSerializer.Serialize(obj.Value);
@@ -1361,7 +1358,7 @@ public class OAuthControllerTests : IDisposable
     {
         var result = (await _controller.Authorize(new OAuthController.AuthorizeRequest
         {
-            ClientId = "client-123",
+            ClientId = "https://claude.ai/oauth/mcp-oauth-client-metadata",
             RedirectUri = "https://attacker.com/callback",
             ResponseType = "code",
             State = "state-abc",
@@ -1379,7 +1376,7 @@ public class OAuthControllerTests : IDisposable
     {
         var request = new OAuthController.VerifyCodeRequest(
             "test@example.com", "123456", "state-abc",
-            "challenge-xyz", "https://attacker.com/callback", "client-123");
+            "challenge-xyz", "https://attacker.com/callback", "https://claude.ai/oauth/mcp-oauth-client-metadata");
 
         var result = await _controller.VerifyCode(request, CancellationToken.None);
 
@@ -1393,7 +1390,7 @@ public class OAuthControllerTests : IDisposable
     {
         var result = await _controller.Token(
             "authorization_code", "any-code", "verifier-xyz",
-            "https://attacker.com/callback", CancellationToken.None, client_id: "client-123");
+            "https://attacker.com/callback", CancellationToken.None, client_id: "https://claude.ai/oauth/mcp-oauth-client-metadata");
 
         var bad = result.Should().BeOfType<BadRequestObjectResult>().Subject;
         var json = JsonSerializer.Serialize(bad.Value);
@@ -1405,7 +1402,7 @@ public class OAuthControllerTests : IDisposable
     {
         var result = (await _controller.Authorize(new OAuthController.AuthorizeRequest
         {
-            ClientId = "client-123",
+            ClientId = "https://claude.ai/oauth/mcp-oauth-client-metadata",
             RedirectUri = "javascript:alert('xss')",
             ResponseType = "code",
             State = "state-abc",
@@ -1421,7 +1418,7 @@ public class OAuthControllerTests : IDisposable
     {
         var result = (await _controller.Authorize(new OAuthController.AuthorizeRequest
         {
-            ClientId = "client-123",
+            ClientId = "https://claude.ai/oauth/mcp-oauth-client-metadata",
             RedirectUri = "http://claude.ai/callback",
             ResponseType = "code",
             State = "state-abc",
@@ -1437,7 +1434,7 @@ public class OAuthControllerTests : IDisposable
     {
         var result = (await _controller.Authorize(new OAuthController.AuthorizeRequest
         {
-            ClientId = "client-123",
+            ClientId = "https://claude.ai/oauth/mcp-oauth-client-metadata",
             RedirectUri = "ftp://claude.ai/callback",
             ResponseType = "code",
             State = "state-abc",
@@ -1453,7 +1450,7 @@ public class OAuthControllerTests : IDisposable
     {
         var result = (await _controller.Authorize(new OAuthController.AuthorizeRequest
         {
-            ClientId = "client-123",
+            ClientId = "https://claude.ai/oauth/mcp-oauth-client-metadata",
             RedirectUri = "https://attacker.claude.ai/callback",
             ResponseType = "code",
             State = "state-abc",
@@ -1474,7 +1471,7 @@ public class OAuthControllerTests : IDisposable
     {
         var request = new OAuthController.VerifyCodeRequest(
             "test@example.com", "123456", "state-abc",
-            "challenge-xyz", redirectUri, "client-123");
+            "challenge-xyz", redirectUri, "https://claude.ai/oauth/mcp-oauth-client-metadata");
 
         var result = await _controller.VerifyCode(request, CancellationToken.None);
 
@@ -1489,8 +1486,8 @@ public class OAuthControllerTests : IDisposable
     {
         var result = (await _controller.Authorize(new OAuthController.AuthorizeRequest
         {
-            ClientId = "client-123",
-            RedirectUri = "https://claude.ai/callback",
+            ClientId = "https://claude.ai/oauth/mcp-oauth-client-metadata",
+            RedirectUri = "https://claude.ai/api/mcp/auth_callback",
             ResponseType = "code",
             State = "",
             CodeChallenge = "challenge-xyz",
@@ -1506,7 +1503,7 @@ public class OAuthControllerTests : IDisposable
     {
         var request = new OAuthController.VerifyCodeRequest(
             "test@example.com", "123456", "",
-            "challenge-xyz", "https://claude.ai/callback", "client-123");
+            "challenge-xyz", "https://claude.ai/api/mcp/auth_callback", "https://claude.ai/oauth/mcp-oauth-client-metadata");
 
         var result = await _controller.VerifyCode(request, CancellationToken.None);
 
@@ -1519,13 +1516,14 @@ public class OAuthControllerTests : IDisposable
     public async Task VerifyCode_EchoesStateVerbatim_SoClientCanDetectMismatch()
     {
         var state = "state-" + Guid.NewGuid().ToString("N");
+        OAuthTestClient.Bind(_controller.HttpContext, _authStore, state);
         var loginResponse = new LoginResponse(UserId, "jwt-token", "Alex", "test@example.com");
         _mediator.Send(Arg.Any<VerifyCodeCommand>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(loginResponse));
 
         var request = new OAuthController.VerifyCodeRequest(
             "test@example.com", "123456", state,
-            "challenge-xyz", "https://claude.ai/callback", "client-123");
+            "challenge-xyz", "https://claude.ai/api/mcp/auth_callback", "https://claude.ai/oauth/mcp-oauth-client-metadata");
 
         var redirectUrl = ExtractRedirectUrl(await _controller.VerifyCode(request, CancellationToken.None));
 
@@ -1537,13 +1535,14 @@ public class OAuthControllerTests : IDisposable
     public async Task VerifyCode_StateWithQueryInjection_IsPercentEncodedSoNoParamSmuggling()
     {
         var tamperedState = "benign&code=forged-code&x=";
+        OAuthTestClient.Bind(_controller.HttpContext, _authStore, tamperedState);
         var loginResponse = new LoginResponse(UserId, "jwt-token", "Alex", "test@example.com");
         _mediator.Send(Arg.Any<VerifyCodeCommand>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(loginResponse));
 
         var request = new OAuthController.VerifyCodeRequest(
             "test@example.com", "123456", tamperedState,
-            "challenge-xyz", "https://claude.ai/callback", "client-123");
+            "challenge-xyz", "https://claude.ai/api/mcp/auth_callback", "https://claude.ai/oauth/mcp-oauth-client-metadata");
 
         var redirectUrl = ExtractRedirectUrl(await _controller.VerifyCode(request, CancellationToken.None));
 
@@ -1558,11 +1557,11 @@ public class OAuthControllerTests : IDisposable
     {
         var (verifier, challenge) = GeneratePkce();
         var code = _authStore.CreateCode(
-            UserId, challenge, "https://claude.ai/callback", "client-123", "replay-nonce");
+            UserId, challenge, "https://claude.ai/api/mcp/auth_callback", "https://claude.ai/oauth/mcp-oauth-client-metadata", "replay-nonce");
 
         var result = await _controller.Token(
             "authorization_code", code, verifier,
-            "https://claude.ai/callback", CancellationToken.None, client_id: "client-123");
+            "https://claude.ai/api/mcp/auth_callback", CancellationToken.None, client_id: "https://claude.ai/oauth/mcp-oauth-client-metadata");
 
         var ok = result.Should().BeOfType<OkObjectResult>().Subject;
         var json = JsonSerializer.Serialize(ok.Value);
@@ -1575,11 +1574,11 @@ public class OAuthControllerTests : IDisposable
     {
         var (verifier, challenge) = GeneratePkce();
         var code = _authStore.CreateCode(
-            UserId, challenge, "https://claude.ai/callback", "client-123");
+            UserId, challenge, "https://claude.ai/api/mcp/auth_callback", "https://claude.ai/oauth/mcp-oauth-client-metadata");
 
         var result = await _controller.Token(
             "authorization_code", code, verifier,
-            "https://claude.ai/callback", CancellationToken.None, client_id: "client-123");
+            "https://claude.ai/api/mcp/auth_callback", CancellationToken.None, client_id: "https://claude.ai/oauth/mcp-oauth-client-metadata");
 
         var ok = result.Should().BeOfType<OkObjectResult>().Subject;
         JsonSerializer.Serialize(ok.Value).Should().NotContain("nonce");
@@ -1595,13 +1594,13 @@ public class OAuthControllerTests : IDisposable
 
         var request = new OAuthController.VerifyCodeRequest(
             "test@example.com", "123456", "state-abc", challenge,
-            "https://claude.ai/callback", "client-123", Nonce: "verify-nonce-7");
+            "https://claude.ai/api/mcp/auth_callback", "https://claude.ai/oauth/mcp-oauth-client-metadata", Nonce: "verify-nonce-7");
         var code = ExtractQueryParam(
             ExtractRedirectUrl(await _controller.VerifyCode(request, CancellationToken.None)), "code");
 
         var tokenResult = await _controller.Token(
             "authorization_code", code, verifier,
-            "https://claude.ai/callback", CancellationToken.None, client_id: "client-123");
+            "https://claude.ai/api/mcp/auth_callback", CancellationToken.None, client_id: "https://claude.ai/oauth/mcp-oauth-client-metadata");
 
         var ok = tokenResult.Should().BeOfType<OkObjectResult>().Subject;
         JsonSerializer.Serialize(ok.Value).Should().Contain("verify-nonce-7");
@@ -1612,8 +1611,8 @@ public class OAuthControllerTests : IDisposable
     {
         var page = (await _controller.Authorize(new OAuthController.AuthorizeRequest
         {
-            ClientId = "client-123",
-            RedirectUri = "https://claude.ai/callback",
+            ClientId = "https://claude.ai/oauth/mcp-oauth-client-metadata",
+            RedirectUri = "https://claude.ai/api/mcp/auth_callback",
             ResponseType = "code",
             State = "client-state",
             CodeChallenge = "mcp-challenge",
@@ -1658,12 +1657,12 @@ public class OAuthControllerTests : IDisposable
 
     private async Task<IActionResult> StartGoogle(string challenge = "mcp-challenge",
         string clientState = "client-state", string? nonce = null) =>
-        (await _controller.GoogleStart("client-123", "https://claude.ai/callback", clientState, challenge, "S256", nonce));
+        (await _controller.GoogleStart("https://claude.ai/oauth/mcp-oauth-client-metadata", "https://claude.ai/api/mcp/auth_callback", clientState, challenge, "S256", nonce));
 
     private GoogleAuthorizationRequest CreatePendingGoogleRequest(string challenge = "mcp-challenge",
         string clientState = "client-state", string? nonce = null) =>
-        _authStore.TryCreateGoogleRequest("client-123", "https://claude.ai/callback", clientState,
-            challenge, nonce, "https://api.useorbit.org/oauth/google/callback", "en")!;
+        _authStore.TryCreateGoogleRequest("https://claude.ai/oauth/mcp-oauth-client-metadata", "https://claude.ai/api/mcp/auth_callback", clientState,
+            challenge, nonce, "https://api.useorbit.org/oauth/google/callback", "en", browserBindingHash: OAuthTestClient.BindingHash(_controller.HttpContext, clientState))!;
 
     private static string Challenge(string verifier) => Convert.ToBase64String(
             System.Security.Cryptography.SHA256.HashData(Encoding.ASCII.GetBytes(verifier)))

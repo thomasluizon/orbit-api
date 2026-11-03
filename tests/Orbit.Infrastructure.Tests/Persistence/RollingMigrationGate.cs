@@ -142,7 +142,9 @@ internal static class RollingMigrationGate
         Func<string, string, bool>? isAncestor = null,
         string baseRef = "base")
     {
-        var contracts = operations.Where(RequiresContract).Select(operation => operation.GetType().Name)
+        var indexRepairs = ConcurrentIndexRepairs(operations);
+        var contracts = operations.Where(operation => !indexRepairs.Contains(operation) && RequiresContract(operation))
+            .Select(operation => operation.GetType().Name)
             .Distinct().ToArray();
         if (contracts.Length == 0)
             return [];
@@ -168,6 +170,31 @@ internal static class RollingMigrationGate
             failures.Add($"{migrationId}: deployment barrier must record the compatibility condition and evidence that web and background processes drained.");
 
         return failures;
+    }
+
+    private static HashSet<MigrationOperation> ConcurrentIndexRepairs(IReadOnlyList<MigrationOperation> operations)
+    {
+        var repairs = new HashSet<MigrationOperation>();
+        const string identifier = "(?:\"(?:[^\"]|\"\")+\"|[a-z_][a-z0-9_$]*)";
+        for (var index = 0; index < operations.Count; index++)
+        {
+            if (operations[index] is not SqlOperation { SuppressTransaction: true } drop)
+                continue;
+            var masked = MaskQuotedSqlAndComments(drop.Sql, preserveIdentifiers: true);
+            if (masked is null)
+                continue;
+            var match = Regex.Match(masked, @"\A\s*DROP\s+INDEX\s+CONCURRENTLY\s+IF\s+EXISTS\s+(?<name>"
+                + identifier + @")\s*;?\s*\z", SqlOptions);
+            if (!match.Success)
+                continue;
+            var create = @"\A\s*CREATE\s+(?:UNIQUE\s+)?INDEX\s+CONCURRENTLY\s+IF\s+NOT\s+EXISTS\s+(?<name>"
+                + identifier + @")\s+ON\s+";
+            if (operations.Skip(index + 1).OfType<SqlOperation>().Any(operation => operation.SuppressTransaction
+                && Regex.Match(MaskQuotedSqlAndComments(operation.Sql, preserveIdentifiers: true) ?? "", create, SqlOptions)
+                    is { Success: true } recreate && recreate.Groups["name"].Value == match.Groups["name"].Value))
+                repairs.Add(drop);
+        }
+        return repairs;
     }
 
     internal static IReadOnlyList<string> CheckRelease(

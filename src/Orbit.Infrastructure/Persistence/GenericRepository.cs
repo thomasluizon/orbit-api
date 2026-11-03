@@ -45,6 +45,25 @@ public class GenericRepository<T>(OrbitDbContext context) : IGenericRepository<T
         return await projection(_dbSet.AsNoTracking().Where(predicate)).ToListAsync(cancellationToken);
     }
 
+    public async IAsyncEnumerable<TResult> StreamAsync<TResult>(
+        Expression<Func<T, bool>> predicate,
+        Func<IQueryable<T>, IQueryable<TResult>> projection,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        const int batchSize = 100;
+        var query = projection(_dbSet.AsNoTracking().Where(predicate).OrderBy(entity => entity.Id));
+        for (var offset = 0; ; offset += batchSize)
+        {
+            var count = 0;
+            await foreach (var row in query.Skip(offset).Take(batchSize).AsAsyncEnumerable().WithCancellation(cancellationToken))
+            {
+                count++;
+                yield return row;
+            }
+            if (count < batchSize) yield break;
+        }
+    }
+
     public async Task<IReadOnlyList<T>> FindIgnoringFiltersAsync(
         Expression<Func<T, bool>> predicate,
         Func<IQueryable<T>, IQueryable<T>>? includes = null,
@@ -90,6 +109,51 @@ public class GenericRepository<T>(OrbitDbContext context) : IGenericRepository<T
 
         entry.CurrentValues.SetValues(databaseValues);
         entry.OriginalValues.SetValues(databaseValues);
+        return true;
+    }
+
+    public async Task ReloadRangeAsync(IReadOnlyCollection<T> entities, CancellationToken cancellationToken = default)
+    {
+        if (entities.Count == 0) return;
+        var ids = entities.Select(entity => entity.Id).ToArray();
+        var rows = await _dbSet.IgnoreQueryFilters().AsNoTracking().Where(entity => ids.Contains(entity.Id))
+            .ToDictionaryAsync(entity => entity.Id, cancellationToken);
+        foreach (var entity in entities)
+        {
+            var entry = context.Entry(entity);
+            if (!rows.TryGetValue(entity.Id, out var row))
+            {
+                entry.State = EntityState.Detached;
+                continue;
+            }
+            entry.CurrentValues.SetValues(row);
+            entry.OriginalValues.SetValues(row);
+            entry.State = EntityState.Unchanged;
+        }
+    }
+
+    public async Task<bool> TryRefreshRangeAsync(IReadOnlyCollection<T> entities, CancellationToken cancellationToken = default)
+    {
+        if (entities.Count == 0) return true;
+        context.ChangeTracker.DetectChanges();
+        var ids = entities.Select(entity => entity.Id).ToArray();
+        var rows = await _dbSet.AsNoTracking().Where(entity => ids.Contains(entity.Id))
+            .ToDictionaryAsync(entity => entity.Id, cancellationToken);
+        foreach (var entity in entities)
+        {
+            var entry = context.Entry(entity);
+            if (entry.State is not (EntityState.Unchanged or EntityState.Modified)
+                || !rows.TryGetValue(entity.Id, out var row)) return false;
+            if (entry.State == EntityState.Modified)
+            {
+                if (row is not ITimestamped timestamped
+                    || entry.OriginalValues.GetValue<DateTime>(nameof(ITimestamped.UpdatedAtUtc)).Ticks / 10
+                        != timestamped.UpdatedAtUtc.Ticks / 10) return false;
+                continue;
+            }
+            entry.CurrentValues.SetValues(row);
+            entry.OriginalValues.SetValues(row);
+        }
         return true;
     }
 

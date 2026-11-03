@@ -24,7 +24,7 @@ public class GetHabitLogsQueryValidator : AbstractValidator<GetHabitLogsQuery>
                 .WithCopy(ValidationErrorCodes.DateRangeOrder);
             RuleFor(x => x.To)
                 .Must((query, to) => query.From is { } from && to is { } end
-                    && end.DayNumber - from.DayNumber < AppConstants.MaxRangeDays)
+                    && end.DayNumber - from.DayNumber < AppConstants.MaxReadRangeDays)
                 .WithCopy(ValidationErrorCodes.DateRangeLimit)
                 .When(x => x.To >= x.From);
         });

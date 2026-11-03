@@ -56,7 +56,7 @@ public class TagToolsTests
         _mediator.Send(Arg.Any<GetTagsQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success<IReadOnlyList<TagResponse>>(tags));
 
-        var result = await _tools.ListTags(_user);
+        var result = (await _tools.ListTags(_user)).AsText();
 
         result.Should().Contain("Health");
         result.Should().Contain("#FF0000");
@@ -69,7 +69,7 @@ public class TagToolsTests
         _mediator.Send(Arg.Any<GetTagsQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success<IReadOnlyList<TagResponse>>([]));
 
-        var result = await _tools.ListTags(_user);
+        var result = (await _tools.ListTags(_user)).AsText();
 
         result.Should().Contain("No tags found");
     }
@@ -80,7 +80,7 @@ public class TagToolsTests
         _mediator.Send(Arg.Any<GetTagsQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Failure<IReadOnlyList<TagResponse>>("Error"));
 
-        var result = await _tools.ListTags(_user);
+        var result = (await _tools.ListTags(_user)).AsText();
 
         result.Should().StartWith("Error: ");
     }
@@ -92,7 +92,7 @@ public class TagToolsTests
         StubExecutor(AgentOperationStatus.Succeeded, targetId: newId.ToString(), targetName: "Work");
 
         string result = string.Empty;
-        var request = await CapturedRequestAsync(async () => result = await _tools.CreateTag(_user, "Work", "#0000FF"));
+        var request = await CapturedRequestAsync(async () => result = (await _tools.CreateTag(_user, "Work", "#0000FF")).AsText());
 
         request.OperationId.Should().Be("create_tag");
         result.Should().Contain("Created tag 'Work'");
@@ -104,7 +104,7 @@ public class TagToolsTests
     {
         StubExecutor(AgentOperationStatus.Failed, policyReason: "Duplicate name");
 
-        var result = await _tools.CreateTag(_user, "Work", "#0000FF");
+        var result = (await _tools.CreateTag(_user, "Work", "#0000FF")).AsText();
 
         result.Should().StartWith("Error: ");
     }
@@ -116,7 +116,7 @@ public class TagToolsTests
         StubExecutor(AgentOperationStatus.Succeeded, targetId: tagId.ToString());
 
         string result = string.Empty;
-        var request = await CapturedRequestAsync(async () => result = await _tools.UpdateTag(_user, tagId.ToString(), "Updated", "#00FF00"));
+        var request = await CapturedRequestAsync(async () => result = (await _tools.UpdateTag(_user, tagId.ToString(), "Updated", "#00FF00")).AsText());
 
         request.OperationId.Should().Be("update_tag");
         result.Should().Contain("Updated tag");
@@ -127,7 +127,7 @@ public class TagToolsTests
     {
         StubExecutor(AgentOperationStatus.Failed, policyReason: "Tag not found");
 
-        var result = await _tools.UpdateTag(_user, Guid.NewGuid().ToString(), "Name", "#000");
+        var result = (await _tools.UpdateTag(_user, Guid.NewGuid().ToString(), "Name", "#000")).AsText();
 
         result.Should().StartWith("Error: ");
     }
@@ -138,7 +138,7 @@ public class TagToolsTests
         StubExecutor(AgentOperationStatus.Succeeded);
 
         string result = string.Empty;
-        var request = await CapturedRequestAsync(async () => result = await _tools.DeleteTag(_user, Guid.NewGuid().ToString()));
+        var request = await CapturedRequestAsync(async () => result = (await _tools.DeleteTag(_user, Guid.NewGuid().ToString())).AsText());
 
         request.OperationId.Should().Be("delete_tag");
         result.Should().Contain("Deleted tag");
@@ -149,7 +149,7 @@ public class TagToolsTests
     {
         StubExecutor(AgentOperationStatus.PendingConfirmation);
 
-        var result = await _tools.DeleteTag(_user, Guid.NewGuid().ToString());
+        var result = (await _tools.DeleteTag(_user, Guid.NewGuid().ToString())).AsText();
 
         result.Should().Contain("Confirmation required");
     }
@@ -159,7 +159,7 @@ public class TagToolsTests
     {
         StubExecutor(AgentOperationStatus.Failed, policyReason: "Tag not found");
 
-        var result = await _tools.DeleteTag(_user, Guid.NewGuid().ToString());
+        var result = (await _tools.DeleteTag(_user, Guid.NewGuid().ToString())).AsText();
 
         result.Should().StartWith("Error: ");
     }
@@ -171,7 +171,7 @@ public class TagToolsTests
 
         var tagId = Guid.NewGuid();
         string result = string.Empty;
-        var request = await CapturedRequestAsync(async () => result = await _tools.AssignTags(_user, Guid.NewGuid().ToString(), tagId.ToString()));
+        var request = await CapturedRequestAsync(async () => result = (await _tools.AssignTags(_user, Guid.NewGuid().ToString(), tagId.ToString())).AsText());
 
         request.OperationId.Should().Be("assign_tags");
         request.Arguments.GetRawText().Should().Contain("tag_ids");
@@ -183,7 +183,7 @@ public class TagToolsTests
     {
         StubExecutor(AgentOperationStatus.Succeeded);
 
-        var result = await _tools.AssignTags(_user, Guid.NewGuid().ToString(), "");
+        var result = (await _tools.AssignTags(_user, Guid.NewGuid().ToString(), "")).AsText();
 
         result.Should().Contain("Removed all tags");
     }
@@ -193,7 +193,7 @@ public class TagToolsTests
     {
         StubExecutor(AgentOperationStatus.Failed, policyReason: "Not found");
 
-        var result = await _tools.AssignTags(_user, Guid.NewGuid().ToString(), Guid.NewGuid().ToString());
+        var result = (await _tools.AssignTags(_user, Guid.NewGuid().ToString(), Guid.NewGuid().ToString())).AsText();
 
         result.Should().StartWith("Error: ");
     }

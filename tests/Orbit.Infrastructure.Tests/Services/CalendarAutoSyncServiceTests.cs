@@ -18,7 +18,7 @@ public sealed class CalendarAutoSyncServiceTests : IDisposable
 {
     private static readonly DateTime NowUtc = new(2100, 6, 15, 12, 0, 0, DateTimeKind.Utc);
     private readonly IMediator _mediator = Substitute.For<IMediator>();
-    private readonly List<Guid> _dispatchedUserIds = [];
+    private readonly System.Collections.Concurrent.ConcurrentQueue<Guid> _dispatchedUserIds = new();
     private readonly ServiceProvider _provider;
     private readonly IServiceScope _scope;
     private readonly OrbitDbContext _db;
@@ -41,7 +41,7 @@ public sealed class CalendarAutoSyncServiceTests : IDisposable
         _mediator.Send(Arg.Any<RunCalendarAutoSyncCommand>(), Arg.Any<CancellationToken>())
             .Returns(call =>
             {
-                _dispatchedUserIds.Add(call.Arg<RunCalendarAutoSyncCommand>().UserId);
+                _dispatchedUserIds.Enqueue(call.Arg<RunCalendarAutoSyncCommand>().UserId);
                 return Result.Success(new CalendarAutoSyncResult(0, 0, GoogleCalendarAutoSyncStatus.Idle));
             });
     }
@@ -189,13 +189,16 @@ public sealed class CalendarAutoSyncServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task RunAsync_SixtyEligibleUsers_DispatchesFiftyLeastRecentlySyncedInOrder()
+    public async Task RunAsync_SixtyEligibleUsers_DispatchesFiftyLeastRecentlyAttempted()
     {
         var users = Enumerable.Range(0, 60).Select(index =>
         {
             var user = CreateEligibleUser();
             if (index != 0)
+            {
                 user.MarkCalendarSyncSuccess(NowUtc.AddHours(-5 - index));
+                user.MarkCalendarSyncAttempt(NowUtc.AddHours(-5 - index));
+            }
             return user;
         }).ToArray();
         var expectedUserIds = new[] { users[0].Id }
@@ -203,7 +206,7 @@ public sealed class CalendarAutoSyncServiceTests : IDisposable
 
         await SeedAndRunAsync(users);
 
-        _dispatchedUserIds.Should().HaveCount(50).And.Equal(expectedUserIds);
+        _dispatchedUserIds.Should().HaveCount(50).And.BeEquivalentTo(expectedUserIds);
     }
 
     [Fact]
@@ -219,7 +222,7 @@ public sealed class CalendarAutoSyncServiceTests : IDisposable
                 Arg.Any<CancellationToken>())
             .Returns(call =>
             {
-                _dispatchedUserIds.Add(call.Arg<RunCalendarAutoSyncCommand>().UserId);
+                _dispatchedUserIds.Enqueue(call.Arg<RunCalendarAutoSyncCommand>().UserId);
                 return Task.FromException<Result<CalendarAutoSyncResult>>(
                     new InvalidOperationException("Sync failed"));
             });
@@ -227,7 +230,7 @@ public sealed class CalendarAutoSyncServiceTests : IDisposable
         var run = () => SeedAndRunAsync(users);
 
         await run.Should().NotThrowAsync();
-        _dispatchedUserIds.Should().Equal(users.Select(user => user.Id));
+        _dispatchedUserIds.Should().BeEquivalentTo(users.Select(user => user.Id));
     }
 
     [Fact]
@@ -237,6 +240,29 @@ public sealed class CalendarAutoSyncServiceTests : IDisposable
 
         await run.Should().NotThrowAsync();
         _dispatchedUserIds.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task FailedAttempts_RotateBehindHealthyUsersWithinTwoTicks()
+    {
+        var users = Enumerable.Range(0, 60).Select(index =>
+        {
+            var user = CreateEligibleUser();
+            user.MarkCalendarSyncAttempt(NowUtc.AddHours(index < 50 ? -2 : -1));
+            return user;
+        }).ToArray();
+        var failing = users.Take(50).Select(u => u.Id).ToHashSet();
+        _mediator.Send(Arg.Any<RunCalendarAutoSyncCommand>(), Arg.Any<CancellationToken>()).Returns(call =>
+        {
+            var id = call.Arg<RunCalendarAutoSyncCommand>().UserId;
+            _dispatchedUserIds.Enqueue(id);
+            return Result.Success(new CalendarAutoSyncResult(0, 0,
+                failing.Contains(id) ? GoogleCalendarAutoSyncStatus.TransientError : GoogleCalendarAutoSyncStatus.Idle));
+        });
+        await SeedAndRunAsync(users);
+        _dispatchedUserIds.Should().HaveCount(50).And.OnlyContain(id => failing.Contains(id));
+        await _service.RunAsync(default);
+        users.Skip(50).Select(u => u.Id).Should().OnlyContain(id => _dispatchedUserIds.Contains(id));
     }
 
     private static User CreateEligibleUser()

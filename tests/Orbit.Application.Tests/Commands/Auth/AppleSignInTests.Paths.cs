@@ -86,7 +86,14 @@ public partial class AppleSignInTests
         var url = await new StartAppleSignInCommandHandler(flow).Handle(new("client-state"), default);
         var callback = await new CompleteAppleCallbackCommandHandler(flow).Handle(new(StateFrom(url!), "code", "{\"name\":{\"firstName\":\"Apple\",\"lastName\":\"User\"}}"), default);
         callback.IsSuccess.Should().BeTrue();
-        var handoff = System.Web.HttpUtility.ParseQueryString(new Uri(callback.Value).Query)["handoff"]!;
+        var destination = new Uri(callback.Value);
+        destination.Query.Should().BeEmpty();
+        destination.AbsolutePath.Should().Be("/auth-callback");
+        var fragment = System.Web.HttpUtility.ParseQueryString(destination.Fragment.TrimStart('#'));
+        fragment["provider"].Should().Be("apple");
+        fragment["state"].Should().Be("client-state");
+        var handoff = fragment["handoff"]!;
+        handoff.Should().NotBeNullOrWhiteSpace();
         var handler = new TakeAppleHandoffCommandHandler(flow);
         var login = await handler.Handle(new(handoff, "client-state"), default);
         login.Value.Name.Should().Be("Apple User");

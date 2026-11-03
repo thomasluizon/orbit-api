@@ -16,6 +16,7 @@ namespace Orbit.Api.Controllers;
 public sealed class EmailController(ISender sender) : ControllerBase
 {
     [HttpPost("ses-events")]
+    [RequestSizeLimit(1024 * 1024)]
     [DistributedRateLimit("ses-events")]
     [Consumes("text/plain", "application/json")]
     [ProducesResponseType(StatusCodes.Status200OK)]

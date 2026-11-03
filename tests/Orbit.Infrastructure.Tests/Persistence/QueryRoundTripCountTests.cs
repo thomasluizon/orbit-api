@@ -248,7 +248,7 @@ public class QueryRoundTripCountTests
     private static IMediator SummarySchedule()
     {
         var mediator = Substitute.For<IMediator>();
-        mediator.Send(Arg.Any<GetHabitScheduleQuery>(), Arg.Any<CancellationToken>())
+        mediator.Send(Arg.Any<GetDailySummaryScheduleQuery>(), Arg.Any<CancellationToken>())
             .Returns(Orbit.Domain.Common.Result.Success(
                 new Orbit.Application.Common.PaginatedResponse<HabitScheduleItem>([], 1, 100, 0, 0)));
         return mediator;

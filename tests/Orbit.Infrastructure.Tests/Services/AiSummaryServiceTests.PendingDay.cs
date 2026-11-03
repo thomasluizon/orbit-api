@@ -116,11 +116,11 @@ public partial class AiSummaryServiceTests
         var dates = Substitute.For<IUserDateService>();
         dates.GetUserTodayAsync(ValidUserId, Arg.Any<CancellationToken>()).Returns(Today);
         dates.GetUserWeekStartDayAsync(ValidUserId, Arg.Any<CancellationToken>()).Returns(1);
-        var schedule = new GetHabitScheduleQueryHandler(repo, reader, Substitute.For<IHabitSchedulePageLoader>(),
+        var schedule = new GetDailySummaryScheduleQueryHandler(repo, reader, Substitute.For<IHabitSchedulePageLoader>(),
             dates, Substitute.For<IUnitOfWork>(), Substitute.For<IRepeatReminderReader>());
         var mediator = Substitute.For<IMediator>();
-        mediator.Send(Arg.Any<GetHabitScheduleQuery>(), Arg.Any<CancellationToken>())
-            .Returns(call => schedule.Handle(call.Arg<GetHabitScheduleQuery>(), call.Arg<CancellationToken>()));
+        mediator.Send(Arg.Any<GetDailySummaryScheduleQuery>(), Arg.Any<CancellationToken>())
+            .Returns(call => schedule.Handle(call.Arg<GetDailySummaryScheduleQuery>(), call.Arg<CancellationToken>()));
         var user = User.Create("Person", "person@example.com").Value;
         user.SetLanguage(language);
         var users = Substitute.For<IGenericRepository<User>>();

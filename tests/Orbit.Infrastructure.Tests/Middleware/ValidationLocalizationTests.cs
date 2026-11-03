@@ -194,7 +194,7 @@ public partial class ValidationLocalizationTests(ITestOutputHelper output)
             "ApiKeys" => Case(new CreateApiKeyValidator(), new CreateApiKeyCommand(id, ""), "Name", ValidationErrorCodes.ApiKeyNameRequired, "Dê um nome à chave de API"),
             "Auth" => Case(new VerifyCodeCommandValidator(), new VerifyCodeCommand("reader@example.com", "12345"), "Code", ValidationErrorCodes.VerificationCodeFormat, "Digite os 6 dígitos"),
             "Calendar" => Case(new SetSelectedCalendarsCommandValidator(), new SetSelectedCalendarsCommand(id, [""]), "CalendarIds[0]", ValidationErrorCodes.CalendarIdsRequired, "Os IDs das agendas não podem estar vazios."),
-            "Chat" => Case(new TranscribeAudioCommandValidator(), new TranscribeAudioCommand(id, [1], "voice.xyz"), "FileName", ValidationErrorCodes.AudioFormat, "O formato de áudio '.xyz' não é suportado."),
+            "Chat" => Case(new TranscribeAudioCommandValidator(), new TranscribeAudioCommand(id, new MemoryStream([1, 2, 3]), "voice.xyz"), "FileName", ValidationErrorCodes.AudioFormat, "O formato de áudio '.xyz' não é suportado."),
             "ChecklistTemplates" => Case(new CreateChecklistTemplateCommandValidator(), new CreateChecklistTemplateCommand(id, "List", [""]), "Items[0]", ValidationErrorCodes.TemplateItemRequired, "Escreva o item do checklist"),
             "Email" => Case(new ProcessSesEventCommandValidator(), new ProcessSesEventCommand(""), "Payload", "NotEmptyValidator", "Preencha Payload."),
             "Gamification" => Case(new ReportEventCommandValidator(), new ReportEventCommand(id, "unknown"), "EventKey", ValidationErrorCodes.EventKeyKnown, "A chave do evento é desconhecida."),

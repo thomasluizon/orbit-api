@@ -11,6 +11,7 @@ internal sealed class SerializingUnitOfWork : IUnitOfWork
     private readonly List<string> _order = [];
     private int _lockRequestCount;
 
+    public void AfterCommit(Action callback) => callback();
     public bool HasActiveTransaction => _transaction.Value is not null;
 
     public TaskCompletionSource<bool> SecondLockRequested { get; } =

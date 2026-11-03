@@ -20,6 +20,8 @@ public class GetAllHabitLogsQueryHandlerTests
 
     public GetAllHabitLogsQueryHandlerTests()
     {
+        Orbit.Tests.Shared.RepositoryProjections.FromFind<Habit, Guid>(_habitRepo);
+        Orbit.Tests.Shared.RepositoryProjections.FromFind<HabitLog, HabitLogReadRow>(_logRepo);
         _handler = new GetAllHabitLogsQueryHandler(_habitRepo, _logRepo);
     }
 

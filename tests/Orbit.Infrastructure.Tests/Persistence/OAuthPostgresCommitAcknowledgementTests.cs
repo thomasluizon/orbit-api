@@ -23,6 +23,7 @@ using Orbit.Infrastructure.AI;
 using Orbit.Infrastructure.Configuration;
 using Orbit.Infrastructure.Persistence;
 using Orbit.Infrastructure.Services;
+using Orbit.Infrastructure.Tests.Controllers;
 
 namespace Orbit.Infrastructure.Tests.Persistence;
 
@@ -45,10 +46,10 @@ public partial class OAuthPostgresRetryTests
             db.AddRange(user, original, unrelated);
             await db.SaveChangesAsync();
             var store = new OAuthAuthorizationStore(new OAuthStateStore(db, TimeProvider.System), TimeProvider.System);
-            var refresh = store.CreateRefreshToken(new(user.Id, original.Id, "client", original.OAuthFamilyId!.Value));
+            var refresh = store.CreateRefreshToken(new(user.Id, original.Id, OAuthTestClient.ClientId, original.OAuthFamilyId!.Value));
             failure.Enabled = true;
 
-            var response = await RefreshController(db).Token("refresh_token", null, null, null, default, refresh, client_id: "client");
+            var response = await RefreshController(db).Token("refresh_token", null, null, null, default, refresh, client_id: OAuthTestClient.ClientId);
 
             var success = response.Should().BeOfType<OkObjectResult>().Subject;
             var body = JsonSerializer.SerializeToElement(success.Value);
@@ -64,8 +65,8 @@ public partial class OAuthPostgresRetryTests
 
             await using var nextRequest = RetryContext(database, new LostAcknowledgement());
             (await RefreshController(nextRequest).Token("refresh_token", null, null, null, default,
-                body.GetProperty("refresh_token").GetString(), client_id: "client")).Should().BeOfType<OkObjectResult>();
-            (await RefreshController(nextRequest).Token("refresh_token", null, null, null, default, refresh, client_id: "client"))
+                body.GetProperty("refresh_token").GetString(), client_id: OAuthTestClient.ClientId)).Should().BeOfType<OkObjectResult>();
+            (await RefreshController(nextRequest).Token("refresh_token", null, null, null, default, refresh, client_id: OAuthTestClient.ClientId))
                 .Should().BeOfType<BadRequestObjectResult>();
             (await database.ApiKeys.AsNoTracking().Where(key => key.OAuthFamilyId == original.OAuthFamilyId).ToListAsync())
                 .Should().OnlyContain(key => key.IsRevoked);
@@ -224,7 +225,7 @@ public partial class OAuthPostgresRetryTests
     private static OAuthController RefreshController(OrbitDbContext db) =>
         new(Substitute.For<IMediator>(), new OAuthAuthorizationStore(new OAuthStateStore(db, TimeProvider.System), TimeProvider.System),
             new GenericRepository<ApiKey>(db), new UnitOfWork(db, new DatabaseConnectionSettings()),
-            Options.Create(new GoogleSettings()), new ConfigurationBuilder().Build(), NullLogger<OAuthController>.Instance, Substitute.For<IOAuthClientMetadataService>())
+            Options.Create(new GoogleSettings()), new ConfigurationBuilder().Build(), NullLogger<OAuthController>.Instance, OAuthTestClient.Metadata(), new GenericRepository<OAuthClient>(db))
         { ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() } };
 
     private sealed class LostAcknowledgement : DbTransactionInterceptor
