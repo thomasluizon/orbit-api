@@ -63,7 +63,7 @@ jobs:
       # job, and no other engine reviews in its place.
       - name: Run agent
         id: codex
-        uses: pullfrog/pullfrog@25a837a2b078177c3acdce790506d1fd1acedd82 # v0, release 0.1.102
+        uses: pullfrog/pullfrog@895164fc90f5c493e72693c919c6cf269af158eb # v0, release 0.1.110
         with:
           prompt: ${{ inputs.prompt }}
           model: openai/gpt-6.1-sol
