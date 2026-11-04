@@ -22,7 +22,7 @@ using Orbit.Infrastructure.Configuration;
 
 namespace Orbit.Infrastructure.Tests.Controllers;
 
-public class OAuthAppleControllerTests
+public partial class OAuthAppleControllerTests
 {
     private readonly IAppleIdentityService _apple = Substitute.For<IAppleIdentityService>();
     private readonly IOAuthStateStore _states = Substitute.For<IOAuthStateStore>();

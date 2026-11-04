@@ -312,6 +312,11 @@ public static partial class ServiceCollectionExtensions
             options.HttpOnly = Microsoft.AspNetCore.CookiePolicy.HttpOnlyPolicy.Always;
             options.Secure = CookieSecurePolicy.Always;
             options.MinimumSameSitePolicy = SameSiteMode.Strict;
+            options.OnAppendCookie = context =>
+            {
+                if (Orbit.Api.Controllers.OAuthController.IsBrowserBindingCookie(context.CookieName, context.CookieOptions))
+                    context.CookieOptions.SameSite = SameSiteMode.Lax;
+            };
         });
 
         builder.WebHost.ConfigureKestrel(options =>
