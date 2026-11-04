@@ -54,6 +54,62 @@ public sealed class ExportHttpTests
         await AssertDocument(response, brotli);
     }
 
+    [Theory]
+    [InlineData("1.0", false)]
+    [InlineData("2.0", true)]
+    public async Task EvalSnapshot_AllowedAccountGetsTheSameFullDocument(string version, bool brotli)
+    {
+        await using var factory = new ExportApiFactory();
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("api-version", version);
+        if (brotli) client.DefaultRequestHeaders.AcceptEncoding.ParseAdd("br");
+        using var response = await client.GetAsync("/api/eval/snapshot");
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        response.Headers.CacheControl!.NoStore.Should().BeTrue();
+        await AssertDocument(response, brotli);
+    }
+
+    [Fact]
+    public async Task EvalSnapshot_NormalAccountIsForbidden()
+    {
+        await using var factory = new ExportApiFactory();
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Test-User", Guid.NewGuid().ToString());
+        using var response = await client.GetAsync("/api/eval/snapshot");
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task ProfileExport_KeepsThreePerHourAndSnapshotHasAnIndependentBudget()
+    {
+        await using var factory = new ExportApiFactory(seedLargeAccount: false);
+        using var client = factory.CreateClient();
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            using var allowed = await client.GetAsync("/api/profile/export");
+            allowed.StatusCode.Should().Be(HttpStatusCode.OK);
+        }
+        using var rejected = await client.GetAsync("/api/profile/export");
+        rejected.StatusCode.Should().Be(HttpStatusCode.TooManyRequests);
+        var error = await rejected.Content.ReadAsStringAsync();
+        error.Should().Contain("RATE_LIMITED");
+        for (var attempt = 0; attempt < 60; attempt++)
+        {
+            using var allowed = await client.GetAsync("/api/eval/snapshot");
+            allowed.StatusCode.Should().Be(HttpStatusCode.OK);
+        }
+        using var limited = await client.GetAsync("/api/eval/snapshot");
+        limited.StatusCode.Should().Be(HttpStatusCode.TooManyRequests);
+        factory.Clock.Advance(TimeSpan.FromMinutes(1));
+        using var renewed = await client.GetAsync("/api/eval/snapshot");
+        renewed.StatusCode.Should().Be(HttpStatusCode.OK);
+        using var stillLimited = await client.GetAsync("/api/profile/export");
+        stillLimited.StatusCode.Should().Be(HttpStatusCode.TooManyRequests);
+        factory.Clock.Advance(TimeSpan.FromHours(1));
+        using var exportRenewed = await client.GetAsync("/api/profile/export");
+        exportRenewed.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
     private static async Task AssertDocument(HttpResponseMessage response, bool brotli)
     {
         response.Content.Headers.ContentType!.MediaType.Should().Be("application/json");
