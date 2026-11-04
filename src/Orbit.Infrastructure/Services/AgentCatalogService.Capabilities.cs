@@ -1002,7 +1002,8 @@ public partial class AgentCatalogService
                     "AuthController.RequestDeletion",
                     "AuthController.ConfirmDeletion",
                     "ProfileController.ResetAccount",
-                    "ProfileController.ExportUserData"
+                    "ProfileController.ExportUserData",
+                    "EvalSnapshotController.GetSnapshot"
                 ]),
 
             new AgentCapability(
