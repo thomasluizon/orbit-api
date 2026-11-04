@@ -6,8 +6,16 @@ namespace Orbit.Api.Controllers;
 
 public partial class OAuthController
 {
+    private const string BrowserCookiePrefix = "orbit_oauth_";
+    private const string BrowserCookiePath = "/oauth";
+
     private static string StateHash(string state) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(state)));
-    private static string CookieName(string state) => "orbit_oauth_" + StateHash(state);
+    private static string CookieName(string state) => BrowserCookiePrefix + StateHash(state);
+
+    internal static bool IsBrowserBindingCookie(string name, CookieOptions options) =>
+        options.Path == BrowserCookiePath && name.Length == BrowserCookiePrefix.Length + 64
+        && name.StartsWith(BrowserCookiePrefix, StringComparison.Ordinal)
+        && name.Skip(BrowserCookiePrefix.Length).All(character => character is >= '0' and <= '9' or >= 'A' and <= 'F');
 
     private void BindBrowser(string state) => RenewBrowser(state, BrowserSecret(state) ?? authStore.CreateBrowserBinding(state));
 
@@ -16,7 +24,7 @@ public partial class OAuthController
         HttpOnly = true,
         Secure = true,
         SameSite = SameSiteMode.Lax,
-        Path = "/oauth",
+        Path = BrowserCookiePath,
         MaxAge = OAuthAuthorizationStore.BrowserBindingLifetime,
         IsEssential = true
     });
