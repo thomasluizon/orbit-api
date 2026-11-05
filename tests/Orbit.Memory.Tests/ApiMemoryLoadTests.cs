@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.IO.Compression;
 using System.Runtime;
 using System.Text.Json;
@@ -11,6 +10,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
 using Orbit.Api.Extensions;
+using Orbit.Api.Observability;
 using Orbit.Application.Common;
 using Orbit.Application.Goals.Services;
 using Orbit.Application.Habits.Commands;
@@ -41,12 +41,10 @@ public sealed class MemoryLoadFactAttribute : FactAttribute
 
 public class ApiMemoryLoadTests(ITestOutputHelper output)
 {
-    private const long ContainerBytes = 512L * 1024 * 1024;
-    private const long WorkingSetBudgetBytes = ContainerBytes * 80 / 100;
     private static readonly DateOnly Today = new(2026, 6, 1);
 
     [MemoryLoadFact]
-    public async Task MixedLoad_SteadyWorkingSetStaysBelowEightyPercentOf512MiB()
+    public async Task MixedLoad_SteadyAnonymousPlusShmemMemoryStaysBelowTheWarningLine()
     {
         Sample("start");
         output.WriteLine(JsonSerializer.Serialize(GC.GetConfigurationVariables()));
@@ -94,15 +92,15 @@ public class ApiMemoryLoadTests(ITestOutputHelper output)
                 await RunAccountAsync(factory, account.User, account.Habits, memory);
                 await chat.RunAsync(20);
                 (await estimator.EstimateMicroDollarsAsync(request, default)).Should().BePositive();
-                var workingSet = Sample($"round-{round}");
-                if (round > 0) samples.Add(workingSet);
+                var unreclaimable = Sample($"round-{round}");
+                if (round > 0) samples.Add(unreclaimable);
             }
             var loadedManaged = GC.GetTotalMemory(false);
             var retainedManaged = GC.GetTotalMemory(forceFullCollection: true);
             Sample("retained-after-diagnostic-collection");
             output.WriteLine($"LoadedManagedBytes={loadedManaged}; RetainedManagedBytes={retainedManaged}; CacheEntries={memory.Count}");
-            samples.Should().OnlyContain(bytes => bytes < WorkingSetBudgetBytes,
-                $"steady working set must leave 20% of {ContainerBytes} bytes free; samples: {string.Join(", ", samples)}");
+            samples.Should().OnlyContain(bytes => bytes < ApiMemoryBudget.WarningBytes,
+                $"steady anonymous plus shmem memory must stay below {ApiMemoryBudget.WarningBytes} bytes; samples: {string.Join(", ", samples)}");
         }
         finally
         {
@@ -181,19 +179,21 @@ public class ApiMemoryLoadTests(ITestOutputHelper output)
 
     private long Sample(string phase)
     {
-        using var process = Process.GetCurrentProcess();
-        var gc = GC.GetGCMemoryInfo();
+        var snapshot = ProcessMemorySnapshot.Read();
         output.WriteLine(JsonSerializer.Serialize(new
         {
             phase,
-            workingSet = process.WorkingSet64,
-            managed = GC.GetTotalMemory(false),
-            committed = gc.TotalCommittedBytes,
-            heap = gc.HeapSizeBytes,
-            available = gc.TotalAvailableMemoryBytes,
+            workingSet = snapshot.WorkingSetBytes,
+            anonymous = snapshot.AnonymousBytes,
+            shmem = snapshot.ShmemBytes,
+            unreclaimable = snapshot.UnreclaimableBytes,
+            managed = snapshot.ManagedBytes,
+            committed = snapshot.CommittedBytes,
+            heap = GC.GetGCMemoryInfo().HeapSizeBytes,
+            available = snapshot.HeapLimitBytes,
             server = GCSettings.IsServerGC,
             processors = Environment.ProcessorCount
         }));
-        return process.WorkingSet64;
+        return snapshot.UnreclaimableBytes;
     }
 }

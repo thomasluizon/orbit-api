@@ -24,7 +24,7 @@ public class ProcessMemoryMonitorTests
         monitor.Observe(high, nowAtUtc.AddSeconds(30));
         monitor.Observe(high, nowAtUtc.AddMinutes(5));
         logger.Logs.Should().HaveCount(2).And.OnlyContain(log => log.Level == LogLevel.Warning);
-        logger.Logs[0].Message.Should().Contain("429496729").And.Contain("536870912").And.Contain("268435456");
+        logger.Logs[0].Message.Should().Contain("314572800").And.Contain("536870912").And.Contain("268435456");
         monitor.Observe(snapshot, nowAtUtc.AddMinutes(6));
         monitor.Observe(snapshot, nowAtUtc.AddMinutes(7));
         logger.Logs.Should().HaveCount(3);

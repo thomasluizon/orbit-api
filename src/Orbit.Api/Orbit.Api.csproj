@@ -22,6 +22,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Orbit.Infrastructure.Tests" />
+    <InternalsVisibleTo Include="Orbit.Memory.Tests" />
   </ItemGroup>
 
   <ItemGroup>
