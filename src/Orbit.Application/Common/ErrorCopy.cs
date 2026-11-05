@@ -90,6 +90,8 @@ public static partial class ErrorCopy
         (DomainErrors.FlexibleNeedsFrequencyUnit.Code, "Pick how often this flexible habit repeats.", "Escolha com que frequência este hábito flexível se repete."),
         (DomainErrors.FlexibleHasDays.Code, "A flexible habit has no fixed days. Clear the days, or turn flexible off.", "Um hábito flexível não tem dias fixos. Limpe os dias, ou desative o modo flexível."),
         (DomainErrors.DaysRequireQuantityOne.Code, "To choose specific weekdays, the habit must repeat every day, once a day. Change the frequency or clear the weekdays.", "Para escolher dias da semana, o hábito precisa se repetir todos os dias, uma vez por dia. Ajuste a frequência ou remova os dias selecionados."),
+        (DomainErrors.MonthDaysInvalid.Code, $"Choose one or more different days of the month, from {MonthDaySchedule.MinMonthDay} to {MonthDaySchedule.MaxMonthDay}.", $"Escolha um ou mais dias diferentes do mês, de {MonthDaySchedule.MinMonthDay} a {MonthDaySchedule.MaxMonthDay}."),
+        (DomainErrors.MonthDaysRequireMonth.Code, "To choose days of the month, the habit must repeat monthly, with no weekdays and no week interval.", "Para escolher dias do mês, o hábito precisa se repetir todo mês, sem dias da semana e sem intervalo de semanas."),
         (DomainErrors.EndTimeBeforeStartTime.Code, "Set the end time after the start time.", "Defina o horário de fim depois do horário de início."),
         (DomainErrors.OneTimeTaskHasEndDate.Code, "A one-time task carries no end date.", "Uma tarefa única não tem data de fim."),
         (DomainErrors.GeneralHabitHasEndDate.Code, "A general habit carries no end date.", "Um hábito geral não tem data de fim."),

@@ -1325,6 +1325,12 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<int?>("LongestRecordedStreak")
                         .HasColumnType("integer");
 
+                    b.Property<string>("MonthDays")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasDefaultValueSql("'[]'::jsonb");
+
                     b.Property<DateOnly>("NextDueDate")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("date")

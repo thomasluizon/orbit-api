@@ -24,7 +24,7 @@ public static class HabitScheduleProjection
             habit.IsCompleted,
             habit.Days.ToList(),
             habit.Schedule,
-            habit.StartDate));
+            habit.StartDate, habit.MonthDays));
 
     public static IQueryable<UserHabitScheduleSnapshot> SelectForFreeze(IQueryable<Habit> query) =>
         query.Select(habit => new UserHabitScheduleSnapshot(
@@ -46,7 +46,7 @@ public static class HabitScheduleProjection
                 habit.IsCompleted,
                 habit.Days.ToList(),
                 habit.Schedule,
-                habit.StartDate)));
+                habit.StartDate, habit.MonthDays)));
 }
 
 public sealed record UserHabitScheduleSnapshot(Guid UserId, HabitScheduleSnapshot Snapshot);

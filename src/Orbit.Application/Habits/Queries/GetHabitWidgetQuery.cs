@@ -107,7 +107,7 @@ public class GetHabitWidgetQueryHandler(
                 new HabitScheduleSnapshot(h.Id, h.ParentHabitId, h.FrequencyUnit, h.FrequencyQuantity,
                     h.IntervalWeeks, h.NextDueDate, h.ScheduledStartDate, h.OriginalDayOfMonth,
                     h.EndDate, h.CreatedAtUtc, h.DeletedAtUtc, h.IsDeleted, h.IsBadHabit,
-                    h.IsCompleted, h.Days.ToList(), h.Schedule, h.StartDate),
+                    h.IsCompleted, h.Days.ToList(), h.Schedule, h.StartDate, h.MonthDays),
                 h.Title, h.Position, h.DueTime, h.ChecklistItems,
                 h.Logs.Where(l => l.Date >= logFrom && l.Date <= logTo)
                     .Select(l => new WidgetLogRow(l.HabitId, l.Date, l.Value)).ToList())).AsSplitQuery(),

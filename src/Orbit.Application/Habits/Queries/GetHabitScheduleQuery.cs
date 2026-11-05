@@ -439,7 +439,7 @@ public class GetHabitScheduleQueryHandler(
                     h.IsCompleted,
                     h.Days.ToList(),
                     h.Schedule,
-                    h.StartDate),
+                    h.StartDate, h.MonthDays),
                 h.Title,
                 includeDescription ? h.Description : null,
                 h.Position,

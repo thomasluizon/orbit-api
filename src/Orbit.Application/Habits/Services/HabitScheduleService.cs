@@ -1,5 +1,6 @@
 using System.Linq.Expressions;
 using Orbit.Application.Common;
+using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
@@ -633,7 +634,9 @@ public static class HabitScheduleService
         {
             FrequencyUnit.Day => qty == 1 || TrueMod(target.DayNumber - anchor.DayNumber, qty) == 0,
             FrequencyUnit.Week => target.DayOfWeek == anchor.DayOfWeek && TrueMod(WeekDiff(target, anchor), qty) == 0,
-            FrequencyUnit.Month => IsMonthlyMatch(target, anchor, qty),
+            FrequencyUnit.Month => habit.MonthDays.Count > 0
+                ? IsMonthDaysMatch(habit.MonthDays, target, anchor, qty)
+                : IsMonthlyMatch(target, anchor, qty),
             FrequencyUnit.Year => IsYearlyMatch(target, anchor, qty),
             _ => false
         };
@@ -665,6 +668,13 @@ public static class HabitScheduleService
         var expectedDay = Math.Min(anchor.Day, DateTime.DaysInMonth(target.Year, target.Month));
         return target.Day == expectedDay && TrueMod(MonthDiff(target, anchor), qty) == 0;
     }
+
+    /// <summary>
+    /// Month-days match: the target falls on a chosen day of the month (a missing day falls on the month's
+    /// last day), and the month interval aligns with the anchor's month.
+    /// </summary>
+    private static bool IsMonthDaysMatch(IReadOnlyCollection<int> monthDays, DateOnly target, DateOnly anchor, int qty) =>
+        MonthDaySchedule.Matches(monthDays, target) && TrueMod(MonthDiff(target, anchor), qty) == 0;
 
     /// <summary>
     /// Yearly match: same month and day with interval alignment.
