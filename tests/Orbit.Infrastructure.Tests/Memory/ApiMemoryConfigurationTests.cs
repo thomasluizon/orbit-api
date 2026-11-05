@@ -16,4 +16,12 @@ public class ApiMemoryConfigurationTests
         settings.GetProperty("System.GC.ConserveMemory").GetInt32().Should().Be(7);
         settings.GetProperty("System.Runtime.TieredCompilation").GetBoolean().Should().BeTrue();
     }
+
+    [Fact]
+    public void PublishedRuntime_DoesNotKeepInstrumentedJitCopiesInUnreclaimableMemory()
+    {
+        using var runtime = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Orbit.Api.runtimeconfig.json")));
+        var settings = runtime.RootElement.GetProperty("runtimeOptions").GetProperty("configProperties");
+        settings.GetProperty("System.Runtime.TieredPGO").GetBoolean().Should().BeFalse();
+    }
 }
