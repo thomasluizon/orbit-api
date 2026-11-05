@@ -65,9 +65,11 @@ public partial class BulkLogHabitsCommandHandler(
             var habitMap = await BulkHabitLoader.LoadHabitsWithRecentLogsAsync(
                 habitRepository, habitLogRepository, request.Items.Select(i => i.HabitId), request.UserId, today, weekStartDay, ct);
             using var batchScope = new HabitLogBatchReadScope(request.UserId, habitMap);
-            var parentBatch = new BadHabitParentSlipBatch(habitMap, habitRepository,
-                request.Items.Select(item => item.Date ?? today).Where(date => date <= today
-                    && date >= today.AddDays(-AppConstants.DefaultOverdueWindowDays)).ToArray());
+            var parentBatch = habitRepository is ITrackedEntityLookup<Habit>
+                ? new BadHabitParentSlipBatch(habitMap, habitRepository,
+                    request.Items.Select(item => item.Date ?? today).Where(date => date <= today
+                        && date >= today.AddDays(-AppConstants.DefaultOverdueWindowDays)).ToArray())
+                : null;
             var dueDateResolution = await HabitDueDateResolutionLoader.LoadAsync(request.UserId,
                 habitLogRepository, habitMap.Values, today.AddDays(-AppConstants.DefaultOverdueWindowDays), ct);
             var previousStreak = (await services.UserStreakService.CalculateAsync(request.UserId, ct))?.CurrentStreak ?? 0;

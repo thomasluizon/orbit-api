@@ -39,7 +39,7 @@ dotnet build tests/Orbit.Infrastructure.Tests
 DOTNET_GCHeapHardLimit=0x20000000 dotnet test tests/Orbit.Infrastructure.Tests --no-build --filter 'FullyQualifiedName~BulkHabitsPerformanceTests' --logger 'console;verbosity=detailed' --nologo
 ```
 
-Without the connection variable, the SQLite regression cases still run and the PostgreSQL cases skip. `BulkHabitMutationReadTests` additionally covers stale pretracked state, flexible completions outside the overdue window, unselected siblings and ancestors.
+Without the connection variable, the SQLite regression cases still run and the PostgreSQL cases skip. `BulkHabitMutationReadTests` additionally covers stale pretracked state, flexible completions outside the overdue window, unselected siblings and ancestors. The unchanged `BadHabitParentSlipTests.BulkLog_ParentRepositoryFailure_DoesNotFailOtherItems` caught a repository-wrapper compatibility issue in the broad run; repositories without the tracked-state capability retain the original per-item parent-read path. The production repository exposes the capability and keeps the measured batch path.
 
 ## Client wait audit
 
