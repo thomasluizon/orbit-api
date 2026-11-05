@@ -76,7 +76,8 @@ public sealed partial class AiUsageRecorder(
                 ["$ai_latency"] = telemetry?.LatencySeconds ?? 0d,
                 ["$ai_is_error"] = telemetry?.IsError ?? false,
                 ["$ai_total_cost_usd"] = costUsd,
-                ["purpose"] = purpose
+                ["purpose"] = purpose,
+                ["cancelled"] = telemetry?.IsCancelled ?? false
             };
             if (userId is { } id)
                 AnalyticsCapture.SafeCaptureUserEvent(analytics, logger, id, telemetry?.Plan, "$ai_generation", properties);

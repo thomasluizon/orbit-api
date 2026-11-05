@@ -112,7 +112,7 @@ public class AiUsageRecorderTests
             var properties = (IReadOnlyDictionary<string, object>)captured.GetArguments()[3]!;
             properties.Keys.Should().BeEquivalentTo(new[] { "$ai_trace_id", "$ai_span_id", "$ai_model", "$ai_provider",
                 "$ai_input_tokens", "$ai_output_tokens", "$ai_cache_read_input_tokens", "$ai_latency", "$ai_is_error",
-                "$ai_total_cost_usd", "purpose" });
+                "$ai_total_cost_usd", "purpose", "cancelled" });
             properties["$ai_trace_id"].Should().Be("chat-correlation-id");
             spans.Add((string)properties["$ai_span_id"]);
             properties["$ai_model"].Should().Be("priced");
@@ -124,6 +124,7 @@ public class AiUsageRecorderTests
             properties["$ai_is_error"].Should().BeOfType<bool>();
             properties["$ai_total_cost_usd"].Should().Be(commandCapture.Costs[0]);
             properties["purpose"].Should().Be("chat");
+            properties["cancelled"].Should().BeOfType<bool>().Which.Should().BeFalse();
         }
         spans.Should().HaveCount(2);
     }
@@ -178,7 +179,28 @@ public class AiUsageRecorderTests
 
         commandCapture.Costs.Should().BeEmpty();
         analytics.Received(1).CaptureAggregateEvent("$ai_generation", Arg.Is<IReadOnlyDictionary<string, object>>(properties =>
-            (bool)properties["$ai_is_error"] && (decimal)properties["$ai_total_cost_usd"] == 0));
+            (bool)properties["$ai_is_error"] && !(bool)properties["cancelled"] && (decimal)properties["$ai_total_cost_usd"] == 0));
+    }
+
+    [Fact]
+    public async Task RecordAsync_CallerCancelledWithoutUsage_EmitsCancelledEventWithoutError()
+    {
+        var analytics = Substitute.For<IProductAnalytics>();
+        var commandCapture = new UpsertCapture();
+        using var services = new ServiceCollection().AddSingleton(analytics)
+            .AddDbContext<OrbitDbContext>(options => options.UseSqlite("Data Source=:memory:").AddInterceptors(commandCapture))
+            .BuildServiceProvider();
+        var recorder = ActivatorUtilities.CreateInstance<AiUsageRecorder>(services,
+            Options.Create(new AiSettings()), NullLogger<AiUsageRecorder>.Instance);
+        var userId = Guid.NewGuid();
+
+        await recorder.RecordAsync("daily_summary", "gpt-6-luna", 0, 0, 0, 0, userId: userId,
+            telemetry: new AiCallTelemetry("superseded-refresh", 2.03, false, [], HasUsage: false, IsCancelled: true));
+
+        commandCapture.Costs.Should().BeEmpty();
+        analytics.Received(1).CaptureUserEvent(userId, "$ai_generation", null, Arg.Is<IReadOnlyDictionary<string, object>>(properties =>
+            !(bool)properties["$ai_is_error"] && (bool)properties["cancelled"]
+            && (string)properties["purpose"] == "daily_summary"));
     }
 
     private static readonly AiModelPrice SamplePrice = new()

@@ -342,11 +342,17 @@ public sealed partial class AiIntentService(
         CancellationToken cancellationToken, string purpose, IReadOnlyList<CurrentTurnImage>? currentImages)
     {
         var observation = new ModelCallObservation();
+        var cancelled = false;
         try
         {
             return streamSink is null
                 ? await CompleteBufferedRoundAsync(client, messages, options, observation, cancellationToken, purpose, currentImages)
                 : await CompleteStreamingRoundAsync(client, messages, options, observation, streamSink, stopwatch, cancellationToken, purpose, currentImages);
+        }
+        catch (OperationCanceledException) when (AiCompletionClient.CompletionCancellation.CurrentCallerCancelled)
+        {
+            cancelled = true;
+            throw;
         }
         finally
         {
@@ -363,8 +369,9 @@ public sealed partial class AiIntentService(
             telemetry.RecordRound(toolNames.Length);
             await RecordChatUsageAsync(observation.Response?.Usage, streamSink is null ? "buffered" : "streaming",
                 userId, new AiCallTelemetry(telemetry.TraceId, stopwatch.Elapsed.TotalSeconds,
-                    observation.Response is null || observation.Response.Status is not (ResponseStatus.Completed or ResponseStatus.Incomplete),
-                    toolNames, telemetry.Plan, observation.Response?.Usage is not null), cancellationToken, purpose);
+                    !cancelled && (observation.Response is null
+                        || observation.Response.Status is not (ResponseStatus.Completed or ResponseStatus.Incomplete)),
+                    toolNames, telemetry.Plan, observation.Response?.Usage is not null, cancelled), cancellationToken, purpose);
         }
     }
 
@@ -682,7 +689,7 @@ public sealed partial class AiIntentService(
         AiCallTelemetry telemetry,
         CancellationToken cancellationToken, string purpose)
     {
-        if (usage is null)
+        if (usage is null && !telemetry.IsCancelled)
         {
             if (logger.IsEnabled(LogLevel.Warning))
                 LogChatUsageMissing(logger, phase);
@@ -703,7 +710,7 @@ public sealed partial class AiIntentService(
                 cacheWriteTokens: usage?.InputTokenDetails?.CacheWriteTokenCount ?? 0,
                     reasoningTokens: usage?.OutputTokenDetails?.ReasoningTokenCount ?? 0);
         }
-        catch (Exception ex) when (telemetry.IsError || ex is not OperationCanceledException)
+        catch (Exception ex) when (telemetry.IsError || telemetry.IsCancelled || ex is not OperationCanceledException)
         {
             if (logger.IsEnabled(LogLevel.Warning))
                 LogChatUsageRecordFailed(logger, aiClient.ChatModel, phase, ex);

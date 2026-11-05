@@ -54,6 +54,11 @@ public sealed class BudgetedAiCompletionClient(AiCompletionClient inner, IAiDail
                 }
             }
         }
+        catch (OperationCanceledException) when (AiCompletionClient.CompletionCancellation.CurrentCallerCancelled)
+        {
+            logger.LogDebug("AI completion cancelled by the caller at {Stage}", stage);
+            throw;
+        }
         catch (Exception exception)
         {
             var reason = exception switch
