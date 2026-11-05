@@ -80,9 +80,10 @@ public sealed partial class OfferDeadlineControllerTests
         transport.Requests.Should().OnlyContain(body => !body.Contains(ProactiveOfferPlanner.SelectionInstruction, StringComparison.Ordinal));
         transport.Requests[0].Should().Contain("Run five kilometers");
         if (callerCancelled)
-            messages.Should().Contain("AI completion failed at completion with cancelled");
-        else
-            messages.Should().NotContain("AI completion failed at completion with cancelled");
+            messages.Should().Contain("AI completion cancelled by the caller at completion");
+        messages.Should().NotContain("AI completion failed at completion with cancelled");
+        messages.Should().NotContain(message => message.StartsWith("AI attempt ", StringComparison.Ordinal)
+            && message.Contains(" failed (", StringComparison.Ordinal));
         await offers.DidNotReceiveWithAnyArgs().IssueAsync(default, default, default!, default);
         await mediator.Received(1).Send(Arg.Is<ProcessUserChatCommand>(command =>
             command.Message == input["message"]!.GetValue<string>() && command.History!.Count == 0
