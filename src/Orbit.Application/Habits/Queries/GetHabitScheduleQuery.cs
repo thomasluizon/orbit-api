@@ -61,7 +61,8 @@ public record HabitScheduleItem(
     RepeatReminderOptions? RepeatReminder = null,
     DateTime? NextReminderAtUtc = null,
     DateOnly? CompletedOn = null,
-    bool? IsSkippedOnDate = null);
+    bool? IsSkippedOnDate = null,
+    IReadOnlyList<int>? MonthDays = null);
 
 public record HabitScheduleChildItem(
     Guid Id,
@@ -108,7 +109,8 @@ public record HabitScheduleChildItem(
     RepeatReminderOptions? RepeatReminder = null,
     DateTime? NextReminderAtUtc = null,
     DateOnly? CompletedOn = null,
-    bool? IsSkippedOnDate = null);
+    bool? IsSkippedOnDate = null,
+    IReadOnlyList<int>? MonthDays = null);
 
 public record GetHabitScheduleQuery(
     Guid UserId,

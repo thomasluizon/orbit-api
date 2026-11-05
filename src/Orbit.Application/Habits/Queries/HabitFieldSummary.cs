@@ -16,6 +16,7 @@ public sealed record HabitFieldSummary
     public TimeOnly? DueEndTime { get; init; }
     public int? IntervalWeeks { get; init; }
     public IReadOnlyList<DayOfWeek> Days { get; init; } = [];
+    public IReadOnlyList<int> MonthDays { get; init; } = [];
     public DateOnly? EndDate { get; init; }
     public bool ReminderEnabled { get; init; }
     public IReadOnlyList<int> ReminderTimes { get; init; } = [];
@@ -37,6 +38,7 @@ public sealed record HabitFieldSummary
         DueEndTime = habit.DueEndTime,
         IntervalWeeks = habit.IntervalWeeks,
         Days = habit.Days.ToList(),
+        MonthDays = habit.MonthDays,
         EndDate = habit.EndDate,
         ReminderEnabled = habit.ReminderEnabled,
         ReminderTimes = habit.ReminderTimes,
@@ -59,6 +61,7 @@ public sealed record HabitFieldSummary
         if (DueEndTime is { } endTime) fields.Add($"Due end time: {endTime.ToString("HH:mm", CultureInfo.InvariantCulture)}");
         if (IntervalWeeks is { } weeks) fields.Add($"Interval weeks: {weeks.ToString(CultureInfo.InvariantCulture)}");
         if (Days.Count > 0) fields.Add($"Days: {string.Join(", ", Days)}");
+        if (MonthDays.Count > 0) fields.Add($"Month days: {string.Join(", ", MonthDays)}");
         if (EndDate is { } endDate) fields.Add($"End date: {endDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}");
         if (ReminderEnabled) fields.Add("Reminders: enabled");
         if (ReminderTimes.Count > 0) fields.Add($"Reminder minutes: {string.Join(", ", ReminderTimes)}");

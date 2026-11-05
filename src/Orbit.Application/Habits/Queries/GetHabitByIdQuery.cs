@@ -47,7 +47,8 @@ public record HabitChildResponse(
     Guid? ParentHabitId = null,
     string? ParentTitle = null,
     RepeatReminderOptions? RepeatReminder = null,
-    DateTime? NextReminderAtUtc = null);
+    DateTime? NextReminderAtUtc = null,
+    IReadOnlyList<int>? MonthDays = null);
 
 public record HabitDetailResponse(
     Guid Id,
@@ -89,7 +90,8 @@ public record HabitDetailResponse(
     Guid? ParentHabitId = null,
     string? ParentTitle = null,
     RepeatReminderOptions? RepeatReminder = null,
-    DateTime? NextReminderAtUtc = null);
+    DateTime? NextReminderAtUtc = null,
+    IReadOnlyList<int>? MonthDays = null);
 
 public record GetHabitByIdQuery(Guid UserId, Guid HabitId) : IRequest<Result<HabitDetailResponse>>;
 
@@ -151,6 +153,7 @@ public class GetHabitByIdQueryHandler(
             children,
             Emoji: habit.Emoji,
             IntervalWeeks: habit.IntervalWeeks,
+            MonthDays: habit.MonthDays,
             LinkedGoals: habit.Goals.Select(g => new LinkedGoalDto(g.Id, g.Title)).ToList(),
             SlipAlertEnabled: habit.SlipAlertEnabled,
             RelativeReminders: habit.RelativeReminders,
@@ -243,6 +246,7 @@ internal static class HabitDetailChildMapper
         MapChildren(child, userToday, weekStartDay, descendantLogsByHabitId),
         Emoji: child.Emoji,
         IntervalWeeks: child.IntervalWeeks,
+        MonthDays: child.MonthDays,
         CreatedAtUtc: child.CreatedAtUtc,
         Schedule: child.Schedule,
         StartDate: child.StartDate,

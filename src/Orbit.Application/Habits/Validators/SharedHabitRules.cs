@@ -65,6 +65,38 @@ public static class SharedHabitRules
         rule.InclusiveBetween(1, AppConstants.MaxIntervalWeeks);
     }
 
+    /// <summary>
+    /// Month days are distinct days from 1 to 31 on a monthly, non-flexible habit with no weekdays.
+    /// An empty list is valid only where it clears stored days (<paramref name="allowEmpty"/>).
+    /// </summary>
+    public static void AddMonthDaysRules<T>(
+        AbstractValidator<T> validator,
+        System.Linq.Expressions.Expression<Func<T, IReadOnlyList<int>?>> monthDaysExpr,
+        Func<T, Domain.Enums.FrequencyUnit?> freqUnit,
+        Func<T, bool> isFlexible,
+        Func<T, IReadOnlyList<System.DayOfWeek>?> days,
+        bool allowEmpty)
+    {
+        AddMonthDaysRangeRules(validator.RuleFor(monthDaysExpr), allowEmpty);
+
+        validator.RuleFor(monthDaysExpr)
+            .Must((command, monthDays) => monthDays is not { Count: > 0 }
+                || (freqUnit(command) == Domain.Enums.FrequencyUnit.Month && !isFlexible(command)
+                    && days(command) is not { Count: > 0 }))
+            .WithCopy(Domain.Common.DomainErrors.MonthDaysRequireMonth.Code);
+    }
+
+    /// <summary>
+    /// The range and duplicate rule alone, for an item whose frequency unit can come from its parent.
+    /// The domain guard checks the effective unit.
+    /// </summary>
+    public static void AddMonthDaysRangeRules<T>(IRuleBuilder<T, IReadOnlyList<int>?> rule, bool allowEmpty)
+    {
+        rule.Must(monthDays => monthDays is null
+                || (monthDays.Count == 0 ? allowEmpty : Domain.Common.MonthDaySchedule.IsValid(monthDays)))
+            .WithCopy(Domain.Common.DomainErrors.MonthDaysInvalid.Code);
+    }
+
     public static void AddDaysRules<T>(
         AbstractValidator<T> validator,
         System.Linq.Expressions.Expression<Func<T, IReadOnlyList<System.DayOfWeek>?>> daysExpr,

@@ -218,7 +218,8 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
             GoalIds: request.GoalIds,
             Emoji: request.Emoji,
             IntervalWeeks: request.IntervalWeeks,
-            StartDate: request.StartDate);
+            StartDate: request.StartDate,
+            MonthDays: request.MonthDays);
 
         var result = await mediator.Send(command, cancellationToken);
 
@@ -347,7 +348,8 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
             StartDate: request.StartDate,
             TagIds: request.TagIds,
             ParentId: request.ParentId,
-            ClearParent: request.ClearParent);
+            ClearParent: request.ClearParent,
+            MonthDays: request.MonthDays);
 
         var result = await mediator.Send(command, cancellationToken);
 
@@ -627,7 +629,8 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
                 RelativeReminders: request.RelativeReminders,
                 RepeatReminder: request.RepeatReminder),
             TagIds: request.TagIds,
-            Emoji: request.Emoji);
+            Emoji: request.Emoji,
+            MonthDays: request.MonthDays);
 
         var result = await mediator.Send(command, cancellationToken);
 
@@ -677,7 +680,8 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
             Tags: request.Tags,
             IntervalWeeks: request.IntervalWeeks,
             RelativeReminders: request.RelativeReminders,
-            RepeatReminder: request.RepeatReminder);
+            RepeatReminder: request.RepeatReminder,
+            MonthDays: request.MonthDays);
     }
 }
 

@@ -123,7 +123,7 @@ public static class HabitMetricsCalculator
         if (habit.Schedule == HabitSchedule.Flexible)
             return GenerateFlexibleWindowDates(habit, today, habitStartDate, weekStartDay);
 
-        if (habit.IntervalWeeks is > 1)
+        if (habit.IntervalWeeks is > 1 || habit.MonthDays.Count > 0)
             return GenerateIntervalExpectedDates(habit, today, habitStartDate, weekStartDay);
 
         if (habit.Days.Count > 0 && habit.FrequencyQuantity == 1)
