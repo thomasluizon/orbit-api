@@ -79,6 +79,46 @@ public class AiCallerCancellationTests
                 && entry.Message == "AI completion failed at completion with cancelled");
     }
 
+    [Theory]
+    [InlineData("caller", true)]
+    [InlineData("outer-deadline", false)]
+    [InlineData("inner-deadline", false)]
+    public void NestedScope_ClassifiesTheCancellationSource(string source, bool callerCancelled)
+    {
+        var clock = new CompletionTestClock();
+        using var caller = new CancellationTokenSource();
+        using var outer = new AiCompletionClient.CompletionCancellation(Timeout, clock, caller.Token);
+        clock.Advance(Timeout / 2);
+        using var inner = new AiCompletionClient.CompletionCancellation(
+            source == "inner-deadline" ? Timeout / 4 : Timeout, clock, outer.Token);
+        AiCompletionClient.CompletionCancellation.CurrentCallerCancelled.Should().BeFalse();
+
+        if (source == "caller")
+            caller.Cancel();
+        else
+            clock.Advance(source == "outer-deadline" ? Timeout / 2 : Timeout / 4);
+
+        inner.Token.IsCancellationRequested.Should().BeTrue();
+        AiCompletionClient.CompletionCancellation.CurrentCallerCancelled.Should().Be(callerCancelled);
+    }
+
+    [Fact]
+    public void Scope_OnUnrelatedToken_UsesItsOwnCallerAndRestoresThePreviousScope()
+    {
+        var clock = new CompletionTestClock();
+        using var first = new CancellationTokenSource();
+        using var second = new CancellationTokenSource();
+        using var outer = new AiCompletionClient.CompletionCancellation(Timeout, clock, first.Token);
+        using (new AiCompletionClient.CompletionCancellation(Timeout, clock, second.Token))
+        {
+            first.Cancel();
+            AiCompletionClient.CompletionCancellation.CurrentCallerCancelled.Should().BeFalse(
+                "the inner scope belongs to a different caller");
+        }
+
+        AiCompletionClient.CompletionCancellation.CurrentCallerCancelled.Should().BeTrue();
+    }
+
     private sealed class Harness
     {
         private readonly AiCompletionClient _client;
