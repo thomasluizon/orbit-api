@@ -903,6 +903,35 @@ public class UpdateHabitToolTests
                 call.ArgAt<CancellationToken>(1)));
     }
 
+    [Fact]
+    public async Task MonthDays_SetsAndClearsTheChosenDays()
+    {
+        var habit = CreateHabit("Pagar contas", FrequencyUnit.Month, 1);
+        SetupHabitFound(habit);
+
+        (await Execute($$$"""{"habit_id": "{{{habit.Id}}}", "month_days": [8, 15]}""")).Success.Should().BeTrue();
+        habit.MonthDays.Should().Equal(8, 15);
+        habit.NextDueDate.Should().Be(new DateOnly(2026, 4, 8));
+
+        (await Execute($$$"""{"habit_id": "{{{habit.Id}}}", "title": "Pagar as contas"}""")).Success.Should().BeTrue();
+        habit.MonthDays.Should().Equal(8, 15);
+
+        (await Execute($$$"""{"habit_id": "{{{habit.Id}}}", "month_days": []}""")).Success.Should().BeTrue();
+        habit.MonthDays.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task MonthDays_OnAWeeklyHabit_FailsWithoutChange()
+    {
+        var habit = CreateHabit("Exercise", FrequencyUnit.Week, 1);
+        SetupHabitFound(habit);
+
+        var result = await Execute($$$"""{"habit_id": "{{{habit.Id}}}", "month_days": [8]}""");
+
+        result.Success.Should().BeFalse();
+        habit.MonthDays.Should().BeEmpty();
+    }
+
     private static OrbitDbContext CreateContext(string databaseName) =>
         new(new DbContextOptionsBuilder<OrbitDbContext>().UseInMemoryDatabase(databaseName).Options);
 

@@ -42,11 +42,16 @@ public sealed partial class HabitCorrectionProposalValidator : AbstractValidator
             var end = update.ClearEndDate == true ? null : update.EndDate ?? current.EndDate;
             if (update.FrequencyUnit != current.FrequencyUnit || update.FrequencyQuantity != current.FrequencyQuantity
                 || update.IntervalWeeks != current.IntervalWeeks || update.Schedule != current.Schedule || end != current.EndDate
-                || !current.Days.ToHashSet().SetEquals(update.Days ?? []))
+                || !current.Days.ToHashSet().SetEquals(update.Days ?? [])
+                || ChangesMonthDays(current, update))
                 context.AddFailure(new ValidationFailure("frequency_unit", HabitModelInstructions.Correction)
                 { ErrorCode = "CORRECTION_PRESERVES_SCHEDULE" });
         });
     }
+
+    private static bool ChangesMonthDays(Domain.Entities.Habit current, Domain.Entities.HabitUpdateParams update) =>
+        update.MonthDays is { } monthDays
+        && !current.MonthDays.SequenceEqual(Domain.Common.MonthDaySchedule.Normalize(monthDays));
 
     [GeneratedRegex(@"\b(?:schedule|recurr\w*|frequen\w*|daily|weekly|monthly|yearly|every|once|one.time|one.off|task|day|days|week|weeks|month|end|until|calend[aá]rio|agenda|repet\w*|di[aá]ri\w*|seman\w*|mensal|anual|todo|todos|cada|vez|vezes|tarefa|[uú]nic\w*|dias?|fim|termin\w*|at[eé])\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex ScheduleEdit();

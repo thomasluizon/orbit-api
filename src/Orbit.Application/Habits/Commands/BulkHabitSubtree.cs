@@ -139,7 +139,7 @@ internal static class BulkHabitSubtree
     }
 
     private static IReadOnlyList<int>? ResolveMonthDays(BulkHabitItem item, Habit? parent, bool inheritsCadence) =>
-        item.MonthDays ?? (inheritsCadence ? parent?.MonthDays : null);
+        item.MonthDays ?? (inheritsCadence && parent?.MonthDays is { Count: > 0 } inherited ? inherited : null);
 
     private static bool HasExplicitCadence(BulkHabitItem item) =>
         item.FrequencyUnit is not null || item.FrequencyQuantity is not null
