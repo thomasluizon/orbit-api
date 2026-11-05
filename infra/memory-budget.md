@@ -8,7 +8,7 @@ kernel reclaims them first.
 
 The warning line is 300 MiB (314,572,800 bytes) of anonymous plus shmem memory,
 58.6% of the container. The remaining 212 MiB holds the file-backed code pages,
-which measure 150 to 175 MB, and transient growth.
+which measure about 176,000 kB after the load, and transient growth.
 
 ## Production evidence
 
@@ -43,16 +43,18 @@ bulk. Every tenth round exports the account. The reads come from `/proc/1/status
 `linux/amd64` image is not used for local reads, because Rosetta adds a translation
 cache to its anonymous memory.
 
-These are the owners of the memory after the recorded load on the current image:
+These are the owners of the memory 60 seconds after the recorded load on the current
+image. The GC value comes from `dotnet-counters` in the same container.
 
 | Owner | Resident | Kernel class |
 | --- | ---: | --- |
-| Mapped assemblies (`*.dll`), ReadyToRun | 151 MB | File, reclaimable |
-| GC heap (committed) | 66 MB | Anonymous |
-| Runtime, glibc arenas, thread stacks | 50 MB | Anonymous |
-| `/memfd:doublemapper` data (loader heaps, stubs) | 60 MB | Shmem |
-| `/memfd:doublemapper` code (JIT code) | 19 MB | Shmem |
-| Native libraries (`*.so`) | 25 MB | File, reclaimable |
+| Mapped assemblies (`*.dll`), ReadyToRun | 151,028 kB | File, reclaimable |
+| GC heap (committed) | 64,512 kB | Anonymous |
+| Other unnamed memory (runtime, glibc arenas, thread stacks) | 39,360 kB | Anonymous |
+| glibc main heap | 5,484 kB | Anonymous |
+| `/memfd:doublemapper` data (loader heaps, stubs) | 60,420 kB | Shmem |
+| `/memfd:doublemapper` code (JIT code) | 19,028 kB | Shmem |
+| Native libraries (`*.so`) | 25,240 kB | File, reclaimable |
 
 The `doublemapper` memfd is the runtime's write xor execute mapping of executable
 memory and loader data.
@@ -66,9 +68,9 @@ less than about 12 MB is noise.
 | Run | Anonymous plus shmem | Result |
 | --- | ---: | --- |
 | `f84ab32cf` (production image) | 241.8 MB | Reference |
-| `f84ab32cf`, 10 times the load | 267.3 MB | Shmem grows from 104 to 123 MB |
+| `f84ab32cf`, 10 times the load | 267.3 MB | Shmem grows from 103,832 kB to 122,976 kB |
 | Current image | 200.8 to 212.4 MB | ReadyToRun moves JIT code to file pages |
-| Current image, 10 times the load | 222.8 MB | Shmem stays at 75 to 80 MB |
+| Current image, 10 times the load | 222.8 MB | Shmem stays at 75,488 kB to 79,752 kB |
 | `MALLOC_ARENA_MAX=2` | 224.7 MB | No decrease |
 | `DOTNET_TieredCompilation=0` | 219.4 MB | No decrease |
 | `DOTNET_TC_CallCountThreshold=1000` | 207.3 MB | No decrease |
@@ -82,7 +84,7 @@ These are the conclusions:
 - The JIT and loader memory of the production image grows with the variety of requests. ReadyToRun with TieredPGO off stops that growth.
 - `MALLOC_ARENA_MAX` and the JIT settings do not move the number. The [glibc tunables](https://sourceware.org/glibc/manual/latest/html_node/Memory-Allocation-Tunables.html) limit the arena count, but the arena heaps held only 17 to 45 MB in the
   [native attribution](evidence/ticket-2003-native-memory.json).
-- The GC heap commits 66 MB under the recorded HTTP load. The heap hard limit is a ceiling, so a lower limit does not lower the number.
+- The GC heap commits 66,060,288 bytes under the recorded HTTP load. The heap hard limit is a ceiling, so a lower limit does not lower the number.
 - Sentry and PostHog add about 25 MB together. Production needs both, so they stay.
 - The `o200k_base` tokenizer already loads on first use. Its vocabulary holds 42 MB of live managed memory after the first count. The library caches it statically, so the API cannot release it.
 - `Microsoft.CodeAnalysis` was never mapped at runtime. The API project no longer references it directly, so the image ships 55 MB less in `/app`. The memory does not change.
@@ -93,7 +95,7 @@ ranking turn and the tokenizer. In the 512 MiB, half-CPU container, it retains
 lowers anonymous plus shmem memory by 11 MB, but production logged 144 MB of managed
 memory. Thus the 256 MiB limit stays.
 
-The working set after the recorded load is 365 to 390 MB on the current image. It is
+The working set after the recorded load is 366 to 398 MB on the current image. It is
 above 300 MB because ReadyToRun puts about 150 MB of precompiled code in clean file
 pages, which the kernel reclaims under pressure.
 
