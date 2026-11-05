@@ -87,6 +87,17 @@ jobs:
           ORBIT_POSTGRES_TEST_CONNECTION: Host=localhost;Port=5432;Database=postgres;Username=orbit_test
         run: dotnet test tests/Orbit.Infrastructure.Tests --no-restore --collect:"XPlat Code Coverage" --settings coverlet.runsettings --results-directory ./TestResults
 
+      - name: Build API memory workload
+        run: dotnet build tests/Orbit.Memory.Tests --no-restore
+
+      - name: Guard API memory headroom
+        env:
+          ORBIT_MEMORY_GUARD: "1"
+          DOTNET_gcServer: "0"
+          DOTNET_GCHeapHardLimit: "10000000"
+          DOTNET_GCConserveMemory: "7"
+        run: dotnet test tests/Orbit.Memory.Tests --no-build --no-restore --filter FullyQualifiedName~ApiMemoryLoadTests --logger "console;verbosity=detailed"
+
       - name: Run Analyzer Tests
         run: dotnet test tests/Orbit.Analyzers.Tests --no-restore
 

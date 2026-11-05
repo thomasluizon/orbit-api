@@ -1,0 +1,583 @@
+{
+  "host": {
+    "os": "macOS ARM64",
+    "runtimeVersion": "10.0.12",
+    "processors": 18,
+    "osContainerLimitApplied": false
+  },
+  "containerBudgetBytes": 536870912,
+  "workingSetWarningBytes": 429496729,
+  "rounds": 20,
+  "before": {
+    "gcConfiguration": {
+      "ServerGC": true,
+      "ConcurrentGC": true,
+      "RetainVM": false,
+      "NoAffinitize": false,
+      "GCCpuGroup": false,
+      "GCLargePages": false,
+      "LOHThreshold": 85000,
+      "HeapCount": 18,
+      "MaxHeapCount": 0,
+      "GCHeapAffinitizeMask": 0,
+      "GCHeapAffinitizeRanges": "",
+      "GCHighMemPercent": 90,
+      "GCGen0MaxBudget": 8388608,
+      "GCHeapHardLimit": 402653184,
+      "GCHeapHardLimitPercent": 0,
+      "GCRegionRange": 0,
+      "GCRegionSize": 0,
+      "UOHWaitBGCSizeIncPercent": -1,
+      "GCHeapHardLimitSOH": 0,
+      "GCHeapHardLimitLOH": 0,
+      "GCHeapHardLimitPOH": 0,
+      "GCHeapHardLimitSOHPercent": 0,
+      "GCHeapHardLimitLOHPercent": 0,
+      "GCHeapHardLimitPOHPercent": 0,
+      "GCConserveMem": 0,
+      "GCName": "",
+      "GCPath": "",
+      "GCDynamicAdaptationMode": 1,
+      "GCDTargetTCP": 0,
+      "GCDGen0GrowthPercent": 0,
+      "GCDGen0GrowthMinFactor": 0,
+      "GCDGen0GrowthMaxFactor": 0
+    },
+    "samples": [
+      {
+        "phase": "start",
+        "workingSet": 124305408,
+        "managed": 2779952,
+        "committed": 0,
+        "heap": 0,
+        "available": 402653184,
+        "server": true,
+        "processors": 18
+      },
+      {
+        "phase": "event-streams-150",
+        "workingSet": 162725888,
+        "managed": 23958672,
+        "committed": 0,
+        "heap": 0,
+        "available": 402653184,
+        "server": true,
+        "processors": 18
+      },
+      {
+        "phase": "production-ai-request",
+        "workingSet": 225705984,
+        "managed": 105854368,
+        "committed": 80035840,
+        "heap": 76938064,
+        "available": 402653184,
+        "server": true,
+        "processors": 18
+      },
+      {
+        "phase": "round-0",
+        "workingSet": 553238528,
+        "managed": 152315400,
+        "committed": 286605312,
+        "heap": 86117032,
+        "available": 402653184,
+        "server": true,
+        "processors": 18
+      },
+      {
+        "phase": "round-1",
+        "workingSet": 564396032,
+        "managed": 178289400,
+        "committed": 286605312,
+        "heap": 94749568,
+        "available": 402653184,
+        "server": true,
+        "processors": 18
+      },
+      {
+        "phase": "round-2",
+        "workingSet": 570818560,
+        "managed": 206814368,
+        "committed": 286605312,
+        "heap": 103268760,
+        "available": 402653184,
+        "server": true,
+        "processors": 18
+      },
+      {
+        "phase": "round-3",
+        "workingSet": 576831488,
+        "managed": 196239344,
+        "committed": 286867456,
+        "heap": 93151448,
+        "available": 402653184,
+        "server": true,
+        "processors": 18
+      },
+      {
+        "phase": "round-4",
+        "workingSet": 581238784,
+        "managed": 243883712,
+        "committed": 288178176,
+        "heap": 99857512,
+        "available": 402653184,
+        "server": true,
+        "processors": 18
+      },
+      {
+        "phase": "round-5",
+        "workingSet": 583188480,
+        "managed": 194980864,
+        "committed": 289751040,
+        "heap": 112470040,
+        "available": 402653184,
+        "server": true,
+        "processors": 18
+      },
+      {
+        "phase": "round-6",
+        "workingSet": 585891840,
+        "managed": 237396952,
+        "committed": 291323904,
+        "heap": 117141664,
+        "available": 402653184,
+        "server": true,
+        "processors": 18
+      },
+      {
+        "phase": "round-7",
+        "workingSet": 587382784,
+        "managed": 144229424,
+        "committed": 293158912,
+        "heap": 88727616,
+        "available": 402653184,
+        "server": true,
+        "processors": 18
+      },
+      {
+        "phase": "round-8",
+        "workingSet": 587759616,
+        "managed": 157864904,
+        "committed": 293158912,
+        "heap": 93706344,
+        "available": 402653184,
+        "server": true,
+        "processors": 18
+      },
+      {
+        "phase": "round-9",
+        "workingSet": 590528512,
+        "managed": 184463024,
+        "committed": 293158912,
+        "heap": 103777576,
+        "available": 402653184,
+        "server": true,
+        "processors": 18
+      },
+      {
+        "phase": "round-10",
+        "workingSet": 590954496,
+        "managed": 255175000,
+        "committed": 293158912,
+        "heap": 109954160,
+        "available": 402653184,
+        "server": true,
+        "processors": 18
+      },
+      {
+        "phase": "round-11",
+        "workingSet": 591298560,
+        "managed": 204855824,
+        "committed": 293158912,
+        "heap": 95957648,
+        "available": 402653184,
+        "server": true,
+        "processors": 18
+      },
+      {
+        "phase": "round-12",
+        "workingSet": 591626240,
+        "managed": 225390480,
+        "committed": 293158912,
+        "heap": 102862936,
+        "available": 402653184,
+        "server": true,
+        "processors": 18
+      },
+      {
+        "phase": "round-13",
+        "workingSet": 591249408,
+        "managed": 187632160,
+        "committed": 292405248,
+        "heap": 115440920,
+        "available": 402653184,
+        "server": true,
+        "processors": 18
+      },
+      {
+        "phase": "round-14",
+        "workingSet": 592183296,
+        "managed": 219253016,
+        "committed": 290881536,
+        "heap": 119311736,
+        "available": 402653184,
+        "server": true,
+        "processors": 18
+      },
+      {
+        "phase": "round-15",
+        "workingSet": 594378752,
+        "managed": 160467024,
+        "committed": 291667968,
+        "heap": 99335576,
+        "available": 402653184,
+        "server": true,
+        "processors": 18
+      },
+      {
+        "phase": "round-16",
+        "workingSet": 594280448,
+        "managed": 184348544,
+        "committed": 291471360,
+        "heap": 110116416,
+        "available": 402653184,
+        "server": true,
+        "processors": 18
+      },
+      {
+        "phase": "round-17",
+        "workingSet": 592592896,
+        "managed": 253724608,
+        "committed": 292814848,
+        "heap": 115439448,
+        "available": 402653184,
+        "server": true,
+        "processors": 18
+      },
+      {
+        "phase": "round-18",
+        "workingSet": 572637184,
+        "managed": 227310168,
+        "committed": 279494656,
+        "heap": 105769120,
+        "available": 402653184,
+        "server": true,
+        "processors": 18
+      },
+      {
+        "phase": "round-19",
+        "workingSet": 553795584,
+        "managed": 200971168,
+        "committed": 261079040,
+        "heap": 117053688,
+        "available": 402653184,
+        "server": true,
+        "processors": 18
+      },
+      {
+        "phase": "retained-after-diagnostic-collection",
+        "workingSet": 550223872,
+        "managed": 141736264,
+        "committed": 259883008,
+        "heap": 86532680,
+        "available": 402653184,
+        "server": true,
+        "processors": 18
+      }
+    ],
+    "summary": {
+      "loadedManagedBytes": 200979168,
+      "retainedManagedBytes": 141709536,
+      "cacheEntries": 164
+    },
+    "steadyWorkingSetMinimumBytes": 553795584,
+    "steadyWorkingSetMaximumBytes": 594378752,
+    "passed": false
+  },
+  "after": {
+    "gcConfiguration": {
+      "ServerGC": false,
+      "ConcurrentGC": true,
+      "RetainVM": false,
+      "NoAffinitize": false,
+      "GCCpuGroup": false,
+      "GCLargePages": false,
+      "LOHThreshold": 85000,
+      "HeapCount": 1,
+      "MaxHeapCount": 0,
+      "GCHeapAffinitizeMask": 0,
+      "GCHeapAffinitizeRanges": "",
+      "GCHighMemPercent": 90,
+      "GCGen0MaxBudget": 8388608,
+      "GCHeapHardLimit": 268435456,
+      "GCHeapHardLimitPercent": 0,
+      "GCRegionRange": 0,
+      "GCRegionSize": 0,
+      "UOHWaitBGCSizeIncPercent": -1,
+      "GCHeapHardLimitSOH": 0,
+      "GCHeapHardLimitLOH": 0,
+      "GCHeapHardLimitPOH": 0,
+      "GCHeapHardLimitSOHPercent": 0,
+      "GCHeapHardLimitLOHPercent": 0,
+      "GCHeapHardLimitPOHPercent": 0,
+      "GCConserveMem": 7,
+      "GCName": "",
+      "GCPath": "",
+      "GCDynamicAdaptationMode": 1,
+      "GCDTargetTCP": 0,
+      "GCDGen0GrowthPercent": 0,
+      "GCDGen0GrowthMinFactor": 0,
+      "GCDGen0GrowthMaxFactor": 0
+    },
+    "samples": [
+      {
+        "phase": "start",
+        "workingSet": 121061376,
+        "managed": 2760280,
+        "committed": 0,
+        "heap": 0,
+        "available": 268435456,
+        "server": false,
+        "processors": 18
+      },
+      {
+        "phase": "event-streams-150",
+        "workingSet": 158253056,
+        "managed": 34269128,
+        "committed": 17399808,
+        "heap": 17000408,
+        "available": 268435456,
+        "server": false,
+        "processors": 18
+      },
+      {
+        "phase": "production-ai-request",
+        "workingSet": 208814080,
+        "managed": 97580480,
+        "committed": 65650688,
+        "heap": 65276040,
+        "available": 268435456,
+        "server": false,
+        "processors": 18
+      },
+      {
+        "phase": "round-0",
+        "workingSet": 378765312,
+        "managed": 145588848,
+        "committed": 147390464,
+        "heap": 145980032,
+        "available": 268435456,
+        "server": false,
+        "processors": 18
+      },
+      {
+        "phase": "round-1",
+        "workingSet": 347291648,
+        "managed": 164183432,
+        "committed": 105709568,
+        "heap": 96504624,
+        "available": 268435456,
+        "server": false,
+        "processors": 18
+      },
+      {
+        "phase": "round-2",
+        "workingSet": 361529344,
+        "managed": 179069816,
+        "committed": 113049600,
+        "heap": 104306496,
+        "available": 268435456,
+        "server": false,
+        "processors": 18
+      },
+      {
+        "phase": "round-3",
+        "workingSet": 366673920,
+        "managed": 170284328,
+        "committed": 115195904,
+        "heap": 106455552,
+        "available": 268435456,
+        "server": false,
+        "processors": 18
+      },
+      {
+        "phase": "round-4",
+        "workingSet": 372768768,
+        "managed": 175294040,
+        "committed": 118587392,
+        "heap": 102014464,
+        "available": 268435456,
+        "server": false,
+        "processors": 18
+      },
+      {
+        "phase": "round-5",
+        "workingSet": 375111680,
+        "managed": 187078808,
+        "committed": 119291904,
+        "heap": 107440360,
+        "available": 268435456,
+        "server": false,
+        "processors": 18
+      },
+      {
+        "phase": "round-6",
+        "workingSet": 375046144,
+        "managed": 174168736,
+        "committed": 119816192,
+        "heap": 108524352,
+        "available": 268435456,
+        "server": false,
+        "processors": 18
+      },
+      {
+        "phase": "round-7",
+        "workingSet": 377143296,
+        "managed": 180769568,
+        "committed": 121126912,
+        "heap": 108735112,
+        "available": 268435456,
+        "server": false,
+        "processors": 18
+      },
+      {
+        "phase": "round-8",
+        "workingSet": 380223488,
+        "managed": 196290168,
+        "committed": 122585088,
+        "heap": 110953680,
+        "available": 268435456,
+        "server": false,
+        "processors": 18
+      },
+      {
+        "phase": "round-9",
+        "workingSet": 384008192,
+        "managed": 183340656,
+        "committed": 127336448,
+        "heap": 111884648,
+        "available": 268435456,
+        "server": false,
+        "processors": 18
+      },
+      {
+        "phase": "round-10",
+        "workingSet": 382992384,
+        "managed": 192655240,
+        "committed": 126124032,
+        "heap": 113958384,
+        "available": 268435456,
+        "server": false,
+        "processors": 18
+      },
+      {
+        "phase": "round-11",
+        "workingSet": 379043840,
+        "managed": 177958464,
+        "committed": 121683968,
+        "heap": 113825728,
+        "available": 268435456,
+        "server": false,
+        "processors": 18
+      },
+      {
+        "phase": "round-12",
+        "workingSet": 383074304,
+        "managed": 184499000,
+        "committed": 125353984,
+        "heap": 109920976,
+        "available": 268435456,
+        "server": false,
+        "processors": 18
+      },
+      {
+        "phase": "round-13",
+        "workingSet": 384745472,
+        "managed": 191874016,
+        "committed": 125976576,
+        "heap": 110951976,
+        "available": 268435456,
+        "server": false,
+        "processors": 18
+      },
+      {
+        "phase": "round-14",
+        "workingSet": 381911040,
+        "managed": 180687472,
+        "committed": 124289024,
+        "heap": 111883376,
+        "available": 268435456,
+        "server": false,
+        "processors": 18
+      },
+      {
+        "phase": "round-15",
+        "workingSet": 382795776,
+        "managed": 187639880,
+        "committed": 124338176,
+        "heap": 111693896,
+        "available": 268435456,
+        "server": false,
+        "processors": 18
+      },
+      {
+        "phase": "round-16",
+        "workingSet": 380354560,
+        "managed": 181737752,
+        "committed": 122224640,
+        "heap": 112665960,
+        "available": 268435456,
+        "server": false,
+        "processors": 18
+      },
+      {
+        "phase": "round-17",
+        "workingSet": 384417792,
+        "managed": 182888520,
+        "committed": 126009344,
+        "heap": 109951560,
+        "available": 268435456,
+        "server": false,
+        "processors": 18
+      },
+      {
+        "phase": "round-18",
+        "workingSet": 384581632,
+        "managed": 184965552,
+        "committed": 124796928,
+        "heap": 109684168,
+        "available": 268435456,
+        "server": false,
+        "processors": 18
+      },
+      {
+        "phase": "round-19",
+        "workingSet": 381992960,
+        "managed": 180582104,
+        "committed": 123273216,
+        "heap": 115799976,
+        "available": 268435456,
+        "server": false,
+        "processors": 18
+      },
+      {
+        "phase": "retained-after-diagnostic-collection",
+        "workingSet": 374341632,
+        "managed": 141536720,
+        "committed": 115605504,
+        "heap": 88293472,
+        "available": 268435456,
+        "server": false,
+        "processors": 18
+      }
+    ],
+    "summary": {
+      "loadedManagedBytes": 180582104,
+      "retainedManagedBytes": 141520272,
+      "cacheEntries": 164
+    },
+    "steadyWorkingSetMinimumBytes": 347291648,
+    "steadyWorkingSetMaximumBytes": 384745472,
+    "passed": true
+  }
+}

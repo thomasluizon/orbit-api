@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="FluentAssertions" Version="8.11.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.14" />
+    <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" Version="3.53.3" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
+    <PackageReference Include="NSubstitute" Version="6.2.0" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="4.0.1" PrivateAssets="all" />
+    <Using Include="Xunit" />
+    <ProjectReference Include="../../src/Orbit.Api/Orbit.Api.csproj" />
+    <Compile Include="../Shared/ChatRankingWorkload.cs" Link="ChatRankingWorkload.cs" />
+    <Compile Include="../Orbit.Infrastructure.Tests/Persistence/SqliteOrbitDbContextFactory.cs" Link="SqliteOrbitDbContextFactory.cs" />
+    <Compile Include="../Orbit.Infrastructure.Tests/Persistence/CountingDbCommandInterceptor.cs" Link="CountingDbCommandInterceptor.cs" />
+    <Compile Include="../Orbit.Infrastructure.Tests/Persistence/RowCountingDbDataReader.cs" Link="RowCountingDbDataReader.cs" />
+    <Compile Include="../Orbit.Infrastructure.Tests/ModerationTestDouble.cs" Link="ModerationTestDouble.cs" />
+    <None Include="../Orbit.Infrastructure.Tests/Fixtures/AiReservation/0.json.gz" Link="Fixtures/AiReservation/0.json.gz" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>
