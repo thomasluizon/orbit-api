@@ -7,11 +7,14 @@ COPY src/Orbit.Application/Orbit.Application.csproj src/Orbit.Application/
 COPY src/Orbit.Infrastructure/Orbit.Infrastructure.csproj src/Orbit.Infrastructure/
 COPY src/Orbit.Api/Orbit.Api.csproj src/Orbit.Api/
 
-RUN dotnet restore src/Orbit.Api/Orbit.Api.csproj
+# ReadyToRun keeps precompiled code in file-backed pages instead of JIT memory; see infra/memory-budget.md.
+ARG TARGETARCH
+RUN dotnet restore src/Orbit.Api/Orbit.Api.csproj -r "linux-$([ "$TARGETARCH" = arm64 ] && echo arm64 || echo x64)" -p:PublishReadyToRun=true
 
 # Copy everything and publish
 COPY src/ src/
-RUN dotnet publish src/Orbit.Api/Orbit.Api.csproj -c Release -o /app --no-restore
+RUN dotnet publish src/Orbit.Api/Orbit.Api.csproj -c Release -o /app --no-restore \
+    -r "linux-$([ "$TARGETARCH" = arm64 ] && echo arm64 || echo x64)" --self-contained false -p:PublishReadyToRun=true
 RUN dotnet tool install --tool-path /tools dotnet-ef --version 10.0.12
 RUN OpenApiGenerateDocumentsOnBuild=false /tools/dotnet-ef migrations bundle \
     --project src/Orbit.Infrastructure/Orbit.Infrastructure.csproj \

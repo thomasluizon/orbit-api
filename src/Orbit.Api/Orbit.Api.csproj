@@ -7,6 +7,7 @@
     <ServerGarbageCollection>false</ServerGarbageCollection>
     <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
     <TieredCompilation>true</TieredCompilation>
+    <TieredPGO>false</TieredPGO>
   </PropertyGroup>
 
   <PropertyGroup>
