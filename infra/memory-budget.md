@@ -1,132 +1,126 @@
 # API memory budget
 
 The production API has one Render Starter instance with a 512 MiB memory limit.
-The working set target is below 80% (429,496,729 bytes), leaving at least 102.4 MiB
-for transient allocations and native growth.
+The working set target is below 80% (429,496,729 bytes), which leaves at least
+102.4 MiB for transient allocations and native growth.
 
 ## Incident evidence
 
 [`evidence/ticket-2003-memory.json`](evidence/ticket-2003-memory.json) records the
 read-only production measurements for thomasluizon/orbit-tickets#2003. The old
 instance ranged from 495,439,870 to 533,102,600 bytes during the incident day,
-against a reported 536,870,900 byte limit. The upper sample consumed 99.3% of
-the limit. These are service measurements, not managed heap measurements.
+against a reported 536,870,900 byte limit. These are service measurements, not
+managed heap measurements.
 
-The deployed image was inspected through the GHCR manifest and layer archive,
-without starting a container. Its `Orbit.Api.runtimeconfig.json` explicitly
-selected Server GC and supplied no heap limit. The image environment, direct
-Render service environment and linked `orbit-production-api` environment group
-had no GC overrides. Concurrent GC and tiered compilation were unspecified.
-Production SSH rejected the available local key, so there is no production
-heap snapshot and no claim that a specific managed type caused the kill.
+After the GC policy below was released, the `ProcessMemoryMonitor` warnings in
+production showed a working set of 544 to 547 MB, with 118 to 144 MB managed and
+160 to 168 MB of committed GC heap. One minute after the next restart, the working
+set was 455,282,688 bytes with 119,447,552 bytes of committed GC heap. About
+380 MB of the working set was outside the GC heap.
 
-The local tokenizer probe runs the real `AiRequestCostEstimator` and its
-`o200k_base` tokenizer. In an isolated .NET 10.0.12 macOS ARM64 test host,
-managed memory increased from 158,863,064 to 208,998,664 bytes after the first
-200 distinct requests and a diagnostic full collection. Two more batches
-retained 209,179,032 and 209,331,568 bytes, with 601 cached counts. Working set
-settled near 304 MB. This attributes about 50 MB to tokenizer and cost-estimation warmup, without
-evidence of a growing tokenizer leak. The unbounded cache is a
-separate retention risk; a count of cached entries is not a byte measurement.
+## Native memory attribution
 
-## Reproduce the measurements
+[`evidence/ticket-2003-native-memory.json`](evidence/ticket-2003-native-memory.json)
+records every read. The API image ran in a Docker container with
+`--memory=512m --memory-swap=512m`, against a `postgres:17` container, with the
+Production environment and placeholder secrets. Each run recorded `/proc/1/status`,
+`/proc/1/smaps`, the cgroup `memory.current` and `memory.stat`, and the
+`ProcessMemoryMonitor` log lines at start and after one minute. The attribution
+groups `/proc/1/smaps` by mapping. The native reads use `linux/arm64`, because
+Rosetta adds its own translation cache to the anonymous memory of a `linux/amd64`
+process on this host.
 
-Run the existing query, bulk, streaming export, chat and event tests before
-changing their behavior:
+These are the owners of the memory outside the GC heap, at one minute after a start
+on a migrated database, before the change:
 
-```sh
-dotnet test tests/Orbit.Infrastructure.Tests --filter 'FullyQualifiedName~UserCacheVersionTests|FullyQualifiedName~AccountEventBusScaleTests|FullyQualifiedName~StreamingExportTests|FullyQualifiedName~BulkHabitRoundTripTests|FullyQualifiedName~ChatContextScaleTests'
-dotnet test tests/Orbit.Infrastructure.Tests --filter FullyQualifiedName~TokenizerMemoryProbeTests --logger 'console;verbosity=detailed'
-```
+| Owner | Resident | Kernel class |
+| --- | ---: | --- |
+| Mapped assemblies (`*.dll`) | 96.6 MB | Clean file pages, reclaimable |
+| `/memfd:doublemapper` writable views (loader heaps, stubs) | 52.2 MB | Shmem, not reclaimable without swap |
+| `/memfd:doublemapper` executable views (JIT code) | 17.7 MB | Shmem, not reclaimable without swap |
+| Native libraries (`*.so`) | 23.6 MB | Clean file pages, reclaimable |
+| glibc malloc arena heaps | 17.1 MB | Anonymous |
+| glibc main heap | 6.0 MB | Anonymous |
 
-The unchanged baseline suite passed all 17 cases. The tokenizer probe passed
-and emits its working set, managed bytes, committed heap, available GC memory
-and GC flavor at every phase. Its full collections are diagnostic only and
-are never performed by the production API.
+The `doublemapper` memfd is the runtime's write xor execute mapping of
+executable memory. Under the recorded load, the same owner held 86 MB of shmem.
+With `DOTNET_EnableWriteXorExecute=0` the same pages moved from shmem to anonymous
+memory, and the total did not change. Thus the owner is the volume of JIT code and
+loader data, not the double mapping.
 
-To re-read the Render evidence, use authenticated GET requests to
-`/v1/metrics/memory` and `/v1/metrics/memory-limit`, with `resource` equal to the
-service ID and `resolutionSeconds=1800`. Use the incident window in the evidence
-artifact for `startTime` and `endTime`. Each actual response is an array containing
-`labels`, `unit`, and `values`, where a value contains `timestamp` and `value`.
-Service configuration came from `render services --output json`,
-`GET /v1/services/{serviceId}/env-vars`, `GET /v1/env-groups` and
-`GET /v1/env-groups/{envGroupId}`. The linked group's actual response exposes
-`envVars` with `key` and `value`; only the absence of GC keys is recorded.
+These candidates were measured and ruled out as the main owner:
 
-The GHCR manifest response exposes `config.digest` and `layers[].digest`.
-Read the configuration blob for the image environment and read the application
-layer tar stream for `app/Orbit.Api.runtimeconfig.json`. Authentication tokens
-and unrelated environment values must stay out of evidence artifacts.
+- `Microsoft.CodeAnalysis` assemblies: `/proc/1/maps` has no mapping for them. The files ship in `/app`, but the runtime never loads them.
+- `DOTNET_BUNDLE_EXTRACT_BASE_DIR=/tmp/efbundle`: production has no start or pre-deploy command, so `efbundle` never runs in the API process.
+- glibc malloc arenas: 45 arena heaps held 16 to 24 MB at idle and 45 MB at the recorded load peak. `MALLOC_ARENA_MAX=2` saved 7 MB under load, which does not prove a cause.
+- Sentry: no profiling integration or EventPipe session is configured.
 
-## Measured cause and selected configuration
+## Startup migrations and the GC heap
 
-The reproduced failure mechanism is GC headroom: committed heap stays large
-relative to live data, while the tokenizer and ORM/runtime baseline remain
-resident. Production metrics establish the OOM and lack of headroom; the local
-controlled comparison attributes the reproduced pressure to the GC policy.
-Production retaining types remain unverified without a runtime heap capture.
+When the API applies every migration to an empty database at startup, the gen2
+generation holds 150,789,648 bytes after the last collection, but a heap dump finds
+only 23,798,187 live bytes. The migration work promotes short-lived objects to
+gen2, and an idle process does not reach the gen2 budget that frees them. In that
+state the arm64 working set reached 430,088 kB. The `linux/amd64` image was
+OOM-killed during that startup, after its monitor reported a 597,721,088 byte
+working set. On a migrated database the committed GC heap stays near 33 MB. A
+release normally applies few migrations, so this path is not the production steady
+state.
 
-[`evidence/ticket-2003-load.json`](evidence/ticket-2003-load.json) preserves every
-sample and the runtime's effective GC configuration for the same 20-round
-workload. The old settings failed the guard. The selected settings passed.
+## Selected configuration
 
-| Measurement | Old GC policy | Selected GC policy |
+The image publishes the API ReadyToRun for the target architecture
+(`-r linux-x64` or `-r linux-arm64`, `-p:PublishReadyToRun=true`, framework
+dependent), and `Orbit.Api.csproj` sets `TieredPGO` to `false`. Precompiled code
+then lives in the mapped assembly, which is a clean file page that the kernel can
+reclaim. Hot methods rejit once to tier 1 and keep no instrumented copy. See
+[ReadyToRun compilation](https://learn.microsoft.com/dotnet/core/deploying/ready-to-run)
+and the [TieredPGO setting](https://learn.microsoft.com/dotnet/core/runtime-config/compilation#profile-guided-optimization).
+
+| Measurement (arm64, 512 MiB container) | Before | After |
 | --- | ---: | ---: |
-| Steady working set maximum | 594,378,752 bytes | 384,745,472 bytes |
-| Share of the 512 MiB budget | 110.7% | 71.7% |
-| Managed bytes after diagnostic collection | 141,709,536 | 141,520,272 |
-| Committed GC bytes after diagnostic collection | 259,883,008 | 115,605,504 |
-| Cache entries at completion | 164 | 164 |
+| Recorded load peak, `doublemapper` shmem | 86,352 kB | 43,088 kB |
+| Recorded load peak, cgroup `memory.current` | 341,102,592 B | 307,568,640 B |
+| Recorded load peak, working set | 366,236 kB | 360,288 kB |
+| Migrated start + 1 minute, shmem | 69,932 kB | 45,400 kB |
+| Migrated start + 1 minute, working set | 249,568 kB | 264,280 kB |
+| Fresh database start + 1 minute, shmem | 94,196 kB | 49,828 kB |
+| Fresh database start + 1 minute, cgroup `memory.current` | 331,689,984 B | 280,199,168 B |
 
-Comparable retained managed bytes and cache counts, with different committed
-heap and working set, support a GC headroom fix. The selected run leaves
-145.1 MiB of the instance budget free. No cache-size claim follows from
-an entry count, and this run does not establish leak freedom over long uptime.
-The instance plan and cost are unchanged.
+The memory that cannot be reclaimed falls by about 25 to 44 MB. The working set can
+rise, because it counts the larger clean ReadyToRun pages. The recorded load in
+`tests/Orbit.Memory.Tests` stays below the warning line before and after the change,
+so it does not reproduce the production surplus. The local runs had no inbound HTTP
+traffic, no TLS database connection and no Sentry DSN. The about 100 MB of
+production memory outside the GC heap that these runs do not show remains
+unattributed.
 
-## Runtime policy and guard
-
-`Orbit.Api.csproj` publishes workstation GC, a 256 MiB heap hard limit, memory
-conservation level 7, concurrent GC and tiered compilation. The settings travel
-with the API image; they need no Render environment edit or plan change.
-The explicit heap allowance leaves half of the container for native/runtime
-memory and temporary work. Memory conservation makes the runtime collect more
-frequently; the load guard must pass without requesting a collection during
-its measured rounds.
-
-The selected settings use the runtime's documented
+The GC policy from the earlier change stays: workstation GC, a 256 MiB heap hard
+limit, memory conservation level 7, concurrent GC and tiered compilation. They
+follow the runtime's
 [GC configuration contract](https://learn.microsoft.com/dotnet/core/runtime-config/garbage-collector).
-The default container heap allowance is 75%, which would leave 128 MiB for
-everything outside the GC heap on this instance. That is a default derived from
-the documented runtime policy, not an observed production heap counter.
+The instance plan and its cost do not change.
 
-`Orbit.Memory.Tests` is an isolated test host for the load, avoiding discovery
-of the other test suites as part of the memory budget. It reuses the existing
-Astra ranking workload and SQLite compatibility fixture. Seed data is prepared
-once. Interceptors and encryption services are reused so the measurement does
-not accumulate EF models created by test setup. No listener, application server,
-container or external AI call is started.
+## Guards
 
-The workload holds 150 slow event subscriptions for 50 accounts, with full
-256-event buffers and 50 habit IDs per event. Across 20 rounds it reads Today
-and the daily summary, changes 50 habits in each of four bulk actions, performs
-an Astra ranking turn through the production handler and operation executor,
-counts a captured SDK request with the production tokenizer, and streams an
-export with 10,000 conversation rows to a discard stream. Both accepted results
-and the working set limit are asserted. The first round warms the runtime;
-every later round must remain below the target. Full collection happens only
-after those samples, to distinguish retained memory from GC headroom.
+`.github/scripts/api-memory-container.sh` runs in the `Docker migration bundle` job
+on the image that the job builds. It applies the migrations with the image's
+`efbundle` in a separate process, starts the API in a `linux/amd64` container with
+`--memory=512m --memory-swap=512m`, and waits 60 seconds after Hangfire starts. It
+prints the `/proc` and cgroup reads and fails when the container stops, when the
+kernel kills it, or when `VmRSS` reaches 429,496,729 bytes.
+
+`Orbit.Memory.Tests` runs the recorded load in a fresh test host. The workload holds
+150 slow event subscriptions for 50 accounts, and across 20 rounds it reads Today and
+the daily summary, runs four bulk actions, an Astra ranking turn, a tokenizer count
+and an export of 10,000 conversation rows. Every round after the first must stay
+below the target.
 
 ```sh
 dotnet build tests/Orbit.Memory.Tests
 ORBIT_MEMORY_GUARD=1 DOTNET_gcServer=0 DOTNET_GCHeapHardLimit=10000000 DOTNET_GCConserveMemory=7 dotnet test tests/Orbit.Memory.Tests --no-build --no-restore --logger 'console;verbosity=detailed'
+bash .github/scripts/api-memory-container.sh <linux/amd64 image tag>
 ```
-
-The environment heap limit is hexadecimal. The generated API runtime
-configuration uses the equivalent decimal value, 268435456. Configuration tests
-assert the published values. The API Tests workflow builds the isolated host
-and runs this guard in a fresh process without coverage instrumentation.
 
 The production `ProcessMemoryMonitor` logs its effective GC configuration on
 startup and samples process memory every 30 seconds. At 80% it emits a warning
@@ -136,15 +130,9 @@ one information message. It never collects the heap or changes request behavior.
 
 ## Release verification
 
-The worker contract ends at the pull request. After the orchestrator releases
-the API image, confirm `orbit-api` logs the 268435456-byte heap allowance and
-workstation GC, then read Render's `orbit-api > Metrics > Memory` for a complete
-24-hour window. Every instance's `memory_usage` must remain below 429496729
-bytes; inspect `orbit-api > Events` for any `server_failed` event whose reason
-contains `oomKilled`. Record that window and its maximum in the owning ticket.
-The production acceptance criterion remains pending until this is complete.
-
-Local macOS measurements with a GC allowance are not a Linux cgroup limit or a
-production soak. The local host's CPU count, test runtime, SQLite provider and
-native allocator differ from the deployed service. The read-only production
-service metrics and the post-release observation are the release evidence.
+After the orchestrator releases the API image, read Render's
+`orbit-api > Metrics > Memory` for a complete 24-hour window. Every instance's
+`memory_usage` must remain below 429496729 bytes. Inspect `orbit-api > Events` for
+any `server_failed` event whose reason contains `oomKilled`, and search the logs for
+`API memory budget exceeded`. Record that window and its maximum in the owning
+ticket. The production acceptance criterion remains open until this is complete.

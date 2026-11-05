@@ -1,0 +1,549 @@
+{
+  "ticket": "thomasluizon/orbit-tickets#2003",
+  "container": {
+    "memory": "--memory=512m --memory-swap=512m",
+    "engine": "Docker Desktop Linux engine on Apple silicon",
+    "nativePlatform": "linux/arm64",
+    "emulatedPlatform": "linux/amd64 under Rosetta",
+    "processors": 18,
+    "database": "postgres:17 container on a private Docker network",
+    "configuration": "ASPNETCORE_ENVIRONMENT=Production with placeholder secrets; Sentry DSN unset; no inbound HTTP traffic"
+  },
+  "warningLineBytes": 429496729,
+  "readSources": [
+    "/proc/1/status",
+    "/proc/1/smaps",
+    "/proc/1/smaps_rollup",
+    "/sys/fs/cgroup/memory.current",
+    "/sys/fs/cgroup/memory.stat",
+    "dotnet-counters System.Runtime",
+    "dotnet-gcdump"
+  ],
+  "apiImage": [
+    {
+      "label": "arm64-before",
+      "image": "before",
+      "database": "fresh database: every migration applied at startup",
+      "override": null,
+      "reads": {
+        "start": {
+          "VmRSSKb": 412640,
+          "RssAnonKb": 204856,
+          "RssFileKb": 119924,
+          "RssShmemKb": 87860,
+          "Threads": 46,
+          "cgroupMemoryCurrentBytes": 312135680,
+          "cgroup_anonBytes": 214396928,
+          "cgroup_fileBytes": 89948160,
+          "cgroup_shmemBytes": 89948160
+        },
+        "one-minute": {
+          "VmRSSKb": 430088,
+          "RssAnonKb": 215336,
+          "RssFileKb": 120556,
+          "RssShmemKb": 94196,
+          "Threads": 43,
+          "cgroupMemoryCurrentBytes": 331689984,
+          "cgroup_anonBytes": 227471360,
+          "cgroup_fileBytes": 96436224,
+          "cgroup_shmemBytes": 96436224
+        }
+      },
+      "ownersAtOneMinuteKb": {
+        "anon: other (GC heap, runtime, stacks)": 181352,
+        "file: assemblies (.dll)": 100520,
+        "shmem: doublemapper data rw": 55864,
+        "shmem: doublemapper code r-x": 38332,
+        "anon: glibc malloc arena heaps": 24172,
+        "file: native libraries (.so)": 23704,
+        "anon: glibc main heap": 5992,
+        "total": 430088
+      }
+    },
+    {
+      "label": "arm64-after-fresh",
+      "image": "after",
+      "database": "fresh database: every migration applied at startup",
+      "override": null,
+      "reads": {
+        "start": {
+          "VmRSSKb": 420248,
+          "RssAnonKb": 208412,
+          "RssFileKb": 163136,
+          "RssShmemKb": 48700,
+          "Threads": 46,
+          "cgroupMemoryCurrentBytes": 278872064,
+          "cgroup_anonBytes": 220368896,
+          "cgroup_fileBytes": 49848320,
+          "cgroup_shmemBytes": 49848320
+        },
+        "one-minute": {
+          "VmRSSKb": 422084,
+          "RssAnonKb": 208484,
+          "RssFileKb": 163772,
+          "RssShmemKb": 49828,
+          "Threads": 43,
+          "cgroupMemoryCurrentBytes": 280199168,
+          "cgroup_anonBytes": 220438528,
+          "cgroup_fileBytes": 51003392,
+          "cgroup_shmemBytes": 51003392
+        }
+      },
+      "ownersAtOneMinuteKb": {
+        "anon: other (GC heap, runtime, stacks)": 175712,
+        "file: assemblies (.dll)": 146732,
+        "shmem: doublemapper data rw": 40512,
+        "file: native libraries (.so)": 23640,
+        "anon: glibc malloc arena heaps": 20516,
+        "shmem: doublemapper code r-x": 9316,
+        "anon: glibc main heap": 5508,
+        "total": 422084
+      }
+    },
+    {
+      "label": "arm64-before-migrated",
+      "image": "before",
+      "database": "migrated database: no pending migration (production start)",
+      "override": null,
+      "reads": {
+        "start": {
+          "VmRSSKb": 240304,
+          "RssAnonKb": 60036,
+          "RssFileKb": 115944,
+          "RssShmemKb": 64324,
+          "Threads": 46,
+          "cgroupMemoryCurrentBytes": 139636736,
+          "cgroup_anonBytes": 66101248,
+          "cgroup_fileBytes": 65855488,
+          "cgroup_shmemBytes": 65855488
+        },
+        "one-minute": {
+          "VmRSSKb": 249568,
+          "RssAnonKb": 63060,
+          "RssFileKb": 116576,
+          "RssShmemKb": 69932,
+          "Threads": 42,
+          "cgroupMemoryCurrentBytes": 143503360,
+          "cgroup_anonBytes": 64827392,
+          "cgroup_fileBytes": 71585792,
+          "cgroup_shmemBytes": 71585792
+        }
+      },
+      "ownersAtOneMinuteKb": {
+        "file: assemblies (.dll)": 96604,
+        "shmem: doublemapper data rw": 52240,
+        "anon: other (GC heap, runtime, stacks)": 36156,
+        "file: native libraries (.so)": 23640,
+        "shmem: doublemapper code r-x": 17688,
+        "anon: glibc malloc arena heaps": 17100,
+        "anon: glibc main heap": 5988,
+        "total": 249564
+      }
+    },
+    {
+      "label": "arm64-after-migrated",
+      "image": "after",
+      "database": "migrated database: no pending migration (production start)",
+      "override": null,
+      "reads": {
+        "start": {
+          "VmRSSKb": 247892,
+          "RssAnonKb": 58304,
+          "RssFileKb": 148184,
+          "RssShmemKb": 41404,
+          "Threads": 46,
+          "cgroupMemoryCurrentBytes": 115097600,
+          "cgroup_anonBytes": 64331776,
+          "cgroup_fileBytes": 42373120,
+          "cgroup_shmemBytes": 42373120
+        },
+        "one-minute": {
+          "VmRSSKb": 264280,
+          "RssAnonKb": 68664,
+          "RssFileKb": 150216,
+          "RssShmemKb": 45400,
+          "Threads": 42,
+          "cgroupMemoryCurrentBytes": 131276800,
+          "cgroup_anonBytes": 77275136,
+          "cgroup_fileBytes": 46473216,
+          "cgroup_shmemBytes": 46473216
+        }
+      },
+      "ownersAtOneMinuteKb": {
+        "file: assemblies (.dll)": 133176,
+        "shmem: doublemapper data rw": 37988,
+        "anon: other (GC heap, runtime, stacks)": 36420,
+        "file: native libraries (.so)": 23640,
+        "anon: glibc malloc arena heaps": 19996,
+        "shmem: doublemapper code r-x": 7412,
+        "anon: glibc main heap": 5500,
+        "total": 264280
+      }
+    },
+    {
+      "label": "arm64-wx0",
+      "image": "before",
+      "database": "fresh database",
+      "override": "DOTNET_EnableWriteXorExecute=0",
+      "reads": {
+        "start": {
+          "VmRSSKb": 411696,
+          "RssAnonKb": 291444,
+          "RssFileKb": 120252,
+          "RssShmemKb": 0,
+          "Threads": 46,
+          "cgroupMemoryCurrentBytes": 313397248,
+          "cgroup_anonBytes": 305393664,
+          "cgroup_fileBytes": 0,
+          "cgroup_shmemBytes": 0
+        },
+        "one-minute": {
+          "VmRSSKb": 426436,
+          "RssAnonKb": 305488,
+          "RssFileKb": 120948,
+          "RssShmemKb": 0,
+          "Threads": 42,
+          "cgroupMemoryCurrentBytes": 320798720,
+          "cgroup_anonBytes": 313069568,
+          "cgroup_fileBytes": 0,
+          "cgroup_shmemBytes": 0
+        }
+      },
+      "ownersAtOneMinuteKb": {
+        "anon: other (GC heap, runtime, stacks)": 275752,
+        "file: assemblies (.dll)": 100916,
+        "file: native libraries (.so)": 23700,
+        "anon: glibc malloc arena heaps": 19940,
+        "anon: glibc main heap": 5980,
+        "total": 426436
+      }
+    },
+    {
+      "label": "arm64-pgo0",
+      "image": "before",
+      "database": "fresh database",
+      "override": "DOTNET_TieredPGO=0",
+      "reads": {
+        "start": {
+          "VmRSSKb": 401588,
+          "RssAnonKb": 201436,
+          "RssFileKb": 119756,
+          "RssShmemKb": 80396,
+          "Threads": 46,
+          "cgroupMemoryCurrentBytes": 303370240,
+          "cgroup_anonBytes": 212992000,
+          "cgroup_fileBytes": 82309120,
+          "cgroup_shmemBytes": 82309120
+        },
+        "one-minute": {
+          "VmRSSKb": 413064,
+          "RssAnonKb": 210100,
+          "RssFileKb": 120264,
+          "RssShmemKb": 82700,
+          "Threads": 41,
+          "cgroupMemoryCurrentBytes": 314257408,
+          "cgroup_anonBytes": 221868032,
+          "cgroup_fileBytes": 84664320,
+          "cgroup_shmemBytes": 84664320
+        }
+      },
+      "ownersAtOneMinuteKb": {
+        "anon: other (GC heap, runtime, stacks)": 177480,
+        "file: assemblies (.dll)": 100236,
+        "shmem: doublemapper data rw": 48364,
+        "shmem: doublemapper code r-x": 34336,
+        "file: native libraries (.so)": 23696,
+        "anon: glibc malloc arena heaps": 22836,
+        "anon: glibc main heap": 5968,
+        "total": 413064
+      }
+    },
+    {
+      "label": "arm64-arena2",
+      "image": "before",
+      "database": "fresh database",
+      "override": "MALLOC_ARENA_MAX=2",
+      "reads": {
+        "start": {
+          "VmRSSKb": 405760,
+          "RssAnonKb": 199408,
+          "RssFileKb": 119856,
+          "RssShmemKb": 86496,
+          "Threads": 45,
+          "cgroupMemoryCurrentBytes": 307335168,
+          "cgroup_anonBytes": 210907136,
+          "cgroup_fileBytes": 88563712,
+          "cgroup_shmemBytes": 88563712
+        },
+        "one-minute": {
+          "VmRSSKb": 423896,
+          "RssAnonKb": 209216,
+          "RssFileKb": 120488,
+          "RssShmemKb": 94192,
+          "Threads": 46,
+          "cgroupMemoryCurrentBytes": 327442432,
+          "cgroup_anonBytes": 222994432,
+          "cgroup_fileBytes": 96432128,
+          "cgroup_shmemBytes": 96432128
+        }
+      },
+      "ownersAtOneMinuteKb": {
+        "anon: other (GC heap, runtime, stacks)": 181268,
+        "file: assemblies (.dll)": 100460,
+        "shmem: doublemapper data rw": 55848,
+        "shmem: doublemapper code r-x": 38344,
+        "file: native libraries (.so)": 23696,
+        "anon: glibc main heap": 18648,
+        "anon: glibc malloc arena heaps": 5484,
+        "total": 423896
+      }
+    },
+    {
+      "label": "arm64-r2r",
+      "image": "ReadyToRun only",
+      "database": "fresh database",
+      "override": null,
+      "reads": {
+        "start": {
+          "VmRSSKb": 426400,
+          "RssAnonKb": 214048,
+          "RssFileKb": 162584,
+          "RssShmemKb": 49768,
+          "Threads": 46,
+          "cgroupMemoryCurrentBytes": 277843968,
+          "cgroup_anonBytes": 219439104,
+          "cgroup_fileBytes": 50941952,
+          "cgroup_shmemBytes": 50941952
+        },
+        "one-minute": {
+          "VmRSSKb": 428896,
+          "RssAnonKb": 214080,
+          "RssFileKb": 163156,
+          "RssShmemKb": 51660,
+          "Threads": 42,
+          "cgroupMemoryCurrentBytes": 280039424,
+          "cgroup_anonBytes": 219471872,
+          "cgroup_fileBytes": 52875264,
+          "cgroup_shmemBytes": 52875264
+        }
+      },
+      "ownersAtOneMinuteKb": {
+        "anon: other (GC heap, runtime, stacks)": 178632,
+        "file: assemblies (.dll)": 146104,
+        "shmem: doublemapper data rw": 41488,
+        "file: native libraries (.so)": 23640,
+        "anon: glibc malloc arena heaps": 23060,
+        "shmem: doublemapper code r-x": 10172,
+        "anon: glibc main heap": 5652,
+        "total": 428896
+      }
+    },
+    {
+      "label": "arm64-r2r-nomigrate",
+      "image": "ReadyToRun only",
+      "database": "migrated database",
+      "override": "Database__MigrateOnStartup=false",
+      "reads": {
+        "start": {
+          "VmRSSKb": 241992,
+          "RssAnonKb": 59044,
+          "RssFileKb": 143456,
+          "RssShmemKb": 39492,
+          "Threads": 45,
+          "cgroupMemoryCurrentBytes": 115179520,
+          "cgroup_anonBytes": 67403776,
+          "cgroup_fileBytes": 40419328,
+          "cgroup_shmemBytes": 40419328
+        },
+        "one-minute": {
+          "VmRSSKb": 251996,
+          "RssAnonKb": 61860,
+          "RssFileKb": 145360,
+          "RssShmemKb": 44776,
+          "Threads": 44,
+          "cgroupMemoryCurrentBytes": 123486208,
+          "cgroup_anonBytes": 70299648,
+          "cgroup_fileBytes": 45846528,
+          "cgroup_shmemBytes": 45846528
+        }
+      },
+      "ownersAtOneMinuteKb": {
+        "file: assemblies (.dll)": 128120,
+        "shmem: doublemapper data rw": 36836,
+        "anon: other (GC heap, runtime, stacks)": 28164,
+        "file: native libraries (.so)": 23640,
+        "anon: glibc malloc arena heaps": 20360,
+        "shmem: doublemapper code r-x": 8196,
+        "anon: glibc main heap": 6788,
+        "total": 252252
+      }
+    },
+    {
+      "label": "amd64-before-migrated",
+      "image": "before",
+      "database": "migrated database: no pending migration",
+      "override": "x64 image under Rosetta; translation cache inflates anon",
+      "reads": {
+        "start": {
+          "VmRSSKb": 423244,
+          "RssAnonKb": 308432,
+          "RssFileKb": 114812,
+          "RssShmemKb": 0,
+          "Threads": 47,
+          "cgroupMemoryCurrentBytes": 354447360,
+          "cgroup_anonBytes": 321544192,
+          "cgroup_fileBytes": 25608192,
+          "cgroup_shmemBytes": 0
+        },
+        "one-minute": {
+          "VmRSSKb": 448852,
+          "RssAnonKb": 333192,
+          "RssFileKb": 115660,
+          "RssShmemKb": 0,
+          "Threads": 46,
+          "cgroupMemoryCurrentBytes": 380227584,
+          "cgroup_anonBytes": 346701824,
+          "cgroup_fileBytes": 25608192,
+          "cgroup_shmemBytes": 0
+        }
+      },
+      "ownersAtOneMinuteKb": {
+        "anon: other (GC heap, runtime, stacks)": 311536,
+        "file: assemblies (.dll)": 92484,
+        "file: native libraries (.so)": 25780,
+        "anon: glibc malloc arena heaps": 18304,
+        "other: /run/rosetta/rosetta": 644,
+        "total": 448852
+      }
+    }
+  ],
+  "amd64FreshDatabaseStartup": {
+    "image": "before",
+    "result": "OOMKilled=true during startup",
+    "processMemoryMonitor": "API memory budget exceeded: working set 597721088 bytes (111.3% of 536870912); managed 164317952 bytes; committed heap 173518848 bytes; heap limit 268435456 bytes"
+  },
+  "gcAfterFreshDatabaseStartup": {
+    "beforeInducedCollection": {
+      "gen2LastCollectionBytes": 150789648,
+      "committedBytes": 174460928
+    },
+    "liveHeapFromGcdumpBytes": 23798187,
+    "afterInducedCollection": {
+      "VmRSSKb": 298024,
+      "RssAnonKb": 176564,
+      "gcCommittedBytes": 40050688
+    }
+  },
+  "gcOnMigratedDatabase": {
+    "before": {
+      "committedBytes": 33275904,
+      "gen2LastCollectionBytes": 20216816
+    },
+    "after": {
+      "committedBytes": 33898496,
+      "gen2LastCollectionBytes": 20244888
+    }
+  },
+  "recordedLoad": {
+    "workload": "tests/Orbit.Memory.Tests ApiMemoryLoadTests in mcr.microsoft.com/dotnet/sdk:10.0, linux/arm64, 512 MiB container",
+    "variants": {
+      "base": {
+        "peakVmRSSKb": 366236,
+        "RssAnonKb": 177520,
+        "RssFileKb": 102364,
+        "RssShmemKb": 86352,
+        "cgroupMemoryCurrentBytes": 341102592,
+        "ownersAtPeakKb": {
+          "anon: other (GC heap, runtime, stacks)": 127276,
+          "file: assemblies (.dll)": 79440,
+          "shmem: doublemapper data rw": 57432,
+          "anon: glibc malloc arena heaps": 45052,
+          "shmem: doublemapper code r-x": 28928,
+          "file: native libraries (.so)": 25952,
+          "anon: glibc main heap": 2016,
+          "total": 366244
+        },
+        "testPassed": true
+      },
+      "pgo0": {
+        "peakVmRSSKb": 364916,
+        "RssAnonKb": 176140,
+        "RssFileKb": 102672,
+        "RssShmemKb": 86104,
+        "cgroupMemoryCurrentBytes": 341860352,
+        "ownersAtPeakKb": {
+          "anon: other (GC heap, runtime, stacks)": 124552,
+          "file: assemblies (.dll)": 79748,
+          "shmem: doublemapper data rw": 57368,
+          "anon: glibc malloc arena heaps": 46388,
+          "shmem: doublemapper code r-x": 28736,
+          "file: native libraries (.so)": 25952,
+          "anon: glibc main heap": 2024,
+          "total": 364916
+        },
+        "testPassed": true
+      },
+      "arena2": {
+        "peakVmRSSKb": 357164,
+        "RssAnonKb": 169836,
+        "RssFileKb": 102724,
+        "RssShmemKb": 84604,
+        "cgroupMemoryCurrentBytes": 333053952,
+        "ownersAtPeakKb": {
+          "anon: other (GC heap, runtime, stacks)": 126376,
+          "file: assemblies (.dll)": 79808,
+          "shmem: doublemapper data rw": 56560,
+          "anon: glibc malloc arena heaps": 38196,
+          "shmem: doublemapper code r-x": 28044,
+          "file: native libraries (.so)": 25944,
+          "anon: glibc main heap": 2088,
+          "total": 357164
+        },
+        "testPassed": true
+      },
+      "r2r": {
+        "peakVmRSSKb": 378392,
+        "RssAnonKb": 174384,
+        "RssFileKb": 131692,
+        "RssShmemKb": 72316,
+        "cgroupMemoryCurrentBytes": 321572864,
+        "ownersAtPeakKb": {
+          "anon: other (GC heap, runtime, stacks)": 125424,
+          "file: assemblies (.dll)": 111264,
+          "shmem: doublemapper data rw": 51184,
+          "anon: glibc malloc arena heaps": 41680,
+          "file: native libraries (.so)": 25888,
+          "shmem: doublemapper code r-x": 21132,
+          "anon: glibc main heap": 1672,
+          "total": 378392
+        },
+        "testPassed": true
+      },
+      "r2r-pgo0": {
+        "peakVmRSSKb": 360288,
+        "RssAnonKb": 192376,
+        "RssFileKb": 124824,
+        "RssShmemKb": 43088,
+        "cgroupMemoryCurrentBytes": 307568640,
+        "ownersAtPeakKb": {
+          "anon: other (GC heap, runtime, stacks)": 158872,
+          "file: assemblies (.dll)": 106848,
+          "shmem: doublemapper data rw": 34128,
+          "anon: glibc malloc arena heaps": 28508,
+          "file: native libraries (.so)": 23392,
+          "shmem: doublemapper code r-x": 9052,
+          "anon: glibc main heap": 1660,
+          "total": 362608
+        },
+        "testPassed": true
+      }
+    }
+  },
+  "ruledOut": {
+    "Microsoft.CodeAnalysis assemblies": "0 mappings in /proc/1/maps; the files ship in /app but the runtime never loads them",
+    "DOTNET_BUNDLE_EXTRACT_BASE_DIR /tmp/efbundle": "production has no start or pre-deploy command, so efbundle never runs in the API process",
+    "Write xor execute double mapping": "DOTNET_EnableWriteXorExecute=0 moves the same pages from shmem to anon; the total stays the same",
+    "glibc malloc arenas": "45 arena heaps hold 16 to 24 MB at idle and 45 MB at the recorded load peak; MALLOC_ARENA_MAX=2 saves 7 MB under load",
+    "Sentry profiler or EventPipe session": "no profiling integration or EventPipe session is configured"
+  }
+}
