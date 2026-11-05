@@ -846,7 +846,8 @@ An operator must target `aws_iam_role.production_plan` and
 `aws_iam_role_policy.production_plan` in an apply before the workflow can assume the
 role. The state permission reads only `render/terraform.tfstate`. Provider reads are
 limited to the dependency graph's API SSM paths, upload buckets, IAM users, SES
-configuration sets, SNS topic and KMS key. Both environment API paths are needed
+configuration sets, SNS topic and KMS key. AWS provider 6 reads upload bucket tags
+with both `s3:GetBucketTagging` and the S3 Control `s3:ListTagsForResource` call. Both environment API paths are needed
 because Terraform evaluates shared for-each maps. SSM `DescribeParameters` has no
 resource-level authorization; its metadata read is restricted to `us-east-2`.
 Decryption is restricted to SSM and those API parameter encryption contexts.

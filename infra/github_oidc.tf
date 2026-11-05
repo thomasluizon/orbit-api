@@ -107,6 +107,7 @@ data "aws_iam_policy_document" "production_plan" {
       "s3:GetBucketCORS", "s3:GetBucketWebsite", "s3:GetBucketVersioning", "s3:GetAccelerateConfiguration",
       "s3:GetBucketRequestPayment", "s3:GetBucketLogging", "s3:GetLifecycleConfiguration",
       "s3:GetReplicationConfiguration", "s3:GetEncryptionConfiguration", "s3:GetBucketObjectLockConfiguration", "s3:GetBucketTagging",
+      "s3:ListTagsForResource",
     ]
     resources = [for environment in ["production", "staging"] : "arn:aws:s3:::orbit-uploads-${environment}-713285551626"]
   }

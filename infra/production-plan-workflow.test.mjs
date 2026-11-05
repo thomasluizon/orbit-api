@@ -55,3 +55,17 @@ test('plan role grants only reads with one state object and bounded provider dep
   assert.match(role, /kms:ViaService/)
   assert.match(role, /kms:EncryptionContext:PARAMETER_ARN/)
 })
+test('plan role reads upload bucket tags through the S3 Control call the locked AWS provider makes', () => {
+  const lock = readFileSync(new URL('./.terraform.lock.hcl', import.meta.url), 'utf8')
+  const major = Number(lock.split('provider "registry.terraform.io/hashicorp/aws" {')[1].match(/version\s*=\s*"(\d+)\./)[1])
+  assert.ok(major >= 6, 'AWS provider 6 reads S3 bucket tags with s3:ListTagsForResource')
+  const policy = oidc.split('data "aws_iam_policy_document" "production_plan" {')[1]
+    .split('\nresource "aws_iam_role_policy"')[0]
+  const uploads = policy.split('  statement {').slice(1)
+    .filter(statement => statement.includes('arn:aws:s3:::orbit-uploads-${environment}-713285551626'))
+  assert.equal(uploads.length, 1)
+  for (const action of ['s3:GetBucketTagging', 's3:ListTagsForResource']) {
+    assert.ok(uploads[0].includes(`"${action}"`), `Upload bucket refresh needs ${action}`)
+  }
+  assert.match(uploads[0], /for environment in \["production", "staging"\]/)
+})
