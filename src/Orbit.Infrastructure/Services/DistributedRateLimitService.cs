@@ -40,6 +40,7 @@ public class DistributedRateLimitService(OrbitDbContext dbContext, TimeProvider 
             ["stripe-webhook"] = new(TimeSpan.FromMinutes(1), PermitLimit: 600, SegmentCount: 4),
             ["calendar-sync"] = new(TimeSpan.FromMinutes(5), PermitLimit: 1, SegmentCount: 1),
             ["data-export"] = new(TimeSpan.FromHours(1), PermitLimit: 3, SegmentCount: 1),
+            ["eval-snapshot"] = new(TimeSpan.FromMinutes(1), PermitLimit: 60, SegmentCount: 4),
             ["ses-events"] = new(TimeSpan.FromMinutes(1), PermitLimit: 600, SegmentCount: 4),
             ["mcp"] = new(TimeSpan.FromMinutes(1), PermitLimit: 60, SegmentCount: 4),
             ["mcp-ai"] = new(TimeSpan.FromMinutes(1), PermitLimit: 15, SegmentCount: 4)

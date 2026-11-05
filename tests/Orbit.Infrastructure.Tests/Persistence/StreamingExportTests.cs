@@ -22,7 +22,13 @@ public class StreamingExportTests
         var db = factory.Context;
         var user = User.Create("Export", "export-stream@example.test").Value;
         db.Users.Add(user);
-        db.Habits.Add(Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, user.Id, "Read", null, null, new DateOnly(2026, 6, 1))).Value);
+        for (var index = 0; index < 150; index++)
+        {
+            var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, user.Id, "Read " + index, FrequencyUnit.Day, 1, new DateOnly(2026, 6, 1))).Value;
+            db.Habits.Add(habit);
+            for (var day = 0; day < 10; day++)
+                db.HabitLogs.Add(habit.Log(new DateOnly(2026, 6, 1).AddDays(day), new string('x', 512)).Value);
+        }
         var instant = DateTime.UtcNow;
         for (var index = 0; index < 10_000; index++)
             db.ConversationTurns.Add(ConversationTurn.Create(user.Id, Guid.NewGuid(), "user", instant.AddSeconds(duplicateSortKeys ? 0 : index), null, "Text " + index, "[]").Value);
@@ -42,7 +48,11 @@ public class StreamingExportTests
         var result = await new StreamUserDataQueryHandler(repos, dates, progress).Handle(new(user.Id), default);
         counter.Reset();
         using var destination = new MemoryStream();
-        await result.Value.WriteAsync(destination, default);
+        using var transport = new AsyncOnlyWriteStream(destination);
+        await result.Value.WriteAsync(transport, default);
+        transport.AsyncWrites.Should().BeGreaterThan(10_000);
+        transport.LargestWrite.Should().BeLessThan(64 * 1024);
+        destination.Length.Should().BeGreaterThan(1024 * 1024);
         var conversationReads = counter.Commands.Where(c => c.Sql.Contains("\"ConversationTurns\"", StringComparison.Ordinal)).ToArray();
         conversationReads.Should().HaveCount(101);
         conversationReads.Should().OnlyContain(c => c.Sql.Contains("LIMIT", StringComparison.Ordinal));
