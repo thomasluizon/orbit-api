@@ -119,7 +119,7 @@ public class HabitScheduleSnapshotInvalidationTests
         {
             var editedHabit = await editor.Habits.SingleAsync(candidate => candidate.Id == habit.Id);
             var edit = editedHabit.Update(new HabitUpdateParams(editedHabit.Schedule is HabitSchedule.Flexible or HabitSchedule.General ? editedHabit.Schedule : HabitSchedule.Recurring,
-                "Friday", null, FrequencyUnit.Day, 1, [DayOfWeek.Friday], false, today));
+                "Friday", null, FrequencyUnit.Day, 1, [DayOfWeek.Friday], false, today, UserToday: today));
             edit.IsSuccess.Should().BeTrue();
             await editor.SaveChangesAsync();
         }
@@ -150,7 +150,7 @@ public class HabitScheduleSnapshotInvalidationTests
         {
             var editedHabit = await editor.Habits.SingleAsync(candidate => candidate.Id == habit.Id);
             editedHabit.Update(new HabitUpdateParams(editedHabit.Schedule is HabitSchedule.Flexible or HabitSchedule.General ? editedHabit.Schedule : HabitSchedule.Recurring,
-                "Friday", null, FrequencyUnit.Day, 1, [DayOfWeek.Friday], false, today))
+                "Friday", null, FrequencyUnit.Day, 1, [DayOfWeek.Friday], false, today, UserToday: today))
                 .IsSuccess.Should().BeTrue();
             await editor.SaveChangesAsync();
         }

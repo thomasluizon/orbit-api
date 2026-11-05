@@ -111,4 +111,21 @@ public class HabitScheduleMonthDaysTests
         HabitScheduleService.WasScheduledOnDate(habit, new DateOnly(2026, 11, 15), 1).Should().BeTrue();
         HabitScheduleService.WasScheduledOnDate(habit, new DateOnly(2026, 11, 16), 1).Should().BeFalse();
     }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void GetScheduledDates_AfterAnAddedDay_ListsTheDayBeforeTheOldCursor(bool resendStartDate)
+    {
+        var habit = CreateHabit([10], new DateOnly(2027, 1, 10));
+        habit.Log(new DateOnly(2027, 1, 10)).IsSuccess.Should().BeTrue();
+
+        habit.Update(new HabitUpdateParams(habit.Schedule, habit.Title, null, FrequencyUnit.Month, 1, null, false, null,
+            UserToday: new DateOnly(2027, 1, 11), StartDate: resendStartDate ? habit.StartDate : null,
+            MonthDays: [10, 15])).IsSuccess.Should().BeTrue();
+
+        HabitScheduleService.IsHabitDueOnDate(habit, new DateOnly(2027, 1, 15)).Should().BeTrue();
+        HabitScheduleService.GetScheduledDates(habit, new DateOnly(2027, 1, 11), new DateOnly(2027, 2, 28))
+            .Should().Equal(new DateOnly(2027, 1, 15), new DateOnly(2027, 2, 10), new DateOnly(2027, 2, 15));
+    }
 }

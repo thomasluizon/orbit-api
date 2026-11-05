@@ -112,7 +112,7 @@ public class HabitScheduleExpansionTests
         AssertSchedule(habit, HabitSchedule.OneTime);
 
         var flexible = Create(HabitSchedule.Flexible);
-        flexible.Update(new HabitUpdateParams(flexible.Schedule is HabitSchedule.Flexible or HabitSchedule.General ? flexible.Schedule : HabitSchedule.Recurring, "Flexible", null, FrequencyUnit.Month, 3, null, false, null))
+        flexible.Update(new HabitUpdateParams(flexible.Schedule is HabitSchedule.Flexible or HabitSchedule.General ? flexible.Schedule : HabitSchedule.Recurring, "Flexible", null, FrequencyUnit.Month, 3, null, false, null, UserToday: Start))
             .IsSuccess.Should().BeTrue();
         AssertSchedule(flexible, HabitSchedule.Flexible);
     }

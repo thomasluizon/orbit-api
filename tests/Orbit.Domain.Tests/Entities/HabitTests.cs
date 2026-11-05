@@ -626,7 +626,8 @@ public class HabitTests
             1,
             Days: null,
             IsBadHabit: false,
-            DueDate: null));
+            DueDate: null,
+            UserToday: new DateOnly(2025, 1, 20))).IsSuccess.Should().BeTrue();
 
         habit.OriginalDayOfMonth.Should().BeNull();
     }
@@ -952,7 +953,8 @@ public class HabitTests
             3,
             Days: null,
             IsBadHabit: false,
-            DueDate: null));
+            DueDate: null,
+            UserToday: habit.StartDate));
 
         result.IsSuccess.Should().BeTrue();
         habit.Schedule.Should().Be(HabitSchedule.Flexible);
@@ -1741,8 +1743,10 @@ public class HabitTests
         habit.ScheduledStartDate.Should().Be(originalDueDate);
     }
 
-    [Fact]
-    public void Update_AdvancedHabitWithChangedCadenceAndUnchangedDueDate_RebasesScheduledStartDate()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Update_AdvancedHabitWithChangedCadenceAndUnchangedDueDate_ReanchorsFromTheStartDate(bool resendStartDate)
     {
         var originalDueDate = new DateOnly(2025, 1, 6);
         var currentDueDate = originalDueDate.AddDays(7);
@@ -1754,7 +1758,7 @@ public class HabitTests
             originalDueDate)).Value;
         habit.AdvanceDueDate(originalDueDate, weekStartDay: 1);
 
-        var result = habit.Update(new HabitUpdateParams(habit.Schedule is HabitSchedule.Flexible or HabitSchedule.General ? habit.Schedule : HabitSchedule.Recurring,
+        var result = habit.Update(new HabitUpdateParams(HabitSchedule.Recurring,
             habit.Title,
             habit.Description,
             FrequencyUnit.Week,
@@ -1763,15 +1767,17 @@ public class HabitTests
             habit.IsBadHabit,
             currentDueDate,
             UserToday: originalDueDate.AddDays(1),
-            IntervalWeeks: 2));
+            IntervalWeeks: 2,
+            StartDate: resendStartDate ? habit.StartDate : null));
 
         result.IsSuccess.Should().BeTrue();
-        habit.NextDueDate.Should().Be(currentDueDate);
-        habit.ScheduledStartDate.Should().Be(currentDueDate);
+        habit.StartDate.Should().Be(originalDueDate);
+        habit.ScheduledStartDate.Should().Be(originalDueDate);
+        habit.NextDueDate.Should().Be(originalDueDate.AddDays(14));
 
-        habit.AdvanceDueDate(currentDueDate, weekStartDay: 1);
+        habit.AdvanceDueDate(habit.NextDueDate, weekStartDay: 1);
 
-        habit.NextDueDate.Should().Be(currentDueDate.AddDays(14));
+        habit.NextDueDate.Should().Be(originalDueDate.AddDays(28));
     }
 
     [Fact]
@@ -1846,6 +1852,7 @@ public class HabitTests
             habit.Days.ToList(),
             habit.IsBadHabit,
             habit.NextDueDate,
+            UserToday: habit.NextDueDate,
             IntervalWeeks: intervalWeeks));
 
         result.IsSuccess.Should().BeTrue();

@@ -22,9 +22,17 @@ public class HabitMonthDaysTests
             Days: days, IntervalWeeks: intervalWeeks, StartDate: startDate, MonthDays: monthDays));
 
     private static HabitUpdateParams UpdateFor(Habit habit, IReadOnlyList<int>? monthDays,
-        FrequencyUnit? unit = FrequencyUnit.Month, int? quantity = 1) =>
-        new(habit.Schedule, habit.Title, habit.Description, unit, quantity, null, habit.IsBadHabit, null,
-            MonthDays: monthDays);
+        FrequencyUnit? unit = FrequencyUnit.Month, int? quantity = 1, DateOnly? userToday = null,
+        DateOnly? startDate = null, DateOnly? dueDate = null) =>
+        new(habit.Schedule, habit.Title, habit.Description, unit, quantity, null, habit.IsBadHabit, dueDate,
+            UserToday: userToday ?? habit.StartDate, StartDate: startDate, MonthDays: monthDays);
+
+    private static Habit LoggedMonthly(IReadOnlyList<int> monthDays, DateOnly dueDate)
+    {
+        var habit = CreateMonthly(monthDays, dueDate).Value;
+        habit.Log(habit.NextDueDate).IsSuccess.Should().BeTrue();
+        return habit;
+    }
 
     [Fact]
     public void Create_AlignsTheFirstOccurrenceToTheNextChosenDay()
@@ -217,5 +225,77 @@ public class HabitMonthDaysTests
         var result = habit.Update(UpdateFor(habit, monthDays: [8], unit: FrequencyUnit.Week));
 
         result.ErrorCode.Should().Be(DomainErrors.MonthDaysRequireMonth.Code);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Update_AddedDayAfterACompletion_RecoversTheDayBeforeTheOldCursor(bool resendStartDate)
+    {
+        var habit = LoggedMonthly([10], new DateOnly(2027, 1, 10));
+        habit.NextDueDate.Should().Be(new DateOnly(2027, 2, 10));
+
+        habit.Update(UpdateFor(habit, [10, 15], userToday: new DateOnly(2027, 1, 11),
+            startDate: resendStartDate ? habit.StartDate : null)).IsSuccess.Should().BeTrue();
+
+        habit.MonthDays.Should().Equal(10, 15);
+        habit.StartDate.Should().Be(new DateOnly(2027, 1, 10));
+        habit.NextDueDate.Should().Be(new DateOnly(2027, 1, 15));
+        habit.Logs.Should().ContainSingle(log => log.Date == new DateOnly(2027, 1, 10));
+    }
+
+    [Fact]
+    public void Update_AddedDayOnTheLoggedDay_KeepsTheLoggedOccurrence()
+    {
+        var habit = LoggedMonthly([10], new DateOnly(2027, 1, 10));
+
+        habit.Update(UpdateFor(habit, [10, 15], userToday: new DateOnly(2027, 1, 10))).IsSuccess.Should().BeTrue();
+
+        habit.NextDueDate.Should().Be(new DateOnly(2027, 1, 15));
+    }
+
+    [Fact]
+    public void Update_RemovedDay_MovesToTheNextRemainingDay()
+    {
+        var habit = LoggedMonthly([10, 15], new DateOnly(2027, 1, 10));
+        habit.NextDueDate.Should().Be(new DateOnly(2027, 1, 15));
+
+        habit.Update(UpdateFor(habit, [10], userToday: new DateOnly(2027, 1, 11))).IsSuccess.Should().BeTrue();
+
+        habit.NextDueDate.Should().Be(new DateOnly(2027, 2, 10));
+    }
+
+    [Fact]
+    public void Update_AddedDay31InA30DayMonth_LandsOnTheLastDayOfThatMonth()
+    {
+        var habit = LoggedMonthly([10], new DateOnly(2027, 4, 10));
+        habit.NextDueDate.Should().Be(new DateOnly(2027, 5, 10));
+
+        habit.Update(UpdateFor(habit, [10, 31], userToday: new DateOnly(2027, 4, 11))).IsSuccess.Should().BeTrue();
+
+        habit.NextDueDate.Should().Be(new DateOnly(2027, 4, 30));
+    }
+
+    [Fact]
+    public void Update_AddedDayWithAnExplicitDueDate_KeepsTheChosenDate()
+    {
+        var habit = LoggedMonthly([10], new DateOnly(2027, 1, 10));
+
+        habit.Update(UpdateFor(habit, [10, 15], userToday: new DateOnly(2027, 1, 11),
+            dueDate: new DateOnly(2027, 3, 1))).IsSuccess.Should().BeTrue();
+
+        habit.NextDueDate.Should().Be(new DateOnly(2027, 3, 10));
+    }
+
+    [Fact]
+    public void Update_ChangedDaysWithoutTheAccountDate_FailsWithoutChange()
+    {
+        var habit = LoggedMonthly([10], new DateOnly(2027, 1, 10));
+        var update = UpdateFor(habit, [10, 15]) with { UserToday = null };
+
+        habit.Update(update).ErrorCode.Should().Be(DomainErrors.InvalidStartDate.Code);
+
+        habit.MonthDays.Should().Equal(10);
+        habit.NextDueDate.Should().Be(new DateOnly(2027, 2, 10));
     }
 }

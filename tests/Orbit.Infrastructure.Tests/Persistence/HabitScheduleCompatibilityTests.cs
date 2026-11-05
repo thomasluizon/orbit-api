@@ -42,7 +42,7 @@ public class HabitScheduleCompatibilityTests
             {
                 recurring = target is HabitSchedule.Recurring or HabitSchedule.Flexible;
                 habit.Update(new HabitUpdateParams(target, "Read", null,
-                    recurring ? FrequencyUnit.Day : null, recurring ? 1 : null, null, false, null))
+                    recurring ? FrequencyUnit.Day : null, recurring ? 1 : null, null, false, null, UserToday: Start))
                     .IsSuccess.Should().BeTrue();
                 await SaveAsync(context, asyncSave);
                 await AssertStoredAsync(factory, habit.Id, target);

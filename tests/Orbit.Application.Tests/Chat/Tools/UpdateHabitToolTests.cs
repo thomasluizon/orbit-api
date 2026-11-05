@@ -932,6 +932,40 @@ public class UpdateHabitToolTests
         habit.MonthDays.Should().BeEmpty();
     }
 
+    [Theory]
+    [InlineData(10)]
+    [InlineData(11)]
+    public async Task MonthDays_AddedAfterACompletion_RecoversTheDayBeforeTheOldCursor(int updateDay)
+    {
+        var databaseName = $"UpdateHabitMonthDays_{Guid.NewGuid()}";
+        Guid habitId;
+        await using (var seed = CreateContext(databaseName))
+        {
+            var seeded = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Pagar contas",
+                FrequencyUnit.Month, 1, new DateOnly(2027, 1, 10), MonthDays: [10])).Value;
+            seeded.Log(new DateOnly(2027, 1, 10)).IsSuccess.Should().BeTrue();
+            seed.Habits.Add(seeded);
+            await seed.SaveChangesAsync();
+            habitId = seeded.Id;
+        }
+        _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(new DateOnly(2027, 1, updateDay));
+        await using var context = CreateContext(databaseName);
+        var unitOfWork = Substitute.For<IUnitOfWork>();
+        ConfigureTransaction(unitOfWork);
+        unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .Returns(call => context.SaveChangesAsync(call.Arg<CancellationToken>()));
+        var tool = CreateTool(new GenericRepository<Habit>(context), unitOfWork, _payGate);
+
+        var result = await tool.ExecuteAsync(JsonDocument.Parse(
+            $$"""{"habit_id":"{{habitId}}","month_days":[10,15]}""").RootElement, UserId, CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        await using var reread = CreateContext(databaseName);
+        var habit = await reread.Habits.SingleAsync(h => h.Id == habitId);
+        habit.MonthDays.Should().Equal(10, 15);
+        habit.NextDueDate.Should().Be(new DateOnly(2027, 1, 15));
+    }
+
     private static OrbitDbContext CreateContext(string databaseName) =>
         new(new DbContextOptionsBuilder<OrbitDbContext>().UseInMemoryDatabase(databaseName).Options);
 

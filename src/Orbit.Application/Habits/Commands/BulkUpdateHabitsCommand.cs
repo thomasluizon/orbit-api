@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Chat.Tools.Implementations;
@@ -188,7 +189,8 @@ public sealed partial class BulkUpdateHabitsCommandHandler(
         var failed = resolved.FirstOrDefault(item => item.Update.IsFailure).Update;
         if (failed is not null)
             return failed.PropagateError<int>();
-        var updates = resolved.Select(item => (item.Habit, Update: item.Update.Value)).ToList();
+        var updates = await PrepareReanchorsAsync(userId,
+            resolved.Select(item => (item.Habit, Update: item.Update.Value)).ToList(), today, cancellationToken);
 
         var validation = await ValidateUpdatesAsync(userId, updates, habitRepository, cancellationToken);
         if (validation.IsFailure)
@@ -216,6 +218,28 @@ public sealed partial class BulkUpdateHabitsCommandHandler(
             await unitOfWork.SaveChangesAsync(cancellationToken);
 
         return Result.Success(updates.Count);
+    }
+
+    /// <summary>
+    /// A reanchored schedule skips dates already logged from the account date onward and uses the account week start,
+    /// so those logs and that setting load only for the habits whose update reanchors.
+    /// </summary>
+    private async Task<List<(Habit Habit, HabitUpdateParams Update)>> PrepareReanchorsAsync(Guid userId,
+        List<(Habit Habit, HabitUpdateParams Update)> updates, DateOnly today, CancellationToken cancellationToken)
+    {
+        var reanchorIds = updates.Where(item => item.Habit.RequiresScheduleReanchor(item.Update))
+            .Select(item => item.Habit.Id).ToArray();
+        if (reanchorIds.Length == 0)
+            return updates;
+
+        await habitRepository.FindTrackedAsync(
+            habit => habit.UserId == userId && reanchorIds.Contains(habit.Id),
+            query => query.Include(habit => habit.Logs.Where(log => !log.IsDeleted && log.Date >= today)),
+            cancellationToken);
+        var weekStartDay = await userDateService.GetUserWeekStartDayAsync(userId, cancellationToken);
+        return updates.Select(item => reanchorIds.Contains(item.Habit.Id)
+            ? (item.Habit, item.Update with { WeekStartDay = weekStartDay })
+            : item).ToList();
     }
 
     private static async Task<Result> ValidateUpdatesAsync(Guid userId,

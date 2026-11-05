@@ -137,7 +137,7 @@ public class RepeatReminderTests
     {
         var habit = Habit.Create(Parameters(new(30))).Value;
         var update = new HabitUpdateParams(habit.Schedule, habit.Title, null, FrequencyUnit.Day, 1,
-            [DayOfWeek.Monday], false, habit.NextDueDate);
+            [DayOfWeek.Monday], false, habit.NextDueDate, UserToday: habit.NextDueDate);
         habit.Update(update).IsSuccess.Should().BeTrue();
         habit.RepeatReminder!.IntervalMinutes.Should().Be(30);
         habit.Update(update with { ClearRepeatReminder = true, ScheduledReminders = [new(ScheduledReminderWhen.SameDay, new(8, 0))] })

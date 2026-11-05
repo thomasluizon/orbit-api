@@ -80,6 +80,49 @@ public class UpdateHabitCommandHandlerTests
         habit.RepeatIntervalMinutes.Should().Be(480);
     }
 
+    private Habit LoggedMonthlyHabit()
+    {
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Pagar contas",
+            FrequencyUnit.Month, 1, new DateOnly(2027, 1, 10), MonthDays: [10])).Value;
+        habit.Log(new DateOnly(2027, 1, 10)).IsSuccess.Should().BeTrue();
+        _habitRepo.FindOneTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>()).Returns(habit);
+        _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(new DateOnly(2027, 1, 11));
+        return habit;
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Handle_AddedMonthDayAfterACompletion_RecoversTheDayBeforeTheOldCursor(bool resendStartDate)
+    {
+        var habit = LoggedMonthlyHabit();
+        var command = new UpdateHabitCommand(UserId, habit.Id, habit.Title, null, FrequencyUnit.Month, 1,
+            StartDate: resendStartDate ? habit.StartDate : null, MonthDays: [10, 15]);
+
+        (await new Orbit.Application.Habits.Validators.UpdateHabitCommandValidator(_habitRepo).ValidateAsync(command)).IsValid.Should().BeTrue();
+        (await _handler.Handle(command, default)).IsSuccess.Should().BeTrue();
+
+        habit.MonthDays.Should().Equal(10, 15);
+        habit.NextDueDate.Should().Be(new DateOnly(2027, 1, 15));
+    }
+
+    [Fact]
+    public async Task Handle_PartialMonthDayUpdate_RecoversTheDayBeforeTheOldCursor()
+    {
+        var habit = LoggedMonthlyHabit();
+        _unitOfWork.ExecuteInTransactionAsync(
+                Arg.Any<Func<CancellationToken, Task<Result<string>>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.ArgAt<Func<CancellationToken, Task<Result<string>>>>(0)(call.ArgAt<CancellationToken>(1)));
+
+        var result = await _handler.Handle(new UpdateHabitFieldsCommand(UserId, habit.Id,
+            new BulkHabitChanges(HasMonthDays: true, MonthDays: [10, 15])), default);
+
+        result.IsSuccess.Should().BeTrue();
+        habit.NextDueDate.Should().Be(new DateOnly(2027, 1, 15));
+    }
+
     [Fact]
     public async Task Handle_UnchangedStartWithChangedInterval_UsesAccountCalendar()
     {

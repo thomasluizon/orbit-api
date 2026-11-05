@@ -774,13 +774,14 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
             return validation;
 
         var previousDueTime = DueTime;
+        var reanchorSchedule = RequiresScheduleReanchor(p);
         var candidate = (Habit)MemberwiseClone();
         var scheduleResult = candidate.ApplyRequiredUpdates(p);
         if (scheduleResult.IsFailure)
             return scheduleResult;
         ApplyRequiredUpdatesFrom(candidate);
         ApplyOptionalUpdates(p);
-        if (p.StartDate.HasValue && Schedule is HabitSchedule.Recurring or HabitSchedule.Flexible)
+        if ((p.StartDate.HasValue || reanchorSchedule) && Schedule is HabitSchedule.Recurring or HabitSchedule.Flexible)
             RecomputeCompletionForEndDate();
 
         if (!previousDueTime.HasValue && DueTime.HasValue && p.ReminderTimes is null && RelativeReminders.Count > 0)
@@ -939,8 +940,19 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         : p.Schedule == HabitSchedule.Recurring && p.FrequencyUnit == Enums.FrequencyUnit.Month ? MonthDays
         : [];
 
+    /// <summary>
+    /// True when the update resolves the next occurrence again from the recurrence anchor and the account date.
+    /// A recurrence change without an explicit start or due date keeps <see cref="StartDate"/> as the anchor,
+    /// so an omitted start date gives the same schedule as the unchanged start date.
+    /// </summary>
     public bool RequiresScheduleReanchor(HabitUpdateParams p) =>
-        p.StartDate.HasValue && (p.StartDate.Value != StartDate || RecurrenceChanged(p));
+        p.StartDate.HasValue
+            ? p.StartDate.Value != StartDate || RecurrenceChanged(p)
+            : StaysRecurring(p) && (p.DueDate is null || p.DueDate == NextDueDate) && RecurrenceChanged(p);
+
+    private bool StaysRecurring(HabitUpdateParams p) =>
+        Schedule is HabitSchedule.Recurring or HabitSchedule.Flexible
+        && p.Schedule is HabitSchedule.Recurring or HabitSchedule.Flexible;
 
     private bool RecurrenceChanged(HabitUpdateParams p) =>
         FrequencyUnit != p.FrequencyUnit
@@ -1004,7 +1016,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
 
     private Result Reanchor(HabitUpdateParams p)
     {
-        StartDate = p.StartDate!.Value;
+        StartDate = p.StartDate ?? StartDate;
         NextDueDate = StartDate;
         ScheduledStartDate = StartDate;
         OriginalDayOfMonth = StartDate.Day;
