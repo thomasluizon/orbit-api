@@ -98,17 +98,29 @@ docker run -d --name "$database" --network "$network" \
   -c ssl=on -c ssl_cert_file=/etc/ssl/certs/ssl-cert-snakeoil.pem -c ssl_key_file=/etc/ssl/private/ssl-cert-snakeoil.key >/dev/null
 until docker exec "$database" pg_isready -U orbit -d orbit >/dev/null 2>&1; do sleep 1; done
 
-# Production starts with no pending migration, so the separate bundle process applies them first.
-docker run --rm --network "$network" --platform linux/amd64 --entrypoint /app/efbundle \
-  "$image" --connection "$connection" >/dev/null
+wait_for_hangfire() {
+  for _ in $(seq 1 180); do
+    docker logs "$1" 2>&1 | grep -q "all the dispatchers started" && return
+    [ "$(docker inspect -f '{{.State.Running}}' "$1")" = true ] || return
+    sleep 1
+  done
+}
+
+# Production starts with no pending migration, so a separate process applies them first.
+if [ "$platform" = linux/amd64 ]; then
+  docker run --rm --network "$network" --platform "$platform" --entrypoint /app/efbundle \
+    "$image" --connection "$connection" >/dev/null
+else
+  # The image's efbundle targets linux-x64, so a first API start applies the migrations on another platform.
+  docker run -d --name "$api" --network "$network" --platform "$platform" \
+    --env-file "$env_file" -e Database__MigrateOnStartup=true "$image" >/dev/null
+  wait_for_hangfire "$api"
+  docker rm -f "$api" >/dev/null
+fi
 
 docker run -d --name "$api" --network "$network" --platform "$platform" \
   --memory=512m --memory-swap=512m --cpus=0.5 --env-file "$env_file" "$image" >/dev/null
-for _ in $(seq 1 180); do
-  docker logs "$api" 2>&1 | grep -q "all the dispatchers started" && break
-  [ "$(docker inspect -f '{{.State.Running}}' "$api")" = true ] || break
-  sleep 1
-done
+wait_for_hangfire "$api"
 check_memory startup
 sleep "$settle_seconds"
 check_memory "idle after ${settle_seconds}s"
