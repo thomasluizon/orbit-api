@@ -55,6 +55,7 @@ internal sealed class BulkHabitsPipelineHost : IAsyncDisposable
             {
                 nameof(IUnitOfWork.SaveChangesAsync) => "save",
                 nameof(IUnitOfWork.AcquireAdvisoryLockAsync) or nameof(IUnitOfWork.AcquireUserRowLockAsync) => "lock wait",
+                nameof(IUnitOfWork.ExecuteInTransactionAsync) => "processing in transaction",
                 _ => null
             }));
         builder.Services.AddDistributedMemoryCache();
@@ -75,7 +76,9 @@ internal sealed class BulkHabitsPipelineHost : IAsyncDisposable
         builder.Services.AddScoped<IMemoryCache>(sp => new VersionedMemoryCache(sp.GetRequiredService<MemoryCache>(),
             probe.Wrap<IUserCacheVersions>(new UserCacheVersions(sp.GetRequiredService<OrbitDbContext>()), _ => "cache invalidation")));
         builder.Services.AddScoped<IIdempotencyContext, HttpIdempotencyContext>();
-        builder.Services.AddScoped<IIdempotencyStore, IdempotencyStore>();
+        builder.Services.AddScoped<IIdempotencyStore>(sp => probe.Wrap<IIdempotencyStore>(
+            new IdempotencyStore(sp.GetRequiredService<OrbitDbContext>()),
+            method => method.Name == nameof(IIdempotencyStore.FindResponseBodyAsync) ? "idempotency read" : null));
         builder.Services.AddSingleton(probe.Wrap<IValidator<BulkLogHabitsCommand>>(new BulkLogHabitsCommandValidator(),
             method => method.Name == "ValidateAsync" ? "validation" : null));
         builder.Services.AddSingleton(probe.Wrap<IValidator<BulkSkipHabitsCommand>>(new BulkSkipHabitsCommandValidator(),

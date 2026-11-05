@@ -1,0 +1,264 @@
+{
+  "baselineSourceCommit": "0edcb188a3d8522bb964d07427fb657ec6f522eb",
+  "implementationCommit": "d3c137d8c",
+  "provider": "PostgreSQL 15.19",
+  "databaseMemoryMiB": 512,
+  "configuredManagedHeapBytes": 536870912,
+  "sdk": "10.0.401",
+  "configuration": "Debug",
+  "historyLogsPerHabit": 400,
+  "reports": {
+    "before": {
+      "skip-10": {
+        "warmupMs": 832.1949,
+        "sampleTotalMs": [
+          266.493,
+          167.4711,
+          162.606,
+          159.7423,
+          149.4875,
+          158.6922,
+          156.0522,
+          170.6283,
+          153.0455
+        ],
+        "medianRequest": {
+          "TotalMs": 159.7423,
+          "PhasesMs": {
+            "validation": 0.0629,
+            "idempotency read": 10.9655,
+            "save": 63.0644,
+            "loads": 66.93589999999999,
+            "lock wait": 2.5469,
+            "processing in transaction": 14.049200000000013,
+            "cache invalidation": 0.8045,
+            "processing and HTTP": 1.3130000000000166
+          },
+          "Commands": 18,
+          "HabitReads": 2,
+          "HabitRows": 20,
+          "Rows": 3701
+        }
+      },
+      "log-10": {
+        "warmupMs": 609.7832,
+        "sampleTotalMs": [
+          397.5808,
+          312.6513,
+          378.8691,
+          349.926,
+          299.9156,
+          278.2801,
+          279.118,
+          251.4595,
+          244.3394
+        ],
+        "medianRequest": {
+          "TotalMs": 299.9156,
+          "PhasesMs": {
+            "validation": 0.1509,
+            "idempotency read": 13.3308,
+            "save": 131.3722,
+            "loads": 118.86639999999997,
+            "lock wait": 6.7843,
+            "processing in transaction": 27.04359999999997,
+            "cache invalidation": 1.5674,
+            "processing and HTTP": 0.8000000000000682
+          },
+          "Commands": 59,
+          "HabitReads": 10,
+          "HabitRows": 40,
+          "Rows": 8748
+        }
+      },
+      "skip-5": {
+        "warmupMs": 107.7702,
+        "sampleTotalMs": [
+          95.8766,
+          90.0993,
+          127.5024,
+          96.2277,
+          88.2231,
+          93.2568,
+          152.3822,
+          97.1463,
+          96.0429
+        ],
+        "medianRequest": {
+          "TotalMs": 96.0429,
+          "PhasesMs": {
+            "validation": 0.0265,
+            "idempotency read": 9.5,
+            "save": 44.9148,
+            "loads": 27.4405,
+            "lock wait": 1.9547999999999999,
+            "processing in transaction": 10.835600000000014,
+            "cache invalidation": 0.7727,
+            "processing and HTTP": 0.5979999999999848
+          },
+          "Commands": 17,
+          "HabitReads": 2,
+          "HabitRows": 10,
+          "Rows": 1851
+        }
+      },
+      "log-5": {
+        "warmupMs": 191.0904,
+        "sampleTotalMs": [
+          186.1484,
+          228.9738,
+          206.9404,
+          225.9617,
+          213.0841,
+          185.0882,
+          208.3319,
+          194.7568,
+          183.1276
+        ],
+        "medianRequest": {
+          "TotalMs": 206.9404,
+          "PhasesMs": {
+            "validation": 0.0375,
+            "idempotency read": 12.4182,
+            "save": 84.9323,
+            "loads": 85.46029999999998,
+            "lock wait": 3.0088,
+            "processing in transaction": 17.554300000000012,
+            "cache invalidation": 2.923,
+            "processing and HTTP": 0.6059999999999945
+          },
+          "Commands": 56,
+          "HabitReads": 10,
+          "HabitRows": 30,
+          "Rows": 3922
+        }
+      }
+    },
+    "after": {
+      "skip-10": {
+        "warmupMs": 721.7824,
+        "sampleTotalMs": [
+          140.146,
+          86.5159,
+          88.647,
+          95.4389,
+          70.0947,
+          74.9532,
+          77.0187,
+          72.0937,
+          69.9886
+        ],
+        "medianRequest": {
+          "TotalMs": 77.0187,
+          "PhasesMs": {
+            "validation": 0.0457,
+            "idempotency read": 10.9066,
+            "save": 28.9594,
+            "loads": 15.9759,
+            "lock wait": 2.3399,
+            "processing in transaction": 16.267400000000002,
+            "cache invalidation": 1.2027,
+            "processing and HTTP": 1.3211000000000013
+          },
+          "Commands": 16,
+          "HabitReads": 1,
+          "HabitRows": 10,
+          "Rows": 101
+        }
+      },
+      "log-10": {
+        "warmupMs": 472.8364,
+        "sampleTotalMs": [
+          184.5321,
+          172.8752,
+          133.5852,
+          159.0627,
+          145.8831,
+          156.8238,
+          158.9494,
+          147.6889,
+          148.7069
+        ],
+        "medianRequest": {
+          "TotalMs": 156.8238,
+          "PhasesMs": {
+            "validation": 0.036,
+            "idempotency read": 11.0807,
+            "save": 45.3917,
+            "loads": 58.86559999999999,
+            "lock wait": 3.1547,
+            "processing in transaction": 22.180400000000006,
+            "cache invalidation": 0.8987,
+            "processing and HTTP": 15.216000000000008
+          },
+          "Commands": 43,
+          "HabitReads": 2,
+          "HabitRows": 10,
+          "Rows": 5128
+        }
+      },
+      "skip-5": {
+        "warmupMs": 50.984,
+        "sampleTotalMs": [
+          40.6889,
+          31.0894,
+          33.313,
+          31.3293,
+          39.6237,
+          36.9381,
+          27.9175,
+          24.5479,
+          36.2542
+        ],
+        "medianRequest": {
+          "TotalMs": 33.313,
+          "PhasesMs": {
+            "validation": 0.0311,
+            "idempotency read": 6.1423,
+            "save": 11.5707,
+            "loads": 6.0348,
+            "lock wait": 0.9396,
+            "processing in transaction": 7.632199999999997,
+            "cache invalidation": 0.3417,
+            "processing and HTTP": 0.6206000000000031
+          },
+          "Commands": 15,
+          "HabitReads": 1,
+          "HabitRows": 5,
+          "Rows": 51
+        }
+      },
+      "log-5": {
+        "warmupMs": 123.7034,
+        "sampleTotalMs": [
+          117.0481,
+          97.3263,
+          100.6484,
+          123.2508,
+          102.6353,
+          105.7716,
+          105.5765,
+          98.8007,
+          91.0018
+        ],
+        "medianRequest": {
+          "TotalMs": 102.6353,
+          "PhasesMs": {
+            "validation": 0.0267,
+            "idempotency read": 9.4587,
+            "save": 24.969099999999997,
+            "loads": 43.1326,
+            "lock wait": 2.5874,
+            "processing in transaction": 21.09230000000001,
+            "cache invalidation": 0.661,
+            "processing and HTTP": 0.707499999999996
+          },
+          "Commands": 40,
+          "HabitReads": 2,
+          "HabitRows": 5,
+          "Rows": 2102
+        }
+      }
+    }
+  }
+}
