@@ -312,5 +312,36 @@
         }
       ]
     }
-  ]
+  ],
+  "events": [
+    {
+      "event": {
+        "details": {},
+        "id": "evt-dbls6olg1s2s739kt3vg",
+        "serviceId": "srv-d6tc2isr85hc739bf75g",
+        "timestamp": "2026-11-04T23:44:34.621102Z",
+        "type": "server_available"
+      },
+      "cursor": "mev_7H4vC1Y2b2xnMXMyczczOWt0M3Zn"
+    },
+    {
+      "event": {
+        "details": {
+          "instanceID": "srv-d6tc2isr85hc739bf75g-bxhnc",
+          "reason": {
+            "evicted": false,
+            "oomKilled": {
+              "memoryLimit": "512Mi"
+            }
+          }
+        },
+        "id": "evt-dbls6ldg1s2s739kt270",
+        "serviceId": "srv-d6tc2isr85hc739bf75g",
+        "timestamp": "2026-11-04T23:44:21.803287Z",
+        "type": "server_failed"
+      },
+      "cursor": "mev_7H4vC1Y2bGRnMXMyczczOWt0Mjcw"
+    }
+  ],
+  "imageGcEnvironmentOverrides": []
 }

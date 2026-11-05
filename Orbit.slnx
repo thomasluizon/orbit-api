@@ -16,5 +16,6 @@
     <Project Path="tests/Orbit.Application.Tests/Orbit.Application.Tests.csproj" />
     <Project Path="tests/Orbit.Infrastructure.Tests/Orbit.Infrastructure.Tests.csproj" />
     <Project Path="tests/Orbit.Analyzers.Tests/Orbit.Analyzers.Tests.csproj" />
+    <Project Path="tests/Orbit.Memory.Tests/Orbit.Memory.Tests.csproj" />
   </Folder>
 </Solution>

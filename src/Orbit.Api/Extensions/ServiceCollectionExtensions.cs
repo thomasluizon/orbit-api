@@ -458,6 +458,8 @@ public static partial class ServiceCollectionExtensions
 
     public static WebApplicationBuilder AddOrbitObservability(this WebApplicationBuilder builder)
     {
+        if (!BuildTimeDocumentGeneration.IsActive)
+            builder.Services.AddHostedService<ProcessMemoryMonitor>();
         var sentrySettings = builder.Configuration.GetSection(SentrySettings.SectionName).Get<SentrySettings>()
             ?? new SentrySettings();
 
