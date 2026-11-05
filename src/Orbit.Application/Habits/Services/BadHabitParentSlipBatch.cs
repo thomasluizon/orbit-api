@@ -1,5 +1,5 @@
-using Microsoft.EntityFrameworkCore;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Habits.Services;
@@ -8,7 +8,9 @@ namespace Orbit.Application.Habits.Services;
 internal sealed class BadHabitParentSlipBatch(
     Dictionary<Guid, Habit> habits,
     IGenericRepository<Habit> repository,
-    IReadOnlyCollection<DateOnly> dates)
+    IGenericRepository<HabitLog> logs,
+    IReadOnlyCollection<DateOnly> dates,
+    int weekStartDay)
 {
     private bool _loaded;
 
@@ -30,8 +32,7 @@ internal sealed class BadHabitParentSlipBatch(
     private async Task LoadAsync(CancellationToken cancellationToken)
     {
         if (_loaded || dates.Count == 0) return;
-        var from = new DateOnly(dates.Min().Year, 1, 1).AddDays(-6);
-        var to = new DateOnly(dates.Max().Year, 12, 31).AddDays(6);
+        var dateSet = dates.ToHashSet();
         var frontier = habits.Values.ToArray();
         var visited = new HashSet<Guid>();
         while (frontier.Length > 0)
@@ -44,8 +45,19 @@ internal sealed class BadHabitParentSlipBatch(
             var related = await repository.FindTrackedAsync(habit => habit.UserId == userId && habit.IsBadHabit
                 && !habit.IsDeleted && !knownIds.Contains(habit.Id)
                 && (parentIds.Contains(habit.Id) || habit.ParentHabitId.HasValue && parentIds.Contains(habit.ParentHabitId.Value)),
-                query => query.Include(habit => habit.Logs.Where(log => log.Date >= from && log.Date <= to)),
                 cancellationToken);
+            if (related.Count > 0)
+            {
+                var relatedIds = related.Select(habit => habit.Id).ToHashSet();
+                var flexible = related.Where(habit => habit.Schedule == HabitSchedule.Flexible).ToArray();
+                var flexibleIds = flexible.Select(habit => habit.Id).ToHashSet();
+                var from = flexible.SelectMany(habit => dates.Select(date => HabitScheduleService.GetWindowStart(habit, date, weekStartDay)))
+                    .DefaultIfEmpty(dates.Min()).Min();
+                var to = flexible.SelectMany(habit => dates.Select(date => HabitScheduleService.GetWindowEnd(habit, date, weekStartDay)))
+                    .DefaultIfEmpty(dates.Max()).Max();
+                await logs.FindTrackedAsync(log => relatedIds.Contains(log.HabitId)
+                    && (dateSet.Contains(log.Date) || flexibleIds.Contains(log.HabitId) && log.Date >= from && log.Date <= to), cancellationToken);
+            }
             foreach (var habit in related) habits.TryAdd(habit.Id, habit);
             frontier = parentIds.Where(habits.ContainsKey).Select(id => habits[id]).ToArray();
         }

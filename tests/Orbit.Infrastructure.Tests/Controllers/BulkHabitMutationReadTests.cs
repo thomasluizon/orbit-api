@@ -2,10 +2,12 @@ using System.Text.Json;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Orbit.Application.Common;
 using Orbit.Application.Habits.Commands;
 using Orbit.Application.Habits.Services;
+using Orbit.Application.Goals.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
@@ -18,6 +20,40 @@ namespace Orbit.Infrastructure.Tests.Controllers;
 public class BulkHabitMutationReadTests
 {
     private static readonly DateOnly Today = new(2026, 6, 1);
+
+    [Fact]
+    public async Task ParentBatch_UnselectedRecurringParent_DoesNotLoadItsHistoricalLogs()
+    {
+        var counter = new CountingDbCommandInterceptor();
+        using var factory = new SqliteOrbitDbContextFactory(counter);
+        var db = factory.Context;
+        var user = User.Create("User", "parent-history@example.test").Value;
+        Habit Create(string title, Guid? parentId = null) => Habit.Create(new(HabitSchedule.Recurring,
+            user.Id, title, FrequencyUnit.Day, 1, Today.AddDays(-500), IsBadHabit: true, ParentHabitId: parentId)).Value;
+        var parent = Create("Parent");
+        var first = Create("First", parent.Id);
+        var second = Create("Second", parent.Id);
+        foreach (var habit in new[] { parent, first, second })
+            for (var offset = 400; offset > 0; offset--)
+                habit.Log(Today.AddDays(-offset), advanceDueDate: false, loggedOnLocalDate: Today.AddDays(-offset)).IsSuccess.Should().BeTrue();
+        db.AddRange(user, parent, first, second);
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+        var dates = Substitute.For<IUserDateService>();
+        dates.GetUserTodayAsync(user.Id, Arg.Any<CancellationToken>()).Returns(Today);
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        using var unit = new UnitOfWork(db, new DatabaseConnectionSettings());
+        var handler = new BulkLogHabitsCommandHandler(new GenericRepository<Habit>(db), new GenericRepository<HabitLog>(db),
+            new(dates, Substitute.For<IUserStreakService>(), Substitute.For<IGamificationService>(), new GenericRepository<Notification>(db)),
+            Substitute.For<IGoalCompletionService>(), unit, cache, NullLogger<BulkLogHabitsCommandHandler>.Instance);
+        counter.Reset();
+
+        var result = await handler.Handle(new(user.Id, [new(first.Id), new(second.Id)]), default);
+
+        result.Value.Results.Should().OnlyContain(item => item.Status == BulkItemStatus.Success);
+        counter.Commands.Where(command => command.Sql.TrimStart().StartsWith("SELECT", StringComparison.Ordinal)
+            && command.Sql.Contains("\"HabitLogs\"", StringComparison.Ordinal)).Sum(command => command.Rows).Should().Be(14);
+    }
 
     [Theory]
     [InlineData(false)]
