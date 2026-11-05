@@ -1,15 +1,20 @@
 #!/usr/bin/env bash
-# Start the API image in a 512 MiB container on a migrated database and fail when
-# the process working set reaches the memory warning line. See infra/memory-budget.md.
+# Start the API image in a 512 MiB, half-CPU container like Render Starter, on a migrated
+# database over TLS, drive the recorded HTTP load, and fail when anonymous plus shmem memory
+# reaches the warning line. See infra/memory-budget.md.
 set -euo pipefail
 
 image=${1:?usage: api-memory-container.sh <image>}
-warning_bytes=429496729
+warning_bytes=314572800
+platform=${ORBIT_MEMORY_PLATFORM:-linux/amd64}
 settle_seconds=${ORBIT_MEMORY_SETTLE_SECONDS:-60}
+script_dir=$(cd "$(dirname "$0")" && pwd)
 network=orbit-memory-guard
 database=orbit-memory-guard-postgres
 api=orbit-memory-guard-api
-connection="Host=$database;Port=5432;Database=orbit;Username=orbit;Password=orbit"
+connection="Host=$database;Port=5432;Database=orbit;Username=orbit;Password=orbit;SSL Mode=Require;Trust Server Certificate=true"
+smoke_email=memory-guard@example.test
+smoke_code=246810
 env_file=$(mktemp)
 
 cleanup() {
@@ -19,7 +24,6 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# Placeholder values only satisfy startup validation; the guard makes no external call.
 cat > "$env_file" <<EOF
 ASPNETCORE_ENVIRONMENT=Production
 ASPNETCORE_URLS=http://+:8080
@@ -55,6 +59,9 @@ Ses__MarketingFromEmail=memory-guard@example.test
 Ses__TransactionalConfigurationSet=memory-guard-placeholder
 Ses__MarketingConfigurationSet=memory-guard-placeholder
 Ses__TopicArn=arn:aws:sns:us-east-2:000000000000:memory-guard
+AI__BaseUrl=http://orbit-memory-guard-ai.invalid/v1
+SMOKE_TEST_EMAIL=$smoke_email
+SMOKE_TEST_CODE=$smoke_code
 EOF
 
 read_memory() {
@@ -66,35 +73,63 @@ read_memory() {
     grep -E "^(anon|file|shmem) " /sys/fs/cgroup/memory.stat'
 }
 
+check_memory() {
+  [ "$(docker inspect -f '{{.State.Running}}' "$api")" = true ] || {
+    docker logs "$api" 2>&1 | tail -40
+    echo "::error::API container stopped (OOMKilled=$(docker inspect -f '{{.State.OOMKilled}}' "$api"))"
+    exit 1
+  }
+  read_memory "$1"
+  local status anon_kb shmem_kb unreclaimable_bytes
+  status=$(docker exec "$api" cat /proc/1/status)
+  anon_kb=$(awk '/^RssAnon:/ {print $2}' <<<"$status")
+  shmem_kb=$(awk '/^RssShmem:/ {print $2}' <<<"$status")
+  unreclaimable_bytes=$(( (anon_kb + shmem_kb) * 1024 ))
+  echo "API anonymous plus shmem $unreclaimable_bytes bytes; warning line $warning_bytes bytes"
+  if [ "$unreclaimable_bytes" -ge "$warning_bytes" ]; then
+    echo "::error::API anonymous plus shmem memory $unreclaimable_bytes bytes reached the $warning_bytes byte warning line ($1) in a 512 MiB container"
+    exit 1
+  fi
+}
+
 docker network create "$network" >/dev/null
 docker run -d --name "$database" --network "$network" \
-  -e POSTGRES_USER=orbit -e POSTGRES_PASSWORD=orbit -e POSTGRES_DB=orbit postgres:17 >/dev/null
+  -e POSTGRES_USER=orbit -e POSTGRES_PASSWORD=orbit -e POSTGRES_DB=orbit postgres:17 \
+  -c ssl=on -c ssl_cert_file=/etc/ssl/certs/ssl-cert-snakeoil.pem -c ssl_key_file=/etc/ssl/private/ssl-cert-snakeoil.key >/dev/null
 until docker exec "$database" pg_isready -U orbit -d orbit >/dev/null 2>&1; do sleep 1; done
 
-# Production starts with no pending migration, so the separate bundle process applies them first.
-docker run --rm --network "$network" --platform linux/amd64 --entrypoint /app/efbundle \
-  "$image" --connection "$connection" >/dev/null
-
-docker run -d --name "$api" --network "$network" --platform linux/amd64 \
-  --memory=512m --memory-swap=512m --env-file "$env_file" "$image" >/dev/null
-for _ in $(seq 1 180); do
-  docker logs "$api" 2>&1 | grep -q "all the dispatchers started" && break
-  [ "$(docker inspect -f '{{.State.Running}}' "$api")" = true ] || break
-  sleep 1
-done
-[ "$(docker inspect -f '{{.State.Running}}' "$api")" = true ] || {
-  docker logs "$api" 2>&1 | tail -40
-  echo "::error::API container stopped during startup (OOMKilled=$(docker inspect -f '{{.State.OOMKilled}}' "$api"))"
-  exit 1
+wait_for_hangfire() {
+  for _ in $(seq 1 180); do
+    docker logs "$1" 2>&1 | grep -q "all the dispatchers started" && return
+    [ "$(docker inspect -f '{{.State.Running}}' "$1")" = true ] || return
+    sleep 1
+  done
 }
-read_memory startup
+
+# Production starts with no pending migration, so a separate process applies them first.
+if [ "$platform" = linux/amd64 ]; then
+  docker run --rm --network "$network" --platform "$platform" --entrypoint /app/efbundle \
+    "$image" --connection "$connection" >/dev/null
+else
+  # The image's efbundle targets linux-x64, so a first API start applies the migrations on another platform.
+  docker run -d --name "$api" --network "$network" --platform "$platform" \
+    --env-file "$env_file" -e Database__MigrateOnStartup=true "$image" >/dev/null
+  wait_for_hangfire "$api"
+  docker rm -f "$api" >/dev/null
+fi
+
+docker run -d --name "$api" --network "$network" --platform "$platform" \
+  --memory=512m --memory-swap=512m --cpus=0.5 --env-file "$env_file" "$image" >/dev/null
+wait_for_hangfire "$api"
+check_memory startup
 sleep "$settle_seconds"
-read_memory "after ${settle_seconds}s"
+check_memory "idle after ${settle_seconds}s"
+
+docker run --rm --network "$network" -v "$script_dir:/scripts:ro" \
+  -e API_BASE_URL="http://$api:8080" -e SMOKE_TEST_EMAIL="$smoke_email" -e SMOKE_TEST_CODE="$smoke_code" \
+  node:22-alpine node /scripts/api-memory-load.mjs
+check_memory "after the recorded load"
+sleep "$settle_seconds"
+check_memory "after the recorded load and ${settle_seconds}s"
 
 [ "$(docker inspect -f '{{.State.OOMKilled}}' "$api")" = false ] || { echo "::error::API container was OOM-killed"; exit 1; }
-rss_bytes=$(( $(docker exec "$api" awk '/^VmRSS/ {print $2}' /proc/1/status) * 1024 ))
-echo "API working set $rss_bytes bytes; warning line $warning_bytes bytes"
-if [ "$rss_bytes" -ge "$warning_bytes" ]; then
-  echo "::error::API working set $rss_bytes bytes reached the $warning_bytes byte warning line in a 512 MiB container"
-  exit 1
-fi

@@ -1,0 +1,1304 @@
+{
+  "ticket": "thomasluizon/orbit-tickets#2003",
+  "warningLine": {
+    "metric": "RssAnon plus RssShmem",
+    "bytes": 314572800
+  },
+  "container": {
+    "memory": "--memory=512m --memory-swap=512m",
+    "cpus": "--cpus=0.5",
+    "platform": "linux/arm64, native on Apple silicon",
+    "database": "postgres:17 with ssl=on; SSL Mode=Require; migrated before the measured start",
+    "configuration": "ASPNETCORE_ENVIRONMENT=Production with placeholder secrets, the production smoke login, and an AI base URL that does not resolve",
+    "load": ".github/scripts/api-memory-load.mjs: 30 rounds of 8 concurrent clients, 3 event streams, 3 exports",
+    "reads": [
+      "/proc/1/status",
+      "/proc/1/smaps",
+      "/sys/fs/cgroup/memory.current",
+      "/sys/fs/cgroup/memory.stat",
+      "dotnet-counters System.Runtime"
+    ],
+    "phases": {
+      "idle": "60 seconds after Hangfire starts",
+      "load": "at once after the recorded load",
+      "after-load-settle": "60 seconds after the recorded load"
+    }
+  },
+  "productionMonitor": {
+    "image": "f84ab32cf",
+    "instance": "srv-d6tc2isr85hc739bf75g-l7q7g",
+    "gcConfiguration": {
+      "ServerGC": false,
+      "ConcurrentGC": true,
+      "HeapCount": 1,
+      "GCHeapHardLimit": 268435456,
+      "GCConserveMem": 7,
+      "GCGen0MaxBudget": 8388608
+    },
+    "warningsFrom13h21To16h49Utc": {
+      "workingSetBytes": [
+        455282688,
+        546770944
+      ],
+      "committedHeapBytes": [
+        119447552,
+        169467904
+      ],
+      "managedBytes": [
+        90682816,
+        144082648
+      ],
+      "outOfMemoryKill": "one, between the 14:25 and 14:30 reads"
+    }
+  },
+  "gcCountersAfterRecordedLoad": {
+    "image": "0645f0692 (main)",
+    "committedBytes": 66060288,
+    "gen2LastCollectionBytes": 47653672,
+    "gen2FragmentationBytes": 12643200,
+    "assemblies": 208
+  },
+  "httpLoad": [
+    {
+      "label": "astra-prod-f84ab32cf-arm64",
+      "image": "f84ab32cf (production image)",
+      "override": null,
+      "reads": {
+        "idle": {
+          "VmRSSKb": 247096,
+          "RssAnonKb": 63208,
+          "RssFileKb": 118772,
+          "RssShmemKb": 65116,
+          "Threads": 41,
+          "cgroupMemoryCurrentBytes": 146419712,
+          "cgroupAnonBytes": 71663616,
+          "cgroupFileBytes": 66666496,
+          "cgroupShmemBytes": 66662400,
+          "anonymousPlusShmemBytes": 131403776,
+          "ownersKb": {
+            "file: assemblies (.dll)": 97992,
+            "anon: unnamed (GC, runtime, arenas, stacks)": 53376,
+            "shmem: doublemapper data": 49792,
+            "file: native libraries (.so)": 24472,
+            "shmem: doublemapper code": 15324,
+            "anon: glibc main heap": 5988,
+            "other: /usr/share/dotnet/dotnet": 80,
+            "anon: main stack": 68,
+            "other: [vdso]": 4
+          }
+        },
+        "load": {
+          "VmRSSKb": 343404,
+          "RssAnonKb": 113732,
+          "RssFileKb": 127540,
+          "RssShmemKb": 102132,
+          "Threads": 44,
+          "cgroupMemoryCurrentBytes": 235966464,
+          "cgroupAnonBytes": 123432960,
+          "cgroupFileBytes": 104566784,
+          "cgroupShmemBytes": 104562688,
+          "anonymousPlusShmemBytes": 221044736,
+          "ownersKb": {
+            "file: assemblies (.dll)": 106056,
+            "anon: unnamed (GC, runtime, arenas, stacks)": 103752,
+            "shmem: doublemapper data": 73700,
+            "shmem: doublemapper code": 28432,
+            "file: native libraries (.so)": 24696,
+            "anon: glibc main heap": 5988,
+            "other: /app/Orbit.Infrastructure.pdb": 428,
+            "other: /app/Orbit.Application.pdb": 200,
+            "other: /usr/share/dotnet/dotnet": 80,
+            "anon: main stack": 68,
+            "other: [vdso]": 4
+          }
+        },
+        "after-load-settle": {
+          "VmRSSKb": 365632,
+          "RssAnonKb": 119784,
+          "RssFileKb": 129532,
+          "RssShmemKb": 116316,
+          "Threads": 40,
+          "cgroupMemoryCurrentBytes": 255352832,
+          "cgroupAnonBytes": 127496192,
+          "cgroupFileBytes": 119091200,
+          "cgroupShmemBytes": 119087104,
+          "anonymousPlusShmemBytes": 241766400,
+          "ownersKb": {
+            "anon: unnamed (GC, runtime, arenas, stacks)": 109788,
+            "file: assemblies (.dll)": 107520,
+            "shmem: doublemapper data": 80888,
+            "shmem: doublemapper code": 35428,
+            "file: native libraries (.so)": 25240,
+            "anon: glibc main heap": 5988,
+            "other: /app/Orbit.Infrastructure.pdb": 428,
+            "other: /app/Orbit.Application.pdb": 200,
+            "other: /usr/share/dotnet/dotnet": 80,
+            "anon: main stack": 68,
+            "other: [vdso]": 4
+          }
+        }
+      }
+    },
+    {
+      "label": "soak-prod",
+      "image": "f84ab32cf (production image)",
+      "override": "ROUNDS=300",
+      "reads": {
+        "idle": {
+          "VmRSSKb": 240476,
+          "RssAnonKb": 60304,
+          "RssFileKb": 118196,
+          "RssShmemKb": 61976,
+          "Threads": 40,
+          "cgroupMemoryCurrentBytes": 140390400,
+          "cgroupAnonBytes": 68689920,
+          "cgroupFileBytes": 63447040,
+          "cgroupShmemBytes": 63442944,
+          "anonymousPlusShmemBytes": 125214720,
+          "ownersKb": {
+            "file: assemblies (.dll)": 97416,
+            "anon: unnamed (GC, runtime, arenas, stacks)": 50468,
+            "shmem: doublemapper data": 48196,
+            "file: native libraries (.so)": 24472,
+            "shmem: doublemapper code": 13780,
+            "anon: glibc main heap": 5992,
+            "other: /usr/share/dotnet/dotnet": 80,
+            "anon: main stack": 68,
+            "other: [vdso]": 4
+          }
+        },
+        "load": {
+          "VmRSSKb": 390188,
+          "RssAnonKb": 140252,
+          "RssFileKb": 127568,
+          "RssShmemKb": 122368,
+          "Threads": 44,
+          "cgroupMemoryCurrentBytes": 283586560,
+          "cgroupAnonBytes": 150499328,
+          "cgroupFileBytes": 125288448,
+          "cgroupShmemBytes": 125284352,
+          "anonymousPlusShmemBytes": 268922880,
+          "ownersKb": {
+            "anon: unnamed (GC, runtime, arenas, stacks)": 130268,
+            "file: assemblies (.dll)": 105620,
+            "shmem: doublemapper data": 82252,
+            "shmem: doublemapper code": 40116,
+            "file: native libraries (.so)": 25240,
+            "anon: glibc main heap": 5992,
+            "other: /app/Orbit.Infrastructure.pdb": 324,
+            "other: /app/Orbit.Application.pdb": 224,
+            "other: /usr/share/dotnet/dotnet": 80,
+            "anon: main stack": 68,
+            "other: [vdso]": 4
+          }
+        },
+        "after-load-settle": {
+          "VmRSSKb": 388708,
+          "RssAnonKb": 138100,
+          "RssFileKb": 127632,
+          "RssShmemKb": 122976,
+          "Threads": 39,
+          "cgroupMemoryCurrentBytes": 283103232,
+          "cgroupAnonBytes": 148357120,
+          "cgroupFileBytes": 125911040,
+          "cgroupShmemBytes": 125906944,
+          "anonymousPlusShmemBytes": 267341824,
+          "ownersKb": {
+            "anon: unnamed (GC, runtime, arenas, stacks)": 128116,
+            "file: assemblies (.dll)": 105684,
+            "shmem: doublemapper data": 82540,
+            "shmem: doublemapper code": 40436,
+            "file: native libraries (.so)": 25240,
+            "anon: glibc main heap": 5992,
+            "other: /app/Orbit.Infrastructure.pdb": 324,
+            "other: /app/Orbit.Application.pdb": 224,
+            "other: /usr/share/dotnet/dotnet": 80,
+            "anon: main stack": 68,
+            "other: [vdso]": 4
+          }
+        }
+      }
+    },
+    {
+      "label": "main-tls",
+      "image": "0645f0692 (main)",
+      "override": null,
+      "reads": {
+        "idle": {
+          "VmRSSKb": 271360,
+          "RssAnonKb": 72120,
+          "RssFileKb": 152168,
+          "RssShmemKb": 47072,
+          "Threads": 41,
+          "cgroupMemoryCurrentBytes": 137580544,
+          "cgroupAnonBytes": 80789504,
+          "cgroupFileBytes": 48181248,
+          "cgroupShmemBytes": 48181248,
+          "anonymousPlusShmemBytes": 122052608,
+          "ownersKb": {
+            "file: assemblies (.dll)": 134332,
+            "anon: unnamed (GC, runtime, arenas, stacks)": 59812,
+            "shmem: doublemapper data": 39192,
+            "file: native libraries (.so)": 24460,
+            "shmem: doublemapper code": 7880,
+            "anon: glibc main heap": 5536,
+            "other: /usr/share/dotnet/dotnet": 80,
+            "anon: main stack": 64,
+            "other: [vdso]": 4
+          }
+        },
+        "load": {
+          "VmRSSKb": 368944,
+          "RssAnonKb": 129364,
+          "RssFileKb": 167368,
+          "RssShmemKb": 72212,
+          "Threads": 45,
+          "cgroupMemoryCurrentBytes": 221028352,
+          "cgroupAnonBytes": 139182080,
+          "cgroupFileBytes": 73920512,
+          "cgroupShmemBytes": 73920512,
+          "anonymousPlusShmemBytes": 206413824,
+          "ownersKb": {
+            "file: assemblies (.dll)": 149260,
+            "anon: unnamed (GC, runtime, arenas, stacks)": 116556,
+            "shmem: doublemapper data": 56684,
+            "file: native libraries (.so)": 24684,
+            "shmem: doublemapper code": 15528,
+            "anon: glibc main heap": 5536,
+            "other: /app/Orbit.Infrastructure.pdb": 324,
+            "other: /app/Orbit.Application.pdb": 224,
+            "other: /usr/share/dotnet/dotnet": 80,
+            "anon: main stack": 64,
+            "other: [vdso]": 4
+          }
+        },
+        "after-load-settle": {
+          "VmRSSKb": 375244,
+          "RssAnonKb": 125660,
+          "RssFileKb": 170100,
+          "RssShmemKb": 79484,
+          "Threads": 40,
+          "cgroupMemoryCurrentBytes": 226000896,
+          "cgroupAnonBytes": 135393280,
+          "cgroupFileBytes": 81371136,
+          "cgroupShmemBytes": 81371136,
+          "anonymousPlusShmemBytes": 210067456,
+          "ownersKb": {
+            "file: assemblies (.dll)": 151464,
+            "anon: unnamed (GC, runtime, arenas, stacks)": 112836,
+            "shmem: doublemapper data": 60380,
+            "file: native libraries (.so)": 25228,
+            "shmem: doublemapper code": 19104,
+            "anon: glibc main heap": 5536,
+            "other: /app/Orbit.Infrastructure.pdb": 324,
+            "other: /app/Orbit.Application.pdb": 224,
+            "other: /usr/share/dotnet/dotnet": 80,
+            "anon: main stack": 64,
+            "other: [vdso]": 4
+          }
+        }
+      }
+    },
+    {
+      "label": "main-deep",
+      "image": "0645f0692 (main)",
+      "override": null,
+      "reads": {
+        "idle": {
+          "VmRSSKb": 271124,
+          "RssAnonKb": 71844,
+          "RssFileKb": 151572,
+          "RssShmemKb": 47708,
+          "Threads": 41,
+          "cgroupMemoryCurrentBytes": 137105408,
+          "cgroupAnonBytes": 80277504,
+          "cgroupFileBytes": 48832512,
+          "cgroupShmemBytes": 48832512,
+          "anonymousPlusShmemBytes": 122421248,
+          "ownersKb": {
+            "file: assemblies (.dll)": 133724,
+            "anon: unnamed (GC, runtime, arenas, stacks)": 59588,
+            "shmem: doublemapper data": 39480,
+            "file: native libraries (.so)": 24472,
+            "shmem: doublemapper code": 8228,
+            "anon: glibc main heap": 5484,
+            "other: /usr/share/dotnet/dotnet": 80,
+            "anon: main stack": 64,
+            "other: [vdso]": 4
+          }
+        },
+        "load": {
+          "VmRSSKb": 357652,
+          "RssAnonKb": 115008,
+          "RssFileKb": 167928,
+          "RssShmemKb": 74716,
+          "Threads": 44,
+          "cgroupMemoryCurrentBytes": 209133568,
+          "cgroupAnonBytes": 124715008,
+          "cgroupFileBytes": 76488704,
+          "cgroupShmemBytes": 76488704,
+          "anonymousPlusShmemBytes": 194277376,
+          "ownersKb": {
+            "file: assemblies (.dll)": 149816,
+            "anon: unnamed (GC, runtime, arenas, stacks)": 102236,
+            "shmem: doublemapper data": 58032,
+            "file: native libraries (.so)": 24696,
+            "shmem: doublemapper code": 16684,
+            "anon: glibc main heap": 5484,
+            "other: /app/Orbit.Infrastructure.pdb": 324,
+            "other: /app/Orbit.Application.pdb": 232,
+            "other: /usr/share/dotnet/dotnet": 80,
+            "anon: main stack": 64,
+            "other: [vdso]": 4
+          }
+        },
+        "after-load-settle": {
+          "VmRSSKb": 365776,
+          "RssAnonKb": 116644,
+          "RssFileKb": 169684,
+          "RssShmemKb": 79448,
+          "Threads": 41,
+          "cgroupMemoryCurrentBytes": 216371200,
+          "cgroupAnonBytes": 126382080,
+          "cgroupFileBytes": 81330176,
+          "cgroupShmemBytes": 81330176,
+          "anonymousPlusShmemBytes": 200798208,
+          "ownersKb": {
+            "file: assemblies (.dll)": 151028,
+            "anon: unnamed (GC, runtime, arenas, stacks)": 103872,
+            "shmem: doublemapper data": 60420,
+            "file: native libraries (.so)": 25240,
+            "shmem: doublemapper code": 19028,
+            "anon: glibc main heap": 5484,
+            "other: /app/Orbit.Infrastructure.pdb": 324,
+            "other: /app/Orbit.Application.pdb": 232,
+            "other: /usr/share/dotnet/dotnet": 80,
+            "anon: main stack": 64,
+            "other: [vdso]": 4
+          }
+        }
+      }
+    },
+    {
+      "label": "astra-main-arm64",
+      "image": "0645f0692 (main)",
+      "override": null,
+      "reads": {
+        "idle": {
+          "VmRSSKb": 261408,
+          "RssAnonKb": 64024,
+          "RssFileKb": 151888,
+          "RssShmemKb": 45504,
+          "Threads": 43,
+          "cgroupMemoryCurrentBytes": 126951424,
+          "cgroupAnonBytes": 72495104,
+          "cgroupFileBytes": 46587904,
+          "cgroupShmemBytes": 46587904,
+          "anonymousPlusShmemBytes": 112156672,
+          "ownersKb": {
+            "file: assemblies (.dll)": 134104,
+            "anon: unnamed (GC, runtime, arenas, stacks)": 51708,
+            "shmem: doublemapper data": 38372,
+            "file: native libraries (.so)": 24472,
+            "shmem: doublemapper code": 7172,
+            "anon: glibc main heap": 5544,
+            "other: /usr/share/dotnet/dotnet": 80,
+            "anon: main stack": 64,
+            "other: [vdso]": 4
+          }
+        },
+        "load": {
+          "VmRSSKb": 369404,
+          "RssAnonKb": 125120,
+          "RssFileKb": 171188,
+          "RssShmemKb": 73096,
+          "Threads": 47,
+          "cgroupMemoryCurrentBytes": 219295744,
+          "cgroupAnonBytes": 135061504,
+          "cgroupFileBytes": 74825728,
+          "cgroupShmemBytes": 74825728,
+          "anonymousPlusShmemBytes": 202973184,
+          "ownersKb": {
+            "file: assemblies (.dll)": 153088,
+            "anon: unnamed (GC, runtime, arenas, stacks)": 112212,
+            "shmem: doublemapper data": 57504,
+            "file: native libraries (.so)": 24696,
+            "shmem: doublemapper code": 15592,
+            "anon: glibc main heap": 5544,
+            "other: /app/Orbit.Infrastructure.pdb": 340,
+            "other: /app/Orbit.Application.pdb": 280,
+            "other: /usr/share/dotnet/dotnet": 80,
+            "anon: main stack": 64,
+            "other: [vdso]": 4
+          }
+        },
+        "after-load-settle": {
+          "VmRSSKb": 381764,
+          "RssAnonKb": 126316,
+          "RssFileKb": 174332,
+          "RssShmemKb": 81116,
+          "Threads": 39,
+          "cgroupMemoryCurrentBytes": 229105664,
+          "cgroupAnonBytes": 136060928,
+          "cgroupFileBytes": 83046400,
+          "cgroupShmemBytes": 83046400,
+          "anonymousPlusShmemBytes": 212410368,
+          "ownersKb": {
+            "file: assemblies (.dll)": 155704,
+            "anon: unnamed (GC, runtime, arenas, stacks)": 113392,
+            "shmem: doublemapper data": 61568,
+            "file: native libraries (.so)": 25240,
+            "shmem: doublemapper code": 19548,
+            "anon: glibc main heap": 5544,
+            "other: /app/Orbit.Infrastructure.pdb": 340,
+            "other: /app/Orbit.Application.pdb": 280,
+            "other: /usr/share/dotnet/dotnet": 80,
+            "anon: main stack": 64,
+            "other: [vdso]": 4
+          }
+        }
+      }
+    },
+    {
+      "label": "soak-branch",
+      "image": "this branch",
+      "override": "ROUNDS=300",
+      "reads": {
+        "idle": {
+          "VmRSSKb": 267748,
+          "RssAnonKb": 69944,
+          "RssFileKb": 152060,
+          "RssShmemKb": 45744,
+          "Threads": 42,
+          "cgroupMemoryCurrentBytes": 133414912,
+          "cgroupAnonBytes": 78356480,
+          "cgroupFileBytes": 46829568,
+          "cgroupShmemBytes": 46825472,
+          "anonymousPlusShmemBytes": 118464512,
+          "ownersKb": {
+            "file: assemblies (.dll)": 134212,
+            "anon: unnamed (GC, runtime, arenas, stacks)": 57752,
+            "shmem: doublemapper data": 38448,
+            "file: native libraries (.so)": 24472,
+            "shmem: doublemapper code": 7296,
+            "anon: glibc main heap": 5420,
+            "other: /usr/share/dotnet/dotnet": 80,
+            "anon: main stack": 64,
+            "other: [vdso]": 4
+          }
+        },
+        "load": {
+          "VmRSSKb": 384540,
+          "RssAnonKb": 134184,
+          "RssFileKb": 170900,
+          "RssShmemKb": 79456,
+          "Threads": 49,
+          "cgroupMemoryCurrentBytes": 233820160,
+          "cgroupAnonBytes": 144359424,
+          "cgroupFileBytes": 81354752,
+          "cgroupShmemBytes": 81350656,
+          "anonymousPlusShmemBytes": 218767360,
+          "ownersKb": {
+            "file: assemblies (.dll)": 152096,
+            "anon: unnamed (GC, runtime, arenas, stacks)": 121480,
+            "shmem: doublemapper data": 60436,
+            "file: native libraries (.so)": 25240,
+            "shmem: doublemapper code": 19020,
+            "anon: glibc main heap": 5420,
+            "other: /app/Orbit.Infrastructure.pdb": 436,
+            "other: /app/Orbit.Application.pdb": 264,
+            "other: /usr/share/dotnet/dotnet": 80,
+            "anon: main stack": 64,
+            "other: [vdso]": 4
+          }
+        },
+        "after-load-settle": {
+          "VmRSSKb": 388564,
+          "RssAnonKb": 137848,
+          "RssFileKb": 170964,
+          "RssShmemKb": 79752,
+          "Threads": 40,
+          "cgroupMemoryCurrentBytes": 238485504,
+          "cgroupAnonBytes": 147869696,
+          "cgroupFileBytes": 81645568,
+          "cgroupShmemBytes": 81641472,
+          "anonymousPlusShmemBytes": 222822400,
+          "ownersKb": {
+            "file: assemblies (.dll)": 152160,
+            "anon: unnamed (GC, runtime, arenas, stacks)": 125088,
+            "shmem: doublemapper data": 60564,
+            "file: native libraries (.so)": 25240,
+            "shmem: doublemapper code": 19188,
+            "anon: glibc main heap": 5476,
+            "other: /app/Orbit.Infrastructure.pdb": 436,
+            "other: /app/Orbit.Application.pdb": 264,
+            "other: /usr/share/dotnet/dotnet": 80,
+            "anon: main stack": 64,
+            "other: [vdso]": 4
+          }
+        }
+      }
+    },
+    {
+      "label": "main-arena2",
+      "image": "0645f0692 (main)",
+      "override": "MALLOC_ARENA_MAX=2",
+      "reads": {
+        "idle": {
+          "VmRSSKb": 277504,
+          "RssAnonKb": 71620,
+          "RssFileKb": 155132,
+          "RssShmemKb": 50752,
+          "Threads": 42,
+          "cgroupMemoryCurrentBytes": 140652544,
+          "cgroupAnonBytes": 80052224,
+          "cgroupFileBytes": 51953664,
+          "cgroupShmemBytes": 51953664,
+          "anonymousPlusShmemBytes": 125308928,
+          "ownersKb": {
+            "file: assemblies (.dll)": 137352,
+            "anon: unnamed (GC, runtime, arenas, stacks)": 59252,
+            "shmem: doublemapper data": 41344,
+            "file: native libraries (.so)": 24472,
+            "shmem: doublemapper code": 9412,
+            "anon: glibc main heap": 5528,
+            "other: /usr/share/dotnet/dotnet": 80,
+            "anon: main stack": 64,
+            "other: [vdso]": 4
+          }
+        },
+        "load": {
+          "VmRSSKb": 385820,
+          "RssAnonKb": 136988,
+          "RssFileKb": 171440,
+          "RssShmemKb": 77392,
+          "Threads": 50,
+          "cgroupMemoryCurrentBytes": 235184128,
+          "cgroupAnonBytes": 147218432,
+          "cgroupFileBytes": 79233024,
+          "cgroupShmemBytes": 79233024,
+          "anonymousPlusShmemBytes": 219525120,
+          "ownersKb": {
+            "file: assemblies (.dll)": 152736,
+            "anon: unnamed (GC, runtime, arenas, stacks)": 124124,
+            "shmem: doublemapper data": 59528,
+            "file: native libraries (.so)": 25240,
+            "shmem: doublemapper code": 17864,
+            "anon: glibc main heap": 5528,
+            "other: /app/Orbit.Infrastructure.pdb": 412,
+            "other: /app/Orbit.Application.pdb": 240,
+            "other: /usr/share/dotnet/dotnet": 80,
+            "anon: main stack": 64,
+            "other: [vdso]": 4
+          }
+        },
+        "after-load-settle": {
+          "VmRSSKb": 391592,
+          "RssAnonKb": 138584,
+          "RssFileKb": 172136,
+          "RssShmemKb": 80872,
+          "Threads": 40,
+          "cgroupMemoryCurrentBytes": 240033792,
+          "cgroupAnonBytes": 148627456,
+          "cgroupFileBytes": 82796544,
+          "cgroupShmemBytes": 82796544,
+          "anonymousPlusShmemBytes": 224722944,
+          "ownersKb": {
+            "file: assemblies (.dll)": 153432,
+            "anon: unnamed (GC, runtime, arenas, stacks)": 125720,
+            "shmem: doublemapper data": 61228,
+            "file: native libraries (.so)": 25240,
+            "shmem: doublemapper code": 19644,
+            "anon: glibc main heap": 5528,
+            "other: /app/Orbit.Infrastructure.pdb": 412,
+            "other: /app/Orbit.Application.pdb": 240,
+            "other: /usr/share/dotnet/dotnet": 80,
+            "anon: main stack": 64,
+            "other: [vdso]": 4
+          }
+        }
+      }
+    },
+    {
+      "label": "main-tc0",
+      "image": "0645f0692 (main)",
+      "override": "DOTNET_TieredCompilation=0",
+      "reads": {
+        "idle": {
+          "VmRSSKb": 271656,
+          "RssAnonKb": 71812,
+          "RssFileKb": 152144,
+          "RssShmemKb": 47700,
+          "Threads": 41,
+          "cgroupMemoryCurrentBytes": 136892416,
+          "cgroupAnonBytes": 80257024,
+          "cgroupFileBytes": 48824320,
+          "cgroupShmemBytes": 48824320,
+          "anonymousPlusShmemBytes": 122380288,
+          "ownersKb": {
+            "file: assemblies (.dll)": 134296,
+            "anon: unnamed (GC, runtime, arenas, stacks)": 59492,
+            "shmem: doublemapper data": 39472,
+            "file: native libraries (.so)": 24472,
+            "shmem: doublemapper code": 8228,
+            "anon: glibc main heap": 5548,
+            "other: /usr/share/dotnet/dotnet": 80,
+            "anon: main stack": 64,
+            "other: [vdso]": 4
+          }
+        },
+        "load": {
+          "VmRSSKb": 376316,
+          "RssAnonKb": 133132,
+          "RssFileKb": 168648,
+          "RssShmemKb": 74536,
+          "Threads": 49,
+          "cgroupMemoryCurrentBytes": 225497088,
+          "cgroupAnonBytes": 141164544,
+          "cgroupFileBytes": 76304384,
+          "cgroupShmemBytes": 76304384,
+          "anonymousPlusShmemBytes": 212652032,
+          "ownersKb": {
+            "file: assemblies (.dll)": 150000,
+            "anon: unnamed (GC, runtime, arenas, stacks)": 120296,
+            "shmem: doublemapper data": 57792,
+            "file: native libraries (.so)": 25240,
+            "shmem: doublemapper code": 16744,
+            "anon: glibc main heap": 5548,
+            "other: /app/Orbit.Infrastructure.pdb": 324,
+            "other: /app/Orbit.Application.pdb": 224,
+            "other: /usr/share/dotnet/dotnet": 80,
+            "anon: main stack": 64,
+            "other: [vdso]": 4
+          }
+        },
+        "after-load-settle": {
+          "VmRSSKb": 384504,
+          "RssAnonKb": 134300,
+          "RssFileKb": 170292,
+          "RssShmemKb": 79912,
+          "Threads": 40,
+          "cgroupMemoryCurrentBytes": 234917888,
+          "cgroupAnonBytes": 144228352,
+          "cgroupFileBytes": 81809408,
+          "cgroupShmemBytes": 81809408,
+          "anonymousPlusShmemBytes": 219353088,
+          "ownersKb": {
+            "file: assemblies (.dll)": 151644,
+            "anon: unnamed (GC, runtime, arenas, stacks)": 121464,
+            "shmem: doublemapper data": 60600,
+            "file: native libraries (.so)": 25240,
+            "shmem: doublemapper code": 19312,
+            "anon: glibc main heap": 5548,
+            "other: /app/Orbit.Infrastructure.pdb": 324,
+            "other: /app/Orbit.Application.pdb": 224,
+            "other: /usr/share/dotnet/dotnet": 80,
+            "anon: main stack": 64,
+            "other: [vdso]": 4
+          }
+        }
+      }
+    },
+    {
+      "label": "main-tcqj",
+      "image": "0645f0692 (main)",
+      "override": "DOTNET_TC_QuickJitForLoops=1 DOTNET_OSR_HitLimit=0 DOTNET_TC_CallCountThreshold=1000",
+      "reads": {
+        "idle": {
+          "VmRSSKb": 270816,
+          "RssAnonKb": 71608,
+          "RssFileKb": 152148,
+          "RssShmemKb": 47060,
+          "Threads": 41,
+          "cgroupMemoryCurrentBytes": 136327168,
+          "cgroupAnonBytes": 80039936,
+          "cgroupFileBytes": 48168960,
+          "cgroupShmemBytes": 48168960,
+          "anonymousPlusShmemBytes": 121516032,
+          "ownersKb": {
+            "file: assemblies (.dll)": 134300,
+            "anon: unnamed (GC, runtime, arenas, stacks)": 59296,
+            "shmem: doublemapper data": 39188,
+            "file: native libraries (.so)": 24472,
+            "shmem: doublemapper code": 7872,
+            "anon: glibc main heap": 5540,
+            "other: /usr/share/dotnet/dotnet": 80,
+            "anon: main stack": 64,
+            "other: [vdso]": 4
+          }
+        },
+        "load": {
+          "VmRSSKb": 367556,
+          "RssAnonKb": 123248,
+          "RssFileKb": 169204,
+          "RssShmemKb": 75104,
+          "Threads": 50,
+          "cgroupMemoryCurrentBytes": 215805952,
+          "cgroupAnonBytes": 131047424,
+          "cgroupFileBytes": 76881920,
+          "cgroupShmemBytes": 76881920,
+          "anonymousPlusShmemBytes": 203112448,
+          "ownersKb": {
+            "file: assemblies (.dll)": 150508,
+            "anon: unnamed (GC, runtime, arenas, stacks)": 110420,
+            "shmem: doublemapper data": 58288,
+            "file: native libraries (.so)": 25240,
+            "shmem: doublemapper code": 16816,
+            "anon: glibc main heap": 5540,
+            "other: /app/Orbit.Infrastructure.pdb": 348,
+            "other: /app/Orbit.Application.pdb": 248,
+            "other: /usr/share/dotnet/dotnet": 80,
+            "anon: main stack": 64,
+            "other: [vdso]": 4
+          }
+        },
+        "after-load-settle": {
+          "VmRSSKb": 372748,
+          "RssAnonKb": 122848,
+          "RssFileKb": 170336,
+          "RssShmemKb": 79564,
+          "Threads": 39,
+          "cgroupMemoryCurrentBytes": 222019584,
+          "cgroupAnonBytes": 132513792,
+          "cgroupFileBytes": 81448960,
+          "cgroupShmemBytes": 81448960,
+          "anonymousPlusShmemBytes": 207269888,
+          "ownersKb": {
+            "file: assemblies (.dll)": 151640,
+            "anon: unnamed (GC, runtime, arenas, stacks)": 110020,
+            "shmem: doublemapper data": 60540,
+            "file: native libraries (.so)": 25240,
+            "shmem: doublemapper code": 19024,
+            "anon: glibc main heap": 5540,
+            "other: /app/Orbit.Infrastructure.pdb": 348,
+            "other: /app/Orbit.Application.pdb": 248,
+            "other: /usr/share/dotnet/dotnet": 80,
+            "anon: main stack": 64,
+            "other: [vdso]": 4
+          }
+        }
+      }
+    },
+    {
+      "label": "main-heap128",
+      "image": "0645f0692 (main)",
+      "override": "DOTNET_GCHeapHardLimit=0x8000000",
+      "reads": {
+        "idle": {
+          "VmRSSKb": 267920,
+          "RssAnonKb": 68772,
+          "RssFileKb": 152472,
+          "RssShmemKb": 46676,
+          "Threads": 42,
+          "cgroupMemoryCurrentBytes": 134012928,
+          "cgroupAnonBytes": 77144064,
+          "cgroupFileBytes": 47779840,
+          "cgroupShmemBytes": 47779840,
+          "anonymousPlusShmemBytes": 118218752,
+          "ownersKb": {
+            "file: assemblies (.dll)": 134624,
+            "anon: unnamed (GC, runtime, arenas, stacks)": 56476,
+            "shmem: doublemapper data": 38924,
+            "file: native libraries (.so)": 24472,
+            "shmem: doublemapper code": 7752,
+            "anon: glibc main heap": 5524,
+            "other: /usr/share/dotnet/dotnet": 80,
+            "anon: main stack": 64,
+            "other: [vdso]": 4
+          }
+        },
+        "load": {
+          "VmRSSKb": 376596,
+          "RssAnonKb": 135316,
+          "RssFileKb": 168760,
+          "RssShmemKb": 72520,
+          "Threads": 47,
+          "cgroupMemoryCurrentBytes": 228253696,
+          "cgroupAnonBytes": 143175680,
+          "cgroupFileBytes": 74244096,
+          "cgroupShmemBytes": 74244096,
+          "anonymousPlusShmemBytes": 212824064,
+          "ownersKb": {
+            "file: assemblies (.dll)": 149960,
+            "anon: unnamed (GC, runtime, arenas, stacks)": 122520,
+            "shmem: doublemapper data": 56872,
+            "file: native libraries (.so)": 25240,
+            "shmem: doublemapper code": 15648,
+            "anon: glibc main heap": 5524,
+            "other: /app/Orbit.Infrastructure.pdb": 484,
+            "other: /app/Orbit.Application.pdb": 200,
+            "other: /usr/share/dotnet/dotnet": 80,
+            "anon: main stack": 64,
+            "other: [vdso]": 4
+          }
+        },
+        "after-load-settle": {
+          "VmRSSKb": 385400,
+          "RssAnonKb": 135236,
+          "RssFileKb": 170892,
+          "RssShmemKb": 79272,
+          "Threads": 41,
+          "cgroupMemoryCurrentBytes": 237756416,
+          "cgroupAnonBytes": 145195008,
+          "cgroupFileBytes": 81154048,
+          "cgroupShmemBytes": 81154048,
+          "anonymousPlusShmemBytes": 219656192,
+          "ownersKb": {
+            "file: assemblies (.dll)": 152108,
+            "anon: unnamed (GC, runtime, arenas, stacks)": 122424,
+            "shmem: doublemapper data": 60276,
+            "file: native libraries (.so)": 25240,
+            "shmem: doublemapper code": 18996,
+            "anon: glibc main heap": 5524,
+            "other: /app/Orbit.Infrastructure.pdb": 484,
+            "other: /app/Orbit.Application.pdb": 200,
+            "other: /usr/share/dotnet/dotnet": 80,
+            "anon: main stack": 64,
+            "other: [vdso]": 4
+          }
+        }
+      }
+    },
+    {
+      "label": "main-sentry",
+      "image": "0645f0692 (main)",
+      "override": "Sentry__Dsn to a local sink",
+      "reads": {
+        "idle": {
+          "VmRSSKb": 269264,
+          "RssAnonKb": 70288,
+          "RssFileKb": 151980,
+          "RssShmemKb": 46996,
+          "Threads": 41,
+          "cgroupMemoryCurrentBytes": 134586368,
+          "cgroupAnonBytes": 78684160,
+          "cgroupFileBytes": 48107520,
+          "cgroupShmemBytes": 48107520,
+          "anonymousPlusShmemBytes": 120098816,
+          "ownersKb": {
+            "file: assemblies (.dll)": 134148,
+            "anon: unnamed (GC, runtime, arenas, stacks)": 57944,
+            "shmem: doublemapper data": 39216,
+            "file: native libraries (.so)": 24472,
+            "shmem: doublemapper code": 7780,
+            "anon: glibc main heap": 5556,
+            "other: /usr/share/dotnet/dotnet": 80,
+            "anon: main stack": 64,
+            "other: [vdso]": 4
+          }
+        },
+        "load": {
+          "VmRSSKb": 381196,
+          "RssAnonKb": 139724,
+          "RssFileKb": 168076,
+          "RssShmemKb": 73396,
+          "Threads": 44,
+          "cgroupMemoryCurrentBytes": 233377792,
+          "cgroupAnonBytes": 150011904,
+          "cgroupFileBytes": 75137024,
+          "cgroupShmemBytes": 75137024,
+          "anonymousPlusShmemBytes": 218234880,
+          "ownersKb": {
+            "file: assemblies (.dll)": 149836,
+            "anon: unnamed (GC, runtime, arenas, stacks)": 126888,
+            "shmem: doublemapper data": 57528,
+            "file: native libraries (.so)": 24696,
+            "shmem: doublemapper code": 15868,
+            "anon: glibc main heap": 5556,
+            "other: /app/Orbit.Infrastructure.pdb": 420,
+            "other: /app/Orbit.Application.pdb": 256,
+            "other: /usr/share/dotnet/dotnet": 80,
+            "anon: main stack": 64,
+            "other: [vdso]": 4
+          }
+        },
+        "after-load-settle": {
+          "VmRSSKb": 392812,
+          "RssAnonKb": 140928,
+          "RssFileKb": 171028,
+          "RssShmemKb": 80856,
+          "Threads": 40,
+          "cgroupMemoryCurrentBytes": 242794496,
+          "cgroupAnonBytes": 151019520,
+          "cgroupFileBytes": 82776064,
+          "cgroupShmemBytes": 82776064,
+          "anonymousPlusShmemBytes": 227106816,
+          "ownersKb": {
+            "file: assemblies (.dll)": 152260,
+            "anon: unnamed (GC, runtime, arenas, stacks)": 128076,
+            "shmem: doublemapper data": 61340,
+            "file: native libraries (.so)": 25240,
+            "shmem: doublemapper code": 19516,
+            "anon: glibc main heap": 5556,
+            "other: /app/Orbit.Infrastructure.pdb": 420,
+            "other: /app/Orbit.Application.pdb": 256,
+            "other: /usr/share/dotnet/dotnet": 80,
+            "anon: main stack": 64,
+            "other: [vdso]": 4
+          }
+        }
+      }
+    },
+    {
+      "label": "main-posthog",
+      "image": "0645f0692 (main)",
+      "override": "PostHog__ApiKey and PostHog__HostUrl to a local sink",
+      "reads": {
+        "idle": {
+          "VmRSSKb": 271116,
+          "RssAnonKb": 70424,
+          "RssFileKb": 152952,
+          "RssShmemKb": 47740,
+          "Threads": 39,
+          "cgroupMemoryCurrentBytes": 135802880,
+          "cgroupAnonBytes": 78835712,
+          "cgroupFileBytes": 48869376,
+          "cgroupShmemBytes": 48865280,
+          "anonymousPlusShmemBytes": 120999936,
+          "ownersKb": {
+            "file: assemblies (.dll)": 135128,
+            "anon: unnamed (GC, runtime, arenas, stacks)": 58112,
+            "shmem: doublemapper data": 39516,
+            "file: native libraries (.so)": 24472,
+            "shmem: doublemapper code": 8224,
+            "anon: glibc main heap": 5516,
+            "other: /usr/share/dotnet/dotnet": 80,
+            "anon: main stack": 64,
+            "other: [vdso]": 4
+          }
+        },
+        "load": {
+          "VmRSSKb": 374012,
+          "RssAnonKb": 133008,
+          "RssFileKb": 168512,
+          "RssShmemKb": 72492,
+          "Threads": 49,
+          "cgroupMemoryCurrentBytes": 226152448,
+          "cgroupAnonBytes": 143142912,
+          "cgroupFileBytes": 74211328,
+          "cgroupShmemBytes": 74207232,
+          "anonymousPlusShmemBytes": 210432000,
+          "ownersKb": {
+            "file: assemblies (.dll)": 150304,
+            "anon: unnamed (GC, runtime, arenas, stacks)": 120172,
+            "shmem: doublemapper data": 57156,
+            "file: native libraries (.so)": 24696,
+            "shmem: doublemapper code": 15336,
+            "anon: glibc main heap": 5516,
+            "other: /app/Orbit.Infrastructure.pdb": 436,
+            "other: /app/Orbit.Application.pdb": 248,
+            "other: /usr/share/dotnet/dotnet": 80,
+            "anon: main stack": 64,
+            "other: [vdso]": 4
+          }
+        },
+        "after-load-settle": {
+          "VmRSSKb": 389280,
+          "RssAnonKb": 137128,
+          "RssFileKb": 171536,
+          "RssShmemKb": 80616,
+          "Threads": 41,
+          "cgroupMemoryCurrentBytes": 237166592,
+          "cgroupAnonBytes": 145035264,
+          "cgroupFileBytes": 82538496,
+          "cgroupShmemBytes": 82534400,
+          "anonymousPlusShmemBytes": 222969856,
+          "ownersKb": {
+            "file: assemblies (.dll)": 152800,
+            "anon: unnamed (GC, runtime, arenas, stacks)": 124276,
+            "shmem: doublemapper data": 61292,
+            "file: native libraries (.so)": 25240,
+            "shmem: doublemapper code": 19324,
+            "anon: glibc main heap": 5516,
+            "other: /app/Orbit.Infrastructure.pdb": 436,
+            "other: /app/Orbit.Application.pdb": 248,
+            "other: /usr/share/dotnet/dotnet": 80,
+            "anon: main stack": 64,
+            "other: [vdso]": 4
+          }
+        }
+      }
+    },
+    {
+      "label": "main-sentry-posthog",
+      "image": "0645f0692 (main)",
+      "override": "Sentry and PostHog to a local sink",
+      "reads": {
+        "idle": {
+          "VmRSSKb": 270068,
+          "RssAnonKb": 70576,
+          "RssFileKb": 152560,
+          "RssShmemKb": 47008,
+          "Threads": 45,
+          "cgroupMemoryCurrentBytes": 135712768,
+          "cgroupAnonBytes": 79200256,
+          "cgroupFileBytes": 48119808,
+          "cgroupShmemBytes": 48119808,
+          "anonymousPlusShmemBytes": 120406016,
+          "ownersKb": {
+            "file: assemblies (.dll)": 134768,
+            "anon: unnamed (GC, runtime, arenas, stacks)": 58224,
+            "shmem: doublemapper data": 39244,
+            "file: native libraries (.so)": 24456,
+            "shmem: doublemapper code": 7764,
+            "anon: glibc main heap": 5540,
+            "other: /usr/share/dotnet/dotnet": 80,
+            "anon: main stack": 64,
+            "other: [vdso]": 4
+          }
+        },
+        "load": {
+          "VmRSSKb": 392884,
+          "RssAnonKb": 149364,
+          "RssFileKb": 169060,
+          "RssShmemKb": 74460,
+          "Threads": 50,
+          "cgroupMemoryCurrentBytes": 244076544,
+          "cgroupAnonBytes": 159891456,
+          "cgroupFileBytes": 76230656,
+          "cgroupShmemBytes": 76230656,
+          "anonymousPlusShmemBytes": 229195776,
+          "ownersKb": {
+            "file: assemblies (.dll)": 150940,
+            "anon: unnamed (GC, runtime, arenas, stacks)": 136496,
+            "shmem: doublemapper data": 58236,
+            "file: native libraries (.so)": 24680,
+            "shmem: doublemapper code": 16224,
+            "anon: glibc main heap": 5540,
+            "other: /app/Orbit.Infrastructure.pdb": 340,
+            "other: /app/Orbit.Application.pdb": 280,
+            "other: /usr/share/dotnet/dotnet": 80,
+            "anon: main stack": 64,
+            "other: [vdso]": 4
+          }
+        },
+        "after-load-settle": {
+          "VmRSSKb": 403088,
+          "RssAnonKb": 149012,
+          "RssFileKb": 171980,
+          "RssShmemKb": 82096,
+          "Threads": 39,
+          "cgroupMemoryCurrentBytes": 251686912,
+          "cgroupAnonBytes": 159301632,
+          "cgroupFileBytes": 84045824,
+          "cgroupShmemBytes": 84045824,
+          "anonymousPlusShmemBytes": 236654592,
+          "ownersKb": {
+            "file: assemblies (.dll)": 153332,
+            "anon: unnamed (GC, runtime, arenas, stacks)": 136128,
+            "shmem: doublemapper data": 62152,
+            "file: native libraries (.so)": 25224,
+            "shmem: doublemapper code": 19944,
+            "anon: glibc main heap": 5540,
+            "other: /app/Orbit.Infrastructure.pdb": 340,
+            "other: /app/Orbit.Application.pdb": 280,
+            "other: /usr/share/dotnet/dotnet": 80,
+            "anon: main stack": 64,
+            "other: [vdso]": 4
+          }
+        }
+      }
+    }
+  ],
+  "soakSamplesEveryMinute": {
+    "soak-prod": [
+      {
+        "VmRSSKb": 360500,
+        "RssAnonKb": 130168,
+        "RssShmemKb": 103832,
+        "cgroupMemoryCurrentBytes": 248160256
+      },
+      {
+        "VmRSSKb": 382172,
+        "RssAnonKb": 139868,
+        "RssShmemKb": 114808,
+        "cgroupMemoryCurrentBytes": 270123008
+      },
+      {
+        "VmRSSKb": 390288,
+        "RssAnonKb": 140640,
+        "RssShmemKb": 122080,
+        "cgroupMemoryCurrentBytes": 277934080
+      }
+    ],
+    "soak-branch": [
+      {
+        "VmRSSKb": 370784,
+        "RssAnonKb": 125156,
+        "RssShmemKb": 75488,
+        "cgroupMemoryCurrentBytes": 218882048
+      },
+      {
+        "VmRSSKb": 381744,
+        "RssAnonKb": 131748,
+        "RssShmemKb": 79224,
+        "cgroupMemoryCurrentBytes": 225001472
+      },
+      {
+        "VmRSSKb": 386504,
+        "RssAnonKb": 136408,
+        "RssShmemKb": 79324,
+        "cgroupMemoryCurrentBytes": 236343296
+      }
+    ]
+  },
+  "containerGuard": {
+    "prod-f84ab32cf-arm64": {
+      "exitCode": 0,
+      "reads": {
+        "startup": {
+          "VmRSSKb": 241356,
+          "RssAnonKb": 60892,
+          "RssFileKb": 118180,
+          "RssShmemKb": 62284,
+          "cgroupMemoryCurrentBytes": 140541952,
+          "anonymousPlusShmemBytes": 126132224
+        },
+        "idle after 60s": {
+          "VmRSSKb": 250988,
+          "RssAnonKb": 63076,
+          "RssFileKb": 118828,
+          "RssShmemKb": 69084,
+          "cgroupMemoryCurrentBytes": 149422080,
+          "anonymousPlusShmemBytes": 135335936
+        },
+        "after the recorded load": {
+          "VmRSSKb": 358600,
+          "RssAnonKb": 130564,
+          "RssFileKb": 126440,
+          "RssShmemKb": 101596,
+          "cgroupMemoryCurrentBytes": 252280832,
+          "anonymousPlusShmemBytes": 237731840
+        },
+        "after the recorded load and 60s": {
+          "VmRSSKb": 374684,
+          "RssAnonKb": 132056,
+          "RssFileKb": 127884,
+          "RssShmemKb": 114744,
+          "cgroupMemoryCurrentBytes": 267489280,
+          "anonymousPlusShmemBytes": 252723200
+        }
+      }
+    },
+    "branch-arm64": {
+      "exitCode": 0,
+      "reads": {
+        "startup": {
+          "VmRSSKb": 237496,
+          "RssAnonKb": 49304,
+          "RssFileKb": 149252,
+          "RssShmemKb": 38940,
+          "cgroupMemoryCurrentBytes": 104849408,
+          "anonymousPlusShmemBytes": 90361856
+        },
+        "idle after 60s": {
+          "VmRSSKb": 269864,
+          "RssAnonKb": 69928,
+          "RssFileKb": 152244,
+          "RssShmemKb": 47692,
+          "cgroupMemoryCurrentBytes": 135495680,
+          "anonymousPlusShmemBytes": 120442880
+        },
+        "after the recorded load": {
+          "VmRSSKb": 366060,
+          "RssAnonKb": 122848,
+          "RssFileKb": 168920,
+          "RssShmemKb": 74292,
+          "cgroupMemoryCurrentBytes": 209543168,
+          "anonymousPlusShmemBytes": 201871360
+        },
+        "after the recorded load and 60s": {
+          "VmRSSKb": 372888,
+          "RssAnonKb": 123240,
+          "RssFileKb": 170252,
+          "RssShmemKb": 79396,
+          "cgroupMemoryCurrentBytes": 222674944,
+          "anonymousPlusShmemBytes": 207499264
+        }
+      }
+    }
+  },
+  "inProcessRecordedLoad": {
+    "workload": "tests/Orbit.Memory.Tests in mcr.microsoft.com/dotnet/sdk:10.0, linux/arm64, --memory=512m --memory-swap=512m --cpus=0.5, DOTNET_GCConserveMemory=7, DOTNET_TieredPGO=0",
+    "runs": {
+      "heapHardLimit268435456": {
+        "testPassed": true,
+        "round19": {
+          "phase": "round-19",
+          "workingSet": 338857984,
+          "anonymous": 171356160,
+          "shmem": 64098304,
+          "unreclaimable": 235454464,
+          "managed": 95731824,
+          "committed": 124358656,
+          "heap": 110441456,
+          "available": 268435456,
+          "server": false,
+          "processors": 1
+        },
+        "retainedAfterDiagnosticCollection": {
+          "phase": "retained-after-diagnostic-collection",
+          "workingSet": 339730432,
+          "anonymous": 172232704,
+          "shmem": 64094208,
+          "unreclaimable": 236326912,
+          "managed": 83634232,
+          "committed": 125317120,
+          "heap": 86525136,
+          "available": 268435456,
+          "server": false,
+          "processors": 1
+        },
+        "loadedManagedBytes": 95731824,
+        "retainedManagedBytes": 83576400
+      },
+      "heapHardLimit134217728": {
+        "testPassed": true,
+        "round19": {
+          "phase": "round-19",
+          "workingSet": 327438336,
+          "anonymous": 159784960,
+          "shmem": 63938560,
+          "unreclaimable": 223723520,
+          "managed": 96757928,
+          "committed": 114556928,
+          "heap": 104490128,
+          "available": 134217728,
+          "server": false,
+          "processors": 1
+        },
+        "retainedAfterDiagnosticCollection": {
+          "phase": "retained-after-diagnostic-collection",
+          "workingSet": 322404352,
+          "anonymous": 154750976,
+          "shmem": 63934464,
+          "unreclaimable": 218685440,
+          "managed": 83623264,
+          "committed": 109522944,
+          "heap": 84853272,
+          "available": 134217728,
+          "server": false,
+          "processors": 1
+        },
+        "loadedManagedBytes": 96766152,
+        "retainedManagedBytes": 83573688
+      }
+    }
+  },
+  "tokenizer": {
+    "encoding": "o200k_base",
+    "package": "Microsoft.ML.Tokenizers 2.0.1",
+    "liveManagedBytesAfterFirstCount": 42028320,
+    "firstCreateMilliseconds": 218,
+    "secondCreateMilliseconds": 0,
+    "liveManagedBytesAfterReleaseAndCollection": 42030472,
+    "mappedAfterHttpLoadWithoutAstra": false,
+    "finding": "The library caches the vocabulary statically, so releasing the API reference frees nothing."
+  },
+  "publishOutput": {
+    "appDirectoryBefore": "363M",
+    "appDirectoryAfter": "308M",
+    "microsoftCodeAnalysisFilesAfter": 0,
+    "microsoftCodeAnalysisMappedAtRuntime": false
+  }
+}

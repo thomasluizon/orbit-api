@@ -16,15 +16,15 @@ public class ProcessMemoryMonitorTests
         var logger = new CaptureLogger();
         var monitor = new ProcessMemoryMonitor(logger, TimeProvider.System);
         var nowAtUtc = new DateTimeOffset(2026, 6, 1, 0, 0, 0, TimeSpan.Zero);
-        var snapshot = new ProcessMemorySnapshot(ApiMemoryBudget.WarningBytes - 1, 100, 200, ApiMemoryBudget.HeapBytes);
+        var snapshot = Snapshot(ApiMemoryBudget.WarningBytes - 1);
         monitor.Observe(snapshot, nowAtUtc);
         logger.Logs.Should().BeEmpty();
-        var high = snapshot with { WorkingSetBytes = ApiMemoryBudget.WarningBytes };
+        var high = Snapshot(ApiMemoryBudget.WarningBytes);
         monitor.Observe(high, nowAtUtc);
         monitor.Observe(high, nowAtUtc.AddSeconds(30));
         monitor.Observe(high, nowAtUtc.AddMinutes(5));
         logger.Logs.Should().HaveCount(2).And.OnlyContain(log => log.Level == LogLevel.Warning);
-        logger.Logs[0].Message.Should().Contain("429496729").And.Contain("536870912").And.Contain("268435456");
+        logger.Logs[0].Message.Should().Contain("314572800").And.Contain("536870912").And.Contain("268435456");
         monitor.Observe(snapshot, nowAtUtc.AddMinutes(6));
         monitor.Observe(snapshot, nowAtUtc.AddMinutes(7));
         logger.Logs.Should().HaveCount(3);
@@ -39,22 +39,96 @@ public class ProcessMemoryMonitorTests
         var logger = new CaptureLogger(enabled: false);
         using var monitor = new ProcessMemoryMonitor(logger, TimeProvider.System);
         var nowAtUtc = DateTimeOffset.UnixEpoch;
-        var high = new ProcessMemorySnapshot(ApiMemoryBudget.WarningBytes, 100, 200, ApiMemoryBudget.HeapBytes);
+        var high = Snapshot(ApiMemoryBudget.WarningBytes);
 
         monitor.Observe(high, nowAtUtc);
-        monitor.Observe(high with { WorkingSetBytes = 1 }, nowAtUtc.AddSeconds(30));
+        monitor.Observe(Snapshot(1), nowAtUtc.AddSeconds(30));
 
         logger.Logs.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Observe_DecidesOnAnonymousPlusShmemMemoryAndIgnoresReclaimableFilePages()
+    {
+        var logger = new CaptureLogger();
+        var monitor = new ProcessMemoryMonitor(logger, TimeProvider.System);
+        var nowAtUtc = DateTimeOffset.UnixEpoch;
+        var half = ApiMemoryBudget.WarningBytes / 2;
+
+        monitor.Observe(new ProcessMemorySnapshot(ApiMemoryBudget.ContainerBytes, half, half - 1, 100, 200, ApiMemoryBudget.HeapBytes), nowAtUtc);
+        logger.Logs.Should().BeEmpty("file pages fill the working set, but the kernel reclaims them before it kills the container");
+
+        monitor.Observe(new ProcessMemorySnapshot(ApiMemoryBudget.WarningBytes, half, ApiMemoryBudget.WarningBytes - half, 100, 200, ApiMemoryBudget.HeapBytes),
+            nowAtUtc.AddSeconds(30));
+        logger.Logs.Should().ContainSingle().Which.Should().Be((LogLevel.Warning,
+            $"API memory budget exceeded: anonymous plus shmem {ApiMemoryBudget.WarningBytes} bytes ({ApiMemoryBudget.WarningBytes * 100d / ApiMemoryBudget.ContainerBytes:F1}% of {ApiMemoryBudget.ContainerBytes}); anonymous {half} bytes; shmem {ApiMemoryBudget.WarningBytes - half} bytes; working set {ApiMemoryBudget.WarningBytes} bytes; managed 100 bytes; committed heap 200 bytes; heap limit {ApiMemoryBudget.HeapBytes} bytes"));
+    }
+
+    [Fact]
+    public void ParseStatus_ReadsAnonymousAndShmemKilobytesFromTheKernelFormat()
+    {
+        string[] status = ["Name:\tdotnet", "VmRSS:\t  271360 kB", "RssAnon:\t   72120 kB", "RssFile:\t  152168 kB", "RssShmem:\t   47072 kB", "Threads:\t41"];
+
+        ProcessMemorySnapshot.ParseStatus(status).Should().Be(new ProcessStatusMemory(72120L * 1024, 47072L * 1024, null));
+    }
+
+    [Theory]
+    [InlineData("RssAnon", "RssShmem:\t0 kB")]
+    [InlineData("RssShmem", "RssAnon:\t0 kB")]
+    [InlineData("RssAnon", "RssAnon:\t12 MB", "RssShmem:\t0 kB")]
+    [InlineData("RssAnon", "RssAnon:\t-12 kB", "RssShmem:\t0 kB")]
+    [InlineData("RssShmem", "RssAnon:\t0 kB", "RssShmem:\t9223372036854775807 kB")]
+    public void ParseStatus_NamesTheMissingOrMalformedField(string field, params string[] status)
+    {
+        ProcessMemorySnapshot.ParseStatus(status).Should().Be(ProcessStatusMemory.Unavailable(field));
+    }
+
+    [Fact]
+    public void Read_CountsTheWorkingSetAsAnonymousMemoryWhenAStatusFieldIsUnavailable()
+    {
+        var snapshot = ProcessMemorySnapshot.Read(() => ["VmRSS:\t  271360 kB", "RssShmem:\t   47072 kB"]);
+
+        snapshot.UnavailableStatusField.Should().Be("RssAnon");
+        snapshot.AnonymousBytes.Should().Be(snapshot.WorkingSetBytes).And.BePositive();
+        snapshot.ShmemBytes.Should().Be(0);
+    }
+
+    [Fact]
+    public void Read_NamesTheStatusFileWhenTheKernelRefusesTheRead()
+    {
+        var snapshot = ProcessMemorySnapshot.Read(() => throw new IOException("The status read failed."));
+
+        snapshot.UnavailableStatusField.Should().Be(ProcessMemorySnapshot.StatusPath);
+        snapshot.AnonymousBytes.Should().Be(snapshot.WorkingSetBytes);
+    }
+
+    [Fact]
+    public void Read_HasNoUnavailableFieldWithoutAStatusFile()
+    {
+        var snapshot = ProcessMemorySnapshot.Read(() => null);
+
+        snapshot.UnavailableStatusField.Should().BeNull();
+        snapshot.AnonymousBytes.Should().Be(snapshot.WorkingSetBytes);
+        snapshot.ShmemBytes.Should().Be(0);
     }
 
     [Fact]
     public void Snapshot_ReadsTheCurrentProcessWithoutCollectingTheHeap()
     {
         var snapshot = ProcessMemorySnapshot.Read();
+        snapshot.UnavailableStatusField.Should().BeNull();
         snapshot.WorkingSetBytes.Should().BePositive();
+        snapshot.AnonymousBytes.Should().BePositive();
+        snapshot.ShmemBytes.Should().BeGreaterThanOrEqualTo(0);
+        snapshot.UnreclaimableBytes.Should().Be(snapshot.AnonymousBytes + snapshot.ShmemBytes);
         snapshot.ManagedBytes.Should().BePositive();
         snapshot.HeapLimitBytes.Should().BePositive();
+        if (OperatingSystem.IsLinux())
+            snapshot.UnreclaimableBytes.Should().BeLessThanOrEqualTo(snapshot.WorkingSetBytes);
     }
+
+    private static ProcessMemorySnapshot Snapshot(long unreclaimableBytes) =>
+        new(unreclaimableBytes, unreclaimableBytes, 0, 100, 200, ApiMemoryBudget.HeapBytes);
 
     [Theory]
     [InlineData(true)]
@@ -64,8 +138,8 @@ public class ProcessMemoryMonitorTests
         var logger = new CaptureLogger(loggingEnabled);
         var time = new PeriodicTestClock();
         var sampledAgain = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var high = new ProcessMemorySnapshot(ApiMemoryBudget.WarningBytes, 100, 200, ApiMemoryBudget.HeapBytes);
-        var snapshots = new ConcurrentQueue<ProcessMemorySnapshot>([high, high with { WorkingSetBytes = 1 }]);
+        var high = Snapshot(ApiMemoryBudget.WarningBytes);
+        var snapshots = new ConcurrentQueue<ProcessMemorySnapshot>([high, Snapshot(1)]);
         using var monitor = new ProcessMemoryMonitor(logger, time, () =>
         {
             if (!snapshots.TryDequeue(out var snapshot))
@@ -86,7 +160,7 @@ public class ProcessMemoryMonitorTests
             {
                 logger.Logs.Should().HaveCount(3);
                 logger.Logs[0].Should().Be((LogLevel.Information,
-                    $"API memory budget {ApiMemoryBudget.ContainerBytes} bytes; warning {ApiMemoryBudget.WarningBytes} bytes; heap limit {GC.GetGCMemoryInfo().TotalAvailableMemoryBytes} bytes; server GC {GCSettings.IsServerGC}"));
+                    $"API memory budget {ApiMemoryBudget.ContainerBytes} bytes; anonymous plus shmem warning {ApiMemoryBudget.WarningBytes} bytes; heap limit {GC.GetGCMemoryInfo().TotalAvailableMemoryBytes} bytes; server GC {GCSettings.IsServerGC}"));
                 logger.Logs[1].Should().Be((LogLevel.Information,
                     $"API GC configuration {JsonSerializer.Serialize(GC.GetConfigurationVariables())}"));
                 logger.Logs[2].Level.Should().Be(LogLevel.Warning);
@@ -114,13 +188,54 @@ public class ProcessMemoryMonitorTests
         {
             logger.Logs.Should().HaveCount(4);
             logger.Logs[3].Should().Be((LogLevel.Information,
-                $"API memory working set recovered below budget: 1 bytes; warning {ApiMemoryBudget.WarningBytes} bytes"));
+                $"API memory anonymous plus shmem recovered below budget: 1 bytes; warning {ApiMemoryBudget.WarningBytes} bytes"));
         }
         else
             logger.Logs.Should().BeEmpty();
 
         time.Advance(TimeSpan.FromSeconds(30));
         logger.Logs.Should().HaveCount(loggingEnabled ? 4 : 0);
+    }
+
+    [Theory]
+    [InlineData("RssAnon", "VmRSS:\t  271360 kB", "RssFile:\t  152168 kB", "RssShmem:\t   47072 kB")]
+    [InlineData("RssShmem", "VmRSS:\t  271360 kB", "RssAnon:\t   72120 kB", "RssFile:\t  152168 kB")]
+    [InlineData("RssAnon", "RssAnon:\t   72 MB", "RssShmem:\t   47072 kB")]
+    [InlineData("RssShmem", "RssAnon:\t   72120 kB", "RssShmem:\t   x kB")]
+    public async Task ExecuteAsync_KeepsSamplingAndNamesTheFieldOnceWhenTheStatusLacksAMemoryField(
+        string field, params string[] status)
+    {
+        var logger = new CaptureLogger();
+        var time = new PeriodicTestClock();
+        var samples = 0;
+        var sampledThreeTimes = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var monitor = new ProcessMemoryMonitor(logger, time, () =>
+        {
+            var snapshot = ProcessMemorySnapshot.Read(() => status);
+            if (Interlocked.Increment(ref samples) == 3)
+                sampledThreeTimes.TrySetResult();
+            return snapshot;
+        });
+
+        await monitor.StartAsync(CancellationToken.None);
+        try
+        {
+            await Task.WhenAny(time.TimerCreated, monitor.ExecuteTask!).WaitAsync(TimeSpan.FromSeconds(10));
+            monitor.ExecuteTask!.IsFaulted.Should().BeFalse("a missing status field must not stop the API host: {0}",
+                monitor.ExecuteTask.Exception?.InnerException);
+            time.Advance(TimeSpan.FromSeconds(30));
+            time.Advance(TimeSpan.FromSeconds(30));
+            await sampledThreeTimes.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        }
+        finally
+        {
+            await monitor.StopAsync(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(10));
+        }
+
+        monitor.ExecuteTask!.IsFaulted.Should().BeFalse();
+        logger.Logs.Where(log => log.Message.Contains("is unavailable", StringComparison.Ordinal)).Should().ContainSingle()
+            .Which.Should().Be((LogLevel.Warning,
+                $"API memory status field {field} is unavailable in /proc/self/status; the monitor decides on the working set"));
     }
 
     private sealed class PeriodicTestClock : TimeProvider

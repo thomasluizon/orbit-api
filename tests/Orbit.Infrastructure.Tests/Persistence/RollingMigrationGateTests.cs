@@ -82,15 +82,18 @@ public class RollingMigrationGateTests
     {
         var root = RepositoryRoot();
         var checkout = Path.Combine(Path.GetTempPath(), $"orbit-migration-base-{Guid.NewGuid():N}");
+        var trace = $"{checkout}.trace2.json";
         try
         {
             Git(root, "init", "--bare", checkout).ExitCode.Should().Be(0);
             var sourceRef = MigrationBaseRef(root);
             var source = Git(root, "rev-parse", "--verify", sourceRef);
             source.ExitCode.Should().Be(0, source.Error);
-            var fetched = Git(checkout, "fetch", "--no-tags", root,
-                $"{source.Output.Trim()}:refs/remotes/origin/review-target");
+            var fetched = Git(checkout, new Dictionary<string, string> { ["GIT_TRACE2_EVENT"] = trace }, "fetch", "--no-tags",
+                "--no-auto-maintenance", root, $"{source.Output.Trim()}:refs/remotes/origin/review-target");
             fetched.ExitCode.Should().Be(0, fetched.Error);
+            File.ReadLines(trace).Where(line => line.Contains("\"maintenance\",\"run\"", StringComparison.Ordinal))
+                .Should().BeEmpty("a detached maintenance child writes objects/info/commit-graphs after fetch exits and races the cleanup");
             Git(checkout, "show-ref", "--heads").Output.Should().BeEmpty();
 
             CheckBoundedReadBarrier(checkout, ReadBarriers(root),
@@ -99,6 +102,7 @@ public class RollingMigrationGateTests
         finally
         {
             if (Directory.Exists(checkout)) Directory.Delete(checkout, recursive: true);
+            File.Delete(trace);
         }
     }
 
@@ -564,7 +568,11 @@ public class RollingMigrationGateTests
         return directory?.FullName ?? throw new InvalidOperationException("Cannot locate Orbit.slnx.");
     }
 
-    private static (int ExitCode, string Output, string Error) Git(string root, params string[] arguments)
+    private static (int ExitCode, string Output, string Error) Git(string root, params string[] arguments) =>
+        Git(root, new Dictionary<string, string>(), arguments);
+
+    private static (int ExitCode, string Output, string Error) Git(string root,
+        IReadOnlyDictionary<string, string> environment, params string[] arguments)
     {
         var start = new ProcessStartInfo("git")
         {
@@ -574,6 +582,8 @@ public class RollingMigrationGateTests
         };
         foreach (var argument in arguments)
             start.ArgumentList.Add(argument);
+        foreach (var (key, value) in environment)
+            start.Environment[key] = value;
         using var process = Process.Start(start) ?? throw new InvalidOperationException("Cannot start git.");
         var output = process.StandardOutput.ReadToEndAsync();
         var error = process.StandardError.ReadToEndAsync();
