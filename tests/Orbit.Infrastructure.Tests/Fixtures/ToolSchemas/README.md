@@ -34,6 +34,14 @@ constraint, enum, required entry and inlined structure is retained. The equivale
 test still checks the complete amended schema. The compact exporter did not
 replace the baseline wholesale.
 
+The month-day schedule in thomasluizon/orbit-tickets#2031 adds the optional
+`month_days` integer array at 64 existing habit property sites: every habit level of
+`create_habit`, `bulk_create_habits` and `create_sub_habit`, and the field sets of
+`update_habit` and `bulk_update_habits`, for the source, legacy, composition and offer
+streams. Only those properties and their strict required entries were copied from the
+actual expanded SDK producer. Every other type, constraint, description and inlined
+structure is retained.
+
 The bounded schema builders remain the execution contract. Export compaction recognizes
 the repeated habit structure, keeps a single recursive habit definition, and shares
 identical schema blocks within a tool when a reference saves space. The strict normalizer

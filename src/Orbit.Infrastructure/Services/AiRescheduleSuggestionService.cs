@@ -114,6 +114,9 @@ public sealed partial class AiRescheduleSuggestionService(
         if (habit.Days.Count > 0)
             description += $" on {string.Join(", ", habit.Days.OrderBy(d => d).Select(d => d.ToString()))}";
 
+        if (habit.MonthDays.Count > 0)
+            description += $" on days {string.Join(", ", habit.MonthDays)} of the month";
+
         if (habit.DueTime.HasValue)
             description += $" at {habit.DueTime.Value:HH\\:mm}";
 
