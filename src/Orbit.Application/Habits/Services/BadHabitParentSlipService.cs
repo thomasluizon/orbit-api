@@ -11,13 +11,15 @@ internal static class BadHabitParentSlipService
 {
     public static async Task<Result<IReadOnlyList<HabitLog>>> LogAsync(
         Habit child, DateOnly date, DateOnly today, int weekStartDay,
-        IGenericRepository<Habit> habits, CancellationToken cancellationToken)
+        IGenericRepository<Habit> habits, CancellationToken cancellationToken, BadHabitParentSlipBatch? batch = null)
     {
         var logs = new List<HabitLog>();
         var visited = new HashSet<Guid> { child.Id };
-        while (await LoadParentAsync(child, date, habits, cancellationToken, weekStartDay) is { } parent && visited.Add(parent.Id))
+        while ((batch is null ? await LoadParentAsync(child, date, habits, cancellationToken, weekStartDay)
+            : child.IsBadHabit && child.ParentHabitId.HasValue ? await batch.ParentAsync(child, cancellationToken) : null)
+            is { } parent && visited.Add(parent.Id))
         {
-            if (!await AllChildrenSlippedAsync(parent, date, habits, cancellationToken))
+            if (!(batch?.AllChildrenSlipped(parent, date) ?? await AllChildrenSlippedAsync(parent, date, habits, cancellationToken)))
                 break;
             if (!parent.Logs.Any(log => IsSlipOnDate(log, date)))
             {

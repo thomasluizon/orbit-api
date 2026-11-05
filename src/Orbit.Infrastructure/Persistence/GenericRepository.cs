@@ -5,9 +5,12 @@ using Orbit.Domain.Interfaces;
 
 namespace Orbit.Infrastructure.Persistence;
 
-public class GenericRepository<T>(OrbitDbContext context) : IGenericRepository<T> where T : Entity
+public class GenericRepository<T>(OrbitDbContext context) : IGenericRepository<T>, ITrackedEntityLookup<T> where T : Entity
 {
     private readonly DbSet<T> _dbSet = context.Set<T>();
+
+    public bool HasTrackedEntities(IReadOnlyCollection<Guid> ids) =>
+        context.ChangeTracker.Entries<T>().Any(entry => ids.Contains(entry.Entity.Id));
 
     public async Task<T?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
