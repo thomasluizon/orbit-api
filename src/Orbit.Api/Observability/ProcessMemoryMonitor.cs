@@ -14,20 +14,27 @@ internal sealed record ProcessMemorySnapshot(long WorkingSetBytes, long ManagedB
     }
 }
 
-internal sealed class ProcessMemoryMonitor(ILogger<ProcessMemoryMonitor> logger, TimeProvider time) : BackgroundService
+internal sealed partial class ProcessMemoryMonitor(ILogger<ProcessMemoryMonitor> logger, TimeProvider time) : BackgroundService
 {
+    private readonly Func<ProcessMemorySnapshot> _readSnapshot = ProcessMemorySnapshot.Read;
     private bool _aboveBudget;
     private DateTimeOffset _lastWarningAtUtc;
 
+    internal ProcessMemoryMonitor(ILogger<ProcessMemoryMonitor> logger, TimeProvider time,
+        Func<ProcessMemorySnapshot> readSnapshot) : this(logger, time) => _readSnapshot = readSnapshot;
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        logger.LogInformation("API memory budget {ContainerLimitBytes} bytes; warning {WarningBytes} bytes; heap limit {HeapLimitBytes} bytes; server GC {ServerGC}",
-            ApiMemoryBudget.ContainerBytes, ApiMemoryBudget.WarningBytes, GC.GetGCMemoryInfo().TotalAvailableMemoryBytes, GCSettings.IsServerGC);
-        logger.LogInformation("API GC configuration {GCConfiguration}", JsonSerializer.Serialize(GC.GetConfigurationVariables()));
-        Observe(ProcessMemorySnapshot.Read(), time.GetUtcNow());
+        if (logger.IsEnabled(LogLevel.Information))
+        {
+            LogBudget(logger, ApiMemoryBudget.ContainerBytes, ApiMemoryBudget.WarningBytes,
+                GC.GetGCMemoryInfo().TotalAvailableMemoryBytes, GCSettings.IsServerGC);
+            LogConfiguration(logger, JsonSerializer.Serialize(GC.GetConfigurationVariables()));
+        }
+        Observe(_readSnapshot(), time.GetUtcNow());
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(30), time);
         while (await timer.WaitForNextTickAsync(stoppingToken))
-            Observe(ProcessMemorySnapshot.Read(), time.GetUtcNow());
+            Observe(_readSnapshot(), time.GetUtcNow());
     }
 
     internal void Observe(ProcessMemorySnapshot snapshot, DateTimeOffset sampledAtUtc)
@@ -36,18 +43,30 @@ internal sealed class ProcessMemoryMonitor(ILogger<ProcessMemoryMonitor> logger,
         {
             if (!_aboveBudget || sampledAtUtc - _lastWarningAtUtc >= TimeSpan.FromMinutes(5))
             {
-                logger.LogWarning("API memory budget exceeded: working set {WorkingSetBytes} bytes ({WorkingSetPercent:F1}% of {ContainerLimitBytes}); managed {ManagedBytes} bytes; committed heap {CommittedBytes} bytes; heap limit {HeapLimitBytes} bytes",
-                    snapshot.WorkingSetBytes, snapshot.WorkingSetBytes * 100d / ApiMemoryBudget.ContainerBytes,
-                    ApiMemoryBudget.ContainerBytes, snapshot.ManagedBytes, snapshot.CommittedBytes, snapshot.HeapLimitBytes);
+                if (logger.IsEnabled(LogLevel.Warning))
+                    LogBudgetExceeded(logger, snapshot.WorkingSetBytes, snapshot.WorkingSetBytes * 100d / ApiMemoryBudget.ContainerBytes,
+                        ApiMemoryBudget.ContainerBytes, snapshot.ManagedBytes, snapshot.CommittedBytes, snapshot.HeapLimitBytes);
                 _lastWarningAtUtc = sampledAtUtc;
             }
             _aboveBudget = true;
         }
         else if (_aboveBudget)
         {
-            logger.LogInformation("API memory working set recovered below budget: {WorkingSetBytes} bytes; warning {WarningBytes} bytes",
-                snapshot.WorkingSetBytes, ApiMemoryBudget.WarningBytes);
+            LogRecovery(logger, snapshot.WorkingSetBytes, ApiMemoryBudget.WarningBytes);
             _aboveBudget = false;
         }
     }
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "API memory budget {ContainerLimitBytes} bytes; warning {WarningBytes} bytes; heap limit {HeapLimitBytes} bytes; server GC {ServerGC}")]
+    private static partial void LogBudget(ILogger logger, long containerLimitBytes, long warningBytes, long heapLimitBytes, bool serverGC);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "API GC configuration {GCConfiguration}")]
+    private static partial void LogConfiguration(ILogger logger, string gcConfiguration);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "API memory budget exceeded: working set {WorkingSetBytes} bytes ({WorkingSetPercent:F1}% of {ContainerLimitBytes}); managed {ManagedBytes} bytes; committed heap {CommittedBytes} bytes; heap limit {HeapLimitBytes} bytes")]
+    private static partial void LogBudgetExceeded(ILogger logger, long workingSetBytes, double workingSetPercent,
+        long containerLimitBytes, long managedBytes, long committedBytes, long heapLimitBytes);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "API memory working set recovered below budget: {WorkingSetBytes} bytes; warning {WarningBytes} bytes")]
+    private static partial void LogRecovery(ILogger logger, long workingSetBytes, long warningBytes);
 }
