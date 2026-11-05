@@ -150,6 +150,12 @@ and committed GC memory, and the heap limit. Warnings repeat at most every five
 minutes while the memory stays high. Recovery emits one information message. The
 monitor never collects the heap or changes request behavior.
 
+The kernel reports `RssAnon` and `RssShmem` since Linux 4.5, and a container reads
+them from the host kernel. If a field is missing or malformed, the monitor does not
+stop. It emits one warning that names the field and then compares the whole working
+set with the line. The working set is larger than anonymous plus shmem memory, so
+this fallback can warn early, but it cannot hide memory pressure.
+
 ## Release verification
 
 After the orchestrator releases the API image, read Render's

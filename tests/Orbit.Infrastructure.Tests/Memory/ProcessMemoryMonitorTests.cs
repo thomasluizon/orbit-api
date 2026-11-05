@@ -69,24 +69,54 @@ public class ProcessMemoryMonitorTests
     {
         string[] status = ["Name:\tdotnet", "VmRSS:\t  271360 kB", "RssAnon:\t   72120 kB", "RssFile:\t  152168 kB", "RssShmem:\t   47072 kB", "Threads:\t41"];
 
-        ProcessMemorySnapshot.ParseStatus(status).Should().Be((72120L * 1024, 47072L * 1024));
+        ProcessMemorySnapshot.ParseStatus(status).Should().Be(new ProcessStatusMemory(72120L * 1024, 47072L * 1024, null));
     }
 
     [Theory]
-    [InlineData("RssShmem:\t0 kB")]
-    [InlineData("RssAnon:\t0 kB")]
-    [InlineData("RssAnon:\t12 MB", "RssShmem:\t0 kB")]
-    public void ParseStatus_RejectsAStatusWithoutBothKilobyteLines(params string[] status)
+    [InlineData("RssAnon", "RssShmem:\t0 kB")]
+    [InlineData("RssShmem", "RssAnon:\t0 kB")]
+    [InlineData("RssAnon", "RssAnon:\t12 MB", "RssShmem:\t0 kB")]
+    [InlineData("RssAnon", "RssAnon:\t-12 kB", "RssShmem:\t0 kB")]
+    [InlineData("RssShmem", "RssAnon:\t0 kB", "RssShmem:\t9223372036854775807 kB")]
+    public void ParseStatus_NamesTheMissingOrMalformedField(string field, params string[] status)
     {
-        var parse = () => ProcessMemorySnapshot.ParseStatus(status);
+        ProcessMemorySnapshot.ParseStatus(status).Should().Be(ProcessStatusMemory.Unavailable(field));
+    }
 
-        parse.Should().Throw<FormatException>();
+    [Fact]
+    public void Read_CountsTheWorkingSetAsAnonymousMemoryWhenAStatusFieldIsUnavailable()
+    {
+        var snapshot = ProcessMemorySnapshot.Read(() => ["VmRSS:\t  271360 kB", "RssShmem:\t   47072 kB"]);
+
+        snapshot.UnavailableStatusField.Should().Be("RssAnon");
+        snapshot.AnonymousBytes.Should().Be(snapshot.WorkingSetBytes).And.BePositive();
+        snapshot.ShmemBytes.Should().Be(0);
+    }
+
+    [Fact]
+    public void Read_NamesTheStatusFileWhenTheKernelRefusesTheRead()
+    {
+        var snapshot = ProcessMemorySnapshot.Read(() => throw new IOException("The status read failed."));
+
+        snapshot.UnavailableStatusField.Should().Be(ProcessMemorySnapshot.StatusPath);
+        snapshot.AnonymousBytes.Should().Be(snapshot.WorkingSetBytes);
+    }
+
+    [Fact]
+    public void Read_HasNoUnavailableFieldWithoutAStatusFile()
+    {
+        var snapshot = ProcessMemorySnapshot.Read(() => null);
+
+        snapshot.UnavailableStatusField.Should().BeNull();
+        snapshot.AnonymousBytes.Should().Be(snapshot.WorkingSetBytes);
+        snapshot.ShmemBytes.Should().Be(0);
     }
 
     [Fact]
     public void Snapshot_ReadsTheCurrentProcessWithoutCollectingTheHeap()
     {
         var snapshot = ProcessMemorySnapshot.Read();
+        snapshot.UnavailableStatusField.Should().BeNull();
         snapshot.WorkingSetBytes.Should().BePositive();
         snapshot.AnonymousBytes.Should().BePositive();
         snapshot.ShmemBytes.Should().BeGreaterThanOrEqualTo(0);
@@ -165,6 +195,47 @@ public class ProcessMemoryMonitorTests
 
         time.Advance(TimeSpan.FromSeconds(30));
         logger.Logs.Should().HaveCount(loggingEnabled ? 4 : 0);
+    }
+
+    [Theory]
+    [InlineData("RssAnon", "VmRSS:\t  271360 kB", "RssFile:\t  152168 kB", "RssShmem:\t   47072 kB")]
+    [InlineData("RssShmem", "VmRSS:\t  271360 kB", "RssAnon:\t   72120 kB", "RssFile:\t  152168 kB")]
+    [InlineData("RssAnon", "RssAnon:\t   72 MB", "RssShmem:\t   47072 kB")]
+    [InlineData("RssShmem", "RssAnon:\t   72120 kB", "RssShmem:\t   x kB")]
+    public async Task ExecuteAsync_KeepsSamplingAndNamesTheFieldOnceWhenTheStatusLacksAMemoryField(
+        string field, params string[] status)
+    {
+        var logger = new CaptureLogger();
+        var time = new PeriodicTestClock();
+        var samples = 0;
+        var sampledThreeTimes = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var monitor = new ProcessMemoryMonitor(logger, time, () =>
+        {
+            var snapshot = ProcessMemorySnapshot.Read(() => status);
+            if (Interlocked.Increment(ref samples) == 3)
+                sampledThreeTimes.TrySetResult();
+            return snapshot;
+        });
+
+        await monitor.StartAsync(CancellationToken.None);
+        try
+        {
+            await Task.WhenAny(time.TimerCreated, monitor.ExecuteTask!).WaitAsync(TimeSpan.FromSeconds(10));
+            monitor.ExecuteTask!.IsFaulted.Should().BeFalse("a missing status field must not stop the API host: {0}",
+                monitor.ExecuteTask.Exception?.InnerException);
+            time.Advance(TimeSpan.FromSeconds(30));
+            time.Advance(TimeSpan.FromSeconds(30));
+            await sampledThreeTimes.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        }
+        finally
+        {
+            await monitor.StopAsync(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(10));
+        }
+
+        monitor.ExecuteTask!.IsFaulted.Should().BeFalse();
+        logger.Logs.Where(log => log.Message.Contains("is unavailable", StringComparison.Ordinal)).Should().ContainSingle()
+            .Which.Should().Be((LogLevel.Warning,
+                $"API memory status field {field} is unavailable in /proc/self/status; the monitor decides on the working set"));
     }
 
     private sealed class PeriodicTestClock : TimeProvider
