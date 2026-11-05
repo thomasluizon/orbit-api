@@ -147,7 +147,12 @@ internal sealed class SqliteOrbitDbContextFactory : IDisposable
                 }
 
                 foreach (var index in entityType.GetIndexes())
-                    if (index.GetFilter() != "\"PushedAtUtc\" IS NOT NULL") index.SetFilter(null);
+                    index.SetFilter(index.GetFilter() switch
+                    {
+                        "\"Value\" > 0 AND NOT \"IsDeleted\"" => "CAST(\"Value\" AS REAL) > 0 AND NOT \"IsDeleted\"",
+                        "\"PushedAtUtc\" IS NOT NULL" => index.GetFilter(),
+                        _ => null
+                    });
             }
         }
     }
