@@ -63,10 +63,13 @@ public partial class GamificationService(
     public async Task<IReadOnlyList<HabitLogGamificationResult>> ProcessHabitsLogged(
         Guid userId, IReadOnlyList<Guid> habitIds, CancellationToken ct = default)
     {
+        IReadOnlyDictionary<Guid, Habit>? batch = HabitLogBatchReadScope.For(userId)?.Habits;
         return await ConcurrencyRetry.RunAsync(unitOfWork, async ct =>
         {
+            var loaded = batch;
+            batch = null;
             var pushes = new List<PendingPush>();
-            var outcome = await ComputeHabitsLoggedAsync(userId, habitIds, pushes, ct);
+            var outcome = await ComputeHabitsLoggedAsync(userId, habitIds, pushes, ct, loaded);
             if (!outcome.ShouldSave)
                 return outcome.Results;
 
@@ -77,7 +80,8 @@ public partial class GamificationService(
     }
 
     private async Task<HabitsLoggedOutcome> ComputeHabitsLoggedAsync(
-        Guid userId, IReadOnlyList<Guid> habitIds, List<PendingPush> pushes, CancellationToken ct)
+        Guid userId, IReadOnlyList<Guid> habitIds, List<PendingPush> pushes, CancellationToken ct,
+        IReadOnlyDictionary<Guid, Habit>? loaded)
     {
         var user = await repos.UserRepository.FindOneTrackedAsync(u => u.Id == userId, cancellationToken: ct);
         if (user is null || !await IsGamificationUnlockedAsync(user, ct))
@@ -86,8 +90,10 @@ public partial class GamificationService(
         var earned = await LoadEarnedAchievementIds(userId, ct);
         var today = await userDateService.GetUserTodayAsync(userId, ct);
 
-        var loggedHabits = (await repos.HabitRepository.FindTrackedAsync(
-            h => h.UserId == userId && habitIds.Contains(h.Id), ct)).ToList();
+        var loggedHabits = loaded is not null && habitIds.All(loaded.ContainsKey)
+            ? habitIds.Select(id => loaded[id]).ToList()
+            : (await repos.HabitRepository.FindTrackedAsync(
+                h => h.UserId == userId && habitIds.Contains(h.Id), ct)).ToList();
         if (loggedHabits.Count == 0) return new HabitsLoggedOutcome([], ShouldSave: false);
         var zone = TimeZoneHelper.FindTimeZone(user.TimeZone);
         var metricLogs = await HabitStreakLogLoader.LoadAsync(repos.HabitLogRepository, loggedHabits, today, user.WeekStartDay, zone, ct);

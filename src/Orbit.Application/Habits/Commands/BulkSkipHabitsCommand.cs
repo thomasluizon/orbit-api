@@ -46,11 +46,13 @@ public class BulkSkipHabitsCommandHandler(
         /** A skip advances a due date or writes a skip log, both inputs a streak repair reads. */
         var refreshed = await HabitCeilingLock.ExecuteAsync(unitOfWork, request.UserId, async ct =>
         {
+            var ids = request.Items.Select(item => item.HabitId).ToArray();
+            var needsRefresh = habitRepository is not ITrackedEntityLookup<Habit> tracked || tracked.HasTrackedEntities(ids);
             var habitMap = await BulkHabitLoader.LoadHabitsWithRecentLogsAsync(
-                habitRepository, request.Items.Select(i => i.HabitId), request.UserId, today, ct);
-            if (!await habitRepository.TryRefreshRangeAsync(habitMap.Values.ToArray(), ct)) return false;
+                habitRepository, habitLogRepository, ids, request.UserId, today, weekStartDay, ct, includeGoals: false);
+            if (needsRefresh && !await habitRepository.TryRefreshRangeAsync(habitMap.Values.ToArray(), ct)) return false;
             var dueDateResolution = await HabitDueDateResolutionLoader.LoadAsync(request.UserId,
-                habitLogRepository, habitMap.Values, today.AddDays(-AppConstants.MaxReadRangeDays), ct);
+                habitLogRepository, habitMap.Values, today.AddDays(-AppConstants.DefaultOverdueWindowDays), ct);
 
             for (int i = 0; i < request.Items.Count; i++)
             {

@@ -63,9 +63,13 @@ public partial class BulkLogHabitsCommandHandler(
             Exception? firstItemError = null;
             var itemErrorCount = 0;
             var habitMap = await BulkHabitLoader.LoadHabitsWithRecentLogsAsync(
-                habitRepository, request.Items.Select(i => i.HabitId), request.UserId, today, ct);
+                habitRepository, habitLogRepository, request.Items.Select(i => i.HabitId), request.UserId, today, weekStartDay, ct);
+            using var batchScope = new HabitLogBatchReadScope(request.UserId, habitMap);
+            var parentBatch = new BadHabitParentSlipBatch(habitMap, habitRepository,
+                request.Items.Select(item => item.Date ?? today).Where(date => date <= today
+                    && date >= today.AddDays(-AppConstants.DefaultOverdueWindowDays)).ToArray());
             var dueDateResolution = await HabitDueDateResolutionLoader.LoadAsync(request.UserId,
-                habitLogRepository, habitMap.Values, today.AddDays(-AppConstants.MaxReadRangeDays), ct);
+                habitLogRepository, habitMap.Values, today.AddDays(-AppConstants.DefaultOverdueWindowDays), ct);
             var previousStreak = (await services.UserStreakService.CalculateAsync(request.UserId, ct))?.CurrentStreak ?? 0;
             var currentStreak = previousStreak;
             var derivedParentIds = new HashSet<Guid>();
@@ -89,7 +93,7 @@ public partial class BulkLogHabitsCommandHandler(
                     if (result.Status == BulkItemStatus.Success && result.LogId is not null)
                     {
                         var parentLogs = await BadHabitParentSlipService.LogAsync(
-                            habitMap[item.HabitId], targetDate, today, weekStartDay, habitRepository, ct);
+                            habitMap[item.HabitId], targetDate, today, weekStartDay, habitRepository, ct, parentBatch);
                         if (parentLogs.IsFailure)
                         {
                             results.Add(new BulkLogItemResult(i, BulkItemStatus.Failed, item.HabitId,

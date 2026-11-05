@@ -110,14 +110,20 @@ internal sealed class BulkHabitsPipelineHost : IAsyncDisposable
         context.Request.Body = new MemoryStream(Encoding.UTF8.GetBytes(body));
         context.Request.ContentLength = context.Request.Body.Length;
         context.Response.Body = new MemoryStream();
-        await _pipeline(context);
+        var accessor = scope.ServiceProvider.GetRequiredService<IHttpContextAccessor>();
+        var previous = accessor.HttpContext;
+        accessor.HttpContext = context;
+        try { await _pipeline(context); }
+        finally { accessor.HttpContext = previous; }
         return context;
     }
 
     private static void AddTimedRepository<T>(IServiceCollection services, BulkRequestProbe probe) where T : Orbit.Domain.Common.Entity =>
-        services.AddScoped<IGenericRepository<T>>(sp => probe.Wrap<IGenericRepository<T>>(
+        services.AddScoped<IGenericRepository<T>>(sp => probe.Wrap<ITimedRepository<T>>(
             new GenericRepository<T>(sp.GetRequiredService<OrbitDbContext>()),
-            method => method.Name is "AddAsync" or "Update" or "Remove" or "RemoveRange" ? null : "loads"));
+            method => method.Name is "HasTrackedEntities" or "AddAsync" or "Update" or "Remove" or "RemoveRange" ? null : "loads"));
+
+    internal interface ITimedRepository<T> : IGenericRepository<T>, ITrackedEntityLookup<T> where T : Orbit.Domain.Common.Entity;
 
     public ValueTask DisposeAsync() => _application.DisposeAsync();
 

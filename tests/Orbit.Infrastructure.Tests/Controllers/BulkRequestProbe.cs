@@ -9,7 +9,7 @@ internal sealed class BulkRequestProbe
     private readonly AsyncLocal<Frame?> _current = new();
     internal Dictionary<string, double> Milliseconds { get; } = [];
 
-    internal T Wrap<T>(T target, Func<MethodInfo, string?> phase) where T : class
+    internal T Wrap<T>(object target, Func<MethodInfo, string?> phase) where T : class
     {
         var proxy = DispatchProxy.Create<T, TimedPort<T>>();
         var port = (TimedPort<T>)(object)proxy;
@@ -39,7 +39,7 @@ internal sealed class BulkRequestProbe
 
     internal class TimedPort<T> : DispatchProxy where T : class
     {
-        internal T Target { get; set; } = default!;
+        internal object Target { get; set; } = default!;
         internal BulkRequestProbe Probe { get; set; } = default!;
         internal Func<MethodInfo, string?> Phase { get; set; } = default!;
 
