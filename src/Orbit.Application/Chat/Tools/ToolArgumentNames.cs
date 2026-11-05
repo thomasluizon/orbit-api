@@ -14,6 +14,7 @@ public static class ToolArgumentNames
     public const string EndDate = "end_date";
     public const string DueTime = "due_time";
     public const string IntervalWeeks = "interval_weeks";
+    public const string MonthDays = "month_days";
     public const string IsBadHabit = "is_bad_habit";
     public const string IsFlexible = "is_flexible";
     public const string BulkCreateHabits = "bulk_create_habits";

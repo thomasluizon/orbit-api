@@ -9,7 +9,7 @@ public static partial class OptionalParameterCases
         {
             [(typeof(AssignTagsTool), "")] = ["habit_id", "habit_ids", "tag_names", "tag_ids"],
             [(typeof(BulkCreateHabitsTool), "habits.items")] =
-            ["description", "emoji", "frequency_unit", "frequency_quantity", "interval_weeks", "days", "due_date", "end_date", "due_time", "due_end_time", "is_bad_habit", "is_general", "is_flexible", "checklist_items", "start_date", "placement", "reminder_enabled", "reminder_times", "scheduled_reminders", "relative_reminders", "repeat_reminder", "slip_alert_enabled", "tag_names", "habit_id", "tag_ids", "goal_ids", "parent_habit_id", "sub_habits"],
+            ["description", "emoji", "frequency_unit", "frequency_quantity", "interval_weeks", "days", "month_days", "due_date", "end_date", "due_time", "due_end_time", "is_bad_habit", "is_general", "is_flexible", "checklist_items", "start_date", "placement", "reminder_enabled", "reminder_times", "scheduled_reminders", "relative_reminders", "repeat_reminder", "slip_alert_enabled", "tag_names", "habit_id", "tag_ids", "goal_ids", "parent_habit_id", "sub_habits"],
             [(typeof(BulkLogHabitsTool), "")] = ["filter", "habit_ids", "date", "dates"],
             [(typeof(BulkUpdateHabitEmojisTool), "")] =
             [
@@ -22,7 +22,7 @@ public static partial class OptionalParameterCases
             [(typeof(BulkUpdateHabitsTool), "updates")] =
             [
                 "clear_fields", "title", "description", "emoji", "frequency_unit", "frequency_quantity",
-                "interval_weeks", "days", "due_date", "end_date", "due_time", "due_end_time", "is_general",
+                "interval_weeks", "month_days", "days", "due_date", "end_date", "due_time", "due_end_time", "is_general",
                 "slip_alert_enabled", "relative_reminders", "repeat_reminder", "is_bad_habit", "is_flexible", "reminder_enabled",
                 "reminder_times", "checklist_items", "scheduled_reminders"
             ],
@@ -32,11 +32,11 @@ public static partial class OptionalParameterCases
                 "description", "target_value", "unit", "deadline", "goal_type", "habit_ids"
             ],
             [(typeof(CreateHabitTool), "")] =
-            ["description", "emoji", "frequency_unit", "frequency_quantity", "interval_weeks", "days", "due_date", "end_date", "due_time", "due_end_time", "is_bad_habit", "is_general", "is_flexible", "checklist_items", "start_date", "placement", "reminder_enabled", "reminder_times", "scheduled_reminders", "relative_reminders", "repeat_reminder", "slip_alert_enabled", "tag_names", "habit_id", "tag_ids", "goal_ids", "parent_habit_id", "sub_habits"],
+            ["description", "emoji", "frequency_unit", "frequency_quantity", "interval_weeks", "days", "month_days", "due_date", "end_date", "due_time", "due_end_time", "is_bad_habit", "is_general", "is_flexible", "checklist_items", "start_date", "placement", "reminder_enabled", "reminder_times", "scheduled_reminders", "relative_reminders", "repeat_reminder", "slip_alert_enabled", "tag_names", "habit_id", "tag_ids", "goal_ids", "parent_habit_id", "sub_habits"],
             [(typeof(CreateHabitTool), "sub_habits.items")] =
-            ["description", "emoji", "frequency_unit", "frequency_quantity", "interval_weeks", "days", "due_date", "end_date", "due_time", "due_end_time", "is_bad_habit", "is_general", "is_flexible", "checklist_items", "start_date", "placement", "reminder_enabled", "reminder_times", "scheduled_reminders", "relative_reminders", "repeat_reminder", "slip_alert_enabled", "tag_names", "habit_id", "tag_ids", "goal_ids", "parent_habit_id", "sub_habits"],
+            ["description", "emoji", "frequency_unit", "frequency_quantity", "interval_weeks", "days", "month_days", "due_date", "end_date", "due_time", "due_end_time", "is_bad_habit", "is_general", "is_flexible", "checklist_items", "start_date", "placement", "reminder_enabled", "reminder_times", "scheduled_reminders", "relative_reminders", "repeat_reminder", "slip_alert_enabled", "tag_names", "habit_id", "tag_ids", "goal_ids", "parent_habit_id", "sub_habits"],
             [(typeof(CreateSubHabitTool), "")] =
-            ["description", "emoji", "frequency_unit", "frequency_quantity", "interval_weeks", "days", "due_date", "end_date", "due_time", "due_end_time", "is_bad_habit", "is_general", "is_flexible", "checklist_items", "start_date", "placement", "reminder_enabled", "reminder_times", "scheduled_reminders", "relative_reminders", "repeat_reminder", "slip_alert_enabled", "tag_names", "habit_id", "tag_ids", "goal_ids", "sub_habits"],
+            ["description", "emoji", "frequency_unit", "frequency_quantity", "interval_weeks", "days", "month_days", "due_date", "end_date", "due_time", "due_end_time", "is_bad_habit", "is_general", "is_flexible", "checklist_items", "start_date", "placement", "reminder_enabled", "reminder_times", "scheduled_reminders", "relative_reminders", "repeat_reminder", "slip_alert_enabled", "tag_names", "habit_id", "tag_ids", "goal_ids", "sub_habits"],
             [(typeof(DeleteChecklistTemplateTool), "")] = [],
             [(typeof(DeleteNotificationsTool), "")] = ["notification_id", "notification_ids"],
             [(typeof(GetApiKeysTool), "")] = [],
@@ -69,7 +69,7 @@ public static partial class OptionalParameterCases
             [(typeof(UpdateHabitTool), "")] =
             [
                 "clear_fields", "start_date", "parent_habit_id", "clear_parent", "tag_ids", "goal_ids", "title", "description", "emoji", "frequency_unit", "frequency_quantity",
-                "interval_weeks", "days", "due_date", "end_date", "due_time", "due_end_time", "is_general",
+                "interval_weeks", "month_days", "days", "due_date", "end_date", "due_time", "due_end_time", "is_general",
                 "slip_alert_enabled", "relative_reminders", "repeat_reminder", "is_bad_habit", "is_flexible", "reminder_enabled",
                 "reminder_times", "checklist_items", "scheduled_reminders"
             ],

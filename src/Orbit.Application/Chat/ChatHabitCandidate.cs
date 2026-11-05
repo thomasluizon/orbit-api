@@ -21,7 +21,7 @@ public sealed record ChatHabitCandidate(
             new HabitScheduleSnapshot(habit.Id, habit.ParentHabitId, habit.FrequencyUnit, habit.FrequencyQuantity,
                 habit.IntervalWeeks, habit.NextDueDate, habit.ScheduledStartDate, habit.OriginalDayOfMonth,
                 habit.EndDate, habit.CreatedAtUtc, habit.DeletedAtUtc, habit.IsDeleted, habit.IsBadHabit,
-                habit.IsCompleted, habit.Days.ToList(), habit.Schedule, habit.StartDate),
+                habit.IsCompleted, habit.Days.ToList(), habit.Schedule, habit.StartDate, habit.MonthDays),
             habit.Title, habit.Position, habit.UpdatedAtUtc,
             includeChecklists && !habit.IsCompleted ? habit.ChecklistItems : null,
             habit.Logs.Any(log => !log.IsDeleted && log.Date == today && log.Value > 0 && !log.IsSlip), habit.Emoji));

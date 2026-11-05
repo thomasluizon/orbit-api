@@ -1044,4 +1044,24 @@ public class HabitMetricsCalculatorTests
         activeMetrics.CurrentStreak.Should().Be(1);
         activeMetrics.MonthlyCompletionRate.Should().Be(100);
     }
+
+    [Fact]
+    public void Calculate_MonthDays_CountsTheStreakOnTheChosenDaysOnly()
+    {
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
+            ValidUserId,
+            "Pagar contas",
+            FrequencyUnit.Month,
+            1,
+            new DateOnly(2026, 11, 1),
+            MonthDays: [8, 15])).Value;
+        habit.Log(new DateOnly(2026, 11, 8), advanceDueDate: false);
+        habit.Log(new DateOnly(2026, 11, 15), advanceDueDate: false);
+        habit.Log(new DateOnly(2026, 12, 8), advanceDueDate: false);
+
+        var metrics = HabitMetricsCalculator.Calculate(habit, new DateOnly(2026, 12, 14), 1);
+
+        metrics.CurrentStreak.Should().Be(3);
+        metrics.LongestStreak.Should().Be(3);
+    }
 }

@@ -23,7 +23,8 @@ public record CreateSubHabitCommand(
     string? Emoji = null,
     bool InheritParentFrequency = false,
     int? IntervalWeeks = null,
-    DateOnly? StartDate = null) : IRequest<Result<Guid>>;
+    DateOnly? StartDate = null,
+    IReadOnlyList<int>? MonthDays = null) : IRequest<Result<Guid>>;
 
 public class CreateSubHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
@@ -112,10 +113,12 @@ public class CreateSubHabitCommandHandler(
         var frequencyQuantity = request.FrequencyQuantity;
         var intervalWeeks = request.IntervalWeeks;
         var days = opts.Days;
+        var monthDays = request.MonthDays;
         var hasExplicitCadence = frequencyUnit is not null
             || frequencyQuantity is not null
             || intervalWeeks is not null
-            || days is { Count: > 0 };
+            || days is { Count: > 0 }
+            || monthDays is not null;
         if (request.InheritParentFrequency)
         {
             frequencyUnit ??= parent.FrequencyUnit;
@@ -123,7 +126,10 @@ public class CreateSubHabitCommandHandler(
             if (days is null && frequencyUnit == FrequencyUnit.Day && frequencyQuantity == 1)
                 days = parent.Days.ToList();
             if (!hasExplicitCadence)
+            {
                 intervalWeeks = parent.IntervalWeeks;
+                monthDays = parent.MonthDays;
+            }
         }
 
         var schedule = LegacyHabitSchedule.Resolve(parent.Schedule == HabitSchedule.General, opts.IsFlexible, frequencyUnit, frequencyQuantity, request.IsBadHabit, days, intervalWeeks);
@@ -153,7 +159,8 @@ public class CreateSubHabitCommandHandler(
             RepeatReminder: opts.RepeatReminder,
             Position: position,
             IntervalWeeks: intervalWeeks,
-            StartDate: request.StartDate));
+            StartDate: request.StartDate,
+            MonthDays: monthDays));
 
     }
 

@@ -35,6 +35,7 @@ public sealed class BulkUpdateHabitsCommandValidator : AbstractValidator<BulkUpd
         RuleFor(command => command.Changes.IntervalWeeks)
             .InclusiveBetween(1, AppConstants.MaxIntervalWeeks)
             .When(command => command.Changes.HasIntervalWeeks && command.Changes.IntervalWeeks.HasValue);
+        SharedHabitRules.AddMonthDaysRangeRules(RuleFor(command => command.Changes.MonthDays), allowEmpty: true);
         SharedHabitRules.AddReminderTimesRules(RuleFor(command => command.Changes.ReminderTimes));
         SharedHabitRules.AddChecklistItemRules(RuleFor(command => command.Changes.ChecklistItems));
         SharedHabitRules.AddRelativeReminderRules(RuleFor(command => command.Changes.RelativeReminders));

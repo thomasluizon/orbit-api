@@ -67,7 +67,8 @@ public partial class SyncController(OrbitDbContext dbContext, ILogger<SyncContro
         [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
         HabitSchedule? Schedule = null,
         [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
-        DateOnly? StartDate = null);
+        DateOnly? StartDate = null,
+        IReadOnlyList<int>? MonthDays = null);
 
     public record SyncHabitLogDto(Guid Id, Guid HabitId, DateOnly Date, decimal Value, DateTime CreatedAtUtc, DateTime UpdatedAtUtc);
 
@@ -288,7 +289,8 @@ public partial class SyncController(OrbitDbContext dbContext, ILogger<SyncContro
             IntervalWeeks: habit.IntervalWeeks,
             RelativeReminders: habit.RelativeReminders,
             Schedule: habit.Schedule,
-            StartDate: habit.StartDate);
+            StartDate: habit.StartDate,
+            MonthDays: habit.MonthDays);
     }
 
     private static SyncHabitLogDto MapHabitLog(HabitLog habitLog)

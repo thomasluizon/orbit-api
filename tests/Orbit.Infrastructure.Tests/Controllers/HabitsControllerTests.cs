@@ -64,6 +64,51 @@ public class HabitsControllerTests
         await _mediator.Received(1).Send(Arg.Is<UpdateHabitCommand>(command => command.StartDate == start), Arg.Any<CancellationToken>());
     }
 
+    [Fact]
+    public async Task CreateAndUpdate_ForwardMonthDays()
+    {
+        _mediator.Send(Arg.Any<CreateHabitCommand>(), Arg.Any<CancellationToken>()).Returns(Result.Success(Guid.NewGuid()));
+        _mediator.Send(Arg.Any<UpdateHabitCommand>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
+        await _controller.CreateHabit(new("Pay bills", null, Orbit.Domain.Enums.FrequencyUnit.Month, 1, MonthDays: [8, 15]), CancellationToken.None);
+        await _controller.UpdateHabit(Guid.NewGuid(), new("Pay bills", null, Orbit.Domain.Enums.FrequencyUnit.Month, 1, MonthDays: [31]), CancellationToken.None);
+        await _mediator.Received(1).Send(Arg.Is<CreateHabitCommand>(command => command.MonthDays!.SequenceEqual(new[] { 8, 15 })), Arg.Any<CancellationToken>());
+        await _mediator.Received(1).Send(Arg.Is<UpdateHabitCommand>(command => command.MonthDays!.SequenceEqual(new[] { 31 })), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CreateAndUpdate_WithoutMonthDays_LeaveTheCommandValueNull()
+    {
+        _mediator.Send(Arg.Any<CreateHabitCommand>(), Arg.Any<CancellationToken>()).Returns(Result.Success(Guid.NewGuid()));
+        _mediator.Send(Arg.Any<UpdateHabitCommand>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
+        await _controller.CreateHabit(new("Read", null, Orbit.Domain.Enums.FrequencyUnit.Month, 1), CancellationToken.None);
+        await _controller.UpdateHabit(Guid.NewGuid(), new("Read", null, Orbit.Domain.Enums.FrequencyUnit.Month, 1), CancellationToken.None);
+        await _mediator.Received(1).Send(Arg.Is<CreateHabitCommand>(command => command.MonthDays == null), Arg.Any<CancellationToken>());
+        await _mediator.Received(1).Send(Arg.Is<UpdateHabitCommand>(command => command.MonthDays == null), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task BulkCreate_MonthDays_ReachCommandAndSubHabits()
+    {
+        BulkCreateHabitsCommand? captured = null;
+        _mediator.Send(Arg.Any<BulkCreateHabitsCommand>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                captured = call.Arg<BulkCreateHabitsCommand>();
+                return Result.Success(new BulkCreateResult([]));
+            });
+
+        var request = DeserializeBulkRequest("""
+            {"habits":[{"title":"Pay bills","frequencyUnit":"Month","frequencyQuantity":1,"monthDays":[8,15],
+              "subHabits":[{"title":"Rent","frequencyUnit":"Month","frequencyQuantity":1,"monthDays":[8]}]}]}
+            """);
+
+        await _controller.BulkCreate(request, CancellationToken.None);
+
+        var item = captured!.Habits.Should().ContainSingle().Subject;
+        item.MonthDays.Should().Equal(8, 15);
+        item.SubHabits.Should().ContainSingle().Which.MonthDays.Should().Equal(8);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

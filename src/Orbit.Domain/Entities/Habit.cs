@@ -32,7 +32,8 @@ public record HabitCreateParams(
     DateTime? CreatedAtUtc = null,
     DateOnly? StartDate = null,
     int WeekStartDay = 1,
-    RepeatReminderOptions? RepeatReminder = null);
+    RepeatReminderOptions? RepeatReminder = null,
+    IReadOnlyList<int>? MonthDays = null);
 
 public record HabitUpdateParams(
     HabitSchedule Schedule,
@@ -60,7 +61,8 @@ public record HabitUpdateParams(
     DateOnly? StartDate = null,
     int WeekStartDay = 1,
     RepeatReminderOptions? RepeatReminder = null,
-    bool ClearRepeatReminder = false);
+    bool ClearRepeatReminder = false,
+    IReadOnlyList<int>? MonthDays = null);
 
 public class Habit : Entity, ITimestamped, ISoftDeletable
 {
@@ -130,6 +132,12 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
     public DateTime? DeletedAtUtc { get; private set; }
     public ICollection<System.DayOfWeek> Days { get; private set; } = [];
 
+    /// <summary>
+    /// For a monthly recurring habit, the chosen days of the month (1 to 31), sorted.
+    /// Empty means the habit repeats on its anchor day. A short month puts a missing day on its last day.
+    /// </summary>
+    public IReadOnlyList<int> MonthDays { get; private set; } = [];
+
     public Guid? ParentHabitId { get; private set; }
 
     private readonly List<HabitLog> _logs = [];
@@ -190,6 +198,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         IsBadHabit = snapshot.IsBadHabit,
         IsCompleted = snapshot.IsCompleted,
         Days = snapshot.Days.ToList(),
+        MonthDays = snapshot.MonthDays.ToList(),
         Title = string.Empty
     };
 
@@ -231,6 +240,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         IsBadHabit = candidate.IsBadHabit;
         IsCompleted = candidate.IsCompleted;
         Days = candidate.Days.ToList();
+        MonthDays = candidate.MonthDays.ToList();
     }
 
     public static Result<Habit> Create(HabitCreateParams p)
@@ -250,7 +260,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
             return Result.Failure<Habit>(emojiValidation);
 
         var scheduleValidation = HabitInvariants.ValidateScheduleOptions(
-            p.Schedule, p.IsBadHabit, p.FrequencyUnit, p.FrequencyQuantity, p.Days, p.IntervalWeeks);
+            p.Schedule, p.IsBadHabit, p.FrequencyUnit, p.FrequencyQuantity, p.Days, p.IntervalWeeks, p.MonthDays);
         if (scheduleValidation is not null)
             return Result.Failure<Habit>(scheduleValidation);
 
@@ -284,9 +294,9 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
     private static Result<Habit> CreateWithSchedule(HabitCreateParams p)
     {
         var habit = CreateValidated(p);
-        if (p.StartDate.HasValue)
+        if (p.StartDate.HasValue || habit.MonthDays.Count > 0)
         {
-            habit.NextDueDate = p.StartDate.Value;
+            habit.NextDueDate = p.StartDate ?? p.DueDate;
             var alignment = habit.AlignFirstOccurrence(p.WeekStartDay);
             if (alignment.IsFailure)
                 return Result.Failure<Habit>(DomainErrors.RecurrenceScheduleUnsatisfiable);
@@ -308,6 +318,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
             FrequencyQuantity = p.FrequencyQuantity,
             IntervalWeeks = p.IntervalWeeks,
             Days = schedule == HabitSchedule.Flexible ? [] : (p.Days?.ToList() ?? []),
+            MonthDays = MonthDaySchedule.Normalize(p.MonthDays),
             IsBadHabit = p.IsBadHabit,
             NextDueDate = p.DueDate,
             StartDate = startDate,
@@ -558,6 +569,9 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
     {
         try
         {
+            if (FrequencyUnit == Enums.FrequencyUnit.Month && MonthDays.Count > 0)
+                return Result.Success(AdvanceMonthDays(current));
+
             var originalDay = OriginalDayOfMonth ?? current.Day;
 
             var next = (FrequencyUnit, FrequencyQuantity) switch
@@ -592,6 +606,16 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         {
             return Result.Failure<DateOnly>(DomainErrors.RecurrenceScheduleUnsatisfiable);
         }
+    }
+
+    private DateOnly AdvanceMonthDays(DateOnly current)
+    {
+        if (current.Day < DateTime.DaysInMonth(current.Year, current.Month)
+            && MonthDaySchedule.FirstInMonthOnOrAfter(MonthDays, current.AddDays(1)) is { } sameMonth)
+            return sameMonth;
+
+        var nextMonth = new DateOnly(current.Year, current.Month, 1).AddMonths(FrequencyQuantity!.Value);
+        return MonthDaySchedule.FirstInMonth(MonthDays, nextMonth.Year, nextMonth.Month);
     }
 
     private static Result<bool> IsInActiveWeek(
@@ -750,13 +774,14 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
             return validation;
 
         var previousDueTime = DueTime;
+        var reanchorSchedule = RequiresScheduleReanchor(p);
         var candidate = (Habit)MemberwiseClone();
         var scheduleResult = candidate.ApplyRequiredUpdates(p);
         if (scheduleResult.IsFailure)
             return scheduleResult;
         ApplyRequiredUpdatesFrom(candidate);
         ApplyOptionalUpdates(p);
-        if (p.StartDate.HasValue && Schedule is HabitSchedule.Recurring or HabitSchedule.Flexible)
+        if ((p.StartDate.HasValue || reanchorSchedule) && Schedule is HabitSchedule.Recurring or HabitSchedule.Flexible)
             RecomputeCompletionForEndDate();
 
         if (!previousDueTime.HasValue && DueTime.HasValue && p.ReminderTimes is null && RelativeReminders.Count > 0)
@@ -856,7 +881,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         var effectiveIsGeneral = schedule == HabitSchedule.General;
 
         var scheduleValidation = HabitInvariants.ValidateScheduleOptions(
-            schedule, p.IsBadHabit, p.FrequencyUnit, p.FrequencyQuantity, p.Days, p.IntervalWeeks);
+            schedule, p.IsBadHabit, p.FrequencyUnit, p.FrequencyQuantity, p.Days, p.IntervalWeeks, ResolveMonthDays(p));
         if (scheduleValidation is not null)
             return scheduleValidation;
 
@@ -906,14 +931,35 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         return startValidation;
     }
 
+    /// <summary>
+    /// An omitted <see cref="HabitUpdateParams.MonthDays"/> keeps the stored days while the habit stays monthly
+    /// and recurring, so a client that does not know the field keeps the schedule. An empty list clears them.
+    /// </summary>
+    private IReadOnlyList<int> ResolveMonthDays(HabitUpdateParams p) =>
+        p.MonthDays is not null ? MonthDaySchedule.Normalize(p.MonthDays)
+        : p.Schedule == HabitSchedule.Recurring && p.FrequencyUnit == Enums.FrequencyUnit.Month ? MonthDays
+        : [];
+
+    /// <summary>
+    /// True when the update resolves the next occurrence again from the recurrence anchor and the account date.
+    /// A recurrence change without an explicit start or due date keeps <see cref="StartDate"/> as the anchor,
+    /// so an omitted start date gives the same schedule as the unchanged start date.
+    /// </summary>
     public bool RequiresScheduleReanchor(HabitUpdateParams p) =>
-        p.StartDate.HasValue && (p.StartDate.Value != StartDate || RecurrenceChanged(p));
+        p.StartDate.HasValue
+            ? p.StartDate.Value != StartDate || RecurrenceChanged(p)
+            : StaysRecurring(p) && (p.DueDate is null || p.DueDate == NextDueDate) && RecurrenceChanged(p);
+
+    private bool StaysRecurring(HabitUpdateParams p) =>
+        Schedule is HabitSchedule.Recurring or HabitSchedule.Flexible
+        && p.Schedule is HabitSchedule.Recurring or HabitSchedule.Flexible;
 
     private bool RecurrenceChanged(HabitUpdateParams p) =>
         FrequencyUnit != p.FrequencyUnit
         || FrequencyQuantity != p.FrequencyQuantity
         || IntervalWeeks != p.IntervalWeeks
         || (Schedule == HabitSchedule.Flexible) != (p.Schedule == HabitSchedule.Flexible)
+        || !MonthDays.SequenceEqual(ResolveMonthDays(p))
         || !Days.ToHashSet().SetEquals(p.Schedule == HabitSchedule.Flexible ? [] : p.Days ?? []);
 
     private Result ApplyRequiredUpdates(HabitUpdateParams p)
@@ -921,6 +967,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         var schedule = p.Schedule;
         var effectiveIsFlexible = schedule == HabitSchedule.Flexible;
         var effectiveDays = effectiveIsFlexible ? [] : (p.Days?.ToList() ?? []);
+        var effectiveMonthDays = ResolveMonthDays(p);
         var effectiveDueDate = p.StartDate.HasValue ? NextDueDate : p.DueDate ?? NextDueDate;
         var reanchorSchedule = RequiresScheduleReanchor(p);
         var dueChanged = effectiveDueDate != NextDueDate;
@@ -934,6 +981,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         FrequencyQuantity = p.FrequencyQuantity;
         IntervalWeeks = p.IntervalWeeks;
         Days = effectiveDays;
+        MonthDays = effectiveMonthDays;
         IsBadHabit = p.IsBadHabit;
         DueTime = p.DueTime;
         DueEndTime = p.DueEndTime;
@@ -947,7 +995,14 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         else if (effectiveDueDate != NextDueDate || recurrencePhaseChanged)
         {
             NextDueDate = effectiveDueDate;
-            ScheduledStartDate = effectiveDueDate;
+            if (MonthDays.Count > 0)
+            {
+                var aligned = AlignToMonthDays(effectiveDueDate);
+                if (aligned.IsFailure)
+                    return Result.Failure(aligned.Error);
+                NextDueDate = aligned.Value;
+            }
+            ScheduledStartDate = NextDueDate;
         }
 
         if (FrequencyUnit is Enums.FrequencyUnit.Month or Enums.FrequencyUnit.Year)
@@ -961,7 +1016,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
 
     private Result Reanchor(HabitUpdateParams p)
     {
-        StartDate = p.StartDate!.Value;
+        StartDate = p.StartDate ?? StartDate;
         NextDueDate = StartDate;
         ScheduledStartDate = StartDate;
         OriginalDayOfMonth = StartDate.Day;
@@ -987,8 +1042,27 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         return Result.Success();
     }
 
+    private Result<DateOnly> AlignToMonthDays(DateOnly date)
+    {
+        if (MonthDaySchedule.FirstInMonthOnOrAfter(MonthDays, date) is { } sameMonth)
+            return Result.Success(sameMonth);
+        if (date.Year == DateOnly.MaxValue.Year && date.Month == DateOnly.MaxValue.Month)
+            return Result.Failure<DateOnly>(DomainErrors.RecurrenceScheduleUnsatisfiable);
+        var nextMonth = new DateOnly(date.Year, date.Month, 1).AddMonths(1);
+        return Result.Success(MonthDaySchedule.FirstInMonth(MonthDays, nextMonth.Year, nextMonth.Month));
+    }
+
     private Result AlignFirstOccurrence(int weekStartDay)
     {
+        if (MonthDays.Count > 0)
+        {
+            var aligned = AlignToMonthDays(NextDueDate);
+            if (aligned.IsFailure)
+                return Result.Failure(aligned.Error);
+            NextDueDate = aligned.Value;
+            ScheduledStartDate = NextDueDate;
+            return Result.Success();
+        }
         if (Days.Count == 0)
             return Result.Success();
         for (var attempt = 0; attempt < DaysInWeek * (IntervalWeeks ?? 1); attempt++)
@@ -1015,6 +1089,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         FrequencyQuantity = candidate.FrequencyQuantity;
         IntervalWeeks = candidate.IntervalWeeks;
         Days = candidate.Days;
+        MonthDays = candidate.MonthDays;
         IsBadHabit = candidate.IsBadHabit;
         DueTime = candidate.DueTime;
         DueEndTime = candidate.DueEndTime;

@@ -964,6 +964,14 @@ public class OrbitDbContext : DbContext
                 .HasDefaultValueSql("'[15]'::jsonb")
                 .Metadata.SetValueComparer(CreateReadOnlyListComparer<int>());
 
+            entity.Property(h => h.MonthDays)
+                .HasConversion(
+                    v => SerializeJson(v),
+                    v => DeserializeJson(v, new List<int>()))
+                .HasColumnType(JsonbColumnType)
+                .HasDefaultValueSql(EmptyJsonArraySql)
+                .Metadata.SetValueComparer(CreateReadOnlyListComparer<int>());
+
             entity.Property(h => h.ScheduledReminders)
                 .HasConversion(
                     v => SerializeJson(v),

@@ -1,5 +1,6 @@
 using System.Linq.Expressions;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
@@ -10,6 +11,7 @@ using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.ValueObjects;
+using Orbit.Infrastructure.Persistence;
 
 namespace Orbit.Application.Tests.Commands.Habits;
 
@@ -403,6 +405,43 @@ public sealed class BulkUpdateHabitsCommandHandlerTests
         habit.FrequencyQuantity.Should().BeNull();
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
+
+    [Theory]
+    [InlineData(10)]
+    [InlineData(11)]
+    public async Task MonthDays_AddedAfterACompletion_RecoversTheDayBeforeTheOldCursor(int updateDay)
+    {
+        var databaseName = $"BulkUpdateMonthDays_{Guid.NewGuid()}";
+        Guid habitId;
+        await using (var seed = CreateContext(databaseName))
+        {
+            var seeded = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Pagar contas",
+                FrequencyUnit.Month, 1, new DateOnly(2027, 1, 10), MonthDays: [10])).Value;
+            seeded.Log(new DateOnly(2027, 1, 10)).IsSuccess.Should().BeTrue();
+            seed.Habits.Add(seeded);
+            await seed.SaveChangesAsync();
+            habitId = seeded.Id;
+        }
+        _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(new DateOnly(2027, 1, updateDay));
+        await using var context = CreateContext(databaseName);
+        _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .Returns(call => context.SaveChangesAsync(call.Arg<CancellationToken>()));
+        var handler = new BulkUpdateHabitsCommandHandler(new GenericRepository<Habit>(context), _userDateService,
+            _payGate, _unitOfWork, new MemoryCache(new MemoryCacheOptions()),
+            NullLogger<BulkUpdateHabitsCommandHandler>.Instance);
+
+        var result = await handler.Handle(new BulkUpdateHabitsCommand(UserId, new BulkHabitFilter(false, [habitId]),
+            new BulkHabitChanges(HasMonthDays: true, MonthDays: [10, 15])), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await using var reread = CreateContext(databaseName);
+        var habit = await reread.Habits.SingleAsync(h => h.Id == habitId);
+        habit.MonthDays.Should().Equal(10, 15);
+        habit.NextDueDate.Should().Be(new DateOnly(2027, 1, 15));
+    }
+
+    private static OrbitDbContext CreateContext(string databaseName) =>
+        new(new DbContextOptionsBuilder<OrbitDbContext>().UseInMemoryDatabase(databaseName).Options);
 
     private void SetupHabits(params Habit[] habits)
     {

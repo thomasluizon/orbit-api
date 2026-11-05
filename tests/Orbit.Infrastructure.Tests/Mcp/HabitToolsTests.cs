@@ -455,6 +455,23 @@ public class HabitToolsTests
     }
 
     [Fact]
+    public async Task CreateAndUpdateHabit_ForwardMonthDays()
+    {
+        StubExecutor(AgentOperationStatus.Succeeded, targetId: Guid.NewGuid().ToString(), targetName: "Pay bills");
+
+        var created = await CapturedRequestAsync(async () => await _tools.CreateHabit(
+            _user, "Pay bills", "2026-04-01", frequencyUnit: "Month", frequencyQuantity: 1, monthDays: [8, 15]));
+        var updated = await CapturedRequestAsync(async () => await _tools.UpdateHabit(
+            _user, Guid.NewGuid().ToString(), monthDays: []));
+        var untouched = await CapturedRequestAsync(async () => await _tools.UpdateHabit(
+            _user, Guid.NewGuid().ToString(), "Pay all bills"));
+
+        created.Arguments.GetProperty("month_days").EnumerateArray().Select(day => day.GetInt32()).Should().Equal(8, 15);
+        updated.Arguments.GetProperty("month_days").GetArrayLength().Should().Be(0);
+        untouched.Arguments.TryGetProperty("month_days", out _).Should().BeFalse();
+    }
+
+    [Fact]
     public async Task CreateHabit_Failure_ReturnsError()
     {
         StubExecutor(AgentOperationStatus.Failed, policyReason: "Title is required");

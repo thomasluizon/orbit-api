@@ -203,7 +203,7 @@ public partial class SlipAlertSchedulerService(
                     Snapshot = new HabitScheduleSnapshot(h.Id, h.ParentHabitId,
                     h.FrequencyUnit, h.FrequencyQuantity, h.IntervalWeeks, h.NextDueDate, h.ScheduledStartDate,
                     h.OriginalDayOfMonth, h.EndDate, h.CreatedAtUtc, h.DeletedAtUtc, h.IsDeleted, h.IsBadHabit,
-                    h.IsCompleted, h.Days.ToList(), h.Schedule, h.StartDate)
+                    h.IsCompleted, h.Days.ToList(), h.Schedule, h.StartDate, h.MonthDays)
                 }).ToListAsync(ct);
             if (rows.Count == 0) break;
             var habits = rows.Select(row =>

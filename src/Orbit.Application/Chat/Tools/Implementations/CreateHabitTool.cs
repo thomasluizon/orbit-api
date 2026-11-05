@@ -109,6 +109,8 @@ public class CreateHabitTool(IUserDateService userDateService, IMediator mediato
                     child["days"] = JsonSerializer.SerializeToNode(days.Select(day => day.ToString()));
                 if (definition.IntervalWeeks is { } interval)
                     child["interval_weeks"] = interval;
+                if (definition.MonthDays is { Count: > 0 } monthDays)
+                    child[MonthDays] = JsonSerializer.SerializeToNode(monthDays);
             }
         normalized = JsonSerializer.SerializeToElement(node);
         if ((await CheckArgumentsAsync(normalized, userId, ct)).IsFailure
@@ -156,7 +158,8 @@ public class CreateHabitTool(IUserDateService userDateService, IMediator mediato
             ReminderTimes = definition.ReminderTimes is { } times ? PreparedToolIntent.Values(times) : null,
             ChecklistItems = definition.ChecklistItems is { } checklist ? PreparedToolIntent.Values(checklist) : null,
             ScheduledReminders = definition.ScheduledReminders is { } scheduled ? PreparedToolIntent.Values(scheduled) : null,
-            RelativeReminders = definition.RelativeReminders is { } relative ? PreparedToolIntent.Values(relative) : null
+            RelativeReminders = definition.RelativeReminders is { } relative ? PreparedToolIntent.Values(relative) : null,
+            MonthDays = definition.MonthDays is { } monthDays ? PreparedToolIntent.Values(monthDays) : null
         },
         PreparedToolIntent.Values(JsonArgumentParser.ParseStringArray(args, "tag_names") ?? []),
         PreparedToolIntent.Values(JsonArgumentParser.ParseGuidArray(args, GoalIds) ?? []),
@@ -184,12 +187,14 @@ public class CreateHabitTool(IUserDateService userDateService, IMediator mediato
         var dueDate = JsonArgumentParser.ParseDateOnly(args, DueDate);
         var days = JsonArgumentParser.ParseDays(args);
         var intervalWeeks = JsonArgumentParser.GetOptionalInt(args, "interval_weeks");
+        var monthDays = JsonArgumentParser.ParseIntArray(args, MonthDays);
         var isFlexible = JsonArgumentParser.GetOptionalBool(args, "is_flexible") ?? false;
         if (dueDate is not null && frequencyUnit is null)
         {
             frequencyQuantity = null;
             days = null;
             intervalWeeks = null;
+            monthDays = null;
         }
         frequencyUnit = NormalizeWeekdayUnit(frequencyUnit, frequencyQuantity, days, isFlexible);
         bool isBadHabit = JsonArgumentParser.GetOptionalBool(args, "is_bad_habit") ?? false;
@@ -221,7 +226,8 @@ public class CreateHabitTool(IUserDateService userDateService, IMediator mediato
             IntervalWeeks: intervalWeeks,
             RelativeReminders: JsonArgumentParser.ParseRelativeReminders(args),
             RepeatReminder: RepeatReminderToolArguments.Parse(args),
-            StartDate: JsonArgumentParser.ParseDateOnly(args, StartDate)));
+            StartDate: JsonArgumentParser.ParseDateOnly(args, StartDate),
+            MonthDays: monthDays));
     }
 
     private static Domain.Common.Result<List<Habit>> BuildChildHabits(
@@ -257,9 +263,11 @@ public class CreateHabitTool(IUserDateService userDateService, IMediator mediato
         var subFrequencyQuantity = JsonArgumentParser.GetOptionalInt(sub, "frequency_quantity");
         var subIntervalWeeks = JsonArgumentParser.GetOptionalInt(sub, "interval_weeks");
         var subDays = JsonArgumentParser.ParseDays(sub);
+        var subMonthDays = JsonArgumentParser.ParseIntArray(sub, MonthDays);
         var subDueDate = JsonArgumentParser.ParseDateOnly(sub, DueDate);
         var isOneTime = JsonArgumentParser.GetOptionalString(sub, "frequency_unit") == "OneTime";
-        var hasExplicitCadence = isOneTime || HasExplicitCadence(subFrequencyUnit, subFrequencyQuantity, subIntervalWeeks, subDays);
+        var hasExplicitCadence = isOneTime || HasExplicitCadence(subFrequencyUnit, subFrequencyQuantity, subIntervalWeeks, subDays, subMonthDays);
+        var (intervalWeeks, monthDays) = ResolveChildRecurrence(isOneTime, hasExplicitCadence, subIntervalWeeks, subMonthDays, parent);
         var frequencyUnit = isOneTime ? null : subFrequencyUnit ?? parent.FrequencyUnit;
         var frequencyQuantity = isOneTime ? null : subFrequencyQuantity ?? (subFrequencyUnit is not null ? 1 : parent.FrequencyQuantity);
         if (isOneTime)
@@ -295,11 +303,19 @@ public class CreateHabitTool(IUserDateService userDateService, IMediator mediato
             RepeatReminder: RepeatReminderToolArguments.Parse(sub),
             Emoji: JsonArgumentParser.GetOptionalString(sub, "emoji"),
             ChecklistItems: JsonArgumentParser.ParseChecklistItems(sub),
-            IntervalWeeks: isOneTime ? null : subIntervalWeeks ?? (hasExplicitCadence ? null : parent.IntervalWeeks)));
+            IntervalWeeks: intervalWeeks,
+            MonthDays: monthDays));
     }
 
-    private static bool HasExplicitCadence(FrequencyUnit? unit, int? quantity, int? interval, IReadOnlyList<DayOfWeek>? days) =>
-        unit is not null || quantity is not null || interval is not null || days is not null;
+    private static bool HasExplicitCadence(FrequencyUnit? unit, int? quantity, int? interval,
+        IReadOnlyList<DayOfWeek>? days, IReadOnlyList<int>? monthDays) =>
+        unit is not null || quantity is not null || interval is not null || days is not null || monthDays is not null;
+
+    private static (int? IntervalWeeks, IReadOnlyList<int>? MonthDays) ResolveChildRecurrence(
+        bool isOneTime, bool hasExplicitCadence, int? intervalWeeks, IReadOnlyList<int>? monthDays, Habit parent) =>
+        isOneTime ? (null, null)
+        : hasExplicitCadence ? (intervalWeeks, monthDays)
+        : (parent.IntervalWeeks, parent.MonthDays is { Count: > 0 } inherited ? inherited : null);
 
     private static FrequencyUnit? NormalizeWeekdayUnit(
         FrequencyUnit? unit, int? quantity, IReadOnlyList<DayOfWeek>? days, bool isFlexible = false) =>

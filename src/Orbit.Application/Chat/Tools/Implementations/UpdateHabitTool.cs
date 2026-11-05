@@ -46,6 +46,7 @@ public class UpdateHabitTool(
             },
             frequency_quantity = new { type = JsonSchemaTypes.Integer, description = "New frequency quantity" },
             interval_weeks = new { type = JsonSchemaTypes.Integer, description = "Repeat interval in weeks, minimum 1." },
+            month_days = new { type = JsonSchemaTypes.Array, description = HabitModelInstructions.MonthDays + " [] clears.", items = new { type = JsonSchemaTypes.Integer } },
             days = new
             {
                 type = JsonSchemaTypes.Array,

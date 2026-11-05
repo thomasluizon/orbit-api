@@ -253,12 +253,13 @@ public partial class BulkCreateHabitsTool(
                 item.FrequencyUnit, item.FrequencyQuantity, item.IsBadHabit, item.DueDate, options,
                 TagIds: JsonArgumentParser.ParseGuidArray(source, TagIds),
                 Emoji: item.Emoji, InheritParentFrequency: item.InheritParentFrequency,
-                IntervalWeeks: item.IntervalWeeks, StartDate: item.StartDate)
+                IntervalWeeks: item.IntervalWeeks, StartDate: item.StartDate, MonthDays: item.MonthDays)
             : new CreateHabitCommand(userId, item.Title, item.Description, item.FrequencyUnit,
                 item.FrequencyQuantity, item.IsBadHabit, DueDate: item.DueDate, IsGeneral: item.IsGeneral,
                 Options: options, TagIds: JsonArgumentParser.ParseGuidArray(source, TagIds),
                 GoalIds: JsonArgumentParser.ParseGuidArray(source, GoalIds),
-                Emoji: item.Emoji, IntervalWeeks: item.IntervalWeeks, StartDate: item.StartDate);
+                Emoji: item.Emoji, IntervalWeeks: item.IntervalWeeks, StartDate: item.StartDate,
+                MonthDays: item.MonthDays);
     }
 
     private async Task<ToolResult> AssignTreeTagsAsync(JsonElement source, BulkHabitItem item, Guid userId, Guid id, CancellationToken ct)
@@ -355,6 +356,7 @@ public partial class BulkCreateHabitsTool(
             SubHabits: subHabits,
             Emoji: JsonArgumentParser.GetOptionalString(el, "emoji"),
             IntervalWeeks: oneTime ? null : JsonArgumentParser.GetOptionalInt(el, IntervalWeeks),
+            MonthDays: oneTime ? null : JsonArgumentParser.ParseIntArray(el, MonthDays),
             ReminderEnabled: JsonArgumentParser.GetOptionalBool(el, "reminder_enabled") ?? RepeatReminderToolArguments.Parse(el) is not null,
             ReminderTimes: JsonArgumentParser.ParseIntArray(el, "reminder_times"),
             ScheduledReminders: JsonArgumentParser.ParseScheduledReminders(el),
@@ -398,6 +400,7 @@ public partial class BulkCreateHabitsTool(
             ["frequency_quantity"] = new { type = JsonSchemaTypes.Integer, description = "How often. Defaults to 1." },
             ["interval_weeks"] = new { type = JsonSchemaTypes.Integer, description = "Repeat interval in weeks. Omit for every week. Minimum 1." },
             ["days"] = new { type = JsonSchemaTypes.Array, description = "Specific weekdays. Only when frequency_quantity is 1.", items = new { type = JsonSchemaTypes.String, @enum = JsonSchemaTypes.WeekdayEnum } },
+            ["month_days"] = new { type = JsonSchemaTypes.Array, description = HabitModelInstructions.MonthDays, items = new { type = JsonSchemaTypes.Integer } },
             ["due_date"] = new { type = JsonSchemaTypes.String, description = "YYYY-MM-DD. For a restriction's start, subtract its own offset from its referenced event's local date and time. A deadline-only item uses the event date with due_end_time at the event, never another preparation's start date. Use requested account-local dates from words or images, including implied holidays and weekdays. Default to today only without a date signal." },
             ["end_date"] = new { type = new[] { JsonSchemaTypes.String, "null" }, description = "YYYY-MM-DD, inclusive. A restriction starting before an event, including a 24-hour restriction, must end on that event's date with Day/1, never null. Omit or null for OneTime events and deadline-only items." },
             ["due_time"] = new { type = JsonSchemaTypes.String, description = "HH:mm. Preserve requested arrival or start times from words or images. Suggestion times with zero seconds are accepted as HH:mm:ss." },

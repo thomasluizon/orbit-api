@@ -126,7 +126,7 @@ internal static class BulkHabitToolArguments
         updates = ProactiveProposal.StripMetadata(updates);
         var allowed = new HashSet<string>(StringComparer.Ordinal)
         {
-            "title", "description", "emoji", "frequency_unit", "frequency_quantity", IntervalWeeks,
+            "title", "description", "emoji", "frequency_unit", "frequency_quantity", IntervalWeeks, MonthDays,
             "days", DueDate, StartDate, EndDate, DueTime, DueEndTimeField, IsBadHabit, IsFlexible,
             IsGeneralField, SlipAlertEnabledField, RelativeRemindersField,
             "reminder_enabled", "reminder_times", "checklist_items", "scheduled_reminders", "clear_fields", RepeatReminderToolArguments.Field
@@ -195,7 +195,9 @@ internal static class BulkHabitToolArguments
             HasStartDate: updates.TryGetProperty(StartDate, out _),
             StartDate: JsonArgumentParser.ParseDateOnly(updates, StartDate),
             HasRepeatReminder: updates.TryGetProperty(RepeatReminderToolArguments.Field, out _),
-            RepeatReminder: RepeatReminderToolArguments.Parse(updates));
+            RepeatReminder: RepeatReminderToolArguments.Parse(updates),
+            HasMonthDays: updates.TryGetProperty(MonthDays, out _),
+            MonthDays: updates.TryGetProperty(MonthDays, out _) ? JsonArgumentParser.ParseIntArray(updates, MonthDays) ?? [] : null);
 
         return (changes, null);
     }
@@ -400,7 +402,7 @@ internal static class BulkHabitToolArguments
 
     private static string? ValidateArrayKinds(JsonElement updates)
     {
-        var arrayName = new[] { "days", "reminder_times", "checklist_items", "scheduled_reminders", RelativeRemindersField }
+        var arrayName = new[] { "days", MonthDays, "reminder_times", "checklist_items", "scheduled_reminders", RelativeRemindersField }
             .FirstOrDefault(name => !HasKind(updates, name, JsonValueKind.Array));
         return arrayName is null ? null : $"{arrayName} must be an array.";
     }
@@ -408,10 +410,25 @@ internal static class BulkHabitToolArguments
     private static string? ValidateArrayContents(JsonElement updates)
     {
         return ValidateDays(updates)
+            ?? ValidateMonthDays(updates)
             ?? ValidateReminderTimes(updates)
             ?? ValidateChecklistItems(updates)
             ?? ValidateScheduledReminders(updates)
             ?? ValidateRelativeReminders(updates);
+    }
+
+    private static string? ValidateMonthDays(JsonElement updates)
+    {
+        if (!updates.TryGetProperty(MonthDays, out var monthDays))
+            return null;
+        var values = new List<int>();
+        foreach (var day in monthDays.EnumerateArray())
+        {
+            if (day.ValueKind != JsonValueKind.Number || !day.TryGetInt32(out var value))
+                return $"{MonthDays} must contain distinct days from 1 to 31.";
+            values.Add(value);
+        }
+        return Domain.Common.MonthDaySchedule.IsValid(values) ? null : $"{MonthDays} must contain distinct days from 1 to 31.";
     }
 
     private static string? ValidateDays(JsonElement updates)

@@ -269,6 +269,23 @@ public class BulkCreateHabitsToolTests
         }
     }
 
+    [Fact]
+    public async Task MonthDays_ReachTheBulkCreateCommand()
+    {
+        BulkCreateHabitsCommand? command = null;
+        _mediator.Send(Arg.Do<BulkCreateHabitsCommand>(value => command = value), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new BulkCreateResult([])));
+
+        var result = await Execute("""
+            {"habits": [{"title": "Pay bills", "frequency_unit": "Month", "frequency_quantity": 1, "month_days": [8, 15]}]}
+            """);
+
+        result.Success.Should().BeTrue();
+        var item = command!.Habits.Should().ContainSingle().Subject;
+        item.MonthDays.Should().Equal(8, 15);
+        item.FrequencyUnit.Should().Be(Orbit.Domain.Enums.FrequencyUnit.Month);
+    }
+
     private async Task<ToolResult> Execute(string json) =>
         await _tool.ExecuteAsync(JsonDocument.Parse(json).RootElement, UserId, CancellationToken.None);
 }

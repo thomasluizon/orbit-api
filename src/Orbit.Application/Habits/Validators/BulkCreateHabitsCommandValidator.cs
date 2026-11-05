@@ -58,6 +58,7 @@ internal sealed class BulkHabitItemValidator : AbstractValidator<BulkHabitItem>
                 .When(h => h.FrequencyUnit is not null);
 
         SharedHabitRules.AddIntervalWeeksRules(RuleFor(h => h.IntervalWeeks));
+        SharedHabitRules.AddMonthDaysRangeRules(RuleFor(h => h.MonthDays), allowEmpty: false);
         SharedHabitRules.AddRelativeReminderRules(RuleFor(h => h.RelativeReminders));
 
         RuleFor(h => h.Tags)

@@ -253,6 +253,16 @@
               "parameter": "repeat_reminder"
             }
           ]
+        },
+        {
+          "name": "MonthDays",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "create_habit",
+              "parameter": "month_days"
+            }
+          ]
         }
       ]
     },
@@ -538,6 +548,16 @@
               "parameter": "clear_fields"
             }
           ]
+        },
+        {
+          "name": "MonthDays",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "update_habit",
+              "parameter": "month_days"
+            }
+          ]
         }
       ]
     },
@@ -741,6 +761,16 @@
             {
               "tool": "create_sub_habit",
               "parameter": "repeat_reminder"
+            }
+          ]
+        },
+        {
+          "name": "MonthDays",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "create_sub_habit",
+              "parameter": "month_days"
             }
           ]
         }
@@ -1387,6 +1417,14 @@
             "required": false
           },
           {
+            "name": "habits[].month_days",
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "required": false
+          },
+          {
             "name": "habits[].parent_habit_id",
             "type": "string",
             "required": false
@@ -1656,6 +1694,14 @@
           {
             "name": "habits[].sub_habits[].is_general",
             "type": "boolean",
+            "required": false
+          },
+          {
+            "name": "habits[].sub_habits[].month_days",
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
             "required": false
           },
           {
@@ -2520,6 +2566,14 @@
             "required": false
           },
           {
+            "name": "updates.month_days",
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "required": false
+          },
+          {
             "name": "updates.relative_reminders",
             "type": "array",
             "items": {
@@ -2843,6 +2897,14 @@
             "required": false
           },
           {
+            "name": "month_days",
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "required": false
+          },
+          {
             "name": "parent_habit_id",
             "type": "string",
             "required": false
@@ -3112,6 +3174,14 @@
           {
             "name": "sub_habits[].is_general",
             "type": "boolean",
+            "required": false
+          },
+          {
+            "name": "sub_habits[].month_days",
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
             "required": false
           },
           {
@@ -3430,6 +3500,14 @@
             "required": false
           },
           {
+            "name": "month_days",
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "required": false
+          },
+          {
             "name": "parent_habit_id",
             "type": "string",
             "required": true
@@ -3699,6 +3777,14 @@
           {
             "name": "sub_habits[].is_general",
             "type": "boolean",
+            "required": false
+          },
+          {
+            "name": "sub_habits[].month_days",
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
             "required": false
           },
           {
@@ -5642,6 +5728,14 @@
             "required": false
           },
           {
+            "name": "month_days",
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "required": false
+          },
+          {
             "name": "parent_habit_id",
             "type": "string",
             "required": false
@@ -6645,6 +6739,14 @@
             "required": false
           },
           {
+            "name": "updatesJson.month_days",
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "required": false
+          },
+          {
             "name": "updatesJson.relative_reminders",
             "type": "array",
             "items": {
@@ -6898,6 +7000,12 @@
             "default": "false"
           },
           {
+            "name": "monthDays",
+            "type": "int[]?",
+            "required": false,
+            "default": "null"
+          },
+          {
             "name": "repeatReminder",
             "type": "string?",
             "required": false,
@@ -7000,6 +7108,12 @@
             "type": "bool",
             "required": false,
             "default": "false"
+          },
+          {
+            "name": "monthDays",
+            "type": "int[]?",
+            "required": false,
+            "default": "null"
           },
           {
             "name": "parentHabitId",
@@ -8173,6 +8287,12 @@
           {
             "name": "isGeneral",
             "type": "bool?",
+            "required": false,
+            "default": "null"
+          },
+          {
+            "name": "monthDays",
+            "type": "int[]?",
             "required": false,
             "default": "null"
           },
@@ -20940,6 +21060,201 @@
                 "filterKeyedBulk": {
                   "status": "deliberate",
                   "reason": "The persisted achievement maximum is derived from completion history and cannot be edited through AI tools."
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "MonthDays",
+          "type": "IReadOnlyList<int>",
+          "surfaces": {
+            "chat": {
+              "verdict": "inventoried",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "create_habit",
+                      "parameter": "month_days",
+                      "status": "covered"
+                    }
+                  ]
+                },
+                "read": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "query_habits",
+                      "status": "covered"
+                    }
+                  ]
+                },
+                "update": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "update_habit",
+                      "parameter": "month_days",
+                      "status": "covered"
+                    }
+                  ]
+                },
+                "delete": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "delete_habit",
+                      "status": "entity-operation"
+                    }
+                  ]
+                },
+                "bulk": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habits[].month_days",
+                      "status": "covered"
+                    },
+                    {
+                      "tool": "bulk_update_habits",
+                      "parameter": "updates.month_days",
+                      "status": "covered"
+                    }
+                  ]
+                },
+                "filterKeyedBulk": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "bulk_update_habits",
+                      "parameter": "updates.month_days",
+                      "status": "covered"
+                    }
+                  ]
+                }
+              }
+            },
+            "mcp": {
+              "verdict": "inventoried",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "create_habit",
+                      "parameter": "monthDays",
+                      "status": "covered"
+                    }
+                  ],
+                  "viaOperations": [
+                    {
+                      "tool": "create_habit",
+                      "parameter": "month_days",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
+                },
+                "read": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "get_habit",
+                      "status": "covered"
+                    },
+                    {
+                      "tool": "list_habits",
+                      "status": "covered"
+                    }
+                  ],
+                  "viaOperations": [
+                    {
+                      "tool": "query_habits",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
+                },
+                "update": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "update_habit",
+                      "parameter": "monthDays",
+                      "status": "covered"
+                    }
+                  ],
+                  "viaOperations": [
+                    {
+                      "tool": "update_habit",
+                      "parameter": "month_days",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
+                },
+                "delete": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "delete_habit",
+                      "status": "entity-operation"
+                    }
+                  ],
+                  "viaOperations": [
+                    {
+                      "tool": "delete_habit",
+                      "status": "entity-operation",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
+                },
+                "bulk": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "bulk_update_habits",
+                      "parameter": "updatesJson.month_days",
+                      "status": "covered"
+                    }
+                  ],
+                  "viaOperations": [
+                    {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habits[].month_days",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    },
+                    {
+                      "tool": "bulk_update_habits",
+                      "parameter": "updates.month_days",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
+                },
+                "filterKeyedBulk": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "bulk_update_habits",
+                      "parameter": "updatesJson.month_days",
+                      "status": "covered"
+                    }
+                  ],
+                  "viaOperations": [
+                    {
+                      "tool": "bulk_update_habits",
+                      "parameter": "updates.month_days",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
                 }
               }
             }
@@ -41361,6 +41676,201 @@
                 "filterKeyedBulk": {
                   "status": "deliberate",
                   "reason": "The persisted achievement maximum is derived from completion history and cannot be edited through AI tools."
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "MonthDays",
+          "type": "IReadOnlyList<int>",
+          "surfaces": {
+            "chat": {
+              "verdict": "inventoried",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "create_sub_habit",
+                      "parameter": "month_days",
+                      "status": "covered"
+                    }
+                  ]
+                },
+                "read": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "query_habits",
+                      "status": "covered"
+                    }
+                  ]
+                },
+                "update": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "update_habit",
+                      "parameter": "month_days",
+                      "status": "covered"
+                    }
+                  ]
+                },
+                "delete": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "delete_habit",
+                      "status": "entity-operation"
+                    }
+                  ]
+                },
+                "bulk": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habits[].month_days",
+                      "status": "covered"
+                    },
+                    {
+                      "tool": "bulk_update_habits",
+                      "parameter": "updates.month_days",
+                      "status": "covered"
+                    }
+                  ]
+                },
+                "filterKeyedBulk": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "bulk_update_habits",
+                      "parameter": "updates.month_days",
+                      "status": "covered"
+                    }
+                  ]
+                }
+              }
+            },
+            "mcp": {
+              "verdict": "inventoried",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "create_sub_habit",
+                      "parameter": "monthDays",
+                      "status": "covered"
+                    }
+                  ],
+                  "viaOperations": [
+                    {
+                      "tool": "create_sub_habit",
+                      "parameter": "month_days",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
+                },
+                "read": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "get_habit",
+                      "status": "covered"
+                    },
+                    {
+                      "tool": "list_habits",
+                      "status": "covered"
+                    }
+                  ],
+                  "viaOperations": [
+                    {
+                      "tool": "query_habits",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
+                },
+                "update": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "update_habit",
+                      "parameter": "monthDays",
+                      "status": "covered"
+                    }
+                  ],
+                  "viaOperations": [
+                    {
+                      "tool": "update_habit",
+                      "parameter": "month_days",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
+                },
+                "delete": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "delete_habit",
+                      "status": "entity-operation"
+                    }
+                  ],
+                  "viaOperations": [
+                    {
+                      "tool": "delete_habit",
+                      "status": "entity-operation",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
+                },
+                "bulk": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "bulk_update_habits",
+                      "parameter": "updatesJson.month_days",
+                      "status": "covered"
+                    }
+                  ],
+                  "viaOperations": [
+                    {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habits[].month_days",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    },
+                    {
+                      "tool": "bulk_update_habits",
+                      "parameter": "updates.month_days",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
+                },
+                "filterKeyedBulk": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "bulk_update_habits",
+                      "parameter": "updatesJson.month_days",
+                      "status": "covered"
+                    }
+                  ],
+                  "viaOperations": [
+                    {
+                      "tool": "bulk_update_habits",
+                      "parameter": "updates.month_days",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
                 }
               }
             }

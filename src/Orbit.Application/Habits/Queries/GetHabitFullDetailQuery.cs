@@ -83,6 +83,7 @@ public class GetHabitFullDetailQueryHandler(
             habit.ChecklistItems, habit.CreatedAtUtc, children,
             Emoji: habit.Emoji,
             IntervalWeeks: habit.IntervalWeeks,
+            MonthDays: habit.MonthDays,
             LinkedGoals: habit.ParentHabitId.HasValue
                 ? habit.Goals.Select(goal => new LinkedGoalDto(goal.Id, goal.Title)).ToList()
                 : null,

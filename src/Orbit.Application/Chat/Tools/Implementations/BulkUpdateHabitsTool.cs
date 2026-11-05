@@ -34,6 +34,7 @@ public sealed class BulkUpdateHabitsTool(IMediator mediator) : IAiTool, IArgumen
                     frequency_unit = new { description = "Use clear_fields to clear frequency_unit.", type = new[] { JsonSchemaTypes.String, "null" }, @enum = JsonSchemaTypes.FrequencyUnitEnum },
                     frequency_quantity = new { description = "Use clear_fields to clear frequency_quantity.", type = new[] { JsonSchemaTypes.Integer, "null" } },
                     interval_weeks = new { description = "Use clear_fields to clear interval_weeks.", type = new[] { JsonSchemaTypes.Integer, "null" } },
+                    month_days = new { type = JsonSchemaTypes.Array, description = HabitModelInstructions.MonthDays + " [] clears.", items = new { type = JsonSchemaTypes.Integer } },
                     days = new { type = JsonSchemaTypes.Array, items = new { type = JsonSchemaTypes.String, @enum = JsonSchemaTypes.WeekdayEnum } },
                     due_date = new { type = JsonSchemaTypes.String },
                     end_date = new { description = "Use clear_fields to clear end_date.", type = new[] { JsonSchemaTypes.String, "null" } },

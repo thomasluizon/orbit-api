@@ -29,7 +29,8 @@ public record UpdateHabitCommand(
     DateOnly? StartDate = null,
     IReadOnlyList<Guid>? TagIds = null,
     Guid? ParentId = null,
-    bool? ClearParent = null) : IRequest<Result>;
+    bool? ClearParent = null,
+    IReadOnlyList<int>? MonthDays = null) : IRequest<Result>;
 
 public sealed record UpdateHabitFieldsCommand(
     Guid UserId,
@@ -257,7 +258,8 @@ public class UpdateHabitCommandHandler(
             UserToday: today,
             IntervalWeeks: request.IntervalWeeks ?? habit.IntervalWeeks,
             StartDate: request.StartDate,
-            ResetCompletion: request.IsGeneral == true));
+            ResetCompletion: request.IsGeneral == true,
+            MonthDays: request.MonthDays));
 
     }
 

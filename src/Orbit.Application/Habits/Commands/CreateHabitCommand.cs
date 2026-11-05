@@ -27,7 +27,8 @@ public record CreateHabitCommand(
     IReadOnlyList<Guid>? GoalIds = null,
     string? Emoji = null,
     int? IntervalWeeks = null,
-    DateOnly? StartDate = null) : IRequest<Result<Guid>>, IIdempotentCommand;
+    DateOnly? StartDate = null,
+    IReadOnlyList<int>? MonthDays = null) : IRequest<Result<Guid>>, IIdempotentCommand;
 
 /// <summary>
 /// Groups repository dependencies for habit creation to reduce constructor parameter count (S107).
@@ -103,7 +104,8 @@ public partial class CreateHabitCommandHandler(
             Position: nextPosition,
             IntervalWeeks: request.IntervalWeeks,
             StartDate: request.StartDate,
-            WeekStartDay: weekStartDay));
+            WeekStartDay: weekStartDay,
+            MonthDays: request.MonthDays));
 
         if (habitResult.IsFailure)
             return habitResult.PropagateError<Guid>();
@@ -178,7 +180,8 @@ public partial class CreateHabitCommandHandler(
                 EndDate: opts.EndDate,
                 Position: subPosition++,
                 IntervalWeeks: request.IntervalWeeks,
-                StartDate: request.StartDate));
+                StartDate: request.StartDate,
+                MonthDays: request.MonthDays));
 
             if (childResult.IsFailure)
                 return childResult.PropagateError();

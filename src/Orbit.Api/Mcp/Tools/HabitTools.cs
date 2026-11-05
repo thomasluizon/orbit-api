@@ -47,7 +47,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
             var lines = new List<string>();
             foreach (var h in items)
             {
-                lines.Add(McpToolHelpers.FormatHabitLine(new McpToolHelpers.HabitLineData(h.Id, h.Title, h.FrequencyUnit, h.FrequencyQuantity, h.DueTime, h.IsCompleted, h.IsOverdue, h.IsBadHabit, h.Schedule ?? HabitSchedule.OneTime, h.ChecklistItems, h.Tags, h.Emoji, new HabitFieldSummary { Description = h.Description, DueTime = h.DueTime, StartDate = h.StartDate, ParentHabitId = h.ParentHabitId, ParentTitle = h.ParentTitle, Tags = h.Tags, DueEndTime = h.DueEndTime, IntervalWeeks = h.IntervalWeeks, Days = h.Days, EndDate = h.EndDate, ReminderEnabled = h.ReminderEnabled, ReminderTimes = h.ReminderTimes, ScheduledReminders = h.ScheduledReminders, RelativeReminders = h.RelativeReminders ?? [], SlipAlertEnabled = h.SlipAlertEnabled, Schedule = h.Schedule ?? HabitSchedule.OneTime, ChecklistItems = h.ChecklistItems }.Format(h.DueDate)), indent: 0));
+                lines.Add(McpToolHelpers.FormatHabitLine(new McpToolHelpers.HabitLineData(h.Id, h.Title, h.FrequencyUnit, h.FrequencyQuantity, h.DueTime, h.IsCompleted, h.IsOverdue, h.IsBadHabit, h.Schedule ?? HabitSchedule.OneTime, h.ChecklistItems, h.Tags, h.Emoji, new HabitFieldSummary { Description = h.Description, DueTime = h.DueTime, StartDate = h.StartDate, ParentHabitId = h.ParentHabitId, ParentTitle = h.ParentTitle, Tags = h.Tags, DueEndTime = h.DueEndTime, IntervalWeeks = h.IntervalWeeks, Days = h.Days, MonthDays = h.MonthDays ?? [], EndDate = h.EndDate, ReminderEnabled = h.ReminderEnabled, ReminderTimes = h.ReminderTimes, ScheduledReminders = h.ScheduledReminders, RelativeReminders = h.RelativeReminders ?? [], SlipAlertEnabled = h.SlipAlertEnabled, Schedule = h.Schedule ?? HabitSchedule.OneTime, ChecklistItems = h.ChecklistItems }.Format(h.DueDate)), indent: 0));
                 McpToolHelpers.AppendChildren(lines, h.Children, indent: 1);
             }
 
@@ -89,6 +89,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
                 DueEndTime = h.DueEndTime,
                 IntervalWeeks = h.IntervalWeeks,
                 Days = [],
+                MonthDays = h.MonthDays ?? [],
                 EndDate = h.EndDate,
                 ReminderEnabled = h.ReminderEnabled,
                 ReminderTimes = h.ReminderTimes,
@@ -132,6 +133,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
         [Description("Repeat interval in weeks. Omit for every week.")] int? intervalWeeks = null,
         [Description("Emoji icon for the habit")] string? emoji = null,
         [Description("Repeat reminder JSON for any schedule: interval_minutes, optional active_start and active_end (HH:mm), and start_at_utc (UTC). Omit to keep current settings; use null JSON to clear on update.")] string? repeatReminder = null,
+        [Description("Days of the month (1 to 31) for a Month habit, for example [8, 15]. A short month uses its last day.")] int[]? monthDays = null,
         CancellationToken cancellationToken = default)
     {
         try
@@ -148,6 +150,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
                 ["is_flexible"] = isFlexible,
                 ["due_time"] = dueTime,
                 ["interval_weeks"] = intervalWeeks,
+                ["month_days"] = monthDays,
                 ["emoji"] = emoji
             };
             McpToolHelpers.AddJsonArguments(arguments, ("repeat_reminder", repeatReminder));
@@ -184,6 +187,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
         [Description("Enable slip alerts. Requires Pro.")] bool? slipAlertEnabled = null,
         [Description("JSON array of relative reminders: minutes_before, or when (day_before/same_day) and time (HH:mm). Empty array clears them.")] string? relativeReminders = null,
         [Description("Repeat reminder JSON for any schedule: interval_minutes, optional active_start and active_end (HH:mm), and start_at_utc (UTC). Omit to keep current settings; use null JSON to clear on update.")] string? repeatReminder = null,
+        [Description("Days of the month (1 to 31) for a Month habit, for example [8, 15]. Omit to keep them; an empty array clears them.")] int[]? monthDays = null,
         CancellationToken cancellationToken = default)
     {
         try
@@ -201,6 +205,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
                 ["frequency_quantity"] = frequencyQuantity,
                 ["due_date"] = dueDate,
                 ["interval_weeks"] = intervalWeeks,
+                ["month_days"] = monthDays,
                 ["is_general"] = isGeneral,
                 ["slip_alert_enabled"] = slipAlertEnabled
             });
@@ -491,6 +496,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
         [Description("JSON array of checklist items with text and is_checked")] string? checklistItems = null,
         [Description("Existing tag IDs")] string[]? tagIds = null,
         [Description("Repeat reminder JSON for any schedule: interval_minutes, optional active_start and active_end (HH:mm), and start_at_utc (UTC).")] string? repeatReminder = null,
+        [Description("Days of the month (1 to 31) for a Month habit, for example [8, 15]. A short month uses its last day.")] int[]? monthDays = null,
         CancellationToken cancellationToken = default)
     {
         try
@@ -509,6 +515,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
                 ["due_end_time"] = dueEndTime,
                 ["end_date"] = endDate,
                 ["interval_weeks"] = intervalWeeks,
+                ["month_days"] = monthDays,
                 ["emoji"] = emoji,
                 ["days"] = days,
                 ["reminder_enabled"] = reminderEnabled,

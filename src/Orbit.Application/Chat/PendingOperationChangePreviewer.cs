@@ -41,7 +41,7 @@ public sealed partial class PendingOperationChangePreviewer(
     private static readonly HashSet<string> CreateFields = new(StringComparer.Ordinal)
     {
         "title", "description", "emoji", "frequency_unit", "frequency_quantity",
-        IntervalWeeks, "days", DueDate, StartDate, EndDate, DueTime, GoalIds, TagNames, TagIds, HabitId,
+        IntervalWeeks, MonthDays, "days", DueDate, StartDate, EndDate, DueTime, GoalIds, TagNames, TagIds, HabitId,
         IsBadHabit, IsGeneralField, IsFlexible, ChecklistItemsField, SubHabits,
         DueEndTimeField, SlipAlertEnabledField, ReminderEnabledField, ReminderTimesField,
         ScheduledRemindersField, RelativeRemindersField, RepeatReminderToolArguments.Field
@@ -462,6 +462,7 @@ public sealed partial class PendingOperationChangePreviewer(
         ["frequency_quantity"] = AgentArgumentPreview.Format(habit.FrequencyQuantity),
         [IntervalWeeks] = AgentArgumentPreview.Format(habit.IntervalWeeks),
         ["days"] = string.Join(", ", habit.Days),
+        [MonthDays] = string.Join(", ", habit.MonthDays),
         [DueDate] = AgentArgumentPreview.Format(habit.NextDueDate),
         [StartDate] = AgentArgumentPreview.Format(habit.StartDate),
         [EndDate] = AgentArgumentPreview.Format(habit.EndDate),
@@ -917,6 +918,8 @@ public sealed partial class PendingOperationChangePreviewer(
         Add(IntervalWeeks, habit.IntervalWeeks, effective.IntervalWeeks, "number");
         Add("days", string.Join(", ", habit.Days), string.Join(", ", effective.Days), "text",
             typedValue: JsonSerializer.SerializeToElement(effective.Days.Select(day => day.ToString())));
+        AddList(MonthDays, habit.MonthDays, effective.MonthDays,
+            day => day.ToString(CultureInfo.InvariantCulture), JsonSerializer.SerializeToElement(effective.MonthDays));
         Add(DueDate, habit.NextDueDate, effective.NextDueDate, "date");
         if (changes.HasStartDate) Add(StartDate, habit.StartDate, effective.StartDate, "date");
         Add(EndDate, habit.EndDate, effective.EndDate, "date");
@@ -985,6 +988,7 @@ public sealed partial class PendingOperationChangePreviewer(
                 or IsFlexible or ReminderEnabledField or ChecklistItemsField
                 or DueEndTimeField or IsGeneralField or SlipAlertEnabledField or RelativeRemindersField or RepeatReminderToolArguments.Field => true,
             "days" => effective.Schedule != HabitSchedule.Flexible,
+            MonthDays => effective.FrequencyUnit == FrequencyUnit.Month && effective.Schedule == HabitSchedule.Recurring,
             EndDate => habit.Schedule != HabitSchedule.General,
             ReminderTimesField => effective.DueTime is null
                 || !changes.HasScheduledReminders || changes.ScheduledReminders is not { Count: > 0 },

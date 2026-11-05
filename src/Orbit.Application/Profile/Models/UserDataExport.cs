@@ -73,7 +73,8 @@ public sealed record ExportedHabit(
     IReadOnlyList<ChecklistItem> ChecklistItems,
     DateTime CreatedAtUtc,
     IReadOnlyList<ExportedHabitLog> Logs,
-    int? IntervalWeeks = null);
+    int? IntervalWeeks = null,
+    IReadOnlyList<int>? MonthDays = null);
 
 public sealed record ExportedHabitLog(
     DateOnly Date,

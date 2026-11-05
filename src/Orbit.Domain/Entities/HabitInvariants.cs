@@ -16,7 +16,8 @@ internal static class HabitInvariants
         HabitSchedule schedule, bool isBadHabit,
         FrequencyUnit? frequencyUnit, int? frequencyQuantity,
         IReadOnlyList<System.DayOfWeek>? days,
-        int? intervalWeeks)
+        int? intervalWeeks,
+        IReadOnlyList<int>? monthDays = null)
     {
         if (!HasCompatibleFrequency(schedule, frequencyUnit))
             return DomainErrors.RecurrenceScheduleUnsatisfiable;
@@ -44,6 +45,24 @@ internal static class HabitInvariants
 
         if (schedule != HabitSchedule.Flexible && days?.Count > 0 && (frequencyQuantity != 1 || frequencyUnit != Enums.FrequencyUnit.Day))
             return DomainErrors.DaysRequireQuantityOne;
+
+        return ValidateMonthDays(schedule, frequencyUnit, days, intervalWeeks, monthDays);
+    }
+
+    private static AppError? ValidateMonthDays(
+        HabitSchedule schedule, FrequencyUnit? frequencyUnit,
+        IReadOnlyList<System.DayOfWeek>? days, int? intervalWeeks,
+        IReadOnlyList<int>? monthDays)
+    {
+        if (monthDays is not { Count: > 0 })
+            return null;
+
+        if (!MonthDaySchedule.IsValid(monthDays))
+            return DomainErrors.MonthDaysInvalid;
+
+        if (schedule != HabitSchedule.Recurring || frequencyUnit != Enums.FrequencyUnit.Month
+            || days?.Count > 0 || intervalWeeks > 1)
+            return DomainErrors.MonthDaysRequireMonth;
 
         return null;
     }

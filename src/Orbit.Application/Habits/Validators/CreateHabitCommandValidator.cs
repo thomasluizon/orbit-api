@@ -40,6 +40,8 @@ public class CreateHabitCommandValidator : AbstractValidator<CreateHabitCommand>
             .WithCopy(ValidationErrorCodes.DateRangeOrderLower);
 
         SharedHabitRules.AddIntervalWeeksRules(RuleFor(x => x.IntervalWeeks));
+        SharedHabitRules.AddMonthDaysRules(this, x => x.MonthDays, x => x.FrequencyUnit,
+            x => x.Options != null && x.Options.IsFlexible, x => x.Options?.Days, allowEmpty: false);
 
         SharedHabitRules.AddDaysRules(this,
             x => x.Options != null ? x.Options.Days : null,

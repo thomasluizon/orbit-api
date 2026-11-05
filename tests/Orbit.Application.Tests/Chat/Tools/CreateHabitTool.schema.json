@@ -52,6 +52,13 @@
         ]
       }
     },
+    "month_days": {
+      "type": "array",
+      "description": "Days of the month, 1 to 31, for frequency_unit=Month.",
+      "items": {
+        "type": "integer"
+      }
+    },
     "due_date": {
       "type": "string",
       "description": "YYYY-MM-DD. Defaults to today."
@@ -307,6 +314,13 @@
                 "Friday",
                 "Saturday"
               ]
+            }
+          },
+          "month_days": {
+            "type": "array",
+            "description": "Days of the month, 1 to 31, for frequency_unit=Month.",
+            "items": {
+              "type": "integer"
             }
           },
           "due_date": {
@@ -566,6 +580,13 @@
                     ]
                   }
                 },
+                "month_days": {
+                  "type": "array",
+                  "description": "Days of the month, 1 to 31, for frequency_unit=Month.",
+                  "items": {
+                    "type": "integer"
+                  }
+                },
                 "due_date": {
                   "type": "string",
                   "description": "YYYY-MM-DD. Defaults to today."
@@ -823,6 +844,13 @@
                           ]
                         }
                       },
+                      "month_days": {
+                        "type": "array",
+                        "description": "Days of the month, 1 to 31, for frequency_unit=Month.",
+                        "items": {
+                          "type": "integer"
+                        }
+                      },
                       "due_date": {
                         "type": "string",
                         "description": "YYYY-MM-DD. Defaults to today."
@@ -1078,6 +1106,13 @@
                                   "Friday",
                                   "Saturday"
                                 ]
+                              }
+                            },
+                            "month_days": {
+                              "type": "array",
+                              "description": "Days of the month, 1 to 31, for frequency_unit=Month.",
+                              "items": {
+                                "type": "integer"
                               }
                             },
                             "due_date": {

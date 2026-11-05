@@ -77,6 +77,8 @@ public class UpdateHabitCommandValidator : AbstractValidator<UpdateHabitCommand>
             .WithCopy(ValidationErrorCodes.DateRangeOrderLower);
 
         SharedHabitRules.AddIntervalWeeksRules(RuleFor(x => x.IntervalWeeks));
+        SharedHabitRules.AddMonthDaysRules(this, x => x.MonthDays, x => x.FrequencyUnit,
+            IsFlexible, OptionDays, allowEmpty: true);
 
         SharedHabitRules.AddDaysRules(this,
             x => x.Options != null ? x.Options.Days : null,
@@ -115,6 +117,10 @@ public class UpdateHabitCommandValidator : AbstractValidator<UpdateHabitCommand>
 
         RuleForEach(x => x.TagIds).NotEmpty();
     }
+
+    private static bool IsFlexible(UpdateHabitCommand command) => command.Options?.IsFlexible == true;
+
+    private static IReadOnlyList<DayOfWeek>? OptionDays(UpdateHabitCommand command) => command.Options?.Days;
 
     private sealed class FieldsValidator : AbstractValidator<UpdateHabitCommand>
     {

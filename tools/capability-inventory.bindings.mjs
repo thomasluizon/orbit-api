@@ -114,6 +114,7 @@ const formats = {
   DueEndTime: [format("DueEndTime is { } endTime"), format('fields.Add($"Due end time:')],
   IntervalWeeks: [format("IntervalWeeks is { } weeks"), format('fields.Add($"Interval weeks:')],
   Days: [format('string.Join(", ", Days)')],
+  MonthDays: [format('string.Join(", ", MonthDays)')],
   EndDate: [format("EndDate is { } endDate"), format('fields.Add($"End date:')],
   ReminderEnabled: [format('if (ReminderEnabled) fields.Add("Reminders: enabled")')],
   ReminderTimes: [format('string.Join(", ", ReminderTimes)')],

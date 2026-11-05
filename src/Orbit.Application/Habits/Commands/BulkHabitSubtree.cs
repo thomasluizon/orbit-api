@@ -103,7 +103,7 @@ internal static class BulkHabitSubtree
     private static Result<Habit> BuildHabit(
         Guid userId, BulkHabitItem item, Habit? parent, DateOnly today, int position)
     {
-        var hasExplicitCadence = HasExplicitCadence(item);
+        var inheritsCadence = !HasExplicitCadence(item) && item.InheritParentFrequency;
         var frequencyUnit = item.FrequencyUnit ?? (item.InheritParentFrequency ? parent?.FrequencyUnit : null);
         var frequencyQuantity = item.FrequencyQuantity ?? (item.InheritParentFrequency ? parent?.FrequencyQuantity : null);
         var days = item.Days;
@@ -134,12 +134,16 @@ internal static class BulkHabitSubtree
             ParentHabitId: parent?.Id,
             Position: position,
             GoogleEventId: item.GoogleEventId,
-            IntervalWeeks: item.IntervalWeeks ?? (hasExplicitCadence || !item.InheritParentFrequency ? null : parent?.IntervalWeeks)));
+            IntervalWeeks: item.IntervalWeeks ?? (inheritsCadence ? parent?.IntervalWeeks : null),
+            MonthDays: ResolveMonthDays(item, parent, inheritsCadence)));
     }
+
+    private static IReadOnlyList<int>? ResolveMonthDays(BulkHabitItem item, Habit? parent, bool inheritsCadence) =>
+        item.MonthDays ?? (inheritsCadence && parent?.MonthDays is { Count: > 0 } inherited ? inherited : null);
 
     private static bool HasExplicitCadence(BulkHabitItem item) =>
         item.FrequencyUnit is not null || item.FrequencyQuantity is not null
-        || item.IntervalWeeks is not null || item.Days is not null;
+        || item.IntervalWeeks is not null || item.Days is not null || item.MonthDays is not null;
 
     private static string? DetermineField(string? code, string error)
     {
@@ -147,6 +151,8 @@ internal static class BulkHabitSubtree
             return nameof(BulkHabitItem.FrequencyQuantity);
         if (code == DomainErrors.IntervalWeeksInvalid.Code)
             return nameof(BulkHabitItem.IntervalWeeks);
+        if (code == DomainErrors.MonthDaysInvalid.Code || code == DomainErrors.MonthDaysRequireMonth.Code)
+            return nameof(BulkHabitItem.MonthDays);
         if (code == DomainErrors.EndDateBeforeStartDate.Code || code == DomainErrors.OneTimeTaskHasEndDate.Code)
             return nameof(BulkHabitItem.EndDate);
         if (code == DomainErrors.EndTimeBeforeStartTime.Code)

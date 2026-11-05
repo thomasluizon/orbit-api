@@ -288,4 +288,34 @@ public sealed class BulkHabitToolArgumentsTests
     }
 
     private static JsonElement Parse(string json) => JsonDocument.Parse(json).RootElement.Clone();
+
+    [Fact]
+    public void MonthDays_ParseIntoTheBulkChanges()
+    {
+        var (changes, error) = BulkHabitToolArguments.ParseChanges(Parse("""{"updates":{"month_days":[8,15]}}"""));
+
+        error.Should().BeNull();
+        changes!.HasMonthDays.Should().BeTrue();
+        changes.MonthDays.Should().Equal(8, 15);
+    }
+
+    [Fact]
+    public void EmptyMonthDays_ParseAsAClear()
+    {
+        var (changes, error) = BulkHabitToolArguments.ParseChanges(Parse("""{"updates":{"month_days":[]}}"""));
+
+        error.Should().BeNull();
+        changes!.HasMonthDays.Should().BeTrue();
+        changes.MonthDays.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData("""{"updates":{"month_days":[32]}}""")]
+    [InlineData("""{"updates":{"month_days":[8,8]}}""")]
+    [InlineData("""{"updates":{"month_days":["8"]}}""")]
+    [InlineData("""{"updates":{"month_days":8}}""")]
+    public void InvalidMonthDays_AreRejected(string json)
+    {
+        BulkHabitToolArguments.ParseChanges(Parse(json)).Error.Should().NotBeNull();
+    }
 }
