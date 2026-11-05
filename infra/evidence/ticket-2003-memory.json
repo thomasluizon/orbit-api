@@ -1,0 +1,316 @@
+{
+  "serviceId": "srv-d6tc2isr85hc739bf75g",
+  "image": "ghcr.io/thomasluizon/orbit-api@sha256:6211279f23073c595fe8f3bb84a7bdb4bdc903254936e0eaa0ea409fc0314642",
+  "imageDotnetVersion": "10.0.14",
+  "runtimeconfig": {
+    "runtimeOptions": {
+      "tfm": "net10.0",
+      "frameworks": [
+        {
+          "name": "Microsoft.NETCore.App",
+          "version": "10.0.0"
+        },
+        {
+          "name": "Microsoft.AspNetCore.App",
+          "version": "10.0.0"
+        }
+      ],
+      "configProperties": {
+        "System.GC.Server": true,
+        "System.Reflection.Metadata.MetadataUpdater.IsSupported": false,
+        "System.Reflection.NullabilityInfoContext.IsSupported": true,
+        "System.Runtime.Serialization.EnableUnsafeBinaryFormatterSerialization": false
+      }
+    }
+  },
+  "serviceGcEnvironmentOverrides": [],
+  "linkedEnvironmentGroupGcOverrides": [],
+  "memory": [
+    {
+      "labels": [
+        {
+          "field": "instance",
+          "value": "srv-d6tc2isr85hc739bf75g-dlq2q"
+        },
+        {
+          "field": "service",
+          "value": "srv-d6tc2isr85hc739bf75g"
+        },
+        {
+          "field": "resource",
+          "value": "srv-d6tc2isr85hc739bf75g"
+        }
+      ],
+      "unit": "bytes",
+      "values": [
+        {
+          "timestamp": "2026-11-05T00:30:00Z",
+          "value": 220962820
+        }
+      ]
+    },
+    {
+      "labels": [
+        {
+          "field": "service",
+          "value": "srv-d6tc2isr85hc739bf75g"
+        },
+        {
+          "field": "resource",
+          "value": "srv-d6tc2isr85hc739bf75g"
+        },
+        {
+          "field": "instance",
+          "value": "srv-d6tc2isr85hc739bf75g-bxhnc"
+        }
+      ],
+      "unit": "bytes",
+      "values": [
+        {
+          "timestamp": "2026-11-04T12:00:00Z",
+          "value": 495726600
+        },
+        {
+          "timestamp": "2026-11-04T12:30:00Z",
+          "value": 499916800
+        },
+        {
+          "timestamp": "2026-11-04T13:00:00Z",
+          "value": 499462140
+        },
+        {
+          "timestamp": "2026-11-04T13:30:00Z",
+          "value": 507269120
+        },
+        {
+          "timestamp": "2026-11-04T14:00:00Z",
+          "value": 517406720
+        },
+        {
+          "timestamp": "2026-11-04T14:30:00Z",
+          "value": 499429380
+        },
+        {
+          "timestamp": "2026-11-04T15:00:00Z",
+          "value": 495439870
+        },
+        {
+          "timestamp": "2026-11-04T15:30:00Z",
+          "value": 532324350
+        },
+        {
+          "timestamp": "2026-11-04T16:00:00Z",
+          "value": 520642560
+        },
+        {
+          "timestamp": "2026-11-04T16:30:00Z",
+          "value": 522403840
+        },
+        {
+          "timestamp": "2026-11-04T17:00:00Z",
+          "value": 516038660
+        },
+        {
+          "timestamp": "2026-11-04T17:30:00Z",
+          "value": 530440200
+        },
+        {
+          "timestamp": "2026-11-04T18:00:00Z",
+          "value": 521003000
+        },
+        {
+          "timestamp": "2026-11-04T18:30:00Z",
+          "value": 532152320
+        },
+        {
+          "timestamp": "2026-11-04T19:00:00Z",
+          "value": 527470600
+        },
+        {
+          "timestamp": "2026-11-04T19:30:00Z",
+          "value": 529575940
+        },
+        {
+          "timestamp": "2026-11-04T20:00:00Z",
+          "value": 530915330
+        },
+        {
+          "timestamp": "2026-11-04T20:30:00Z",
+          "value": 531300350
+        },
+        {
+          "timestamp": "2026-11-04T21:00:00Z",
+          "value": 531939330
+        },
+        {
+          "timestamp": "2026-11-04T21:30:00Z",
+          "value": 528420860
+        },
+        {
+          "timestamp": "2026-11-04T22:00:00Z",
+          "value": 533102600
+        },
+        {
+          "timestamp": "2026-11-04T22:30:00Z",
+          "value": 532664320
+        },
+        {
+          "timestamp": "2026-11-04T23:00:00Z",
+          "value": 532033540
+        },
+        {
+          "timestamp": "2026-11-04T23:30:00Z",
+          "value": 528564220
+        },
+        {
+          "timestamp": "2026-11-05T00:00:00Z",
+          "value": 477962240
+        }
+      ]
+    }
+  ],
+  "memoryLimit": [
+    {
+      "labels": [
+        {
+          "field": "instance",
+          "value": "srv-d6tc2isr85hc739bf75g-bxhnc"
+        },
+        {
+          "field": "service",
+          "value": "srv-d6tc2isr85hc739bf75g"
+        },
+        {
+          "field": "resource",
+          "value": "srv-d6tc2isr85hc739bf75g"
+        }
+      ],
+      "unit": "bytes",
+      "values": [
+        {
+          "timestamp": "2026-11-04T12:00:00Z",
+          "value": 536870900
+        },
+        {
+          "timestamp": "2026-11-04T12:30:00Z",
+          "value": 536870900
+        },
+        {
+          "timestamp": "2026-11-04T13:00:00Z",
+          "value": 536870900
+        },
+        {
+          "timestamp": "2026-11-04T13:30:00Z",
+          "value": 536870900
+        },
+        {
+          "timestamp": "2026-11-04T14:00:00Z",
+          "value": 536870900
+        },
+        {
+          "timestamp": "2026-11-04T14:30:00Z",
+          "value": 536870900
+        },
+        {
+          "timestamp": "2026-11-04T15:00:00Z",
+          "value": 536870900
+        },
+        {
+          "timestamp": "2026-11-04T15:30:00Z",
+          "value": 536870900
+        },
+        {
+          "timestamp": "2026-11-04T16:00:00Z",
+          "value": 536870900
+        },
+        {
+          "timestamp": "2026-11-04T16:30:00Z",
+          "value": 536870900
+        },
+        {
+          "timestamp": "2026-11-04T17:00:00Z",
+          "value": 536870900
+        },
+        {
+          "timestamp": "2026-11-04T17:30:00Z",
+          "value": 536870900
+        },
+        {
+          "timestamp": "2026-11-04T18:00:00Z",
+          "value": 536870900
+        },
+        {
+          "timestamp": "2026-11-04T18:30:00Z",
+          "value": 536870900
+        },
+        {
+          "timestamp": "2026-11-04T19:00:00Z",
+          "value": 536870900
+        },
+        {
+          "timestamp": "2026-11-04T19:30:00Z",
+          "value": 536870900
+        },
+        {
+          "timestamp": "2026-11-04T20:00:00Z",
+          "value": 536870900
+        },
+        {
+          "timestamp": "2026-11-04T20:30:00Z",
+          "value": 536870900
+        },
+        {
+          "timestamp": "2026-11-04T21:00:00Z",
+          "value": 536870900
+        },
+        {
+          "timestamp": "2026-11-04T21:30:00Z",
+          "value": 536870900
+        },
+        {
+          "timestamp": "2026-11-04T22:00:00Z",
+          "value": 536870900
+        },
+        {
+          "timestamp": "2026-11-04T22:30:00Z",
+          "value": 536870900
+        },
+        {
+          "timestamp": "2026-11-04T23:00:00Z",
+          "value": 536870900
+        },
+        {
+          "timestamp": "2026-11-04T23:30:00Z",
+          "value": 536870900
+        },
+        {
+          "timestamp": "2026-11-05T00:00:00Z",
+          "value": 536870900
+        }
+      ]
+    },
+    {
+      "labels": [
+        {
+          "field": "service",
+          "value": "srv-d6tc2isr85hc739bf75g"
+        },
+        {
+          "field": "resource",
+          "value": "srv-d6tc2isr85hc739bf75g"
+        },
+        {
+          "field": "instance",
+          "value": "srv-d6tc2isr85hc739bf75g-dlq2q"
+        }
+      ],
+      "unit": "bytes",
+      "values": [
+        {
+          "timestamp": "2026-11-05T00:30:00Z",
+          "value": 536870900
+        }
+      ]
+    }
+  ]
+}
