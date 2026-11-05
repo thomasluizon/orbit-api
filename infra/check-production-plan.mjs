@@ -4,6 +4,23 @@ import { fileURLToPath } from 'node:url'
 import { checkPlan as checkWebPlan } from './check-web-plan.mjs'
 
 const guarded = new Set(['render_web_service.production_api', 'render_web_service.production_web', 'render_env_group.production_api'])
+/**
+ * Release workflows deploy image digests outside Terraform, so Render reports them as refresh drift.
+ * Paths come from the render-oss/render 1.9.1 schema, where `runtime_source.image` is single-nested.
+ */
+const releaseOwned = new Set(['runtime_source.image.digest', 'runtime_source.image.tag'])
+const isObject = value => value !== null && typeof value === 'object' && !Array.isArray(value)
+function changedPaths(before, after, path = []) {
+  if (!isObject(before) || !isObject(after))
+    return JSON.stringify(before) === JSON.stringify(after) ? [] : [path.join('.')]
+  return [...new Set([...Object.keys(before), ...Object.keys(after)])]
+    .flatMap(key => changedPaths(before[key], after[key], [...path, key]))
+}
+function isReleaseImageDrift(resource) {
+  if (!resource.address.startsWith('render_web_service.') || JSON.stringify(resource.change?.actions) !== '["update"]') return false
+  const paths = changedPaths(resource.change.before, resource.change.after)
+  return paths.length > 0 && paths.every(path => releaseOwned.has(path))
+}
 function checkValues(address, change) {
   if (address.startsWith('render_web_service.')) {
     return change?.before?.max_shutdown_delay_seconds === 300 && change?.after?.max_shutdown_delay_seconds === 300
@@ -23,7 +40,7 @@ export function checkProductionPlan(plan) {
     issues.push(...checkValues(address, change))
   }
   for (const resource of plan.resource_drift ?? []) {
-    if (guarded.has(resource.address) && JSON.stringify(resource.change?.actions) !== '["no-op"]')
+    if (guarded.has(resource.address) && JSON.stringify(resource.change?.actions) !== '["no-op"]' && !isReleaseImageDrift(resource))
       issues.push(`Production drift detected on ${resource.address}`)
   }
   return issues
