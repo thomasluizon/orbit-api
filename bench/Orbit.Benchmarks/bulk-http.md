@@ -10,19 +10,19 @@ PostgreSQL 15.19 runs in a disposable Docker container limited to 512 MiB. The .
 
 | Operation | Items | Before p50 ms | After p50 ms | SQL commands before / after | Habit rows before / after |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| log | 5 | 206.94 | 102.64 | 56 / 40 | 30 / 5 |
-| log | 10 | 299.92 | 156.82 | 59 / 43 | 40 / 10 |
-| skip | 5 | 96.04 | 33.31 | 17 / 15 | 10 / 5 |
-| skip | 10 | 159.74 | 77.02 | 18 / 16 | 20 / 10 |
+| log | 5 | 206.94 | 109.19 | 56 / 40 | 30 / 5 |
+| log | 10 | 299.92 | 142.91 | 59 / 43 | 40 / 10 |
+| skip | 5 | 96.04 | 65.55 | 17 / 15 | 10 / 5 |
+| skip | 10 | 159.74 | 66.55 | 18 / 16 | 20 / 10 |
 
 The phase figures below are exclusive times in milliseconds for the request at each cohort's total-latency median, not independent phase medians. Loads include query execution and materialization. Save includes every save in the idempotent transaction. Processing in transaction excludes measured child calls and includes transaction completion; HTTP and setup is the remainder. Lock wait includes both advisory and user-row acquisition.
 
 | Operation | State | Validation | Idempotency read | Lock wait | Loads | Processing in transaction | Save | Cache invalidation | HTTP and setup |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | log 10 | before | 0.15 | 13.33 | 6.78 | 118.87 | 27.04 | 131.37 | 1.57 | 0.80 |
-| log 10 | after | 0.04 | 11.08 | 3.15 | 58.87 | 22.18 | 45.39 | 0.90 | 15.22 |
+| log 10 | after | 0.05 | 10.81 | 3.43 | 60.69 | 16.94 | 48.84 | 1.38 | 0.77 |
 | skip 10 | before | 0.06 | 10.97 | 2.55 | 66.94 | 14.05 | 63.06 | 0.80 | 1.31 |
-| skip 10 | after | 0.05 | 10.91 | 2.34 | 15.98 | 16.27 | 28.96 | 1.20 | 1.32 |
+| skip 10 | after | 0.09 | 10.98 | 2.02 | 13.72 | 14.71 | 22.69 | 0.88 | 1.47 |
 
 The [raw evidence](bulk-http-evidence.json) retains all nine total-latency samples and the median request's complete counters and phases. SQL counts include writes. Habit row counts refer to entity-shaped habit reads, excluding scalar schedule projections and log/goal joins. The log after-case has a second, empty related-family read; selected habit rows are returned once.
 
