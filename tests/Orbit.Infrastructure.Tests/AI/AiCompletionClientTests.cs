@@ -334,7 +334,7 @@ public class AiCompletionClientTests
         await bounded.Should().ThrowAsync<OperationCanceledException>();
         clock.ActiveTimers.Should().Be(0);
         handler.RequestCount.Should().Be(1);
-        AssertFailedUsage(usage);
+        AssertCancelledUsage(usage);
     }
 
     [Theory]
@@ -465,11 +465,25 @@ public class AiCompletionClientTests
 
     private static void AssertFailedUsage(IAiUsageRecorder usage)
     {
+        var metadata = SingleUsageWithoutTokens(usage);
+        metadata.IsError.Should().BeTrue();
+        metadata.IsCancelled.Should().BeFalse();
+        metadata.HasUsage.Should().BeFalse();
+    }
+
+    private static void AssertCancelledUsage(IAiUsageRecorder usage)
+    {
+        var metadata = SingleUsageWithoutTokens(usage);
+        metadata.IsError.Should().BeFalse("the caller cancelled its own call during the retry wait");
+        metadata.IsCancelled.Should().BeTrue();
+        metadata.HasUsage.Should().BeFalse();
+    }
+
+    private static AiCallTelemetry SingleUsageWithoutTokens(IAiUsageRecorder usage)
+    {
         var arguments = usage.ReceivedCalls().Single().GetArguments();
         arguments.Skip(2).Take(4).Should().OnlyContain(value => (long)value! == 0);
-        var metadata = (AiCallTelemetry)arguments[8]!;
-        metadata.IsError.Should().BeTrue();
-        metadata.HasUsage.Should().BeFalse();
+        return (AiCallTelemetry)arguments[8]!;
     }
 
     private sealed class ObservingRetryPolicy() : AiRetryLoggingPolicy(2, NullLogger.Instance)

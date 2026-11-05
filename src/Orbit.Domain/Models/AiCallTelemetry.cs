@@ -6,7 +6,8 @@ public sealed record AiCallTelemetry(
     bool IsError,
     IReadOnlyList<string> ToolNames,
     string? Plan = null,
-    bool HasUsage = true);
+    bool HasUsage = true,
+    bool IsCancelled = false);
 
 public sealed class AiTurnTelemetry(string? traceId = null, string? plan = null)
 {
