@@ -1,7 +1,9 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Chat.Models;
+using Orbit.Application.Common;
 using Orbit.Application.Chat.Validators;
+using Orbit.Domain.Common;
 using Orbit.Domain.Models;
 
 namespace Orbit.Application.Chat.Commands;
@@ -13,10 +15,36 @@ public partial class ProcessUserChatCommandHandler
         RejectedCallCorrection? correction, string? language, Func<AiStreamEvent, Task>? streamSink, CancellationToken ct)
     {
         var plans = await AcceptPlanAsync(response, request, results);
+        TracePlanCalls(response, plans, results);
         response = response with { ToolCalls = response.ToolCalls!.Where(call => call.Name != PlanToolDeclaration.Name).ToArray() };
         return response.HasToolCalls
             ? await ProcessActionCallsAsync(response, request, context, results, iteration, totalBudgetTokens, correction, language, streamSink, ct, plans)
-            : new ToolRoundResult(MessageResponse(language));
+            : await ContinueAfterPlanOnlyRoundAsync(response, plans, language, streamSink, ct);
+    }
+
+    /// <summary>
+    /// A round that holds only <c>present_plan</c> executes no action. The plan acknowledgement goes back
+    /// to the model so that the next round can call the action tools, inside the turn's iteration limit.
+    /// </summary>
+    private async Task<ToolRoundResult> ContinueAfterPlanOnlyRoundAsync(AiResponse response, IReadOnlyList<AiToolCallResult> plans,
+        string? language, Func<AiStreamEvent, Task>? streamSink, CancellationToken ct)
+    {
+        if (response.ConversationContext is null)
+            return new ToolRoundResult(MessageResponse(language));
+        ct.ThrowIfCancellationRequested();
+        var continued = await ai.IntentService.ContinueWithToolResultsAsync(response.ConversationContext, plans, streamSink, ct);
+        if (continued.IsSuccess)
+            return new ToolRoundResult(continued.Value);
+        LogContinueWithToolResultsFailed(logger, continued.Error);
+        return new ToolRoundResult(response, ProviderError: new AppError(
+            continued.ErrorCode ?? ErrorMessages.AiUnavailable.Code, continued.Error));
+    }
+
+    private static void TracePlanCalls(AiResponse response, IReadOnlyList<AiToolCallResult> plans, ToolExecutionAccumulator results)
+    {
+        if (results.EvalTrace is not { } trace) return;
+        foreach (var call in response.ToolCalls!.Where(call => call.Name == PlanToolDeclaration.Name))
+            trace.Record(call, plans.FirstOrDefault(plan => plan.Id == call.Id), null, omitData: false);
     }
 
     private async Task<List<AiToolCallResult>> AcceptPlanAsync(AiResponse response, ProcessUserChatCommand request,
