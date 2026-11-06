@@ -65,13 +65,13 @@ internal sealed record ProcessMemorySnapshot(long WorkingSetBytes, long Anonymou
         {
             if (line.StartsWith("RssAnon:", StringComparison.Ordinal))
             {
-                if (!TryParseKilobytes(line, out var bytes)) return ProcessStatusMemory.Unavailable("RssAnon");
-                anonymousBytes = bytes;
+                if (!TryParseKilobytes(line, out var kilobytes)) return ProcessStatusMemory.Unavailable("RssAnon");
+                anonymousBytes = kilobytes * 1024;
             }
             else if (line.StartsWith("RssShmem:", StringComparison.Ordinal))
             {
-                if (!TryParseKilobytes(line, out var bytes)) return ProcessStatusMemory.Unavailable("RssShmem");
-                shmemBytes = bytes;
+                if (!TryParseKilobytes(line, out var kilobytes)) return ProcessStatusMemory.Unavailable("RssShmem");
+                shmemBytes = kilobytes * 1024;
             }
         }
         if (anonymousBytes is not { } anonymous) return ProcessStatusMemory.Unavailable("RssAnon");
@@ -79,37 +79,56 @@ internal sealed record ProcessMemorySnapshot(long WorkingSetBytes, long Anonymou
         return new(anonymous, shmem, null);
     }
 
-    private static bool TryParseKilobytes(string line, out long bytes)
+    /// <summary>
+    /// Reads a <c>Name: value kB</c> line of a <c>/proc/self</c> file. A value that does not fit in bytes is malformed.
+    /// </summary>
+    internal static bool TryParseKilobytes(string line, out long kilobytes)
     {
-        bytes = 0;
         var fields = line.Split([' ', '\t'], StringSplitOptions.RemoveEmptyEntries);
         if (fields.Length != 3 || fields[2] != "kB"
             || !long.TryParse(fields[1], System.Globalization.NumberStyles.None,
-                System.Globalization.CultureInfo.InvariantCulture, out var kilobytes)
+                System.Globalization.CultureInfo.InvariantCulture, out kilobytes)
             || kilobytes > long.MaxValue / 1024)
+        {
+            kilobytes = 0;
             return false;
-        bytes = kilobytes * 1024;
+        }
         return true;
     }
 }
 
+/// <summary>
+/// Samples process memory every 30 seconds. At startup and with each budget warning, it also logs
+/// <see cref="ProcessMemoryBreakdown"/>, so production logs show which kind of memory grows. The breakdown reads
+/// <c>/proc/self/smaps</c>, so the monitor reads it at most once per warning interval.
+/// </summary>
 internal sealed partial class ProcessMemoryMonitor(ILogger<ProcessMemoryMonitor> logger, TimeProvider time) : BackgroundService
 {
+    internal static readonly TimeSpan WarningInterval = TimeSpan.FromMinutes(5);
+
     private readonly Func<ProcessMemorySnapshot> _readSnapshot = ProcessMemorySnapshot.Read;
+    private readonly Func<TimeSpan, string> _readBreakdown = ProcessMemoryBreakdown.Read;
     private bool _aboveBudget;
     private bool _statusUnavailableLogged;
     private DateTimeOffset _lastWarningAtUtc;
+    private DateTimeOffset? _startedAtUtc;
 
     internal ProcessMemoryMonitor(ILogger<ProcessMemoryMonitor> logger, TimeProvider time,
         Func<ProcessMemorySnapshot> readSnapshot) : this(logger, time) => _readSnapshot = readSnapshot;
 
+    internal ProcessMemoryMonitor(ILogger<ProcessMemoryMonitor> logger, TimeProvider time,
+        Func<ProcessMemorySnapshot> readSnapshot, Func<TimeSpan, string> readBreakdown) : this(logger, time, readSnapshot) =>
+        _readBreakdown = readBreakdown;
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        _startedAtUtc = time.GetUtcNow();
         if (logger.IsEnabled(LogLevel.Information))
         {
             LogBudget(logger, ApiMemoryBudget.ContainerBytes, ApiMemoryBudget.WarningBytes,
                 GC.GetGCMemoryInfo().TotalAvailableMemoryBytes, GCSettings.IsServerGC);
             LogConfiguration(logger, JsonSerializer.Serialize(GC.GetConfigurationVariables()));
+            LogStartupBreakdown(logger, _readBreakdown(TimeSpan.Zero));
         }
         Observe(_readSnapshot(), time.GetUtcNow());
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(30), time);
@@ -126,13 +145,16 @@ internal sealed partial class ProcessMemoryMonitor(ILogger<ProcessMemoryMonitor>
         }
         if (snapshot.UnreclaimableBytes >= ApiMemoryBudget.WarningBytes)
         {
-            if (!_aboveBudget || sampledAtUtc - _lastWarningAtUtc >= TimeSpan.FromMinutes(5))
+            if (!_aboveBudget || sampledAtUtc - _lastWarningAtUtc >= WarningInterval)
             {
                 if (logger.IsEnabled(LogLevel.Warning))
+                {
                     LogBudgetExceeded(logger, snapshot.UnreclaimableBytes,
                         snapshot.UnreclaimableBytes * 100d / ApiMemoryBudget.ContainerBytes, ApiMemoryBudget.ContainerBytes,
                         snapshot.AnonymousBytes, snapshot.ShmemBytes, snapshot.WorkingSetBytes,
                         snapshot.ManagedBytes, snapshot.CommittedBytes, snapshot.HeapLimitBytes);
+                    LogBreakdown(logger, _readBreakdown(sampledAtUtc - (_startedAtUtc ??= sampledAtUtc)));
+                }
                 _lastWarningAtUtc = sampledAtUtc;
             }
             _aboveBudget = true;
@@ -157,6 +179,12 @@ internal sealed partial class ProcessMemoryMonitor(ILogger<ProcessMemoryMonitor>
     private static partial void LogBudgetExceeded(ILogger logger, long unreclaimableBytes, double unreclaimablePercent,
         long containerLimitBytes, long anonymousBytes, long shmemBytes, long workingSetBytes,
         long managedBytes, long committedBytes, long heapLimitBytes);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "API memory breakdown at startup {MemoryBreakdown}")]
+    private static partial void LogStartupBreakdown(ILogger logger, string memoryBreakdown);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "API memory breakdown {MemoryBreakdown}")]
+    private static partial void LogBreakdown(ILogger logger, string memoryBreakdown);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "API memory anonymous plus shmem recovered below budget: {UnreclaimableBytes} bytes; warning {WarningBytes} bytes")]
     private static partial void LogRecovery(ILogger logger, long unreclaimableBytes, long warningBytes);
