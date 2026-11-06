@@ -596,6 +596,15 @@ public static class HabitScheduleService
             && h.FrequencyQuantity != null && h.NextDueDate < today
             && (!h.EndDate.HasValue || h.EndDate.Value >= today);
 
+    /// <summary>
+    /// The in-memory form of <see cref="StaleBadHabitsFor"/> for habits already loaded, so a read compiles no expression.
+    /// </summary>
+    public static bool IsStaleBadHabit(Habit h, Guid userId, DateOnly today) =>
+        h.UserId == userId && h.IsBadHabit
+            && (h.Schedule == HabitSchedule.Recurring || h.Schedule == HabitSchedule.Flexible)
+            && h.FrequencyQuantity != null && h.NextDueDate < today
+            && (!h.EndDate.HasValue || h.EndDate.Value >= today);
+
     public static async Task AdvanceStaleBadHabitDueDates(
         IGenericRepository<Habit> habitRepository, IUnitOfWork unitOfWork,
         Guid userId, DateOnly today, CancellationToken ct, int weekStartDay = 1)

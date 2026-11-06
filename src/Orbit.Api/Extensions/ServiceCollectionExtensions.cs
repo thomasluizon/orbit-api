@@ -403,7 +403,7 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<Microsoft.Extensions.Caching.Memory.IMemoryCache, VersionedMemoryCache>();
         AddOrbitDistributedCache(builder);
 
-        builder.Services.AddValidatorsFromAssemblyContaining<CreateHabitCommandValidator>();
+        builder.Services.AddOrbitValidators();
 
         builder.Services.AddHttpContextAccessor();
         builder.Services.AddScoped<IIdempotencyContext, HttpIdempotencyContext>();
@@ -423,6 +423,18 @@ public static partial class ServiceCollectionExtensions
 
         return builder;
     }
+
+    /// <summary>
+    /// A validator compiles each non-member <c>RuleFor</c> expression when it is constructed, so a scoped
+    /// validator JIT-compiles new dynamic methods on every request. One without constructor dependencies is
+    /// stateless and is registered once: https://docs.fluentvalidation.net/en/latest/di.html
+    /// </summary>
+    internal static IServiceCollection AddOrbitValidators(this IServiceCollection services) =>
+        services.AddValidatorsFromAssemblyContaining<CreateHabitCommandValidator>(ServiceLifetime.Singleton, HasNoConstructorDependencies)
+            .AddValidatorsFromAssemblyContaining<CreateHabitCommandValidator>(filter: scan => !HasNoConstructorDependencies(scan));
+
+    private static bool HasNoConstructorDependencies(AssemblyScanner.AssemblyScanResult scan) =>
+        scan.ValidatorType.GetConstructors().All(constructor => constructor.GetParameters().Length == 0);
 
     public static WebApplicationBuilder AddOrbitRateLimiting(this WebApplicationBuilder builder)
     {
