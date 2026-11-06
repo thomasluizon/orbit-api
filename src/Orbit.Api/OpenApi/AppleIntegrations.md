@@ -11,11 +11,20 @@ the three Apple migrations; no manual migration or backfill is required.
 
 ## Configuration
 
-Set environment variables in the Render API service's Environment screen. Apply them
-through the normal API deployment. Keys contain the complete PEM text from Apple's
-`.p8` file, including its header and footer. Keep signing keys in Render environment
-secrets and the corresponding GitHub Actions environment secrets when deployment
-needs them. Never include credentials in logs, issues or pull requests.
+Terraform owns these keys in the `orbit-production-api` and `orbit-staging-api`
+environment groups. The plain values are in `infra/configuration.tf`, in
+`production_api_values` and `staging_api_values`. Staging merges the production map,
+so a staging entry overrides the production value for the same key. Each `PrivateKey`
+is an SSM SecureString at `/orbit/<environment>/api/<key>` in `us-east-2`, listed in
+`api_secret_keys`. Terraform reads these parameters; it does not create them.
+
+Each private key contains the complete PEM text from Apple's `.p8` file, including its
+header and footer. To change a value, edit the Terraform value or the SSM parameter.
+Then review and apply a plan targeted to `render_env_group.production_api` or
+`render_env_group.staging_api`, and release the API through the normal workflow.
+Do not set these keys on the Render API service's Environment screen. A service-level
+value overrides the linked group, so the Terraform value stops having an effect.
+Never include credentials in logs, issues or pull requests.
 
 | Capability | Environment variables | Apple console |
 | --- | --- | --- |
@@ -49,8 +58,22 @@ successful revocation clears the stored encrypted refresh token. Its job retries
 provider failures and skips active or already completed accounts. The existing
 `Encryption__Key` protects refresh tokens and OAuth state payloads at rest.
 
-Remove the capability's `PrivateKey` variable and apply the environment change to
-turn it off. The other Apple capabilities, Stripe, Play, FCM and Web Push keep their
+Each capability is off when its `KeyId` is blank. `AppStoreSettings.IsConfigured`,
+`AppleSignInSettings.IsConfigured` and `ApnsSettings.IsConfigured` each require a
+nonblank `KeyId`. To turn off one capability, follow these steps:
+
+1. In `infra/configuration.tf`, set `AppStore__KeyId`, `AppleSignIn__KeyId` or
+   `Apns__KeyId` to `""` in that environment's map.
+2. For production only, add the current value to `staging_api_values` if staging
+   has no entry for that key. Otherwise staging inherits the blank value.
+3. Review and apply a plan targeted to that environment's API group.
+
+A blank `AppleSignIn__KeyId` also turns off MCP sign-in. To turn off only MCP sign-in,
+set `AppleSignIn__McpRedirectUri` to `""`. A blank `Apns__KeyId` also stops desktop
+APNs delivery. Restore the value and apply the same targeted plan to turn it on again.
+Do not delete an SSM parameter: the Terraform data source read fails, and the plan
+stops. Do not remove a key from the Render group in the dashboard: the next apply
+restores it. The other Apple capabilities, Stripe, Play, FCM and Web Push keep their
 independent configuration. App Store subscriptions are managed by the customer;
 account deletion does not submit App Store cancellation requests.
 
