@@ -181,7 +181,7 @@ Each budget warning is followed by one `API memory breakdown {MemoryBreakdown}`
 warning. On startup, the monitor logs the same text once as
 `API memory breakdown at startup {MemoryBreakdown}` at the information level. The
 startup line is the baseline for growth with uptime. The text is compact JSON of at
-most 4,000 characters, about 2,400 characters in a container. It has these fields:
+most 4,000 characters, about 2,200 characters in a container. It has these fields:
 
 | Field | Source | Content |
 | --- | --- | --- |
