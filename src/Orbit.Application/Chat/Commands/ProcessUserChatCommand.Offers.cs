@@ -120,9 +120,12 @@ public partial class ProcessUserChatCommandHandler
         var conversation = request.ClientContext!.ConversationId!.Value;
         var facts = await OfferFactsAsync(request.UserId, reads, context, ct);
         var dismissed = await offerStore!.DismissedAsync(request.UserId, conversation, ct);
+        var equivalentGoal = AimGoalEquivalence.HasEquivalentActiveGoal(request.Message, context.ActiveGoals);
         var candidates = ProactiveOfferPlanner.Build(reads, facts, context.Language)
-            .Where(candidate => !dismissed.Contains(candidate.Action.OfferKey)).Take(100).ToArray();
-        var candidate = PreferredTypedOffer(candidates)
+            .Where(candidate => !dismissed.Contains(candidate.Action.OfferKey))
+            .Where(candidate => candidate.Family != "aim" || !equivalentGoal).Take(100).ToArray();
+        var candidate = DeclaredGoalAim(candidates, reads, results)
+            ?? PreferredTypedOffer(candidates)
             ?? candidates.Where(candidate => candidate.Family switch
                 {
                     "aim" => results.ReadOfferIntents.Values.Contains("aim"),
@@ -152,6 +155,19 @@ public partial class ProcessUserChatCommandHandler
         foreach (var call in response.ToolCalls ?? [])
             if (ProactiveReadOffer.Read(call.Args) is { } intent && results.QueryReads.TryGetValue(call.Id, out var read))
                 results.ReadOfferIntents[read.Read.QueryId] = intent;
+    }
+
+    /// <summary>
+    /// A declared aim on a goal read keeps its action when the turn also holds another read. A typed
+    /// offer from that other read, such as one small step on an empty day, does not replace it.
+    /// </summary>
+    private static AstraOfferFact? DeclaredGoalAim(IEnumerable<AstraOfferFact> candidates, IReadOnlyList<QueryReadBlock> reads,
+        ToolExecutionAccumulator results)
+    {
+        var goalReads = reads.Where(read => read.Block is GoalListCard
+            && results.ReadOfferIntents.GetValueOrDefault(read.Read.QueryId) == "aim").Select(read => read.Read.QueryId).ToHashSet();
+        return goalReads.Count == 0 ? null
+            : candidates.FirstOrDefault(candidate => candidate.Family == "aim" && goalReads.Contains(candidate.QueryId));
     }
 
     private static AstraOfferFact? PreferredTypedOffer(IEnumerable<AstraOfferFact> candidates) => candidates

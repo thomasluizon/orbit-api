@@ -47,7 +47,7 @@ public partial class ProcessUserChatCommandHandler
             && context.User?.GoogleAccessToken is null && CalendarOfferEligibility.HasRequestedEventDate(preview, message, context.UserToday))
             offers.Add(Offer("calendar:calendar-sync", "calendar", "An editable dated draft and an available disconnected Google Calendar connection; requires dated_event interpretation.",
                 new("calendar:calendar-sync", "openSurface", pt ? "Conectar Google Agenda" : "Connect Google Calendar", Surface: "calendar-sync")));
-        if (preview.CapabilityId != AgentCapabilityIds.GoalsWrite
+        if (preview.CapabilityId != AgentCapabilityIds.GoalsWrite && !AimGoalEquivalence.HasEquivalentActiveGoal(message, context.ActiveGoals)
             && preview.Items!.SelectMany(item => item.Fields).Any(field => field.Field is "target_value" or "goal_type" && field.ProposedValue is not null))
             offers.Add(Offer("aim:account", "aim", "The editable draft and complete active-goal snapshot support a goal only for an expressed aim with no equivalent active goal.",
             new("aim:account", "continueChat", pt ? "Planejar esta meta" : "Plan this goal", Prompt: pt
