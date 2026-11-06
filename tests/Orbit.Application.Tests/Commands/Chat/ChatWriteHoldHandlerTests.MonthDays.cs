@@ -76,7 +76,7 @@ public sealed partial class ChatWriteHoldHandlerTests
 
     [Theory]
     [InlineData("Make both positive", TwoHabitMonthDaysRequest)]
-    [InlineData("Yes, do that", "Make my habits \"Month days A\" and \"Month days B\" positive.")]
+    [InlineData("Yes, do that", "Make both of them positive.")]
     public async Task MonthDays_CorrectionThatDriftsTheSchedule_IsStillRejected(string message, string previousRequest)
     {
         var (first, second) = SetupMonthlyHabits();

@@ -18,7 +18,8 @@ public partial class ProcessUserChatCommandHandler
         {
             if (call is { Name: "update_habit" or "bulk_update_habits" })
             {
-                if (CorrectionError(call, request.Message, results) is { } correctionError)
+                if (CorrectionError(call, HabitCorrectionProposalValidator.RequestText(request.Message, request.History), results)
+                    is { } correctionError)
                 {
                     results.InvalidCalls[id] = correctionError;
                     calls[id] = null;
