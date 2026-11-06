@@ -560,6 +560,8 @@ Create each entry as a SecureString in AWS Systems Manager Parameter Store in `u
 | Production API | `/orbit/production/api/Jwt__SecretKey` |
 | Production API | `/orbit/production/api/Marketing__UnsubscribeSigningKey` |
 | Production API | `/orbit/production/api/PostHog__ApiKey` |
+| Production API | `/orbit/production/api/REVIEW_ACCOUNT_CODE` |
+| Production API | `/orbit/production/api/REVIEW_ACCOUNT_EMAIL` |
 | Production API | `/orbit/production/api/SMOKE_TEST_CODE` |
 | Production API | `/orbit/production/api/SMOKE_TEST_EMAIL` |
 | Production API | `/orbit/production/api/Sentry__Dsn` |
@@ -800,6 +802,17 @@ again after a reseed if it is absent. On production, the corresponding API
 `SMOKE_TEST_EMAIL` and `SMOKE_TEST_CODE` values use the existing production smoke
 code path. Production smoke signs in and reads only; it never writes habits.
 Neither the scripts nor their diagnostics print credentials or login bodies.
+
+### Store-review sign-in
+
+Google Play and App Store review sign in to production with a dedicated account that has no mailbox and no personal data.
+Production reads its address from `/orbit/production/api/REVIEW_ACCOUNT_EMAIL` and its code from `/orbit/production/api/REVIEW_ACCOUNT_CODE`.
+Both are SecureString parameters, and only the production API group receives them. Staging review sign-in uses `TEST_ACCOUNTS`.
+When the address matches and the code is exactly six ASCII digits, send-code seeds that code and enqueues no email.
+For the same pair, SES skips every message to the address, so nothing bounces. A missing or malformed value seeds nothing and the address receives a normal emailed code.
+Generate the code once with `LC_ALL=C tr -dc '0-9' < /dev/urandom | head -c 6`, and give it only to the store consoles.
+After you change either parameter, apply a plan restricted to `-target=render_env_group.production_api`, then update the login details in Play Console and App Store Connect.
+The reviewer still passes Turnstile in the app, as every user does.
 
 For migration releases, set GitHub Actions environment `production` variable
 `RENDER_PRODUCTION_POSTGRES_ID` to the production database id from Render Dashboard.

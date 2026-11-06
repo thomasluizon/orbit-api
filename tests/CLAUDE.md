@@ -21,9 +21,10 @@ Orbit.Infrastructure.Tests/ - services, prompt sections, controllers, MCP tools
 
 The auth flow normally requires a code emailed via Amazon SES. Env-controlled test accounts bypass this:
 
-- `TEST_ACCOUNTS` — comma-separated `email:code` pairs (reviewer flows, e.g. Play review, and local runs).
+- `TEST_ACCOUNTS` — comma-separated `email:code` pairs (staging reviewer flows and local runs).
+- `REVIEW_ACCOUNT_EMAIL` + `REVIEW_ACCOUNT_CODE`: the single production store-review account. Production seeds its six-digit code and sends it no email; other environments ignore the pair.
 
-When `SendCodeCommand` matches one of these emails, the verification code is NOT randomized; it's the static code from the pair. Inert in production — the handler skips the bypass when `ASPNETCORE_ENVIRONMENT` is `Production`.
+When `SendCodeCommand` matches one of these emails, the verification code is NOT randomized; it's the static code from the pair. `TEST_ACCOUNTS` is inert in production, and production startup fails when it is set.
 
 ## Running
 
