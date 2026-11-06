@@ -25,7 +25,8 @@ public class ProcessMemoryBreakdownTests
             new MemoryMappingTotal("so", 6, 17184, 13164, 0),
             new MemoryMappingTotal("anonymous", 6, 4440, 4308, 4308),
             new MemoryMappingTotal("heap", 1, 2932, 2656, 2656),
-            new MemoryMappingTotal("doublemapper", 6, 2368, 2296, 0),
+            new MemoryMappingTotal("doublemapper-data", 5, 1984, 1912, 0),
+            new MemoryMappingTotal("doublemapper-code", 1, 384, 384, 0),
             new MemoryMappingTotal("file", 4, 80, 80, 8),
             new MemoryMappingTotal("stack", 1, 132, 60, 60),
             new MemoryMappingTotal("kernel", 2, 24, 4, 0),
@@ -54,13 +55,24 @@ public class ProcessMemoryBreakdownTests
     }
 
     [Theory]
+    [InlineData("/memfd:doublemapper (deleted)", "r-xs", "doublemapper-code")]
+    [InlineData("/memfd:doublemapper (deleted)", "rw-s", "doublemapper-data")]
+    [InlineData("/memfd:doublemapper (deleted)", "r--s", "doublemapper-data")]
+    [InlineData("/memfd:dotnet_ipc_created (deleted)", "---p", "shm")]
+    [InlineData("/app/Orbit.Api.dll", "r-xp", "dll")]
+    [InlineData(null, "rwxp", "anonymous")]
+    public void Classify_SplitsTheDoubleMapperIntoCodeAndData(string? path, string permissions, string kind)
+    {
+        ProcessMemoryBreakdown.Classify(path, permissions).Should().Be(kind);
+    }
+
+    [Theory]
     [InlineData(null, "anonymous")]
     [InlineData("", "anonymous")]
     [InlineData("[anon:dotnet-gc]", "anonymous")]
     [InlineData("[heap]", "heap")]
     [InlineData("[stack]", "stack")]
     [InlineData("[vdso]", "kernel")]
-    [InlineData("/memfd:doublemapper (deleted)", "doublemapper")]
     [InlineData("/memfd:dotnet_ipc_created (deleted)", "shm")]
     [InlineData("/dev/shm/orbit", "shm")]
     [InlineData("/SYSV00000000 (deleted)", "shm")]
@@ -72,7 +84,7 @@ public class ProcessMemoryBreakdownTests
     [InlineData("/app/appsettings.json", "file")]
     public void Classify_NamesTheKindOfAMappingPath(string? path, string kind)
     {
-        ProcessMemoryBreakdown.Classify(path).Should().Be(kind);
+        ProcessMemoryBreakdown.Classify(path, "rw-p").Should().Be(kind);
     }
 
     [Fact]
@@ -145,7 +157,7 @@ public class ProcessMemoryBreakdownTests
         shortened.Length.Should().BeLessThanOrEqualTo(cap);
         using var json = JsonDocument.Parse(shortened);
         json.RootElement.GetProperty("largestKb").GetArrayLength().Should().Be(ProcessMemoryBreakdown.LargestMappingCount - 1);
-        json.RootElement.GetProperty("kindsKb").GetArrayLength().Should().Be(9);
+        json.RootElement.GetProperty("kindsKb").GetArrayLength().Should().Be(10);
 
         ProcessMemoryBreakdown.Format(TimeSpan.Zero, FixtureRollup(), smaps, new(null, null), Runtime(), 40)
             .Should().HaveLength(40);

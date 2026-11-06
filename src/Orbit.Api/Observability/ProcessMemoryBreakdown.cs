@@ -162,7 +162,7 @@ internal static class ProcessMemoryBreakdown
             {
                 Flush();
                 var fields = line.Split(' ', 6, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-                current = new(Classify(fields.Length > 5 ? fields[5] : null), fields[1], 0, 0, 0);
+                current = new(Classify(fields.Length > 5 ? fields[5] : null, fields[1]), fields[1], 0, 0, 0);
                 continue;
             }
             if (current is null) continue;
@@ -198,10 +198,18 @@ internal static class ProcessMemoryBreakdown
     }
 
     /// <summary>
-    /// The kind of a mapping path. <c>/memfd:doublemapper</c> is the runtime's write xor execute mapping of executable
-    /// memory and loader data.
+    /// The kind of a mapping path. <c>/memfd:doublemapper</c> is the runtime's write xor execute mapping: its
+    /// executable mappings hold JIT code and stubs, and the others hold loader heaps and the writable views.
     /// </summary>
-    internal static string Classify(string? path)
+    internal static string Classify(string? path, string permissions)
+    {
+        var kind = Classify(path);
+        return kind == "doublemapper"
+            ? permissions.Contains('x', StringComparison.Ordinal) ? "doublemapper-code" : "doublemapper-data"
+            : kind;
+    }
+
+    private static string Classify(string? path)
     {
         if (string.IsNullOrEmpty(path) || path.StartsWith("[anon:", StringComparison.Ordinal)) return "anonymous";
         if (path == "[heap]") return "heap";
