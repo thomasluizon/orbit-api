@@ -1,11 +1,19 @@
 // One round of the uptime soak: identical reads, a habit create and delete, a daily summary and two Astra turns. See infra/memory-budget.md.
 import fs from 'node:fs'
-const base = process.env.API_BASE_URL
+const base = 'http://localhost:8080'
 const email = process.env.SMOKE_TEST_EMAIL
 const code = process.env.SMOKE_TEST_CODE
 const state = '/state/token.json'
 const today = new Date().toISOString().slice(0, 10)
 const log = []
+const guid = /^([0-9a-f]{8})-([0-9a-f]{4})-([0-9a-f]{4})-([0-9a-f]{4})-([0-9a-f]{12})$/i
+// A habit id comes from a response, so the path gets only hex digits rebuilt from numbers and never the response text.
+function habitPath(id, suffix) {
+  const groups = guid.exec(String(id))
+  if (!groups) return null
+  const hex = groups.slice(1).map(group => Number.parseInt(group, 16).toString(16).padStart(group.length, '0'))
+  return `/api/habits/${hex.join('-')}${suffix}`
+}
 async function call(method, path, token, body) {
   const response = await fetch(base + path, { method, headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) }, body: body ? JSON.stringify(body) : undefined })
   const text = await response.text()
@@ -27,18 +35,23 @@ if (!token || (await call('GET', '/api/profile', token)).status === 401) token =
 if (!token) { console.log('login failed', log.join(', ')); process.exit(0) }
 await call('POST', '/api/events/ticket', token)
 const page = await call('GET', `/api/habits?dateFrom=${today}&dateTo=${today}&includeOverdue=true&pageSize=100`, token)
-const ids = (page.body?.items ?? []).map(habit => habit.id)
-await call('GET', `/api/habits/${ids[0]}/detail`, token)
-await call('GET', `/api/habits/${ids[0]}/metrics`, token)
+const firstHabit = page.body?.items?.[0]?.id
+const detail = habitPath(firstHabit, '/detail')
+if (detail) await call('GET', detail, token)
+const metrics = habitPath(firstHabit, '/metrics')
+if (metrics) await call('GET', metrics, token)
 await call('GET', '/api/gamification/profile', token)
 await call('GET', `/api/habits/calendar-month?dateFrom=${today.slice(0, 8)}01&dateTo=${today}`, token)
 await call('GET', `/api/habits/summary?dateFrom=${today}&dateTo=${today}&language=en`, token)
 const created = await call('POST', '/api/habits', token, { title: 'Soak habit', description: 'Created and deleted by the soak', frequencyUnit: 'Day', frequencyQuantity: 1, days: ['Monday', 'Wednesday'] })
-if (created.body?.id) await call('DELETE', `/api/habits/${created.body.id}`, token)
-for (const question of ['What should I focus on today?', 'Which habit did I skip most this week?']) {
+const createdPath = habitPath(created.body?.id, '')
+if (createdPath) await call('DELETE', createdPath, token)
+async function astraTurn(question) {
   const form = new FormData()
   form.append('message', `${question} ${Date.now()}`)
   const chat = await fetch(base + '/api/chat', { method: 'POST', headers: { authorization: `Bearer ${token}` }, body: form })
   log.push(`POST /api/chat ${chat.status} ${(await chat.text()).slice(0, 80).replace(/\s+/g, ' ')}`)
 }
+await astraTurn('What should I focus on today?')
+await astraTurn('Which habit did I skip most this week?')
 console.log(`${new Date().toISOString()} ${log.join(', ')}`)

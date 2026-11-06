@@ -8,6 +8,10 @@ namespace Orbit.Application.Tests.Habits.Services;
 public sealed class StaleBadHabitPredicateTests
 {
     private static readonly DateOnly Today = new(2026, 6, 10);
+    private static readonly HabitSchedule[] Schedules = [HabitSchedule.Recurring, HabitSchedule.Flexible, HabitSchedule.OneTime];
+    private static readonly bool[] BadFlags = [true, false];
+    private static readonly int[] DueOffsets = [-3, 0, 2];
+    private static readonly int?[] EndOffsets = [null, -1, 0, 5];
 
     [Fact]
     public void IsStaleBadHabit_AgreesWithTheQueryExpressionForEveryHabitShape()
@@ -15,10 +19,10 @@ public sealed class StaleBadHabitPredicateTests
         var owner = Guid.NewGuid();
         var query = HabitScheduleService.StaleBadHabitsFor(owner, Today).Compile();
         var habits = (
-            from schedule in new[] { HabitSchedule.Recurring, HabitSchedule.Flexible, HabitSchedule.OneTime }
-            from isBad in new[] { true, false }
-            from dueOffset in new[] { -3, 0, 2 }
-            from endOffset in new int?[] { null, -1, 0, 5 }
+            from schedule in Schedules
+            from isBad in BadFlags
+            from dueOffset in DueOffsets
+            from endOffset in EndOffsets
             from userId in new[] { owner, Guid.NewGuid() }
             select Habit.Create(new HabitCreateParams(schedule, userId, "Late snacks",
                 schedule == HabitSchedule.OneTime ? null : FrequencyUnit.Day,

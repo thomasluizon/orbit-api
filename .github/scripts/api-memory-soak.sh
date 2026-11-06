@@ -56,9 +56,10 @@ docker run -d --name "$sink" --network "$network" --network-alias sink -v "$sink
   node:22-alpine node /scripts/api-memory-fake-openai.mjs >/dev/null
 
 wait_for_hangfire() {
+  local container=$1
   for _ in $(seq 1 300); do
-    [ "$(docker logs "$1" 2>&1 | grep -c "all the dispatchers started")" -gt 0 ] && return
-    [ "$(docker inspect -f '{{.State.Running}}' "$1")" = true ] || return
+    [[ $(docker logs "$container" 2>&1 | grep -c "all the dispatchers started") -gt 0 ]] && return
+    [[ $(docker inspect -f '{{.State.Running}}' "$container") == true ]] || return
     sleep 1
   done
 }
@@ -77,28 +78,29 @@ docker run -d --name "$counters" --pid=container:"$api" --cap-add SYS_PTRACE -e 
   --counters System.Runtime >/dev/null
 
 sample() {
+  local label=$1
   docker exec "$api" sh -c '
     s=$(grep -E "^(RssAnon|RssShmem|RssFile|Threads)" /proc/1/status | tr -s " \t" " " | tr "\n" " ")
     k=$(awk "function kind(p,perm){ if(p==\"\")return \"anonymous\"; if(p==\"[heap]\")return \"heap\"; if(p ~ /^\\[stack/)return \"stack\"; if(p ~ /^\\[/)return \"kernel\"; if(p ~ /^\\/memfd:doublemapper/)return (perm ~ /x/ ? \"dm-code\" : \"dm-data\"); if(p ~ /^\\/memfd:/)return \"shm\"; if(p ~ /\\.dll\$/)return \"dll\"; if(p ~ /\\.so/)return \"so\"; return \"file\"} /^[0-9a-f]+-[0-9a-f]+ /{p=\"\"; for(i=6;i<=NF;i++){p=p (i>6?\" \":\"\") \$i}; c=kind(p,\$2); n[c]++} /^Rss:/{r[c]+=\$2} END{for(c in n) printf \"%s=%d/%d \", c, r[c], n[c]}" /proc/1/smaps)
-    echo "$s| $k"' | sed "s/^/$(( $(date +%s) - start ))s $1 /" | tee -a "$out/samples.txt"
+    echo "$s| $k"' | sed "s/^/$(( $(date +%s) - start ))s $label /" | tee -a "$out/samples.txt"
 }
 
 sample startup
-docker run --rm --network "$network" -v "$script_dir:/scripts:ro" -e API_BASE_URL="http://$api:8080" \
+docker run --rm --network container:"$api" -v "$script_dir:/scripts:ro" -e API_BASE_URL=http://localhost:8080 \
   -e SMOKE_TEST_EMAIL=memory-guard@example.test -e SMOKE_TEST_CODE=246810 node:22-alpine node /scripts/api-memory-load.mjs > "$out/load.txt"
 sample after-load
 end=$(( start + minutes * 60 ))
 next_sample=$(( $(date +%s) + 300 ))
-while [ "$(date +%s)" -lt "$end" ]; do
-  [ "$(docker inspect -f '{{.State.Running}}' "$api")" = true ] || {
+while [[ $(date +%s) -lt $end ]]; do
+  [[ $(docker inspect -f '{{.State.Running}}' "$api") == true ]] || {
     echo "API stopped OOMKilled=$(docker inspect -f '{{.State.OOMKilled}}' "$api")" | tee -a "$out/samples.txt"
     docker logs "$api" > "$out/api.log" 2>&1
     exit 1
   }
-  docker run --rm --network "$network" -v "$script_dir:/scripts:ro" -v "$state_dir:/state" -e API_BASE_URL="http://$api:8080" \
+  docker run --rm --network container:"$api" -v "$script_dir:/scripts:ro" -v "$state_dir:/state" \
     -e SMOKE_TEST_EMAIL=memory-guard@example.test -e SMOKE_TEST_CODE=246810 node:22-alpine node /scripts/api-memory-soak-client.mjs \
     >> "$out/client.txt" 2>&1 || true
-  if [ "$(date +%s)" -ge "$next_sample" ]; then sample soak; next_sample=$(( next_sample + 300 )); fi
+  if [[ $(date +%s) -ge $next_sample ]]; then sample soak; next_sample=$(( next_sample + 300 )); fi
   sleep 45
 done
 
