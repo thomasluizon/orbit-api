@@ -3,6 +3,7 @@ using System.Text.Json;
 using FluentAssertions;
 using Orbit.Application.Chat.Validators;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Models;
 
 namespace Orbit.Application.Tests.Chat;
 
@@ -35,5 +36,48 @@ public class HabitCorrectionProposalValidatorTests
         var changes = JsonSerializer.SerializeToElement(new { frequency_unit = "Day", frequency_quantity = 1 });
         new HabitCorrectionProposalValidator().Validate(new HabitCorrectionProposal(message, changes, current))
             .IsValid.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("Yes, do that", true)]
+    [InlineData("Yes, prepare that change for me to approve.", true)]
+    [InlineData("Sim, pode fazer", true)]
+    [InlineData("Make both positive", false)]
+    [InlineData("Please make both positive", false)]
+    [InlineData("Pode deixar os dois positivos", false)]
+    [InlineData("Ok, make both positive", false)]
+    [InlineData("Sure, and make it positive too", false)]
+    [InlineData("Sim, mas deixa os dois positivos", false)]
+    [InlineData("Isso, deixa positivo", false)]
+    public void ConfirmationReply_CarriesThePreviousScheduleRequest(string message, bool confirms)
+    {
+        var current = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, Guid.NewGuid(), "Pay bills", FrequencyUnit.Month, 1,
+            new DateOnly(2026, 11, 8), MonthDays: [8, 15])).Value;
+        List<ChatHistoryMessage> history =
+        [
+            new("user", "Change the days of the month of Pay bills to the 5th and the 25th."),
+            new("assistant", "Should I prepare that change?")
+        ];
+        var changes = JsonSerializer.SerializeToElement(new { month_days = new[] { 5, 25 } });
+
+        var validation = new HabitCorrectionProposalValidator().Validate(new HabitCorrectionProposal(
+            HabitCorrectionProposalValidator.RequestText(message, history), changes, current));
+
+        validation.IsValid.Should().Be(confirms);
+        if (!confirms)
+            validation.Errors.Should().Contain(error => error.ErrorCode == "CORRECTION_PRESERVES_SCHEDULE");
+    }
+
+    [Fact]
+    public void ConfirmationReply_WithoutAPreviousScheduleRequest_StillPreservesTheSchedule()
+    {
+        var current = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, Guid.NewGuid(), "Pay bills", FrequencyUnit.Month, 1,
+            new DateOnly(2026, 11, 8), MonthDays: [8, 15])).Value;
+        var changes = JsonSerializer.SerializeToElement(new { is_bad_habit = false, month_days = new[] { 5, 25 } });
+
+        foreach (var history in new List<ChatHistoryMessage>?[] { null, [], [new("user", "Make Pay bills positive.")] })
+            new HabitCorrectionProposalValidator().Validate(new HabitCorrectionProposal(
+                    HabitCorrectionProposalValidator.RequestText("Yes, do that", history), changes, current)).Errors
+                .Should().Contain(error => error.ErrorCode == "CORRECTION_PRESERVES_SCHEDULE");
     }
 }

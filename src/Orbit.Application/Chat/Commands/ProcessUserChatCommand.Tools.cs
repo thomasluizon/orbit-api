@@ -707,7 +707,8 @@ public partial class ProcessUserChatCommandHandler
             : await operationExecutor.ExecuteAsync(correctionRequest with { OnExecutionStarted = onExecutionStarted }, cancellationToken);
         executionResponse = RevisedPreviewResponse(call, executionResponse);
         RegisterPreviewDiscussion(call, executionResponse, executionResults);
-        var operationResult = StatusCardBuilder.ForClient(executionResponse.Operation with { Access = access }, request.ClientContext);
+        var operationResult = ResolveNamedSelection(call, StatusCardBuilder.ForClient(
+            executionResponse.Operation with { Access = access }, request.ClientContext), request.Message);
         var toolResult = BuildToolCallResult(call, operationResult);
         InvalidateTurnSnapshotIfMutated(request.UserId, tool, operationResult);
 

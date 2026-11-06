@@ -14,6 +14,29 @@ public partial class ProcessUserChatCommandHandler
         || request.ClientContext.PartKinds?.Any(IsAskKind) != true
         || call.Args.TryGetProperty("for_selection", out var selection) && selection.ValueKind == JsonValueKind.False;
 
+    /// <summary>
+    /// A name search that matches several habits is not ambiguous when the message names every match by its
+    /// complete title, and no match title is part of another match title. That read selects nothing, so a write
+    /// over the named habits needs no ask. A read that the model declares with for_selection=true still asks.
+    /// </summary>
+    private static AgentOperationResult ResolveNamedSelection(AiToolCall call, AgentOperationResult operation, string message)
+    {
+        if (call.Name != "query_habits" || IsSelectionRead(call)
+            || operation.Payload is not HabitListCard { Selection: { } selection } card
+            || card.TotalCount != selection.Candidates.Count || !NamesEveryCandidate(message, selection.Candidates))
+            return operation;
+        return operation with { Payload = card with { Selection = null } };
+    }
+
+    private static bool NamesEveryCandidate(string message, IReadOnlyList<HabitListCardItem> candidates)
+    {
+        var text = $" {HabitNameMatcher.Normalize(message)} ";
+        var titles = candidates.Select(candidate => $" {HabitNameMatcher.Normalize(candidate.Title)} ").ToArray();
+        return titles.Length > 1 && titles.Distinct(StringComparer.Ordinal).Count() == titles.Length
+            && titles.All(title => title.Trim().Length > 0 && text.Contains(title, StringComparison.Ordinal)
+                && titles.All(other => other == title || !other.Contains(title, StringComparison.Ordinal)));
+    }
+
     private static ToolCallOutcome SelectionRequiredOutcome(AiToolCall call) => new(
         new AiToolCallResult(call.Name, call.Id, false, null, null,
             "Selection is unanswered. Call ask with the returned candidates and prepare no write until the person answers."),
