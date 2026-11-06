@@ -4,7 +4,10 @@ using Microsoft.Extensions.DependencyInjection;
 using Orbit.Api.Extensions;
 using Orbit.Application.Habits.Commands;
 using Orbit.Application.Habits.Validators;
+using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
+using Orbit.Domain.Interfaces;
+using NSubstitute;
 
 namespace Orbit.Infrastructure.Tests.Extensions;
 
@@ -41,6 +44,29 @@ public sealed class ValidatorRegistrationTests
 
         (System.Runtime.JitInfo.GetCompiledMethodCount(currentThread: true) - compiledBefore).Should().Be(0,
             "a request scope must not construct a validator that compiles its rule expressions again");
+    }
+
+    [Fact]
+    public void RepeatedUpdateValidatorConstruction_CompilesNoNewMethods()
+    {
+        var services = new ServiceCollection().AddOrbitValidators();
+        services.AddScoped(_ => Substitute.For<IGenericRepository<Habit>>());
+        using var provider = services.BuildServiceProvider();
+
+        for (var warmup = 0; warmup < 3; warmup++)
+            ResolveInNewScope(provider);
+        var compiledBefore = System.Runtime.JitInfo.GetCompiledMethodCount(currentThread: true);
+        for (var request = 0; request < 50; request++)
+            ResolveInNewScope(provider);
+
+        (System.Runtime.JitInfo.GetCompiledMethodCount(currentThread: true) - compiledBefore).Should().Be(0,
+            "the scoped update validator must include its repository-free rules instead of compiling them again");
+    }
+
+    private static void ResolveInNewScope(IServiceProvider provider)
+    {
+        using var scope = provider.CreateScope();
+        scope.ServiceProvider.GetRequiredService<IValidator<UpdateHabitCommand>>().Should().NotBeNull();
     }
 
     private static void ValidateInNewScope(IServiceProvider provider, CreateHabitCommand command)
