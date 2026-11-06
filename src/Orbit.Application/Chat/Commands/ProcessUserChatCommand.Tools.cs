@@ -201,8 +201,8 @@ public partial class ProcessUserChatCommandHandler
     {
         LogToolCallingIteration(logger, iteration, aiResponse.ToolCalls!.Count);
 
-        var orderedCalls = OrderCallsForAsk(aiResponse.ToolCalls!.Select(call =>
-            ProactiveProposal.CompleteCreateReminder(call, request.ClientContext)).ToArray(), context.UserHabits);
+        var orderedCalls = OrderCallsForAsk(aiResponse.ToolCalls!.Select(call => ProactiveProposal.KeepRequestedSchedule(
+            ProactiveProposal.CompleteCreateReminder(call, request.ClientContext), request.Message)).ToArray(), context.UserHabits);
         await StartPlanCallsAsync(orderedCalls, request, executionResults);
         var outcomesByCallId = correction is null
             ? await ExecuteToolCallsAsync(orderedCalls, request, executionResults, language, cancellationToken)
