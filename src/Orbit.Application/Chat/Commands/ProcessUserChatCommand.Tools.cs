@@ -223,7 +223,7 @@ public partial class ProcessUserChatCommandHandler
         if (BulkNoChangesMessage(executionResults, language) is { } noChanges)
             return new ToolRoundResult(new AiResponse { TextMessage = noChanges });
 
-        if (executionResults.AskBlock is not null)
+        if (await EndsWithAskAsync(aiResponse, orderedCalls, outcomesByCallId, request, context, executionResults, cancellationToken))
             return new ToolRoundResult(aiResponse with { ToolCalls = null, ReportedTokenCount = 0, RequestBudgetTokenCount = 0 });
 
         if (CanCompleteToolRound(aiResponse, request, context, executionResults, iteration,

@@ -343,7 +343,7 @@ public partial class ProcessUserChatCommandHandlerTests
         block.Items.Select(item => item.Id).Should().Equal(habits.Select(habit => habit.Id.ToString()));
         result.Value.PendingOperations.Should().BeNullOrEmpty();
         result.Value.Actions.Should().BeEmpty();
-        await _aiIntentService.Received(1).ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
+        await _aiIntentService.Received(declaredSelection ? 0 : 1).ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
             Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
     }
 
