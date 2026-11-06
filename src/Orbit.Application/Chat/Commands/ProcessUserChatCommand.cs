@@ -419,23 +419,20 @@ public partial class ProcessUserChatCommandHandler(
             Parts: request.ClientContext?.SupportsParts == true ? [new ChatTextPart(message)] : null));
     }
 
-    private CancellationTokenSource CreateBlockTurnCancellation(CancellationToken token, DateTime? answeredAtUtc)
+    private AiCallDeadline.Budget? StartBlockAnswerDeadline(CancellationToken token, DateTime? answeredAtUtc)
     {
-        var cancellation = CancellationTokenSource.CreateLinkedTokenSource(token);
-        if (answeredAtUtc is { } claim && execution.BlockAnswerTimeout is { } timeout)
-        {
-            var remaining = claim + timeout - TimeProvider.System.GetUtcNow().UtcDateTime;
-            cancellation.CancelAfter(remaining > TimeSpan.Zero ? remaining : TimeSpan.Zero);
-        }
-        return cancellation;
+        if (answeredAtUtc is not { } claim || execution.BlockAnswerTimeout is not { } timeout)
+            return null;
+        var remaining = claim + timeout - TimeProvider.System.GetUtcNow().UtcDateTime;
+        return AiCallDeadline.Start(remaining > TimeSpan.Zero ? remaining : TimeSpan.Zero, TimeProvider.System, token);
     }
 
     private async Task<Result<ChatResponse>> HandleTurnAsync(ProcessUserChatCommand request, ChatTurnState recording,
         ChatEvalTraceCollector? evalTrace, CancellationToken cancellationToken,
         DateTime? answeredAtUtc = null, ChatContext? loadedContext = null, string? safetyText = null)
     {
-        using var turnCancellation = CreateBlockTurnCancellation(cancellationToken, answeredAtUtc);
-        cancellationToken = turnCancellation.Token;
+        using var answerDeadline = StartBlockAnswerDeadline(cancellationToken, answeredAtUtc);
+        cancellationToken = answerDeadline?.Token ?? cancellationToken;
         var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
         LogProcessingChatMessage(logger);
 

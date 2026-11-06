@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Orbit.Api.Hosting;
 
 namespace Orbit.Api.Extensions;
@@ -10,6 +11,7 @@ public static class ShutdownDrainExtensions
         services.AddOptions<ShutdownDrainOptions>()
             .Validate(options => options.Timeout > TimeSpan.Zero && options.Timeout < TimeSpan.FromSeconds(270))
             .ValidateOnStart();
+        services.TryAddSingleton(TimeProvider.System);
         services.AddSingleton<ShutdownDrain>();
         services.AddHostedService(provider => provider.GetRequiredService<ShutdownDrain>());
         return services;

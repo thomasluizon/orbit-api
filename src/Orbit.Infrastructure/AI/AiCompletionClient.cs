@@ -303,25 +303,54 @@ public sealed partial class AiCompletionClient
                 .Select(part => part.Text)))
             .Where(text => !string.IsNullOrEmpty(text)));
 
-    internal CompletionCancellation CreateCompletionCancellation(CancellationToken cancellationToken, bool streaming = false)
-        => new(streaming ? StreamingCompletionTimeout : CompletionTimeout, _timeProvider, cancellationToken);
+    internal CompletionCancellation CreateCompletionCancellation(CancellationToken cancellationToken, bool streaming = false,
+        TimeSpan? callerBudget = null)
+    {
+        var timeout = streaming ? StreamingCompletionTimeout : CompletionTimeout;
+        return new(callerBudget is { } budget && budget < timeout ? budget : timeout, _timeProvider, cancellationToken);
+    }
 
+    /// <summary>
+    /// Bounds one AI call by a deadline linked to the caller's token. The innermost active scope flows
+    /// through the async context, so the retry policy and the telemetry can tell a caller cancellation
+    /// (a superseded refresh, a closed stream) from a deadline expiry. A scope created on the token of
+    /// an enclosing scope inherits its caller, and an upstream <see cref="AiCallDeadline"/> expiry is a deadline.
+    /// </summary>
     internal sealed class CompletionCancellation : IDisposable
     {
+        private static readonly AsyncLocal<CompletionCancellation?> Active = new();
+        private readonly CompletionCancellation? _previous;
+        private readonly CompletionCancellation? _enclosing;
+        private readonly AiCallDeadline? _upstream;
+        private readonly CancellationToken _caller;
         private readonly CancellationTokenSource _deadline;
         private readonly CancellationTokenSource _linked;
 
         internal CompletionCancellation(TimeSpan timeout, TimeProvider timeProvider, CancellationToken caller)
         {
             caller.ThrowIfCancellationRequested();
+            _caller = caller;
+            _upstream = AiCallDeadline.Current;
             _deadline = new CancellationTokenSource(timeout, timeProvider);
             _linked = CancellationTokenSource.CreateLinkedTokenSource(caller, _deadline.Token);
+            Token = _linked.Token;
+            _previous = Active.Value;
+            _enclosing = _previous is { } previous && previous.Token == caller ? previous : null;
+            Active.Value = this;
         }
 
-        internal CancellationToken Token => _linked.Token;
+        internal CancellationToken Token { get; }
+
+        /// <summary>True when the active scope ended because its caller cancelled, not because a deadline expired.</summary>
+        internal static bool CurrentCallerCancelled => Active.Value?.CallerCancelled == true;
+
+        private bool CallerCancelled => !_deadline.IsCancellationRequested && _upstream?.Expired != true
+            && (_enclosing?.CallerCancelled ?? _caller.IsCancellationRequested);
 
         public void Dispose()
         {
+            if (Active.Value == this)
+                Active.Value = _previous;
             _linked.Dispose();
             _deadline.Dispose();
         }
@@ -337,18 +366,25 @@ public sealed partial class AiCompletionClient
         var stopwatch = Stopwatch.StartNew();
         ResponseResult? response = null;
         var traceId = Guid.NewGuid().ToString("N");
+        var cancelled = false;
         try
         {
             var completion = await GetResponsesClient(userId: userId).CreateResponseAsync(options, cancellationToken);
             response = completion.Value;
             return response;
         }
+        catch (OperationCanceledException) when (CompletionCancellation.CurrentCallerCancelled)
+        {
+            cancelled = true;
+            throw;
+        }
         finally
         {
             stopwatch.Stop();
             var usage = response?.Usage;
             LogTruncation(response, purpose, options.MaxOutputTokenCount);
-            var failed = response is null || response.Status is not (ResponseStatus.Completed or ResponseStatus.Incomplete);
+            var failed = !cancelled
+                && (response is null || response.Status is not (ResponseStatus.Completed or ResponseStatus.Incomplete));
             if (usage is not null)
                 LogAiTokenUsage(_logger, purpose, options.Model, usage.InputTokenDetails?.CachedTokenCount ?? 0,
                     usage.InputTokenCount, usage.OutputTokenCount, usage.TotalTokenCount);
@@ -360,11 +396,11 @@ public sealed partial class AiCompletionClient
                     cancellationToken, userId,
                     new AiCallTelemetry(traceId, stopwatch.Elapsed.TotalSeconds,
                         failed,
-                        [], HasUsage: usage is not null),
+                        [], HasUsage: usage is not null, IsCancelled: cancelled),
                     cacheWriteTokens: usage?.InputTokenDetails?.CacheWriteTokenCount ?? 0,
                     reasoningTokens: usage?.OutputTokenDetails?.ReasoningTokenCount ?? 0);
             }
-            catch (Exception ex) when (failed || ex is not OperationCanceledException)
+            catch (Exception ex) when (failed || cancelled || ex is not OperationCanceledException)
             {
                 LogUsageRecordFailed(_logger, options.Model, purpose, ex);
             }

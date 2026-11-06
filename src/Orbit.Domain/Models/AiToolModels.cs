@@ -23,6 +23,12 @@ public sealed record AiToolRequest(
     public string? AccountContext { get; init; }
     public string? DynamicContext { get; init; }
     public AiTurnTelemetry Telemetry { get; init; } = new();
+
+    /// <summary>
+    /// A budget the caller owns for this call. It becomes the deadline of the completion scope when it is
+    /// shorter than the configured completion timeout, so its expiry records an AI failure, not a caller cancellation.
+    /// </summary>
+    public TimeSpan? Timeout { get; init; }
 }
 
 public record AiToolCallResult(

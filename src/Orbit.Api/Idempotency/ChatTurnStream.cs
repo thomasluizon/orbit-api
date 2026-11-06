@@ -20,7 +20,7 @@ namespace Orbit.Api.Idempotency;
 
 public sealed class ChatTurnStream(
     IChatTurnStore store, IMediator mediator, ShutdownDrain drain, IOptions<ShutdownDrainOptions> options,
-    IDistributedRateLimitService limits, ILogger<ChatTurnStream> logger)
+    IDistributedRateLimitService limits, ILogger<ChatTurnStream> logger, TimeProvider timeProvider)
 {
     public async Task<IActionResult> RunAsync(ProcessUserChatCommand command, HttpContext http, string key, CancellationToken transportToken)
     {
@@ -29,7 +29,7 @@ public sealed class ChatTurnStream(
         if (await ChatInputValidation.ValidateAsync(command, transportToken) is { } inputError)
             return inputError;
         var candidate = ChatTurn.Create(command.UserId, ChatTurnIdentity.HashKey(key), ChatTurnIdentity.Fingerprint(command),
-            TimeProvider.System.GetUtcNow().UtcDateTime.Add(options.Value.Timeout));
+            timeProvider.GetUtcNow().UtcDateTime.Add(options.Value.Timeout));
         var (turn, claimed) = await store.ClaimAsync(candidate, transportToken);
         if (!ChatTurnIdentity.Matches(turn.Fingerprint, command))
             return new ConflictObjectResult(new { code = "CHAT_TURN_KEY_CONFLICT", error = await ChatErrorLocalization.MessageAsync(http, "CHAT_TURN_KEY_CONFLICT", "The turn key belongs to another payload.") });
@@ -63,7 +63,7 @@ public sealed class ChatTurnStream(
 
         if (!claimed)
         {
-            while (turn.TerminalEvent is null && turn.ExpiresAtUtc > TimeProvider.System.GetUtcNow().UtcDateTime)
+            while (turn.TerminalEvent is null && turn.ExpiresAtUtc > timeProvider.GetUtcNow().UtcDateTime)
             {
                 await Task.Delay(TimeSpan.FromMilliseconds(250), transportToken);
                 turn = await store.ReadAsync(command.UserId, turn.Id, transportToken);
@@ -72,8 +72,9 @@ public sealed class ChatTurnStream(
             return new EmptyResult();
         }
 
-        using var execution = CancellationTokenSource.CreateLinkedTokenSource(drain.ExecutionDeadline);
-        execution.CancelAfter(options.Value.Timeout);
+        using var turnDeadline = new CancellationTokenSource(options.Value.Timeout, timeProvider);
+        using var execution = CancellationTokenSource.CreateLinkedTokenSource(drain.ExecutionDeadline, turnDeadline.Token);
+        using var aiDeadline = AiCallDeadline.Bind(execution.Token);
         var partition = $"user:{command.UserId}";
         DateTime? leaseEndAtUtc = null;
         ChatStreamEvent terminal;
@@ -101,6 +102,7 @@ public sealed class ChatTurnStream(
         }
         catch (OperationCanceledException) when (execution.IsCancellationRequested)
         {
+            logger.LogWarning("Chat turn {TurnId} interrupted by its deadline", turn.Id);
             terminal = await InterruptedAsync(http, turn.Id);
         }
         catch (Exception exception)
