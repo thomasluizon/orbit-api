@@ -82,10 +82,11 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<AccountEventCollector>();
         builder.Services.AddScoped<IAccountEventCollector>(sp => sp.GetRequiredService<AccountEventCollector>());
         builder.Services.AddScoped<AccountEventTransactionInterceptor>();
+        var requestPathConnectionString = OrbitConnectionStringFactory.ForRequestPath(builder.Configuration);
         builder.Services.AddDbContext<OrbitDbContext>((serviceProvider, options) =>
             options
                 .UseNpgsql(
-                    OrbitConnectionStringFactory.ForRequestPath(builder.Configuration),
+                    requestPathConnectionString,
                     npgsql =>
                     {
                         npgsql.EnableRetryOnFailure(maxRetryCount: 3, maxRetryDelay: TimeSpan.FromSeconds(5), errorCodesToAdd: null);
