@@ -31,7 +31,6 @@ public sealed class ReadBlockFactory(IUserDateService dates, IReadQueryTokenServ
         await RelativeReadPeriod.ResolveAsync(tool, node, today, dates, userId, ct);
         args = JsonSerializer.SerializeToElement(node);
         ValidateDates(args);
-        string Iso(DateOnly day) => day.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         if (tool == "query_habits" && node["date"]?.GetValue<string>() is { } date)
         {
             if (date.Equals("today", StringComparison.OrdinalIgnoreCase))
@@ -61,25 +60,41 @@ public sealed class ReadBlockFactory(IUserDateService dates, IReadQueryTokenServ
         if (tool is "query_goals" or "review_goals" or "get_gamification_overview" or "get_calendar_overview" or "get_habit_metrics")
             node["as_of"] ??= Iso(today);
         if (tool == "get_calendar_overview")
-        {
-            var user = await users.GetByIdAsync(userId, ct);
-            if (!node.ContainsKey("calendar_ids")) node["calendar_ids"] = JsonSerializer.SerializeToNode(user?.GetSelectedCalendarIds());
-            var zone = await dates.GetUserTimeZoneAsync(userId, ct);
-            if (node["date_to"] is not null) node["date_from"] ??= Iso(today);
-            if (node["date_from"]?.GetValue<string>() is { } fromText && DateOnly.TryParseExact(fromText, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var fromDate))
-            {
-                var toDate = JsonArgumentParser.ParseDateOnly(args, "date_to") ?? fromDate;
-                node["window_from_utc"] ??= TimeZoneInfo.ConvertTimeToUtc(fromDate.ToDateTime(TimeOnly.MinValue), zone).ToString("O", CultureInfo.InvariantCulture);
-                node["window_to_utc"] ??= TimeZoneInfo.ConvertTimeToUtc(toDate.AddDays(1).ToDateTime(TimeOnly.MinValue), zone).ToString("O", CultureInfo.InvariantCulture);
-            }
-            else
-            {
-                var fromAtUtc = TimeProvider.System.GetUtcNow().UtcDateTime;
-                node["window_from_utc"] ??= fromAtUtc.ToString("O", CultureInfo.InvariantCulture);
-                node["window_to_utc"] ??= fromAtUtc.AddDays(60).ToString("O", CultureInfo.InvariantCulture);
-            }
-        }
+            await ResolveCalendarAsync(node, args, today, userId, ct);
         return JsonSerializer.SerializeToElement(node);
+    }
+
+    private static string Iso(DateOnly day) => day.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+
+    private static string Instant(DateTime atUtc) => atUtc.ToString("O", CultureInfo.InvariantCulture);
+
+    /// <summary>
+    /// The scope carries exactly the window the calendar tool reads. A model value is rewritten as a UTC round-trip
+    /// instant, and a value the tool cannot parse is replaced by the same default as a missing value.
+    /// </summary>
+    private async Task ResolveCalendarAsync(JsonObject node, JsonElement args, DateOnly today, Guid userId, CancellationToken ct)
+    {
+        var user = await users.GetByIdAsync(userId, ct);
+        if (!node.ContainsKey("calendar_ids")) node["calendar_ids"] = JsonSerializer.SerializeToNode(user?.GetSelectedCalendarIds());
+        foreach (var key in new[] { "window_from_utc", "window_to_utc" })
+            node[key] = JsonArgumentParser.ParseUtcInstant(args, key) is { } atUtc ? Instant(atUtc) : null;
+        var (fromAtUtc, toAtUtc) = DefaultCalendarWindow(node, args, today, await dates.GetUserTimeZoneAsync(userId, ct));
+        node["window_from_utc"] ??= Instant(fromAtUtc);
+        node["window_to_utc"] ??= Instant(toAtUtc);
+    }
+
+    private static (DateTime FromAtUtc, DateTime ToAtUtc) DefaultCalendarWindow(JsonObject node, JsonElement args, DateOnly today, TimeZoneInfo zone)
+    {
+        if (node["date_to"] is not null) node["date_from"] ??= Iso(today);
+        if (node["date_from"]?.GetValue<string>() is { } fromText
+            && DateOnly.TryParseExact(fromText, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var fromDate))
+        {
+            var toDate = JsonArgumentParser.ParseDateOnly(args, "date_to") ?? fromDate;
+            return (TimeZoneInfo.ConvertTimeToUtc(fromDate.ToDateTime(TimeOnly.MinValue), zone),
+                TimeZoneInfo.ConvertTimeToUtc(toDate.AddDays(1).ToDateTime(TimeOnly.MinValue), zone));
+        }
+        var nowAtUtc = TimeProvider.System.GetUtcNow().UtcDateTime;
+        return (nowAtUtc, nowAtUtc.AddDays(60));
     }
 
     private static void ResolveHabitMonth(string tool, JsonObject node, JsonElement args, DateOnly today)

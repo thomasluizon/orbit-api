@@ -3,7 +3,6 @@ using MediatR;
 using Orbit.Application.Calendar.Commands;
 using Orbit.Application.Calendar.Queries;
 using Orbit.Application.Calendar.Services;
-using System.Globalization;
 using Orbit.Application.Common;
 using Orbit.Application.Chat.Tools;
 using Orbit.Domain.Common;
@@ -107,8 +106,8 @@ public class GetCalendarOverviewTool(IMediator mediator) : IAiTool
     };
 
     private static CalendarReadWindow? ParseWindow(JsonElement args) =>
-        DateTime.TryParse(JsonArgumentParser.GetOptionalString(args, "window_from_utc"), CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out var fromAtUtc)
-        && DateTime.TryParse(JsonArgumentParser.GetOptionalString(args, "window_to_utc"), CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out var toAtUtc)
+        JsonArgumentParser.ParseUtcInstant(args, "window_from_utc") is { } fromAtUtc
+        && JsonArgumentParser.ParseUtcInstant(args, "window_to_utc") is { } toAtUtc
             ? new(fromAtUtc, toAtUtc) : null;
 
 }

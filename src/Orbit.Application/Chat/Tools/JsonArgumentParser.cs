@@ -74,6 +74,13 @@ internal static class JsonArgumentParser
         return DateOnly.TryParseExact(str, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date) ? date : null;
     }
 
+    /// <summary>
+    /// Reads an instant as UTC. A value with no offset counts as UTC, and a value with an offset is converted to UTC.
+    /// </summary>
+    public static DateTime? ParseUtcInstant(JsonElement el, string prop) =>
+        DateTime.TryParse(GetOptionalString(el, prop), CultureInfo.InvariantCulture,
+            DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out var atUtc) ? atUtc : null;
+
     public static TimeOnly? ParseTimeOnly(JsonElement el, string prop)
     {
         var str = GetOptionalString(el, prop);
