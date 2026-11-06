@@ -2,6 +2,7 @@
   "ticket": "thomasluizon/orbit-tickets#2003",
   "container": "--memory=512m --memory-swap=512m --cpus=0.5, linux/arm64 native, postgres:17 with TLS, Production environment, migrated database",
   "warningLineBytes": 314572800,
+  "warningLineKb": 307200,
   "noiseBandBytes": 12000000,
   "harness": ".github/scripts/api-memory-soak.sh with api-memory-load.mjs, api-memory-soak-client.mjs and api-memory-fake-openai.mjs; earlier runs used the same scripts from a scratch directory",
   "images": {
@@ -1080,6 +1081,108 @@
         "otherAnonymousRssKb": 93652,
         "mainHeapRssKb": 28880
       }
+    ],
+    "anonymousPlusShmemKbTable": [
+      {
+        "read": "startup",
+        "seconds": [
+          0,
+          0
+        ],
+        "beforeKb": 90788,
+        "afterKb": 87576,
+        "differenceKb": 3212
+      },
+      {
+        "read": "after-load",
+        "seconds": [
+          46,
+          40
+        ],
+        "beforeKb": 215760,
+        "afterKb": 184900,
+        "differenceKb": 30860
+      },
+      {
+        "read": "soak",
+        "seconds": [
+          385,
+          378
+        ],
+        "beforeKb": 302552,
+        "afterKb": 233140,
+        "differenceKb": 69412
+      },
+      {
+        "read": "soak",
+        "seconds": [
+          658,
+          652
+        ],
+        "beforeKb": 308096,
+        "afterKb": 237412,
+        "differenceKb": 70684
+      },
+      {
+        "read": "soak",
+        "seconds": [
+          977,
+          971
+        ],
+        "beforeKb": 314872,
+        "afterKb": 242236,
+        "differenceKb": 72636
+      },
+      {
+        "read": "soak",
+        "seconds": [
+          1251,
+          1245
+        ],
+        "beforeKb": 317288,
+        "afterKb": 238272,
+        "differenceKb": 79016
+      },
+      {
+        "read": "soak",
+        "seconds": [
+          1571,
+          1565
+        ],
+        "beforeKb": 314500,
+        "afterKb": 243428,
+        "differenceKb": 71072
+      },
+      {
+        "read": "soak",
+        "seconds": [
+          1889,
+          1884
+        ],
+        "beforeKb": 321812,
+        "afterKb": 243460,
+        "differenceKb": 78352
+      },
+      {
+        "read": "soak",
+        "seconds": [
+          2163,
+          2157
+        ],
+        "beforeKb": 321628,
+        "afterKb": 243840,
+        "differenceKb": 77788
+      },
+      {
+        "read": "soak",
+        "seconds": [
+          2481,
+          2475
+        ],
+        "beforeKb": 324928,
+        "afterKb": 245300,
+        "differenceKb": 79628
+      }
     ]
   },
   "baseFirstSampleAtOrAboveLineSeconds": 678,
@@ -1280,6 +1383,27 @@
           "lessBytes": 15773696
         }
       ]
+    }
+  },
+  "unitMeasurements": {
+    "command": "dotnet test tests/Orbit.Infrastructure.Tests --filter <test>, with the defect restored in the working tree and then reverted",
+    "createHabitValidationsIn50NewScopes": {
+      "test": "ValidatorRegistrationTests.RepeatedRequestValidation_CompilesNoNewMethods",
+      "defect": "AddValidatorsFromAssemblyContaining with the default scoped lifetime",
+      "compiledMethodsWithDefect": 402,
+      "compiledMethodsFixed": 0
+    },
+    "updateValidatorConstructionsIn50Scopes": {
+      "test": "ValidatorRegistrationTests.RepeatedUpdateValidatorConstruction_CompilesNoNewMethods",
+      "defect": "UpdateHabitCommandValidator from 10b83e81d",
+      "compiledMethodsWithDefect": 153,
+      "compiledMethodsFixed": 0
+    },
+    "databaseConfigurationReadsIn10Scopes": {
+      "test": "DatabaseRegistrationTests.RequestScopes_ReuseTheConnectionStringWithoutBindingConfigurationAgain",
+      "defect": "OrbitConnectionStringFactory.ForRequestPath inside the AddDbContext options action",
+      "readsWithDefect": 90,
+      "readsFixed": 0
     }
   },
   "efQueryLogRun": {
