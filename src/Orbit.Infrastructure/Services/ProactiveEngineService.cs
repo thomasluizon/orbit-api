@@ -55,8 +55,8 @@ public sealed partial class ProactiveEngineService(
                 await Parallel.ForEachAsync(batch.Users, new ParallelOptions
                 { MaxDegreeOfParallelism = 4, CancellationToken = cancellationToken }, async (user, token) =>
                 {
-                    using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);
-                    deadline.CancelAfter(TimeSpan.FromSeconds(configuration?.GetValue("BackgroundServices:ProactiveUserTimeoutSeconds", 60) ?? 60));
+                    using var deadline = AiCallDeadline.Start(
+                        TimeSpan.FromSeconds(configuration?.GetValue("BackgroundServices:ProactiveUserTimeoutSeconds", 60) ?? 60), clock, token);
                     using var scope = scopes.CreateScope();
                     var engine = (ProactiveEngineService)scope.ServiceProvider.GetRequiredService<IProactiveEngine>();
                     try { await engine.EvaluateAccountAsync(ForUser(batch, user), user, nowUtc, deadline.Token); }

@@ -4,7 +4,9 @@ using System.ClientModel;
 using System.ClientModel.Primitives;
 using System.Diagnostics;
 using FluentAssertions;
+using Hangfire;
 using MediatR;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -12,15 +14,23 @@ using NSubstitute;
 using OpenAI.Responses;
 using Orbit.Api.Hosting;
 using Orbit.Api.Idempotency;
+using Orbit.Application.Calendar.Services;
 using Orbit.Application.Chat.Commands;
 using Orbit.Application.Common;
 using Orbit.Application.Chat.Models;
+using Orbit.Application.Proactive.Services;
 using Orbit.Domain.Common;
+using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 using Orbit.Infrastructure.AI;
+using Orbit.Infrastructure.BackgroundJobs;
 using Orbit.Infrastructure.Services;
+using Orbit.Infrastructure.Tests.BackgroundJobs;
 using Orbit.Infrastructure.Tests.Controllers;
+using Orbit.Infrastructure.Tests.Persistence;
+using Orbit.Infrastructure.Tests.Services;
 
 namespace Orbit.Infrastructure.Tests.AI;
 
@@ -28,7 +38,7 @@ namespace Orbit.Infrastructure.Tests.AI;
 /// A caller that cancels its own token (a superseded daily summary refresh, a closed chat stream) did not
 /// see an AI failure, so the usage recorder and the logs must not report one. A completion deadline that
 /// expires while the provider is still working is a real failure and keeps its failed record and warnings,
-/// also when the caller owns it (the offer selector budget, the chat turn deadline).
+/// also when the caller owns it (the selector, chat turn, proactive user and scheduled job budgets).
 /// </summary>
 public class AiCallerCancellationTests
 {
@@ -137,6 +147,82 @@ public class AiCallerCancellationTests
             && entry.Message == $"Chat turn {terminal.GetProperty("turnId").GetGuid()} interrupted by its deadline");
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ProactiveUserBudget_ExpiryRecordsFailed_JobCancellationRecordsCancelled(bool budgetExpires)
+    {
+        var harness = new Harness();
+        var today = new DateOnly(2030, 10, 14);
+        using var factory = new SqliteOrbitDbContextFactory(Path.Combine(Path.GetTempPath(), $"proactive-budget-{Guid.NewGuid():N}.db"));
+        using (var seed = factory.CreateContext())
+        {
+            var user = User.Create("Budget user", "budget@example.com").Value;
+            user.GrantLifetimePro();
+            user.SetTimeZone("UTC");
+            seed.Add(user);
+            seed.Add(Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, user.Id, "Read", FrequencyUnit.Day, 1, today)).Value);
+            await seed.SaveChangesAsync();
+        }
+        var dates = Substitute.For<IUserDateService>();
+        dates.GetUserTodayAsync(Arg.Any<string?>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(today);
+        var flags = Substitute.For<IFeatureFlagService>();
+        flags.GetEnabledKeysForUsersAsync(Arg.Any<IReadOnlyCollection<User>>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.Arg<IReadOnlyCollection<User>>().ToDictionary(user => user.Id, _ => (IReadOnlyList<string>)Array.Empty<string>()));
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["BackgroundServices:ProactiveUserTimeoutSeconds"] = budgetExpires ? "1" : "600"
+        }).Build();
+        using var provider = new ServiceCollection().AddLogging().AddScoped(_ => factory.CreateContext())
+            .AddSingleton<IConfiguration>(configuration).AddSingleton(dates).AddSingleton(flags)
+            .AddSingleton<IProactiveCheckinMessageService>(new AiProactiveCheckinMessageService(harness.Budgeted,
+                new CollectingLogger<AiProactiveCheckinMessageService>(harness.Entries)))
+            .AddSingleton(Substitute.For<IBackgroundJobClient>()).AddSingleton(Substitute.For<ICalendarEventFetcher>())
+            .AddSingleton(Substitute.For<IGoogleTokenService>()).AddSingleton(Substitute.For<IProductAnalytics>())
+            .AddSingleton<TimeProvider>(new ProactiveEngineServiceTests.FixedClock(today.ToDateTime(new TimeOnly(19, 0), DateTimeKind.Utc)))
+            .AddScoped<IProactiveEngine, ProactiveEngineService>().BuildServiceProvider();
+        using var job = new CancellationTokenSource();
+        using var scope = provider.CreateScope();
+        var run = scope.ServiceProvider.GetRequiredService<IProactiveEngine>().EvaluateAsync(job.Token);
+        await harness.Handler.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        if (!budgetExpires)
+            await job.CancelAsync();
+
+        var thrown = await Record.ExceptionAsync(() => run.WaitAsync(TimeSpan.FromSeconds(10)));
+        if (budgetExpires)
+        {
+            thrown.Should().BeNull("the engine ends the expired user and finishes the run");
+            AssertDeadlineFailure(harness);
+            return;
+        }
+        thrown.Should().BeAssignableTo<OperationCanceledException>();
+        var telemetry = harness.SingleTelemetry();
+        telemetry.IsError.Should().BeFalse("a cancelled job is not an AI failure");
+        telemetry.IsCancelled.Should().BeTrue();
+        harness.Entries.Should().NotContain(entry => entry.Level >= LogLevel.Information);
+    }
+
+    [Fact]
+    public async Task ScheduledJobTimeout_ExpiresDuringProviderCall_RecordsFailedWithWarning()
+    {
+        var harness = new Harness();
+        var jobClock = new CompletionTestClock();
+        var job = new AiJob(harness);
+        var health = new BackgroundServiceHealthCheck(Substitute.For<IServiceScopeFactory>(), [job], TimeProvider.System,
+            new CollectingLogger<BackgroundServiceHealthCheck>(harness.Entries));
+        var runner = new ScheduledJobRunner([job], new TestScheduledJobLeaseProvider(), health,
+            new ConfigurationBuilder().Build(), jobClock);
+        var run = runner.RunAsync(job.Name, default);
+        await harness.Handler.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        jobClock.Advance(TimeSpan.FromMinutes(120));
+
+        var thrown = await Record.ExceptionAsync(() => run.WaitAsync(TimeSpan.FromSeconds(5)));
+        thrown.Should().BeAssignableTo<OperationCanceledException>();
+        AssertDeadlineFailure(harness);
+    }
+
     private static void AssertDeadlineFailure(Harness harness)
     {
         var telemetry = harness.SingleTelemetry();
@@ -229,6 +315,7 @@ public class AiCallerCancellationTests
             _intent = new AiIntentService(_budgeted, Usage, new CollectingLogger<AiIntentService>(Entries));
         }
 
+        internal BudgetedAiCompletionClient Budgeted => _budgeted;
         internal BlockingHandler Handler { get; } = new();
         internal CompletionTestClock Clock { get; } = new();
         internal IAiUsageRecorder Usage { get; } = Substitute.For<IAiUsageRecorder>();
@@ -255,6 +342,13 @@ public class AiCallerCancellationTests
             arguments.Skip(2).Take(4).Should().OnlyContain(value => (long)value! == 0);
             return (AiCallTelemetry)arguments[8]!;
         }
+    }
+
+    private sealed class AiJob(Harness harness) : IScheduledJob
+    {
+        public string Name => "ai-job";
+        public string CronExpression => "* * * * *";
+        public Task RunAsync(CancellationToken cancellationToken) => harness.Start("budget-json", cancellationToken);
     }
 
     private sealed class BlockingHandler : HttpMessageHandler
