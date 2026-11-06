@@ -19,7 +19,8 @@ public class SendCodeCommandHandler(
     public async Task<Result> Handle(SendCodeCommand request, CancellationToken cancellationToken)
     {
         var email = request.Email.Trim().ToLowerInvariant();
-        var fixedCode = TrySeedProductionSmokeCode(email) ?? TrySeedTestAccountCode(email);
+        var fixedCode = (environment.IsProduction() ? ProductionSignInCode.For(email) : null)
+            ?? TrySeedTestAccountCode(email);
         var issued = await challenges.IssueAsync(EmailChallengeOperation.SignIn,
             email, fixedCode, cancellationToken: cancellationToken);
         if (issued.IsFailure)
@@ -46,15 +47,5 @@ public class SendCodeCommandHandler(
             }
         }
         return null;
-    }
-
-    private string? TrySeedProductionSmokeCode(string email)
-    {
-        if (!environment.IsProduction())
-            return null;
-        var smokeEmail = Environment.GetEnvironmentVariable("SMOKE_TEST_EMAIL");
-        var smokeCode = Environment.GetEnvironmentVariable("SMOKE_TEST_CODE");
-        return smokeCode is { Length: 6 } && smokeCode.All(char.IsAsciiDigit)
-            && string.Equals(smokeEmail?.Trim(), email, StringComparison.OrdinalIgnoreCase) ? smokeCode : null;
     }
 }
