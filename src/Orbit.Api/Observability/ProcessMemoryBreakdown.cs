@@ -134,55 +134,28 @@ internal static class ProcessMemoryBreakdown
 
     internal static MemoryMapSummary ParseSmaps(IEnumerable<string> lines, int largestCount)
     {
-        var totals = new Dictionary<string, MemoryMappingTotal>(StringComparer.Ordinal);
-        var largest = new List<MemoryMapping>(largestCount + 1);
+        var summary = new MemoryMapAccumulator(largestCount);
         MemoryMapping? current = null;
-        var unparsed = 0;
-
-        void Flush()
-        {
-            if (current is null) return;
-            totals[current.Kind] = totals.TryGetValue(current.Kind, out var total)
-                ? total with
-                {
-                    Mappings = total.Mappings + 1,
-                    SizeKb = total.SizeKb + current.SizeKb,
-                    RssKb = total.RssKb + current.RssKb,
-                    AnonymousKb = total.AnonymousKb + current.AnonymousKb,
-                }
-                : new(current.Kind, 1, current.SizeKb, current.RssKb, current.AnonymousKb);
-            var index = largest.FindIndex(mapping => mapping.RssKb < current.RssKb);
-            largest.Insert(index < 0 ? largest.Count : index, current);
-            if (largest.Count > largestCount) largest.RemoveAt(largest.Count - 1);
-        }
-
         foreach (var line in lines)
         {
             if (IsMappingHeader(line))
             {
-                Flush();
-                var fields = line.Split(' ', 6, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-                current = new(Classify(fields.Length > 5 ? fields[5] : null, fields[1]), fields[1], 0, 0, 0);
-                continue;
+                summary.Add(current);
+                current = ParseMappingHeader(line);
             }
-            if (current is null) continue;
-            if (line.StartsWith("Size:", StringComparison.Ordinal))
-                current = ProcessMemorySnapshot.TryParseKilobytes(line, out var size) ? current with { SizeKb = size } : Count(current, ref unparsed);
-            else if (line.StartsWith("Rss:", StringComparison.Ordinal))
-                current = ProcessMemorySnapshot.TryParseKilobytes(line, out var rss) ? current with { RssKb = rss } : Count(current, ref unparsed);
-            else if (line.StartsWith("Anonymous:", StringComparison.Ordinal))
-                current = ProcessMemorySnapshot.TryParseKilobytes(line, out var anonymous) ? current with { AnonymousKb = anonymous } : Count(current, ref unparsed);
+            else if (current is not null)
+            {
+                current = summary.ParseField(current, line);
+            }
         }
-        Flush();
-
-        return new([.. totals.Values.OrderByDescending(total => total.RssKb).ThenBy(total => total.Kind, StringComparer.Ordinal)],
-            largest, unparsed);
+        summary.Add(current);
+        return summary.ToSummary();
     }
 
-    private static MemoryMapping Count(MemoryMapping mapping, ref int unparsed)
+    private static MemoryMapping ParseMappingHeader(string line)
     {
-        unparsed++;
-        return mapping;
+        var fields = line.Split(' ', 6, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        return new(Classify(fields.Length > 5 ? fields[5] : null, fields[1]), fields[1], 0, 0, 0);
     }
 
     /// <summary>
@@ -204,9 +177,8 @@ internal static class ProcessMemoryBreakdown
     internal static string Classify(string? path, string permissions)
     {
         var kind = Classify(path);
-        return kind == "doublemapper"
-            ? permissions.Contains('x', StringComparison.Ordinal) ? "doublemapper-code" : "doublemapper-data"
-            : kind;
+        if (kind != "doublemapper") return kind;
+        return permissions.Contains('x', StringComparison.Ordinal) ? "doublemapper-code" : "doublemapper-data";
     }
 
     private static string Classify(string? path)
@@ -250,92 +222,169 @@ internal static class ProcessMemoryBreakdown
         {
             json.WriteStartObject();
             json.WriteNumber("uptimeSeconds", (long)uptime.TotalSeconds);
-            string?[] unavailable = [rollup.UnavailablePath, smaps.UnavailablePath, status.UnavailablePath];
-            if (unavailable.Any(path => path is not null))
-            {
-                json.WriteStartArray("unavailable");
-                foreach (var path in unavailable)
-                    if (path is not null) json.WriteStringValue(path);
-                json.WriteEndArray();
-            }
-            if (rollup.Value is { } rollupValues)
-            {
-                json.WriteStartObject("rollupKb");
-                foreach (var field in RollupFields)
-                    if (rollupValues.TryGetValue(field, out var kilobytes)) json.WriteNumber(field, kilobytes);
-                json.WriteEndObject();
-            }
-            if (smaps.Value is { } map)
-            {
-                json.WriteStartArray("kindsKb");
-                foreach (var total in map.Kinds)
-                {
-                    json.WriteStartObject();
-                    json.WriteString("kind", total.Kind);
-                    json.WriteNumber("count", total.Mappings);
-                    json.WriteNumber("size", total.SizeKb);
-                    json.WriteNumber("rss", total.RssKb);
-                    json.WriteNumber("anon", total.AnonymousKb);
-                    json.WriteEndObject();
-                }
-                json.WriteEndArray();
-                json.WriteStartArray("largestKb");
-                foreach (var mapping in map.Largest.Take(largestCount))
-                {
-                    json.WriteStartObject();
-                    json.WriteString("kind", mapping.Kind);
-                    json.WriteString("perms", mapping.Permissions);
-                    json.WriteNumber("size", mapping.SizeKb);
-                    json.WriteNumber("rss", mapping.RssKb);
-                    json.WriteNumber("anon", mapping.AnonymousKb);
-                    json.WriteEndObject();
-                }
-                json.WriteEndArray();
-                if (map.UnparsedLines > 0) json.WriteNumber("unparsedLines", map.UnparsedLines);
-            }
+            WriteUnavailable(json, [rollup.UnavailablePath, smaps.UnavailablePath, status.UnavailablePath]);
+            if (rollup.Value is { } rollupValues) WriteRollup(json, rollupValues);
+            if (smaps.Value is { } map) WriteMap(json, map, largestCount);
             if (status.Value?.Threads is { } threads) json.WriteNumber("threads", threads);
-            json.WriteStartObject("runtime");
-            json.WriteNumber("threadPoolThreads", runtime.ThreadPoolThreads);
-            json.WriteNumber("threadPoolPending", runtime.ThreadPoolPendingItems);
-            json.WriteNumber("timers", runtime.ActiveTimers);
-            json.WriteNumber("assemblies", runtime.Assemblies);
-            json.WriteNumber("dynamicAssemblies", runtime.DynamicAssemblies);
-            json.WriteNumber("jitMethods", runtime.JitMethods);
-            json.WriteNumber("jitILBytes", runtime.JitILBytes);
-            json.WriteEndObject();
-            json.WriteStartObject("gc");
-            json.WriteBoolean("server", runtime.ServerGC);
-            json.WriteNumber("index", runtime.Index);
-            json.WriteNumber("heapSize", runtime.HeapSizeBytes);
-            json.WriteNumber("fragmented", runtime.FragmentedBytes);
-            json.WriteNumber("committed", runtime.CommittedBytes);
-            json.WriteNumber("promoted", runtime.PromotedBytes);
-            json.WriteNumber("pinnedObjects", runtime.PinnedObjectsCount);
-            json.WriteNumber("finalizationPending", runtime.FinalizationPendingCount);
-            json.WriteNumber("allocated", runtime.AllocatedBytes);
-            json.WriteStartArray("collections");
-            foreach (var count in runtime.Collections) json.WriteNumberValue(count);
-            json.WriteEndArray();
-            json.WriteStartArray("generations");
-            foreach (var (size, fragmentation) in runtime.Generations)
-            {
-                json.WriteStartArray();
-                json.WriteNumberValue(size);
-                json.WriteNumberValue(fragmentation);
-                json.WriteEndArray();
-            }
-            json.WriteEndArray();
-            json.WriteStartObject("lastFull");
-            json.WriteNumber("index", runtime.LastFull.Index);
-            json.WriteBoolean("background", runtime.LastFull.Background);
-            json.WriteNumber("promoted", runtime.LastFull.PromotedBytes);
-            json.WriteNumber("heapSize", runtime.LastFull.HeapSizeBytes);
-            json.WriteNumber("fragmented", runtime.LastFull.FragmentedBytes);
-            json.WriteEndObject();
-            json.WriteEndObject();
+            WriteRuntime(json, runtime);
+            WriteGc(json, runtime);
             json.WriteEndObject();
         }
         return Encoding.UTF8.GetString(buffer.WrittenSpan);
+    }
+
+    private static void WriteUnavailable(Utf8JsonWriter json, string?[] unavailable)
+    {
+        if (!unavailable.Any(path => path is not null)) return;
+        json.WriteStartArray("unavailable");
+        foreach (var path in unavailable.Where(path => path is not null)) json.WriteStringValue(path);
+        json.WriteEndArray();
+    }
+
+    private static void WriteRollup(Utf8JsonWriter json, IReadOnlyDictionary<string, long> rollup)
+    {
+        json.WriteStartObject("rollupKb");
+        foreach (var field in RollupFields)
+            if (rollup.TryGetValue(field, out var kilobytes)) json.WriteNumber(field, kilobytes);
+        json.WriteEndObject();
+    }
+
+    private static void WriteMap(Utf8JsonWriter json, MemoryMapSummary map, int largestCount)
+    {
+        json.WriteStartArray("kindsKb");
+        foreach (var total in map.Kinds)
+        {
+            json.WriteStartObject();
+            json.WriteString("kind", total.Kind);
+            json.WriteNumber("count", total.Mappings);
+            json.WriteNumber("size", total.SizeKb);
+            json.WriteNumber("rss", total.RssKb);
+            json.WriteNumber("anon", total.AnonymousKb);
+            json.WriteEndObject();
+        }
+        json.WriteEndArray();
+        json.WriteStartArray("largestKb");
+        foreach (var mapping in map.Largest.Take(largestCount))
+        {
+            json.WriteStartObject();
+            json.WriteString("kind", mapping.Kind);
+            json.WriteString("perms", mapping.Permissions);
+            json.WriteNumber("size", mapping.SizeKb);
+            json.WriteNumber("rss", mapping.RssKb);
+            json.WriteNumber("anon", mapping.AnonymousKb);
+            json.WriteEndObject();
+        }
+        json.WriteEndArray();
+        if (map.UnparsedLines > 0) json.WriteNumber("unparsedLines", map.UnparsedLines);
+    }
+
+    private static void WriteRuntime(Utf8JsonWriter json, RuntimeMemory runtime)
+    {
+        json.WriteStartObject("runtime");
+        json.WriteNumber("threadPoolThreads", runtime.ThreadPoolThreads);
+        json.WriteNumber("threadPoolPending", runtime.ThreadPoolPendingItems);
+        json.WriteNumber("timers", runtime.ActiveTimers);
+        json.WriteNumber("assemblies", runtime.Assemblies);
+        json.WriteNumber("dynamicAssemblies", runtime.DynamicAssemblies);
+        json.WriteNumber("jitMethods", runtime.JitMethods);
+        json.WriteNumber("jitILBytes", runtime.JitILBytes);
+        json.WriteEndObject();
+    }
+
+    private static void WriteGc(Utf8JsonWriter json, RuntimeMemory runtime)
+    {
+        json.WriteStartObject("gc");
+        json.WriteBoolean("server", runtime.ServerGC);
+        json.WriteNumber("index", runtime.Index);
+        json.WriteNumber("heapSize", runtime.HeapSizeBytes);
+        json.WriteNumber("fragmented", runtime.FragmentedBytes);
+        json.WriteNumber("committed", runtime.CommittedBytes);
+        json.WriteNumber("promoted", runtime.PromotedBytes);
+        json.WriteNumber("pinnedObjects", runtime.PinnedObjectsCount);
+        json.WriteNumber("finalizationPending", runtime.FinalizationPendingCount);
+        json.WriteNumber("allocated", runtime.AllocatedBytes);
+        json.WriteStartArray("collections");
+        foreach (var count in runtime.Collections) json.WriteNumberValue(count);
+        json.WriteEndArray();
+        json.WriteStartArray("generations");
+        foreach (var (size, fragmentation) in runtime.Generations)
+        {
+            json.WriteStartArray();
+            json.WriteNumberValue(size);
+            json.WriteNumberValue(fragmentation);
+            json.WriteEndArray();
+        }
+        json.WriteEndArray();
+        WriteLastFull(json, runtime.LastFull);
+        json.WriteEndObject();
+    }
+
+    private static void WriteLastFull(Utf8JsonWriter json, FullCollection lastFull)
+    {
+        json.WriteStartObject("lastFull");
+        json.WriteNumber("index", lastFull.Index);
+        json.WriteBoolean("background", lastFull.Background);
+        json.WriteNumber("promoted", lastFull.PromotedBytes);
+        json.WriteNumber("heapSize", lastFull.HeapSizeBytes);
+        json.WriteNumber("fragmented", lastFull.FragmentedBytes);
+        json.WriteEndObject();
+    }
+}
+
+/// <summary>
+/// The totals by kind and the largest resident mappings of <c>/proc/self/smaps</c>, added one mapping at a time, so
+/// the parse reads the file in one pass and keeps at most <c>largestCount</c> mappings.
+/// </summary>
+internal sealed class MemoryMapAccumulator(int largestCount)
+{
+    private readonly Dictionary<string, MemoryMappingTotal> _totals = new(StringComparer.Ordinal);
+    private readonly List<MemoryMapping> _largest = new(largestCount + 1);
+    private int _unparsedLines;
+
+    internal void Add(MemoryMapping? mapping)
+    {
+        if (mapping is null) return;
+        _totals[mapping.Kind] = _totals.TryGetValue(mapping.Kind, out var total)
+            ? total with
+            {
+                Mappings = total.Mappings + 1,
+                SizeKb = total.SizeKb + mapping.SizeKb,
+                RssKb = total.RssKb + mapping.RssKb,
+                AnonymousKb = total.AnonymousKb + mapping.AnonymousKb,
+            }
+            : new(mapping.Kind, 1, mapping.SizeKb, mapping.RssKb, mapping.AnonymousKb);
+        InsertLargest(mapping);
+    }
+
+    /// <summary>
+    /// The mapping with the value of a <c>Size</c>, <c>Rss</c> or <c>Anonymous</c> line. A malformed value of one of
+    /// these fields counts as an unparsed line; every other field line leaves the mapping as it is.
+    /// </summary>
+    internal MemoryMapping ParseField(MemoryMapping mapping, string line)
+    {
+        if (FieldSetter(line) is not { } set) return mapping;
+        if (ProcessMemorySnapshot.TryParseKilobytes(line, out var kilobytes)) return set(mapping, kilobytes);
+        _unparsedLines++;
+        return mapping;
+    }
+
+    internal MemoryMapSummary ToSummary() =>
+        new([.. _totals.Values.OrderByDescending(total => total.RssKb).ThenBy(total => total.Kind, StringComparer.Ordinal)],
+            _largest, _unparsedLines);
+
+    private static Func<MemoryMapping, long, MemoryMapping>? FieldSetter(string line)
+    {
+        if (line.StartsWith("Size:", StringComparison.Ordinal)) return static (mapping, kilobytes) => mapping with { SizeKb = kilobytes };
+        if (line.StartsWith("Rss:", StringComparison.Ordinal)) return static (mapping, kilobytes) => mapping with { RssKb = kilobytes };
+        if (line.StartsWith("Anonymous:", StringComparison.Ordinal)) return static (mapping, kilobytes) => mapping with { AnonymousKb = kilobytes };
+        return null;
+    }
+
+    private void InsertLargest(MemoryMapping mapping)
+    {
+        var index = _largest.FindIndex(largest => largest.RssKb < mapping.RssKb);
+        _largest.Insert(index < 0 ? _largest.Count : index, mapping);
+        if (_largest.Count > largestCount) _largest.RemoveAt(_largest.Count - 1);
     }
 }
 

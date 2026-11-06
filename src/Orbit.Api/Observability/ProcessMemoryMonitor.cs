@@ -125,10 +125,13 @@ internal sealed partial class ProcessMemoryMonitor(ILogger<ProcessMemoryMonitor>
         _startedAtUtc = time.GetUtcNow();
         if (logger.IsEnabled(LogLevel.Information))
         {
-            LogBudget(logger, ApiMemoryBudget.ContainerBytes, ApiMemoryBudget.WarningBytes,
-                GC.GetGCMemoryInfo().TotalAvailableMemoryBytes, GCSettings.IsServerGC);
-            LogConfiguration(logger, JsonSerializer.Serialize(GC.GetConfigurationVariables()));
-            LogStartupBreakdown(logger, _readBreakdown(TimeSpan.Zero));
+            var heapLimitBytes = GC.GetGCMemoryInfo().TotalAvailableMemoryBytes;
+            LogBudget(logger, ApiMemoryBudget.ContainerBytes, ApiMemoryBudget.WarningBytes, heapLimitBytes,
+                GCSettings.IsServerGC);
+            var configuration = JsonSerializer.Serialize(GC.GetConfigurationVariables());
+            LogConfiguration(logger, configuration);
+            var breakdown = _readBreakdown(TimeSpan.Zero);
+            LogStartupBreakdown(logger, breakdown);
         }
         Observe(_readSnapshot(), time.GetUtcNow());
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(30), time);
@@ -153,7 +156,8 @@ internal sealed partial class ProcessMemoryMonitor(ILogger<ProcessMemoryMonitor>
                         snapshot.UnreclaimableBytes * 100d / ApiMemoryBudget.ContainerBytes, ApiMemoryBudget.ContainerBytes,
                         snapshot.AnonymousBytes, snapshot.ShmemBytes, snapshot.WorkingSetBytes,
                         snapshot.ManagedBytes, snapshot.CommittedBytes, snapshot.HeapLimitBytes);
-                    LogBreakdown(logger, _readBreakdown(sampledAtUtc - (_startedAtUtc ??= sampledAtUtc)));
+                    var breakdown = _readBreakdown(sampledAtUtc - (_startedAtUtc ??= sampledAtUtc));
+                    LogBreakdown(logger, breakdown);
                 }
                 _lastWarningAtUtc = sampledAtUtc;
             }
