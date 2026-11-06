@@ -103,6 +103,31 @@ About 150 MB of the production anonymous plus shmem memory does not appear in th
 runs. The local runs have no outbound TLS calls to OpenAI, Firebase, Stripe or SES,
 no Hangfire work on real accounts, and fewer hours of uptime.
 
+## Uptime soak
+
+[`evidence/ticket-2003-uptime-soak.json`](evidence/ticket-2003-uptime-soak.json)
+records two longer runs of the same container. Each run applies the recorded HTTP
+load once and then a light client about every 75 seconds. Every 5 minutes, it adds
+up the resident memory of `/proc/1/smaps` by mapping kind. At the end,
+`dotnet-gcdump` forces a full GC, and the memory is read again.
+
+| Run | Outbound HTTPS to a local sink | Window | Anonymous plus shmem at the end | Anonymous that a full GC returns | Live GC heap |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Uptime, near idle | Sentry, PostHog | 60 minutes | 251,556 kB | 10,756 kB | 39,063,400 bytes |
+| Authenticated, one chat turn a minute | Sentry, PostHog, the AI base URL | 35 minutes | 225,996 kB | 10,716 kB | 37,831,400 bytes |
+
+These are the conclusions:
+
+- Neither run grows without a limit. Shmem stops at 86,124 to 88,560 kB after about 15 minutes. Anonymous memory stops at 135,032 to 163,100 kB.
+- At minute 12, the `doublemapper` held 64,608 kB of loader data and 22,124 kB of JIT code. The cgroup `shmem` equals `RssShmem`, so the double mapping is not counted twice.
+- The local GC heap holds little garbage. Production logged a committed GC heap of 164,282,368 to 179,068,928 bytes. Locally, the committed heap was 70,418,432 bytes at minute 20.
+- The chat turns end at the moderation call, so the `o200k_base` tokenizer never loads. Its 42 MB of live memory is absent from these runs, but present in production after the first Astra turn.
+
+Thus the production excess is in the managed heap, and these runs do not show its
+owner. The memory breakdown in each production warning names it: compare
+`gc.heapSize` with `gc.lastFull.promoted`, and compare `kindsKb` with the startup
+line.
+
 ## Selected configuration
 
 The image publishes the API ReadyToRun for the target architecture
@@ -150,6 +175,41 @@ and committed GC memory, and the heap limit. Warnings repeat at most every five
 minutes while the memory stays high. Recovery emits one information message. The
 monitor never collects the heap or changes request behavior.
 
+### Memory breakdown
+
+Each budget warning is followed by one `API memory breakdown {MemoryBreakdown}`
+warning. On startup, the monitor logs the same text once as
+`API memory breakdown at startup {MemoryBreakdown}` at the information level. The
+startup line is the baseline for growth with uptime. The text is compact JSON of at
+most 4,000 characters, about 2,400 characters in a container. It has these fields:
+
+| Field | Source | Content |
+| --- | --- | --- |
+| `rollupKb` | `/proc/self/smaps_rollup` | `Rss`, `Pss_Anon`, `Pss_File`, `Pss_Shmem`, clean and dirty pages, `Anonymous`, `AnonHugePages`, `Swap` |
+| `kindsKb` | `/proc/self/smaps` | Mapping count, size, resident and anonymous kB for each kind |
+| `largestKb` | `/proc/self/smaps` | The 12 largest resident mappings: kind, permissions, size, resident and anonymous kB |
+| `threads` | `/proc/self/status` | The thread count of the process |
+| `runtime` | Runtime | Thread pool threads and queue, timers, loaded and dynamic assemblies, JIT methods and IL bytes |
+| `gc` | `GC.GetGCMemoryInfo` | Heap size, fragmentation, committed, promoted, pinned and finalization counts, collection counts, generation sizes |
+| `gc.lastFull` | `GC.GetGCMemoryInfo` | Index, background flag, promoted bytes, heap size and fragmentation of the last full GC |
+
+The kinds are `anonymous`, `heap`, `stack`, `doublemapper-code`,
+`doublemapper-data`, `shm`, `dll`, `so`, `file` and `kernel`. A `doublemapper`
+mapping with execute permission holds JIT code and stubs. The other `doublemapper`
+mappings hold loader heaps and writable views. The text holds kind names and
+numbers only. It never holds a mapping path, so it cannot show a file name or a
+secret. A `/proc/self` file that the kernel refuses is named in `unavailable`.
+
+The monitor reads the breakdown at most once per warning interval, and only when
+the warning is enabled. One read streams about 35,000 lines of `/proc/self/smaps`.
+
+Use these rules to read a warning:
+
+- Compare `gc.heapSize` with `gc.lastFull.promoted`. The difference is managed memory that a full GC can return.
+- Compare `kindsKb` with the startup line of the same instance. The kind whose `rss` grows is the owner of the growth.
+- If `doublemapper-code` grows, JIT code grows. If `doublemapper-data` grows, loader data grows, for example from new types or dynamic code.
+- If `anonymous` grows and `gc.committed` does not, native memory grows outside the GC heap.
+
 The kernel reports `RssAnon` and `RssShmem` since Linux 4.5, and a container reads
 them from the host kernel. If a field is missing or malformed, the monitor does not
 stop. It emits one warning that names the field and then compares the whole working
@@ -162,6 +222,7 @@ After the orchestrator releases the API image, read Render's
 `orbit-api > Metrics > Memory` for a complete 24-hour window. Inspect
 `orbit-api > Events` for any `server_failed` event whose reason contains
 `oomKilled`, and search the logs for `API memory budget exceeded`. Each warning
-gives the anonymous plus shmem total. Record that window and its maximum in the
+gives the anonymous plus shmem total, and the `API memory breakdown` line after it
+gives the owners. Record that window and its maximum in the
 owning ticket. The production acceptance criterion remains open until this is
 complete.
