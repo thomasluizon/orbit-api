@@ -123,6 +123,12 @@ public class ProcessMemoryBreakdownTests
         root.GetProperty("runtime").GetProperty("dynamicAssemblies").GetInt32().Should().Be(2);
         root.GetProperty("gc").GetProperty("fragmented").GetInt64().Should().Be(7);
         root.GetProperty("gc").GetProperty("generations").GetArrayLength().Should().Be(5);
+        root.GetProperty("gc").GetProperty("index").GetInt64().Should().Be(40);
+        var lastFull = root.GetProperty("gc").GetProperty("lastFull");
+        lastFull.GetProperty("index").GetInt64().Should().Be(31);
+        lastFull.GetProperty("background").GetBoolean().Should().BeTrue();
+        lastFull.GetProperty("promoted").GetInt64().Should().Be(24_000_000);
+        lastFull.GetProperty("heapSize").GetInt64().Should().Be(150_000_000);
         root.TryGetProperty("unavailable", out _).Should().BeFalse();
     }
 
@@ -168,6 +174,10 @@ public class ProcessMemoryBreakdownTests
         json.RootElement.GetProperty("uptimeSeconds").GetInt64().Should().Be(90);
         json.RootElement.GetProperty("runtime").GetProperty("assemblies").GetInt32().Should().BePositive();
         json.RootElement.GetProperty("gc").GetProperty("committed").GetInt64().Should().BePositive();
+        GC.Collect(2, GCCollectionMode.Forced, blocking: true);
+        using var afterFull = JsonDocument.Parse(ProcessMemoryBreakdown.Read(TimeSpan.Zero));
+        afterFull.RootElement.GetProperty("gc").GetProperty("lastFull").GetProperty("index").GetInt64().Should().BePositive();
+        afterFull.RootElement.GetProperty("gc").GetProperty("lastFull").GetProperty("promoted").GetInt64().Should().BePositive();
         json.RootElement.TryGetProperty("unavailable", out _).Should().BeFalse();
         if (OperatingSystem.IsLinux())
         {
@@ -181,5 +191,6 @@ public class ProcessMemoryBreakdownTests
         new(ProcessMemoryBreakdown.ParseRollup(Fixture("smaps_rollup.txt")), null);
 
     private static RuntimeMemory Runtime() =>
-        new(1, 7, 3, 4, 5, 6, [(10, 1), (20, 2), (30, 3), (40, 4), (50, 5)], [9, 8, 7], 11, 12, 13, 14, 200, 2, 15, 16, false);
+        new(40, 1, 7, 3, 4, 5, 6, [(10, 1), (20, 2), (30, 3), (40, 4), (50, 5)], [9, 8, 7], 11,
+            new FullCollection(31, true, 24_000_000, 150_000_000, 9), 12, 13, 14, 200, 2, 15, 16, false);
 }

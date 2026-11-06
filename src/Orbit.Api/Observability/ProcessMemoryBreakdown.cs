@@ -19,25 +19,41 @@ internal sealed record MemoryMapSummary(IReadOnlyList<MemoryMappingTotal> Kinds,
     int UnparsedLines);
 
 /// <summary>
+/// The last full GC, blocking or background. Its promoted bytes are the live managed memory at that GC, so the heap
+/// size now minus that value is the memory that a full GC can return. Index 0 means no full GC ran.
+/// </summary>
+internal sealed record FullCollection(long Index, bool Background, long PromotedBytes, long HeapSizeBytes, long FragmentedBytes)
+{
+    internal static FullCollection Read()
+    {
+        var blocking = GC.GetGCMemoryInfo(GCKind.FullBlocking);
+        var background = GC.GetGCMemoryInfo(GCKind.Background);
+        var last = background.Index > blocking.Index ? background : blocking;
+        return new(last.Index, last.Concurrent, last.PromotedBytes, last.HeapSizeBytes, last.FragmentedBytes);
+    }
+}
+
+/// <summary>
 /// Counters of the runtime that own memory outside the GC heap, or that tell where the GC heap is.
 /// <see cref="Generations"/> holds generation 0, 1, 2, the large object heap and the pinned object heap after the last GC.
 /// </summary>
-internal sealed record RuntimeMemory(long HeapSizeBytes, long FragmentedBytes, long CommittedBytes, long PromotedBytes,
+internal sealed record RuntimeMemory(long Index, long HeapSizeBytes, long FragmentedBytes, long CommittedBytes, long PromotedBytes,
     long PinnedObjectsCount, long FinalizationPendingCount, IReadOnlyList<(long SizeBytes, long FragmentationBytes)> Generations,
-    IReadOnlyList<int> Collections, long AllocatedBytes, int ThreadPoolThreads, long ThreadPoolPendingItems,
-    long ActiveTimers, int Assemblies, int DynamicAssemblies, long JitMethods, long JitILBytes, bool ServerGC)
+    IReadOnlyList<int> Collections, long AllocatedBytes, FullCollection LastFull, int ThreadPoolThreads,
+    long ThreadPoolPendingItems, long ActiveTimers, int Assemblies, int DynamicAssemblies, long JitMethods, long JitILBytes,
+    bool ServerGC)
 {
     internal static RuntimeMemory Read()
     {
-        var gc = GC.GetGCMemoryInfo();
+        var gc = GC.GetGCMemoryInfo(GCKind.Any);
         var generations = new List<(long, long)>(gc.GenerationInfo.Length);
         foreach (var generation in gc.GenerationInfo)
             generations.Add((generation.SizeAfterBytes, generation.FragmentationAfterBytes));
         var assemblies = AppDomain.CurrentDomain.GetAssemblies();
-        return new(gc.HeapSizeBytes, gc.FragmentedBytes, gc.TotalCommittedBytes, gc.PromotedBytes,
+        return new(gc.Index, gc.HeapSizeBytes, gc.FragmentedBytes, gc.TotalCommittedBytes, gc.PromotedBytes,
             gc.PinnedObjectsCount, gc.FinalizationPendingCount, generations,
             [GC.CollectionCount(0), GC.CollectionCount(1), GC.CollectionCount(2)], GC.GetTotalAllocatedBytes(),
-            ThreadPool.ThreadCount, ThreadPool.PendingWorkItemCount, Timer.ActiveCount, assemblies.Length,
+            FullCollection.Read(), ThreadPool.ThreadCount, ThreadPool.PendingWorkItemCount, Timer.ActiveCount, assemblies.Length,
             assemblies.Count(assembly => assembly.IsDynamic), System.Runtime.JitInfo.GetCompiledMethodCount(),
             System.Runtime.JitInfo.GetCompiledILBytes(), GCSettings.IsServerGC);
     }
@@ -281,6 +297,7 @@ internal static class ProcessMemoryBreakdown
             json.WriteEndObject();
             json.WriteStartObject("gc");
             json.WriteBoolean("server", runtime.ServerGC);
+            json.WriteNumber("index", runtime.Index);
             json.WriteNumber("heapSize", runtime.HeapSizeBytes);
             json.WriteNumber("fragmented", runtime.FragmentedBytes);
             json.WriteNumber("committed", runtime.CommittedBytes);
@@ -300,6 +317,13 @@ internal static class ProcessMemoryBreakdown
                 json.WriteEndArray();
             }
             json.WriteEndArray();
+            json.WriteStartObject("lastFull");
+            json.WriteNumber("index", runtime.LastFull.Index);
+            json.WriteBoolean("background", runtime.LastFull.Background);
+            json.WriteNumber("promoted", runtime.LastFull.PromotedBytes);
+            json.WriteNumber("heapSize", runtime.LastFull.HeapSizeBytes);
+            json.WriteNumber("fragmented", runtime.LastFull.FragmentedBytes);
+            json.WriteEndObject();
             json.WriteEndObject();
             json.WriteEndObject();
         }
