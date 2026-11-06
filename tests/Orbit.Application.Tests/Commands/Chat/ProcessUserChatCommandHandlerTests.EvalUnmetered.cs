@@ -66,5 +66,7 @@ public partial class ProcessUserChatCommandHandlerTests
         gateway.Requests.Should().HaveCount(2);
         gateway.Responses[0].Should().BeOfType<RejectedBeforeDispatchResponse>();
         gateway.Responses[1].Operation.Status.Should().Be(AgentOperationStatus.Succeeded);
+        result.Value.AiMessage.Should().NotBe("I couldn't complete that. Please try again.",
+            "a correction that resolves every failure is not a failed turn");
     }
 }
