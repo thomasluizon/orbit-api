@@ -1204,11 +1204,17 @@
       "round19Unreclaimable": 224030720,
       "retainedManaged": 45913448
     },
-    "finalCommit": {
+    "commit10b83e81d": {
       "result": "passed",
       "tokenizerRetainedBytes": 4855120,
       "round19Unreclaimable": 216104960,
       "retainedManaged": 45713928
+    },
+    "head2fd0ebfea": {
+      "result": "passed",
+      "tokenizerRetainedBytes": 4855144,
+      "round19Unreclaimable": 226373632,
+      "retainedManaged": 45968280
     }
   },
   "containerGuard": {
@@ -1391,13 +1397,23 @@
       "test": "ValidatorRegistrationTests.RepeatedRequestValidation_CompilesNoNewMethods",
       "defect": "AddValidatorsFromAssemblyContaining with the default scoped lifetime",
       "compiledMethodsWithDefect": 402,
-      "compiledMethodsFixed": 0
+      "compiledMethodsFixed": 0,
+      "fullSuiteFlake": "found 1 in the full Orbit.Infrastructure.Tests run: dynamicClass.ResolveService of the IServiceScopeFactory accessor on the test thread",
+      "withOneScopeFactory": {
+        "compiledMethodsWithDefect": 401,
+        "compiledMethodsFixed": 0
+      }
     },
     "updateValidatorConstructionsIn50Scopes": {
       "test": "ValidatorRegistrationTests.RepeatedUpdateValidatorConstruction_CompilesNoNewMethods",
       "defect": "UpdateHabitCommandValidator from 10b83e81d",
       "compiledMethodsWithDefect": 153,
-      "compiledMethodsFixed": 0
+      "compiledMethodsFixed": 0,
+      "fullSuiteFlake": "found 2 and 3 in full Orbit.Infrastructure.Tests runs: two dynamicClass.ResolveService and one InvokeStub_ObjectProxy..ctor on the test thread",
+      "withDirectConstruction": {
+        "compiledMethodsWithDefect": 150,
+        "compiledMethodsFixed": 0
+      }
     },
     "databaseConfigurationReadsIn10Scopes": {
       "test": "DatabaseRegistrationTests.RequestScopes_ReuseTheConnectionStringWithoutBindingConfigurationAgain",
