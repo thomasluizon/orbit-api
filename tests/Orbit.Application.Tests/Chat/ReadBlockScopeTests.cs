@@ -176,6 +176,64 @@ public sealed class ReadBlockScopeTests
         calendar.GetProperty("window_to_utc").GetString().Should().StartWith("2026-04-02T03:00:00");
     }
 
+    [Theory]
+    [InlineData("2026-11-06T15:00:00", "2026-11-06T15:00:00.0000000Z")]
+    [InlineData("2026-11-06", "2026-11-06T00:00:00.0000000Z")]
+    [InlineData("2026-11-06T15:00:00-03:00", "2026-11-06T18:00:00.0000000Z")]
+    [InlineData("2026-11-06T15:00:00Z", "2026-11-06T15:00:00.0000000Z")]
+    [InlineData("2026-11-06T15:00:00.0000000Z", "2026-11-06T15:00:00.0000000Z")]
+    public async Task CalendarScopeWritesEachAcceptedModelWindowAsUtcRoundTrip(string sent, string expected)
+    {
+        var scope = await _blocks.ResolveAsync("get_calendar_overview",
+            JsonSerializer.SerializeToElement(new { window_from_utc = sent, window_to_utc = "2026-11-08T00:00:00+02:00" }), _userId, default);
+
+        scope.GetProperty("window_from_utc").GetString().Should().Be(expected);
+        scope.GetProperty("window_to_utc").GetString().Should().Be("2026-11-07T22:00:00.0000000Z");
+        var replay = await _blocks.ResolveAsync("get_calendar_overview", scope, _userId, default);
+        replay.GetProperty("window_from_utc").GetString().Should().Be(expected);
+    }
+
+    [Fact]
+    public async Task CalendarScopeReplacesAnUnparseableModelWindowWithTheDefaultWindow()
+    {
+        var dated = await _blocks.ResolveAsync("get_calendar_overview",
+            Json("""{"date_from":"2026-04-01","date_to":"2026-04-02","window_from_utc":"soon","window_to_utc":17}"""), _userId, default);
+        dated.GetProperty("window_from_utc").GetString().Should().Be("2026-04-01T03:00:00.0000000Z");
+        dated.GetProperty("window_to_utc").GetString().Should().Be("2026-04-03T03:00:00.0000000Z");
+
+        var beforeAtUtc = TimeProvider.System.GetUtcNow().UtcDateTime;
+        var open = await _blocks.ResolveAsync("get_calendar_overview",
+            Json("""{"window_from_utc":"next week","window_to_utc":"2026-11-08T00:00:00Z"}"""), _userId, default);
+        var fromAtUtc = DateTime.Parse(open.GetProperty("window_from_utc").GetString()!, System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.RoundtripKind);
+        fromAtUtc.Kind.Should().Be(DateTimeKind.Utc);
+        fromAtUtc.Should().BeOnOrAfter(beforeAtUtc).And.BeOnOrBefore(TimeProvider.System.GetUtcNow().UtcDateTime);
+        open.GetProperty("window_to_utc").GetString().Should().Be("2026-11-08T00:00:00.0000000Z");
+    }
+
+    [Fact]
+    public async Task CalendarScopeKeepsTheApiFilledDefaultAndDateWindows()
+    {
+        var single = await _blocks.ResolveAsync("get_calendar_overview", Json("""{"date_from":"2026-04-01"}"""), _userId, default);
+        single.GetProperty("window_from_utc").GetString().Should().Be("2026-04-01T03:00:00.0000000Z");
+        single.GetProperty("window_to_utc").GetString().Should().Be("2026-04-02T03:00:00.0000000Z");
+        var ranged = await _blocks.ResolveAsync("get_calendar_overview", Json("""{"date_to":"2026-04-03"}"""), _userId, default);
+        ranged.GetProperty("date_from").GetString().Should().Be("2026-04-01");
+        ranged.GetProperty("window_from_utc").GetString().Should().Be("2026-04-01T03:00:00.0000000Z");
+        ranged.GetProperty("window_to_utc").GetString().Should().Be("2026-04-04T03:00:00.0000000Z");
+
+        var beforeAtUtc = TimeProvider.System.GetUtcNow().UtcDateTime;
+        var open = await _blocks.ResolveAsync("get_calendar_overview", Json("{}"), _userId, default);
+        var fromAtUtc = DateTime.Parse(open.GetProperty("window_from_utc").GetString()!, System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.RoundtripKind);
+        var toAtUtc = DateTime.Parse(open.GetProperty("window_to_utc").GetString()!, System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.RoundtripKind);
+        fromAtUtc.Kind.Should().Be(DateTimeKind.Utc);
+        fromAtUtc.Should().BeOnOrAfter(beforeAtUtc);
+        (toAtUtc - fromAtUtc).Should().Be(TimeSpan.FromDays(60));
+        open.GetProperty("window_from_utc").GetString().Should().Be(fromAtUtc.ToString("O", System.Globalization.CultureInfo.InvariantCulture));
+    }
+
     [Fact]
     public async Task HistoryPagesUseActualDatedLogsAndRejectDeletedSourceCursor()
     {
