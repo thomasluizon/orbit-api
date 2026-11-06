@@ -57,4 +57,39 @@ public static partial class ProactiveProposal
         foreach (var field in new[] { "reminder_enabled", "reminder_times" })
             if (!names.Any(name => name?.ToString() == field)) names.Add(field);
     }
+
+    private static readonly string[] ScheduleFields = ["frequency_unit", "frequency_quantity"];
+
+    /// <summary>
+    /// A message that asks for a repetition, such as daily or every week, requests the schedule. The
+    /// schedule fields of a create call then stay requested, even when the model lists them as suggested.
+    /// </summary>
+    internal static AiToolCall KeepRequestedSchedule(AiToolCall call, string message)
+    {
+        if (call.Name is not ("create_habit" or "bulk_create_habits") || call.Args.ValueKind != JsonValueKind.Object
+            || !Validators.HabitProposalValidator.RequestsRepetition(message)
+            && !Validators.HabitProposalValidator.RequestsRepetition(HabitNameMatcher.Normalize(message)))
+            return call;
+        var root = JsonNode.Parse(call.Args.GetRawText())!.AsObject();
+        if (call.Name == "bulk_create_habits" && root["habits"] is JsonArray habits)
+            foreach (var item in habits.OfType<JsonObject>()) KeepScheduleNode(item);
+        else KeepScheduleNode(root);
+        return call with { Args = JsonSerializer.SerializeToElement(root) };
+    }
+
+    private static void KeepScheduleNode(JsonObject node)
+    {
+        if (node["sub_habits"] is JsonArray children)
+            foreach (var child in children.OfType<JsonObject>()) KeepScheduleNode(child);
+        if (node[Argument] is JsonArray names)
+            foreach (var name in names.Where(name => ScheduleFields.Contains(name?.ToString())).ToArray())
+                names.Remove(name);
+        else if (node[Argument] is JsonObject values)
+            foreach (var field in ScheduleFields.Where(values.ContainsKey).ToArray())
+            {
+                var value = values[field]?.DeepClone();
+                values.Remove(field);
+                if (node[field] is null) node[field] = value;
+            }
+    }
 }

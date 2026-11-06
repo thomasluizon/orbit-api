@@ -149,7 +149,6 @@ public partial class ProcessUserChatCommandHandler
         ChatContext context, ToolExecutionAccumulator results, ToolLoopResult loop, CancellationToken ct)
     {
         using var phase = ChatTurnTimer.Measure(ChatPhase.Composition);
-        ct.ThrowIfCancellationRequested();
         if (results.RequiresCreationProposal)
             return Result.Failure<ChatResponse>(loop.ProviderError is { Code: not ErrorCodes.AiEmptyResponse } creationError
                 ? creationError : ErrorMessages.AiUnavailable);
@@ -201,8 +200,8 @@ public partial class ProcessUserChatCommandHandler
     {
         LogToolCallingIteration(logger, iteration, aiResponse.ToolCalls!.Count);
 
-        var orderedCalls = OrderCallsForAsk(aiResponse.ToolCalls!.Select(call =>
-            ProactiveProposal.CompleteCreateReminder(call, request.ClientContext)).ToArray(), context.UserHabits);
+        var orderedCalls = OrderCallsForAsk(aiResponse.ToolCalls!.Select(call => ProactiveProposal.KeepRequestedSchedule(
+            ProactiveProposal.CompleteCreateReminder(call, request.ClientContext), request.Message)).ToArray(), context.UserHabits);
         await StartPlanCallsAsync(orderedCalls, request, executionResults);
         var outcomesByCallId = correction is null
             ? await ExecuteToolCallsAsync(orderedCalls, request, executionResults, language, cancellationToken)
@@ -223,7 +222,7 @@ public partial class ProcessUserChatCommandHandler
         if (BulkNoChangesMessage(executionResults, language) is { } noChanges)
             return new ToolRoundResult(new AiResponse { TextMessage = noChanges });
 
-        if (executionResults.AskBlock is not null)
+        if (await EndsWithAskAsync(aiResponse, orderedCalls, outcomesByCallId, request, context, executionResults, cancellationToken))
             return new ToolRoundResult(aiResponse with { ToolCalls = null, ReportedTokenCount = 0, RequestBudgetTokenCount = 0 });
 
         if (CanCompleteToolRound(aiResponse, request, context, executionResults, iteration,

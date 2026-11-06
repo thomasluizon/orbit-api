@@ -21,7 +21,20 @@ public partial class ProcessUserChatCommandHandler
             && request.ClientContext?.SupportsParts == true
             && request.ClientContext.PartKinds?.Any(IsAskKind) == true
             && !context.EnabledFeatureFlags.Contains(FeatureFlagKeys.AstraAskBlocksDisabled)
-            && !context.EnabledFeatureFlags.Contains(FeatureFlagKeys.AstraPartsDisabled);
+            && !context.EnabledFeatureFlags.Contains(FeatureFlagKeys.AstraPartsDisabled)
+            && !HasSupportedOfferDefault(request, context);
+
+    /// <summary>
+    /// An offer-enabled create turn with a server default (a fitting owned parent, an active goal or a repeat
+    /// reminder) prepares the editable preview. A question in place of that preview drops the proposal. A turn
+    /// that creates nothing keeps ask.
+    /// </summary>
+    private static bool HasSupportedOfferDefault(ProcessUserChatCommand request, ChatContext context) =>
+        request.BlockAnswer is null && ProactiveProposal.Enabled(request.ClientContext)
+        && SuggestionCandidates(request, context).SupportedDefault;
+
+    private static ProactiveSuggestionCandidates.Candidates SuggestionCandidates(ProcessUserChatCommand request, ChatContext context) =>
+        ProactiveSuggestionCandidates.For(request.Message, context.PromptHabits, context.ActiveGoals);
 
     private static string AddAskContext(string dynamicContext, ProcessUserChatCommand request, ChatContext context)
     {

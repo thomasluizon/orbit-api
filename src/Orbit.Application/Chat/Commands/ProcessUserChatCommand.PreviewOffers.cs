@@ -18,7 +18,7 @@ public partial class ProcessUserChatCommandHandler
         if (preview is null) return (cards, false);
         var conversation = request.ClientContext!.ConversationId!.Value;
         var dismissed = await offerStore.DismissedAsync(request.UserId, conversation, ct);
-        var candidates = PreviewOffers(preview, context).Where(fact => !dismissed.Contains(fact.Action.OfferKey)).ToArray();
+        var candidates = PreviewOffers(preview, context, request.Message).Where(fact => !dismissed.Contains(fact.Action.OfferKey)).ToArray();
         if (candidates.Length == 0) return (cards, false);
         var issued = await offerStore.IssuedAsync(request.UserId, conversation, ct);
         var selected = await SelectOfferAsync(request, candidates, ct);
@@ -36,19 +36,18 @@ public partial class ProcessUserChatCommandHandler
         return (cards, true);
     }
 
-    private static List<AstraOfferFact> PreviewOffers(PendingAgentOperation preview, ChatContext context)
+    private static List<AstraOfferFact> PreviewOffers(PendingAgentOperation preview, ChatContext context, string? message)
     {
         var pt = LocaleHelper.IsPortuguese(context.Language);
         AstraOfferFact Offer(string key, string family, string evidence, AstraNextAction action) =>
             new(key, family, evidence, action, preview.Id, preview.PreviewFingerprint!, context.UserToday)
             { PendingOperationId = preview.Id, SourceKind = "pendingOperation" };
         var offers = new List<AstraOfferFact>();
-        var hasDate = preview.Items!.SelectMany(item => item.Fields).Any(field => field.Field is "due_date" or "deadline" && field.ProposedValue is not null && field.Provenance == "requested");
         if (context.HasProAccess && context.EnabledFeatureFlags.Contains(FeatureFlagKeys.CalendarIntegration)
-            && context.User?.GoogleAccessToken is null && hasDate)
+            && context.User?.GoogleAccessToken is null && CalendarOfferEligibility.HasRequestedEventDate(preview, message, context.UserToday))
             offers.Add(Offer("calendar:calendar-sync", "calendar", "An editable dated draft and an available disconnected Google Calendar connection; requires dated_event interpretation.",
                 new("calendar:calendar-sync", "openSurface", pt ? "Conectar Google Agenda" : "Connect Google Calendar", Surface: "calendar-sync")));
-        if (preview.CapabilityId != AgentCapabilityIds.GoalsWrite
+        if (preview.CapabilityId != AgentCapabilityIds.GoalsWrite && !AimGoalEquivalence.HasEquivalentActiveGoal(message, context.ActiveGoals)
             && preview.Items!.SelectMany(item => item.Fields).Any(field => field.Field is "target_value" or "goal_type" && field.ProposedValue is not null))
             offers.Add(Offer("aim:account", "aim", "The editable draft and complete active-goal snapshot support a goal only for an expressed aim with no equivalent active goal.",
             new("aim:account", "continueChat", pt ? "Planejar esta meta" : "Plan this goal", Prompt: pt

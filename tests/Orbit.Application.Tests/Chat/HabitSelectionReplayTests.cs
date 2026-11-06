@@ -340,10 +340,13 @@ public partial class ProcessUserChatCommandHandlerTests
         result.IsSuccess.Should().BeTrue(result.Error);
         var block = result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>()
             .Which.Block.Should().BeOfType<AstraPickListBlock>().Subject;
-        block.Items.Select(item => item.Id).Should().Equal(habits.Select(habit => habit.Id.ToString()));
+        if (declaredSelection)
+            block.Items.Select(item => item.Id).Should().BeEquivalentTo(habits.Select(habit => habit.Id.ToString()));
+        else
+            block.Items.Select(item => item.Id).Should().Equal(habits.Select(habit => habit.Id.ToString()));
         result.Value.PendingOperations.Should().BeNullOrEmpty();
         result.Value.Actions.Should().BeEmpty();
-        await _aiIntentService.Received(1).ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
+        await _aiIntentService.Received(declaredSelection ? 0 : 1).ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
             Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
     }
 
