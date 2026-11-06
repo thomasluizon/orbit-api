@@ -79,6 +79,8 @@ public partial class ProcessUserChatCommandHandler
                 ProactiveOfferAccountFacts.Serialize(context.PromptHabits, context.ActiveGoals, context.UserTags,
                     !context.IsPromptHabitIndexPartial));
             dynamicContext = string.Join(Environment.NewLine, dynamicContext,
+                ProactiveSuggestionCandidates.Instruction,
+                ProactiveSuggestionCandidates.Serialize(SuggestionCandidates(request, context)),
                 JsonSerializer.Serialize(new { previously_issued_offers = issued.Take(100).Select(offer => new { offer.Action.OfferKey, offer.Action.Label }) }),
                 "Dismissed offer keys: " + JsonSerializer.Serialize(request.ClientContext!.DismissedOfferKeys ?? []));
         }
