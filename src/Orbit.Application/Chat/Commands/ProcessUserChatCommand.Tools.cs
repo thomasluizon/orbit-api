@@ -149,7 +149,6 @@ public partial class ProcessUserChatCommandHandler
         ChatContext context, ToolExecutionAccumulator results, ToolLoopResult loop, CancellationToken ct)
     {
         using var phase = ChatTurnTimer.Measure(ChatPhase.Composition);
-        ct.ThrowIfCancellationRequested();
         if (results.RequiresCreationProposal)
             return Result.Failure<ChatResponse>(loop.ProviderError is { Code: not ErrorCodes.AiEmptyResponse } creationError
                 ? creationError : ErrorMessages.AiUnavailable);

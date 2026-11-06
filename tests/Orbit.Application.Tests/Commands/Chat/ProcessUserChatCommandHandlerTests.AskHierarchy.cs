@@ -183,6 +183,11 @@ public partial class ProcessUserChatCommandHandlerTests
             held.Should().ContainSingle().Which.OperationId.Should().Be(delete.Name);
         else
             held.Should().BeEmpty("a write beside a choice is prepared only when every candidate resolves outside its hierarchy");
+        if (!prepared)
+            await _aiIntentService.Received().ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
+                Arg.Is<IReadOnlyList<AiToolCallResult>>(results => results.Any(item => item.Id == "delete"
+                    && !item.Success && !string.IsNullOrWhiteSpace(item.Error))),
+                Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
         await _mediator.DidNotReceiveWithAnyArgs().Send(default(DeleteHabitCommand)!, default);
         habits.Should().OnlyContain(habit => !habit.IsDeleted);
     }
