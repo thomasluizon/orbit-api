@@ -45,6 +45,10 @@ public class HabitCorrectionProposalValidatorTests
     [InlineData("Make both positive", false)]
     [InlineData("Please make both positive", false)]
     [InlineData("Pode deixar os dois positivos", false)]
+    [InlineData("Ok, make both positive", false)]
+    [InlineData("Sure, and make it positive too", false)]
+    [InlineData("Sim, mas deixa os dois positivos", false)]
+    [InlineData("Isso, deixa positivo", false)]
     public void ConfirmationReply_CarriesThePreviousScheduleRequest(string message, bool confirms)
     {
         var current = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, Guid.NewGuid(), "Pay bills", FrequencyUnit.Month, 1,

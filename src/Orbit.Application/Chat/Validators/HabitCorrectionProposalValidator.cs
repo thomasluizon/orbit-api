@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using FluentValidation;
@@ -53,15 +54,29 @@ public sealed partial class HabitCorrectionProposalValidator : AbstractValidator
     /// <summary>
     /// Returns the text that states the person's request for this turn. A reply that only confirms the previous
     /// request ("Yes, do that", "Sim, pode fazer") carries the schedule words of the previous user message, so a
-    /// confirmed schedule change is not read as a correction. Any other message states its own request.
+    /// confirmed schedule change is not read as a correction. A reply that adds anything of its own ("Ok, make both
+    /// positive") states its own request, like any other message.
     /// </summary>
     public static string RequestText(string message, IReadOnlyList<ChatHistoryMessage>? history)
     {
-        if (!Confirmation().IsMatch(HabitNameMatcher.Normalize(message)))
+        if (!ConfirmsOnly(HabitNameMatcher.Normalize(message)))
             return message;
         var previous = history?.LastOrDefault(item => item.Role == "user")?.Content;
         return string.IsNullOrWhiteSpace(previous) ? message : previous + "\n" + message;
     }
+
+    private static bool ConfirmsOnly(string normalized) =>
+        Confirmation().IsMatch(normalized) && normalized.Split(' ').All(ConfirmationWords.Contains);
+
+    private static readonly FrozenSet<string> ConfirmationWords = new[]
+    {
+        "yes", "yeah", "yep", "yup", "sure", "ok", "okay", "go", "ahead", "do", "it", "that", "this", "sounds", "good",
+        "confirm", "confirmed", "please", "prepare", "make", "apply", "save", "the", "change", "changes", "for", "me",
+        "to", "approve", "now", "then", "thanks", "thank", "you",
+        "sim", "claro", "isso", "beleza", "certo", "pode", "fazer", "faz", "faca", "preparar", "prepara", "seguir",
+        "ser", "assim", "confirmo", "manda", "ver", "aplica", "aplicar", "salva", "salvar", "por", "favor", "pra",
+        "para", "eu", "aprovar", "a", "mudanca", "mudancas", "essa", "esta", "agora", "entao", "obrigado", "obrigada",
+    }.ToFrozenSet(StringComparer.Ordinal);
 
     private static bool ChangesMonthDays(Domain.Entities.Habit current, Domain.Entities.HabitUpdateParams update) =>
         update.MonthDays is { } monthDays
