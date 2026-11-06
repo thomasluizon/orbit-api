@@ -67,6 +67,7 @@ public sealed partial class ChatWriteHoldHandlerTests : IDisposable
     private readonly AiToolRegistry _toolRegistry;
     private readonly PendingOperationChangePreviewer _previewer;
     private readonly IHabitEmojiInferenceService _emojiInference = Substitute.For<IHabitEmojiInferenceService>();
+    private readonly ILogger<ProcessUserChatCommandHandler> _handlerLogger = Substitute.For<ILogger<ProcessUserChatCommandHandler>>();
 
     public ChatWriteHoldHandlerTests()
     {
@@ -608,7 +609,7 @@ public sealed partial class ChatWriteHoldHandlerTests : IDisposable
             _pendingOperationStore);
 
         return new ProcessUserChatCommandHandler(dataDeps, aiDeps, executionDeps,
-            Substitute.For<ILogger<ProcessUserChatCommandHandler>>(), Substitute.For<IAppConfigService>(), Orbit.Application.Tests.ModerationTestDouble.Clean());
+            _handlerLogger, Substitute.For<IAppConfigService>(), Orbit.Application.Tests.ModerationTestDouble.Clean());
     }
 
     private void ScriptToolCall(string arguments, string operationId = "create_habit")
