@@ -77,10 +77,13 @@ jobs:
       - name: Restore local tools
         run: dotnet tool restore
 
+      # https://github.com/stryker-mutator/stryker-net/blob/f9109e24c615a7030a3b33e5532c665c974e4ec5/docs/configuration.md#test-projects-string
+      # Stryker honors test-projects only from the project under test; the root Orbit.slnx starts solution mode and runs every test project.
       - name: Run Stryker (PR changed in-scope files only)
         if: github.event_name == 'pull_request'
         env:
           MUTATE_FILES: ${{ matrix.mutate && join(matrix.mutate, ' ') || '' }}
+          MUTATION_PROJECT: ${{ matrix.project }}
         run: |
           since_target=$(git rev-parse HEAD^1)
           concurrency=$(nproc)
@@ -90,12 +93,16 @@ jobs:
           for file in "${files[@]}"; do
             args+=(--mutate "$file")
           done
-          dotnet stryker -f stryker-config.${{ matrix.project }}.json --since:"$since_target" --concurrency "$concurrency" "${args[@]}"
+          config="stryker-config.$MUTATION_PROJECT.json"
+          project_file=$(jq -er '."stryker-config".project' "$config")
+          cd "src/${project_file%.csproj}"
+          dotnet stryker -f "../../$config" --since:"$since_target" --concurrency "$concurrency" "${args[@]}"
 
       - name: Run Stryker (nightly full in-scope)
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         env:
           MUTATE_FILES: ${{ matrix.mutate && join(matrix.mutate, ' ') || '' }}
+          MUTATION_PROJECT: ${{ matrix.project }}
         run: |
           concurrency=$(nproc)
           echo "Stryker concurrency: $concurrency"
@@ -104,7 +111,10 @@ jobs:
           for file in "${files[@]}"; do
             args+=(--mutate "$file")
           done
-          dotnet stryker -f stryker-config.${{ matrix.project }}.json --concurrency "$concurrency" "${args[@]}"
+          config="stryker-config.$MUTATION_PROJECT.json"
+          project_file=$(jq -er '."stryker-config".project' "$config")
+          cd "src/${project_file%.csproj}"
+          dotnet stryker -f "../../$config" --concurrency "$concurrency" "${args[@]}"
 
       - name: Upload mutation report
         if: always()
@@ -112,6 +122,6 @@ jobs:
         with:
           name: mutation-report-${{ github.event_name }}-${{ matrix.shard || matrix.project }}
           path: |
-            StrykerOutput/**/reports/*.html
-            StrykerOutput/**/reports/*.json
+            src/Orbit.*/StrykerOutput/**/reports/*.html
+            src/Orbit.*/StrykerOutput/**/reports/*.json
           if-no-files-found: ignore

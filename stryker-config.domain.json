@@ -1,7 +1,7 @@
 {
   "stryker-config": {
     "project": "Orbit.Domain.csproj",
-    "test-projects": ["tests/Orbit.Domain.Tests/Orbit.Domain.Tests.csproj"],
+    "test-projects": ["../../tests/Orbit.Domain.Tests/Orbit.Domain.Tests.csproj"],
     "mutate": [
       "**/Entities/Habit.cs",
       "**/Entities/HabitInvariants.cs",

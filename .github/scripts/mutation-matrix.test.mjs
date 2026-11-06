@@ -127,20 +127,75 @@ function mergeWithMovedBase(t) {
   return { ...repo, base };
 }
 
+const strykerProjects = ["domain", "application", "infrastructure"];
+
+function strykerConfig(project) {
+  return JSON.parse(readFileSync(new URL(`../../stryker-config.${project}.json`, import.meta.url), "utf8"))["stryker-config"];
+}
+
+function runStrykerStep(name, root, project, mutate) {
+  const configFile = `stryker-config.${project}.json`;
+  writeFileSync(join(root, configFile), readFileSync(new URL(`../../${configFile}`, import.meta.url)));
+  mkdirSync(join(root, "src", strykerConfig(project).project.replace(/\.csproj$/, "")), { recursive: true });
+  const capture = join(root, "stryker-call");
+  execFileSync("bash", ["--noprofile", "--norc", "-eo", "pipefail"], {
+    cwd: root,
+    env: { ...process.env, MUTATE_FILES: mutate.join(" "), MUTATION_PROJECT: project, STRYKER_CALL: capture },
+    input: `nproc() { printf '2\\n'; }\ndotnet() { { pwd -P; printf '%s\\0' "$@"; } > "$STRYKER_CALL"; }\n${workflowStep(name).replaceAll("${{ matrix.project }}", project)}`,
+  });
+  const [cwd, args] = readFileSync(capture, "utf8").split(/\n(.*)$/s);
+  return { cwd, args: args.split("\0").filter(Boolean) };
+}
+
 test("the PR Stryker step uses the merge first parent after the base branch moves", (t) => {
   const repo = mergeWithMovedBase(t);
-  const capture = join(repo.root, "stryker-args");
-  const script = workflowStep("Run Stryker (PR changed in-scope files only)")
-    .replaceAll("${{ matrix.project }}", "domain");
   const [scope] = select(repo, "HEAD^1");
-  execFileSync("bash", ["--noprofile", "--norc", "-eo", "pipefail"], {
-    cwd: repo.root,
-    env: { ...process.env, MUTATE_FILES: scope.mutate.join(" "), STRYKER_ARGS: capture },
-    input: `nproc() { printf '2\\n'; }\ndotnet() { printf '%s\\0' "$@" > "$STRYKER_ARGS"; }\n${script}`,
-  });
-  const args = readFileSync(capture, "utf8").split("\0").filter(Boolean);
+  const { args } = runStrykerStep("Run Stryker (PR changed in-scope files only)", repo.root, "domain", scope.mutate);
   assert.ok(args.includes(`--since:${repo.base}`));
   assert.deepEqual(args.slice(-2), ["--mutate", "**/Entities/User.cs{13..33}"]);
+});
+
+for (const name of ["Run Stryker (PR changed in-scope files only)", "Run Stryker (nightly full in-scope)"]) {
+  for (const project of strykerProjects) {
+    test(`${name} runs ${project} Stryker from the project under test so its test-projects apply`, (t) => {
+      const repo = repository(t);
+      repo.write("README.md");
+      repo.commit();
+      const { cwd, args } = runStrykerStep(name, repo.root, project, ["**/File.cs"]);
+      const directory = strykerConfig(project).project.replace(/\.csproj$/, "");
+      assert.equal(cwd, join(realpathSync(repo.root), "src", directory));
+      assert.deepEqual(args.slice(0, 3), ["stryker", "-f", `../../stryker-config.${project}.json`]);
+      assert.deepEqual(args.slice(-2), ["--mutate", "**/File.cs"]);
+    });
+  }
+}
+
+for (const project of strykerProjects) {
+  test(`stryker-config.${project}.json resolves its test projects from the project under test outside solution mode`, () => {
+    const config = strykerConfig(project);
+    const directory = fileURLToPath(new URL(`../../src/${config.project.replace(/\.csproj$/, "")}/`, import.meta.url));
+    assert.ok(existsSync(join(directory, config.project)), `${config.project} must live in its Stryker working directory`);
+    // https://github.com/stryker-mutator/stryker-net/blob/f9109e24c615a7030a3b33e5532c665c974e4ec5/src/Stryker.Configuration/Options/Inputs/SolutionInput.cs
+    assert.deepEqual(readdirSync(directory).filter((file) => /\.slnx?$/i.test(file)), []);
+    assert.ok(config["test-projects"].length > 0);
+    for (const testProject of config["test-projects"]) {
+      const path = join(directory, testProject);
+      assert.ok(existsSync(path), `${testProject} must resolve from ${directory}`);
+      const references = [...readFileSync(path, "utf8").matchAll(/<ProjectReference Include="([^"]+)"/g)]
+        .map((match) => join(dirname(path), match[1].replaceAll("\\", "/")));
+      assert.ok(references.includes(join(directory, config.project)), `${testProject} must reference ${config.project}`);
+    }
+  });
+}
+
+test("the report upload covers the output directory of every Stryker working directory", () => {
+  const workflow = readFileSync(new URL("../workflows/mutation.yml", import.meta.url), "utf8");
+  const paths = workflow.split("      - name: Upload mutation report\n")[1].match(/          path: \|\n((?:            [^\n]*\n)+)/)[1]
+    .trim().split(/\n\s*/);
+  assert.deepEqual(paths, ["src/Orbit.*/StrykerOutput/**/reports/*.html", "src/Orbit.*/StrykerOutput/**/reports/*.json"]);
+  for (const project of strykerProjects) {
+    assert.match(strykerConfig(project).project, /^Orbit\.[A-Z]\w*\.csproj$/);
+  }
 });
 
 test("workflow span selection excludes moved-base changes and uses the Stryker target", (t) => {
