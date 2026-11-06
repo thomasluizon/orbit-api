@@ -72,6 +72,15 @@ jobs:
             node tools/check-dashes.mjs --text "$PR_TITLE $PR_BODY"
           fi
 
+      - name: Attribution Lines
+        if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+        env:
+          PULL_REQUEST_RANGE: ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          printf '%s' "$PR_BODY" > "$RUNNER_TEMP/pull-request-body.md"
+          node tools/check-attribution.mjs --range "$PULL_REQUEST_RANGE" --body-file "$RUNNER_TEMP/pull-request-body.md"
+
       - name: Skill and Agent Frontmatter
         if: ${{ !cancelled() }}
         run: node tools/check-frontmatter.mjs
