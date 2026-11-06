@@ -30,9 +30,14 @@ internal static partial class ProactiveSuggestionCandidates
         ["lunch", "noon", "almoco"]
     ];
 
-    internal sealed record Candidates(IReadOnlyList<Guid> ParentHabitIds, IReadOnlyList<Guid> GoalIds, bool RepeatThroughoutDay)
+    /// <summary>
+    /// The candidates of one message. A default supports only a create preview, so
+    /// <see cref="SupportedDefault"/> is false when the message asks for no create.
+    /// </summary>
+    internal sealed record Candidates(IReadOnlyList<Guid> ParentHabitIds, IReadOnlyList<Guid> GoalIds, bool RepeatThroughoutDay,
+        bool RequestsCreate)
     {
-        public bool SupportedDefault => ParentHabitIds.Count == 1 || GoalIds.Count > 0 || RepeatThroughoutDay;
+        public bool SupportedDefault => RequestsCreate && (ParentHabitIds.Count == 1 || GoalIds.Count > 0 || RepeatThroughoutDay);
     }
 
     internal static Candidates For(string message, IEnumerable<Habit> habits, IEnumerable<Goal> goals)
@@ -45,7 +50,8 @@ internal static partial class ProactiveSuggestionCandidates
             .Select(habit => habit.Id).ToArray();
         var linked = goals.Where(goal => goal.Status == GoalStatus.Active && !goal.IsDeleted)
             .Where(goal => SharesWord(words, Words(goal.Title))).Select(goal => goal.Id).ToArray();
-        return new Candidates(parents, linked, ThroughoutDay().IsMatch(message));
+        return new Candidates(parents, linked, ThroughoutDay().IsMatch(message),
+            CreateRequest().IsMatch(HabitNameMatcher.Normalize(message)));
     }
 
     internal static string Serialize(Candidates candidates) => JsonSerializer.Serialize(new
@@ -73,6 +79,10 @@ internal static partial class ProactiveSuggestionCandidates
     [GeneratedRegex(@"\b(?:top[ -]level|without\s+a\s+parent|no\s+parent|at\s+the\s+root|sem\s+pai|n[íi]vel\s+principal|sem\s+rotina)\b",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex RootPlacement();
+
+    [GeneratedRegex(@"\b(?:create|add|make|build|set\s+up|new\s+(?:habit|routine|goal|task)|remember\s+to|remind\s+me|crie|cria|criar|adicione|adiciona|adicionar|monte|montar|configure|configurar|novo\s+habito|nova\s+(?:rotina|meta|tarefa)|lembrar|lembre|lembra)\b",
+        RegexOptions.CultureInvariant)]
+    private static partial Regex CreateRequest();
 
     [GeneratedRegex(@"\b(?:throughout\s+the\s+day|all\s+day(?:\s+long)?|during\s+the\s+day|ao\s+longo\s+do\s+dia|durante\s+o\s+dia|o\s+dia\s+(?:todo|inteiro))\b",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]

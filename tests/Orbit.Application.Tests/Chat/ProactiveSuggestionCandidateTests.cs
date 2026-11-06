@@ -66,6 +66,37 @@ public partial class ProcessUserChatCommandHandlerTests
         else tools.Should().NotContain("ask");
     }
 
+    [Theory]
+    [InlineData("en", "Show my Before Bed habits.")]
+    [InlineData("pt-BR", "Mostre meus hábitos de Antes de dormir.")]
+    [InlineData("en", "Rename my Before Bed routine to Night wind-down.")]
+    [InlineData("pt-BR", "Renomeie minha rotina Antes de dormir para Fim do dia.")]
+    [InlineData("en", "Skip my reminders all day today.")]
+    public async Task SuggestionCandidates_KeepAskInATurnThatCreatesNothing(string locale, string message)
+    {
+        SetupCandidateParents("Post Lunch", "Before Bed");
+
+        var request = await SentRequestAsync(locale, message);
+
+        request.ToolDeclarations.Select(value => JsonSerializer.SerializeToElement(value).GetProperty("name").GetString())
+            .Should().Contain("ask");
+        var candidates = await CandidatesSentAsync(locale, message);
+        candidates.GetProperty("SupportedDefault").GetBoolean().Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData("en", "Add a nightly magnesium habit.")]
+    [InlineData("pt-BR", "Adicione um hábito noturno de tomar magnésio.")]
+    public async Task SuggestionCandidates_KeepAskOutOfACreateTurnWithAFittingParent(string locale, string message)
+    {
+        SetupCandidateParents("Post Lunch", "Before Bed");
+
+        var request = await SentRequestAsync(locale, message);
+
+        request.ToolDeclarations.Select(value => JsonSerializer.SerializeToElement(value).GetProperty("name").GetString())
+            .Should().NotContain("ask");
+    }
+
     private (Habit Lunch, Habit Bed) SetupCandidateParents(string lunch, string bed)
     {
         var parents = new[] { lunch, bed }.Select(title => Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,

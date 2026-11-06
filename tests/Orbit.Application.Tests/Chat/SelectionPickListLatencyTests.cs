@@ -6,6 +6,7 @@ using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Models;
 
 namespace Orbit.Application.Tests.Commands.Chat;
@@ -49,6 +50,58 @@ public partial class ProcessUserChatCommandHandlerTests
         await _aiIntentService.Received(1).ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
             Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
     }
+
+    [Theory]
+    [InlineData("en", "Log my habits for yesterday.")]
+    [InlineData("pt-BR", "Registrar meus hábitos de ontem.")]
+    public async Task SelectionPickList_UsesTheDateOfTheSelectionRead(string language, string message)
+    {
+        var yesterday = Today.AddDays(-1);
+        SetupDatedPickListTurn(language, SelectionReadOn("read-yesterday", yesterday));
+        IssuedAstraBlock? stored = null;
+        _blockStore.AddAsync(Arg.Do<IssuedAstraBlock>(block => stored = block), Arg.Any<CancellationToken>());
+
+        var result = await PickListTurnAsync(message, language);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>()
+            .Which.Block.Should().BeOfType<AstraPickListBlock>();
+        stored.Should().NotBeNull();
+        stored!.ReadDefinition().Items.Select(item => item.Arguments.GetProperty("date").GetString())
+            .Should().HaveCount(2).And.OnlyContain(date => date == yesterday.ToString("yyyy-MM-dd"));
+        await _aiIntentService.DidNotReceiveWithAnyArgs().ContinueWithToolResultsAsync(default!, default!, default, default);
+    }
+
+    [Fact]
+    public async Task SelectionPickList_ReadsOnTwoDatesLeaveThePickListToTheModel()
+    {
+        SetupDatedPickListTurn("en", SelectionReadOn("read-today", Today), SelectionReadOn("read-yesterday", Today.AddDays(-1)));
+        _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
+                Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AiResponse { ConversationContext = TestConversationContext, TextMessage = "Which day?" }));
+
+        var result = await PickListTurnAsync("Log my habits for today and yesterday.", "en");
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        await _blockStore.DidNotReceiveWithAnyArgs().AddAsync(default!, default);
+        await _aiIntentService.Received(1).ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
+            Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
+    }
+
+    private void SetupDatedPickListTurn(string language, params AiToolCall[] reads)
+    {
+        var user = User.Create("Reader", "reader@example.test").Value;
+        user.SetLanguage(language);
+        SetupUserAndPayGate(user);
+        EnableComposition();
+        SetupSelectionHabits([.. new[] { "Water", "Walk" }.Select(title => Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
+            UserId, title, FrequencyUnit.Day, 1, Today.AddDays(-10))).Value)]);
+        SetupAiResponse(new AiResponse { ConversationContext = TestConversationContext, ToolCalls = reads });
+        _mediator.Send(Arg.Any<CheckChatCommandQuery>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
+    }
+
+    private static AiToolCall SelectionReadOn(string id, DateOnly date) => new("query_habits", id,
+        JsonSerializer.SerializeToElement(new { date = date.ToString("yyyy-MM-dd"), for_selection = true, orbit_read_complete = false }));
 
     private Habit[] SetupPickListTurn(string language)
     {

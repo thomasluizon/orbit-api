@@ -19,7 +19,8 @@ public partial class ProcessUserChatCommandHandler
     /// <summary>
     /// A round that holds only <c>query_habits(for_selection=true)</c> for a log or skip selection already has
     /// every pickList input. The server issues that pickList through the ask tool, so the turn needs no second
-    /// model round. A pickList that the ask tool does not accept leaves the turn to the model as before.
+    /// model round. Each item uses the date of its read; an undated read is for the user's today. Reads on
+    /// different dates, or a pickList that the ask tool does not accept, leave the turn to the model.
     /// </summary>
     private async Task<bool> TryIssueSelectionPickListAsync(AiResponse response, IReadOnlyList<AiToolCall> calls,
         IReadOnlyDictionary<string, ToolCallOutcome> outcomes, ProcessUserChatCommand request, ChatContext context,
@@ -36,7 +37,9 @@ public partial class ProcessUserChatCommandHandler
         var candidates = cards.SelectMany(card => card!.Items)
             .Where(item => !item.IsBadHabit && item.IsSkippedOnDate != true).DistinctBy(item => item.Id).ToArray();
         if (candidates.Length is 0 or > MaxServerPickListItems) return false;
-        var date = context.UserToday.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        var dates = cards.Select(card => card!.Date ?? context.UserToday).Distinct().ToArray();
+        if (dates.Length != 1) return false;
+        var date = dates[0].ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         var ask = new AiToolCall("ask", "server-selection-" + calls[0].Id, JsonSerializer.SerializeToElement(new
         {
             input = new

@@ -25,8 +25,9 @@ public partial class ProcessUserChatCommandHandler
             && !HasSupportedOfferDefault(request, context);
 
     /// <summary>
-    /// An offer-enabled turn with a server default (a fitting owned parent, an active goal or a repeat
-    /// reminder) prepares the editable preview. A question in place of that preview drops the proposal.
+    /// An offer-enabled create turn with a server default (a fitting owned parent, an active goal or a repeat
+    /// reminder) prepares the editable preview. A question in place of that preview drops the proposal. A turn
+    /// that creates nothing keeps ask.
     /// </summary>
     private static bool HasSupportedOfferDefault(ProcessUserChatCommand request, ChatContext context) =>
         request.BlockAnswer is null && ProactiveProposal.Enabled(request.ClientContext)
