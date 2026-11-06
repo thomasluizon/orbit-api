@@ -29,6 +29,8 @@ public class SendCodeCommandHandlerTests
 
     private const string SmokeEmail = "smoke@useorbit.org";
     private const string SmokeCode = "428913";
+    private const string ReviewEmail = "store-review@example.com";
+    private const string ReviewCode = "135791";
 
     public SendCodeCommandHandlerTests()
     {
@@ -214,6 +216,73 @@ public class SendCodeCommandHandlerTests
     }
 
     [Fact]
+    public async Task Production_ReviewAccount_SeedsFixedCode_AndDoesNotEnqueueEmail()
+    {
+        await WithReviewEnv("Production", ReviewEmail, ReviewCode, async () =>
+        {
+            var result = await _handler.Handle(new SendCodeCommand(" Store-Review@Example.com "), CancellationToken.None);
+
+            result.IsSuccess.Should().BeTrue();
+            _backgroundJobClient.DidNotReceive().Create(Arg.Any<Job>(), Arg.Any<IState>());
+            var verify = await BuildVerifyHandler().Handle(new VerifyCodeCommand(ReviewEmail, ReviewCode), CancellationToken.None);
+            verify.IsSuccess.Should().BeTrue();
+            verify.Value.Email.Should().Be(ReviewEmail);
+        });
+    }
+
+    [Fact]
+    public async Task Production_ReviewAccountConfigured_OtherEmail_GetsRandomCodeAndEmail()
+    {
+        await WithReviewEnv("Production", ReviewEmail, ReviewCode, async () =>
+        {
+            var result = await _handler.Handle(new SendCodeCommand("someone-else@example.com"), CancellationToken.None);
+
+            result.IsSuccess.Should().BeTrue();
+            var code = (string)_enqueuedJob!.Args[1];
+            code.Should().NotBe(ReviewCode);
+            AssertEnqueuedVerificationEmail("someone-else@example.com", code, "en");
+        });
+    }
+
+    [Theory]
+    [InlineData(null, ReviewCode)]
+    [InlineData("", ReviewCode)]
+    [InlineData(ReviewEmail, null)]
+    [InlineData(ReviewEmail, "")]
+    [InlineData(ReviewEmail, "13579")]
+    [InlineData(ReviewEmail, "1357913")]
+    [InlineData(ReviewEmail, "13579a")]
+    [InlineData(ReviewEmail, "１３５７９１")]
+    public async Task Production_MissingOrMalformedReviewSetting_SeedsNothing(string? reviewEmail, string? reviewCode)
+    {
+        await WithReviewEnv("Production", reviewEmail, reviewCode, async () =>
+        {
+            var result = await _handler.Handle(new SendCodeCommand(ReviewEmail), CancellationToken.None);
+
+            result.IsSuccess.Should().BeTrue();
+            var code = (string)_enqueuedJob!.Args[1];
+            code.Should().NotBe(reviewCode);
+            AssertEnqueuedVerificationEmail(ReviewEmail, code, "en");
+        });
+    }
+
+    [Theory]
+    [InlineData("Development")]
+    [InlineData("Staging")]
+    public async Task NonProduction_ReviewAccount_SeedsNothing(string environmentName)
+    {
+        await WithReviewEnv(environmentName, ReviewEmail, ReviewCode, async () =>
+        {
+            var result = await _handler.Handle(new SendCodeCommand(ReviewEmail), CancellationToken.None);
+
+            result.IsSuccess.Should().BeTrue();
+            var code = (string)_enqueuedJob!.Args[1];
+            code.Should().NotBe(ReviewCode);
+            AssertEnqueuedVerificationEmail(ReviewEmail, code, "en");
+        });
+    }
+
+    [Fact]
     public async Task Cooldown_WithinWindow_ReturnsFailure_AndDoesNotEnqueue()
     {
         await WithEnv("Development", SmokeEmail, SmokeCode, async () =>
@@ -251,6 +320,23 @@ public class SendCodeCommandHandlerTests
 
         return new VerifyCodeCommandHandler(
             ChallengeTestDatabase.For(_cache).Store(), userRepo, unitOfWork, authSessionService, new SignupJobDispatcher(_backgroundJobClient, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance), _backgroundJobClient, new AccountReactivation(Substitute.For<IGenericRepository<OwedSubscriptionCancellation>>()));
+    }
+
+    private async Task WithReviewEnv(string aspNetEnv, string? reviewEmail, string? reviewCode, Func<Task> body)
+    {
+        var priorEmail = Environment.GetEnvironmentVariable("REVIEW_ACCOUNT_EMAIL");
+        var priorCode = Environment.GetEnvironmentVariable("REVIEW_ACCOUNT_CODE");
+        Environment.SetEnvironmentVariable("REVIEW_ACCOUNT_EMAIL", reviewEmail);
+        Environment.SetEnvironmentVariable("REVIEW_ACCOUNT_CODE", reviewCode);
+        try
+        {
+            await WithEnv(aspNetEnv, SmokeEmail, SmokeCode, body);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("REVIEW_ACCOUNT_EMAIL", priorEmail);
+            Environment.SetEnvironmentVariable("REVIEW_ACCOUNT_CODE", priorCode);
+        }
     }
 
     private async Task WithEnv(string aspNetEnv, string? smokeEmail, string? smokeCode, Func<Task> body)

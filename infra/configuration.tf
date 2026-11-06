@@ -18,6 +18,11 @@ locals {
     "Wns__ClientSecret",
   ])
 
+  production_api_review_keys = toset([
+    "REVIEW_ACCOUNT_CODE",
+    "REVIEW_ACCOUNT_EMAIL",
+  ])
+
   api_eval_secret_keys = {
     for environment, parameters in data.aws_ssm_parameters_by_path.onboarding_platform : environment => (
       contains(parameters.names, "/orbit/${environment}/api/AI__EvalApiKey")
@@ -140,7 +145,7 @@ locals {
 }
 
 data "aws_ssm_parameter" "production_api" {
-  for_each = setunion(local.api_secret_keys, local.api_eval_secret_keys["production"])
+  for_each = setunion(local.api_secret_keys, local.api_eval_secret_keys["production"], local.production_api_review_keys)
   name     = "/orbit/production/api/${each.key}"
 }
 

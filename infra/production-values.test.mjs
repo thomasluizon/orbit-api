@@ -33,7 +33,11 @@ test('production and staging explicitly enable bot protection', () => {
 test('api_secret_keys covers every required API secret', () => {
   const keys = [...configuration.split('api_secret_keys = toset([')[1].split('])')[0].matchAll(/"([^"]+)"/g)].map(match => match[1])
   assert.deepEqual(keys.sort(), ['AI__ApiKey', 'Encryption__Key', 'Firebase__CredentialsJson', 'GooglePlay__ServiceAccountJson', 'Google__ClientSecret', 'Jwt__SecretKey', 'Marketing__UnsubscribeSigningKey', 'PostHog__ApiKey', 'SMOKE_TEST_CODE', 'SMOKE_TEST_EMAIL', 'Sentry__Dsn', 'Stripe__SecretKey', 'Stripe__WebhookSecret', 'Vapid__PrivateKey', 'Waitlist__SigningKey', 'Wns__ClientSecret'].sort())
-  assert.match(configuration, /for_each = setunion\(local.api_secret_keys, local.api_eval_secret_keys\["production"\]\)/)
+  assert.match(configuration, /for_each = setunion\(local.api_secret_keys, local.api_eval_secret_keys\["production"\], local.production_api_review_keys\)/)
+  const review = [...configuration.split('production_api_review_keys = toset([')[1].split('])')[0].matchAll(/"([^"]+)"/g)].map(match => match[1])
+  assert.deepEqual(review.sort(), ['REVIEW_ACCOUNT_CODE', 'REVIEW_ACCOUNT_EMAIL'])
+  assert.ok(!configuration.split('data "aws_ssm_parameter" "staging_api" {')[1].split('\n}')[0].includes('production_api_review_keys'),
+    'the store-review sign-in is production only')
   assert.match(configuration, /for_each = setunion\(local.api_secret_keys, local.api_eval_secret_keys\["staging"\], toset\(\["TEST_ACCOUNTS"\]\)\)/)
   for (const key of ['BotProtection__SecretKey', 'BotProtection__SmokeBypassSecret', 'Auth__BffForwardingSecret', 'Storage__S3__AccessKeyId', 'Storage__S3__SecretAccessKey', 'OnboardingSecurity__SigningSecret', 'Ses__AccessKeyId', 'Ses__SecretAccessKey'])
     assert.ok(configuration.includes(key), `Terraform-managed secret ${key} must reach the API group`)

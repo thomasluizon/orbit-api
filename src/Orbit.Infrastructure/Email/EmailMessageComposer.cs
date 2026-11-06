@@ -1,4 +1,5 @@
 using System.Net;
+using Orbit.Application.Auth.Services;
 using Orbit.Application.Common;
 
 namespace Orbit.Infrastructure.Email;
@@ -186,8 +187,16 @@ internal sealed class EmailMessageComposer(string frontendBaseUrl)
         [FooterToken] = copy.Footer,
     };
 
+    /// <summary>
+    /// True for a <c>TEST_ACCOUNTS</c> address, or for the production store-review account while its fixed
+    /// sign-in code is seeded. Neither address has a mailbox, so a send to either bounces.
+    /// </summary>
     public static bool IsTestAccount(string to)
     {
+        if (string.Equals(Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT"), "Production", StringComparison.OrdinalIgnoreCase)
+            && ProductionSignInCode.ForStoreReview(to) is not null)
+            return true;
+
         var testAccountsEnv = Environment.GetEnvironmentVariable("TEST_ACCOUNTS");
         if (string.IsNullOrEmpty(testAccountsEnv))
             return false;
