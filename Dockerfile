@@ -31,6 +31,8 @@ WORKDIR /app
 ARG API_COMMIT_SHA
 ENV RENDER_GIT_COMMIT=$API_COMMIT_SHA
 ENV DOTNET_BUNDLE_EXTRACT_BASE_DIR=/tmp/efbundle
+# Two glibc malloc arenas instead of one per thread keep the native heap from growing with uptime; see infra/memory-budget.md.
+ENV MALLOC_ARENA_MAX=2
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends wget libgssapi-krb5-2 \

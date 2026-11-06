@@ -92,6 +92,11 @@ check_memory() {
   fi
 }
 
+docker image inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$image" | grep -qx 'MALLOC_ARENA_MAX=2' || {
+  echo "::error::The API image must set MALLOC_ARENA_MAX=2; without it the glibc arenas grow with uptime (infra/memory-budget.md)"
+  exit 1
+}
+
 docker network create "$network" >/dev/null
 docker run -d --name "$database" --network "$network" \
   -e POSTGRES_USER=orbit -e POSTGRES_PASSWORD=orbit -e POSTGRES_DB=orbit postgres:17 \
