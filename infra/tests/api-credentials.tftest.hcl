@@ -206,3 +206,75 @@ run "wns_credentials_without_evaluation_keys" {
     error_message = "Both API groups need the public WNS identifiers and their own required SSM secret even without evaluation keys."
   }
 }
+
+run "apple_credentials" {
+  command = plan
+
+  plan_options {
+    target = [render_env_group.production_api, render_env_group.staging_api]
+  }
+
+  override_data {
+    target = data.aws_ssm_parameter.production_api["AppStore__PrivateKey"]
+    values = { value = "production-app-store-test-key" }
+  }
+
+  override_data {
+    target = data.aws_ssm_parameter.staging_api["AppStore__PrivateKey"]
+    values = { value = "staging-app-store-test-key" }
+  }
+
+  override_data {
+    target = data.aws_ssm_parameter.production_api["AppleSignIn__PrivateKey"]
+    values = { value = "production-apple-sign-in-test-key" }
+  }
+
+  override_data {
+    target = data.aws_ssm_parameter.staging_api["AppleSignIn__PrivateKey"]
+    values = { value = "staging-apple-sign-in-test-key" }
+  }
+
+  override_data {
+    target = data.aws_ssm_parameter.production_api["Apns__PrivateKey"]
+    values = { value = "production-apns-test-key" }
+  }
+
+  override_data {
+    target = data.aws_ssm_parameter.staging_api["Apns__PrivateKey"]
+    values = { value = "staging-apns-test-key" }
+  }
+
+  assert {
+    condition = alltrue([
+      render_env_group.production_api.env_vars["AppStore__PrivateKey"].value == "production-app-store-test-key",
+      render_env_group.staging_api.env_vars["AppStore__PrivateKey"].value == "staging-app-store-test-key",
+      render_env_group.production_api.env_vars["AppleSignIn__PrivateKey"].value == "production-apple-sign-in-test-key",
+      render_env_group.staging_api.env_vars["AppleSignIn__PrivateKey"].value == "staging-apple-sign-in-test-key",
+      render_env_group.production_api.env_vars["Apns__PrivateKey"].value == "production-apns-test-key",
+      render_env_group.staging_api.env_vars["Apns__PrivateKey"].value == "staging-apns-test-key",
+      data.aws_ssm_parameter.production_api["AppStore__PrivateKey"].name == "/orbit/production/api/AppStore__PrivateKey",
+      data.aws_ssm_parameter.staging_api["AppStore__PrivateKey"].name == "/orbit/staging/api/AppStore__PrivateKey",
+      data.aws_ssm_parameter.production_api["AppleSignIn__PrivateKey"].name == "/orbit/production/api/AppleSignIn__PrivateKey",
+      data.aws_ssm_parameter.staging_api["AppleSignIn__PrivateKey"].name == "/orbit/staging/api/AppleSignIn__PrivateKey",
+      data.aws_ssm_parameter.production_api["Apns__PrivateKey"].name == "/orbit/production/api/Apns__PrivateKey",
+      data.aws_ssm_parameter.staging_api["Apns__PrivateKey"].name == "/orbit/staging/api/Apns__PrivateKey",
+    ])
+    error_message = "Both API groups need their own Apple signing keys from SSM."
+  }
+
+  assert {
+    condition = alltrue([
+      render_env_group.production_api.env_vars["AppStore__BundleId"].value == "org.useorbit.app",
+      render_env_group.staging_api.env_vars["AppStore__BundleId"].value == "org.useorbit.app.staging",
+      render_env_group.production_api.env_vars["AppStore__AppAppleId"].value == "6831372835",
+      render_env_group.staging_api.env_vars["AppStore__AppAppleId"].value == "6831373752",
+      render_env_group.production_api.env_vars["AppleSignIn__WebOrigin"].value == "https://app.useorbit.org",
+      render_env_group.staging_api.env_vars["AppleSignIn__WebOrigin"].value == "https://app-staging.useorbit.org",
+      render_env_group.production_api.env_vars["Apns__Topic"].value == "org.useorbit.app",
+      render_env_group.staging_api.env_vars["Apns__Topic"].value == "org.useorbit.app.staging",
+      render_env_group.production_api.env_vars["Apns__UseSandbox"].value == "false",
+      render_env_group.staging_api.env_vars["Apns__UseSandbox"].value == "false",
+    ])
+    error_message = "Each API group needs the Apple identifiers of its own app."
+  }
+}

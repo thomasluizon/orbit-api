@@ -1,6 +1,9 @@
 locals {
   api_secret_keys = toset([
     "AI__ApiKey",
+    "Apns__PrivateKey",
+    "AppStore__PrivateKey",
+    "AppleSignIn__PrivateKey",
     "Encryption__Key",
     "Firebase__CredentialsJson",
     "GooglePlay__ServiceAccountJson",
@@ -43,6 +46,23 @@ locals {
     AI__EvalDailyBudgetUsd              = "0.50"
     AI__Model                           = "gpt-6-luna"
     AI__SubTaskModel                    = "gpt-6-luna"
+    Apns__KeyId                         = "9UDC7DT49B"
+    Apns__TeamId                        = "BD7JH468F7"
+    Apns__Topic                         = "org.useorbit.app"
+    Apns__UseSandbox                    = "false"
+    AppStore__AppAppleId                = "6831372835"
+    AppStore__BundleId                  = "org.useorbit.app"
+    AppStore__IssuerId                  = "2a83c5e0-37ac-4e6b-b4ed-db0ed443d3dc"
+    AppStore__KeyId                     = "2D28SBZ84U"
+    AppStore__MonthlyProductId          = "orbit_pro_monthly"
+    AppStore__YearlyProductId           = "orbit_pro_yearly"
+    AppleSignIn__KeyId                  = "C5949L4PM4"
+    AppleSignIn__McpRedirectUri         = "https://api.useorbit.org/oauth/apple/callback"
+    AppleSignIn__NativeClientId         = "org.useorbit.app"
+    AppleSignIn__RedirectUri            = "https://api.useorbit.org/api/auth/apple/callback"
+    AppleSignIn__TeamId                 = "BD7JH468F7"
+    AppleSignIn__WebClientId            = "org.useorbit.app.web"
+    AppleSignIn__WebOrigin              = "https://app.useorbit.org"
     BotProtection__Enabled              = "true"
     ASPNETCORE_ENVIRONMENT              = "Production"
     Cors__AllowedOrigins__0             = "https://app.useorbit.org"
@@ -89,6 +109,17 @@ locals {
 
   staging_api_values = merge(local.production_api_values, {
     AI__EvalDailyBudgetUsd             = "0.50"
+    Apns__Topic                        = "org.useorbit.app.staging"
+    AppStore__AppAppleId               = "6831373752"
+    AppStore__BundleId                 = "org.useorbit.app.staging"
+    AppStore__MonthlyProductId         = "orbit_staging_pro_monthly"
+    AppStore__YearlyProductId          = "orbit_staging_pro_yearly"
+    AppleSignIn__KeyId                 = "498G5TUZ23"
+    AppleSignIn__McpRedirectUri        = "https://api-staging.useorbit.org/oauth/apple/callback"
+    AppleSignIn__NativeClientId        = "org.useorbit.app.staging"
+    AppleSignIn__RedirectUri           = "https://api-staging.useorbit.org/api/auth/apple/callback"
+    AppleSignIn__WebClientId           = "org.useorbit.app.staging.web"
+    AppleSignIn__WebOrigin             = "https://app-staging.useorbit.org"
     Ses__TransactionalConfigurationSet = aws_sesv2_configuration_set.staging["transactional"].configuration_set_name
     Ses__MarketingConfigurationSet     = aws_sesv2_configuration_set.staging["marketing"].configuration_set_name
     Ses__TopicArn                      = aws_sns_topic.ses_events_staging.arn
