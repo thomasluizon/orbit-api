@@ -74,8 +74,6 @@ public class ProcessMemoryBreakdownTests
     [InlineData("[stack]", "stack")]
     [InlineData("[vdso]", "kernel")]
     [InlineData("/memfd:dotnet_ipc_created (deleted)", "shm")]
-    [InlineData("/dev/shm/orbit", "shm")]
-    [InlineData("/SYSV00000000 (deleted)", "shm")]
     [InlineData("/app/Orbit.Api.dll", "dll")]
     [InlineData("/app/Orbit.Api.dll (deleted)", "dll")]
     [InlineData("/usr/lib/aarch64-linux-gnu/libc.so.6", "so")]

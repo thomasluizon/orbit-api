@@ -188,9 +188,7 @@ internal static class ProcessMemoryBreakdown
         if (path == "[stack]") return "stack";
         if (path.StartsWith('[')) return "kernel";
         if (path.StartsWith("/memfd:doublemapper", StringComparison.Ordinal)) return "doublemapper";
-        if (path.StartsWith("/memfd:", StringComparison.Ordinal) || path.StartsWith("/dev/shm/", StringComparison.Ordinal)
-            || path.StartsWith("/SYSV", StringComparison.Ordinal))
-            return "shm";
+        if (path.StartsWith("/memfd:", StringComparison.Ordinal)) return "shm";
         var name = Path.GetFileName(path.EndsWith(" (deleted)", StringComparison.Ordinal) ? path[..^" (deleted)".Length] : path);
         if (name.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)) return "dll";
         if (name.EndsWith(".so", StringComparison.Ordinal) || name.Contains(".so.", StringComparison.Ordinal)) return "so";
