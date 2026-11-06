@@ -14,7 +14,12 @@ public class ProcessMemoryMonitorTests
     public void Observe_WarnsAtTheBudgetRepeatsAfterFiveMinutesAndReportsRecovery()
     {
         var logger = new CaptureLogger();
-        var monitor = new ProcessMemoryMonitor(logger, TimeProvider.System);
+        var breakdowns = new List<TimeSpan>();
+        var monitor = new ProcessMemoryMonitor(logger, TimeProvider.System, ProcessMemorySnapshot.Read, uptime =>
+        {
+            breakdowns.Add(uptime);
+            return $"{{\"uptimeSeconds\":{uptime.TotalSeconds}}}";
+        });
         var nowAtUtc = new DateTimeOffset(2026, 6, 1, 0, 0, 0, TimeSpan.Zero);
         var snapshot = Snapshot(ApiMemoryBudget.WarningBytes - 1);
         monitor.Observe(snapshot, nowAtUtc);
@@ -23,21 +28,50 @@ public class ProcessMemoryMonitorTests
         monitor.Observe(high, nowAtUtc);
         monitor.Observe(high, nowAtUtc.AddSeconds(30));
         monitor.Observe(high, nowAtUtc.AddMinutes(5));
-        logger.Logs.Should().HaveCount(2).And.OnlyContain(log => log.Level == LogLevel.Warning);
+        logger.Logs.Should().HaveCount(4).And.OnlyContain(log => log.Level == LogLevel.Warning);
         logger.Logs[0].Message.Should().Contain("314572800").And.Contain("536870912").And.Contain("268435456");
+        logger.Logs[1].Message.Should().Be("API memory breakdown {\"uptimeSeconds\":0}");
+        logger.Logs[3].Message.Should().Be("API memory breakdown {\"uptimeSeconds\":300}");
+        breakdowns.Should().Equal(TimeSpan.Zero, TimeSpan.FromMinutes(5));
         monitor.Observe(snapshot, nowAtUtc.AddMinutes(6));
         monitor.Observe(snapshot, nowAtUtc.AddMinutes(7));
-        logger.Logs.Should().HaveCount(3);
-        logger.Logs[2].Level.Should().Be(LogLevel.Information);
+        logger.Logs.Should().HaveCount(5);
+        logger.Logs[4].Level.Should().Be(LogLevel.Information);
         monitor.Observe(high, nowAtUtc.AddMinutes(7));
-        logger.Logs.Should().HaveCount(4);
+        logger.Logs.Should().HaveCount(7);
+    }
+
+    [Fact]
+    public void Observe_ReadsTheBreakdownAtMostOncePerWarningIntervalWhileTheMemoryStaysHigh()
+    {
+        var logger = new CaptureLogger();
+        var reads = 0;
+        var monitor = new ProcessMemoryMonitor(logger, TimeProvider.System, ProcessMemorySnapshot.Read, _ =>
+        {
+            reads++;
+            return "{}";
+        });
+        var nowAtUtc = DateTimeOffset.UnixEpoch;
+        var high = Snapshot(ApiMemoryBudget.WarningBytes);
+
+        for (var sample = 0; sample < 40; sample++)
+            monitor.Observe(high, nowAtUtc.AddSeconds(30 * sample));
+
+        reads.Should().Be(4, "twenty minutes of samples every 30 seconds give one warning per five-minute interval");
+        logger.Logs.Where(log => log.Message.StartsWith("API memory breakdown ", StringComparison.Ordinal))
+            .Should().HaveCount(4).And.OnlyContain(log => log.Level == LogLevel.Warning);
     }
 
     [Fact]
     public void Observe_DoesNotWriteDisabledLogs()
     {
         var logger = new CaptureLogger(enabled: false);
-        using var monitor = new ProcessMemoryMonitor(logger, TimeProvider.System);
+        var reads = 0;
+        using var monitor = new ProcessMemoryMonitor(logger, TimeProvider.System, ProcessMemorySnapshot.Read, _ =>
+        {
+            reads++;
+            return "{}";
+        });
         var nowAtUtc = DateTimeOffset.UnixEpoch;
         var high = Snapshot(ApiMemoryBudget.WarningBytes);
 
@@ -45,13 +79,14 @@ public class ProcessMemoryMonitorTests
         monitor.Observe(Snapshot(1), nowAtUtc.AddSeconds(30));
 
         logger.Logs.Should().BeEmpty();
+        reads.Should().Be(0, "a disabled warning must not pay for the smaps read");
     }
 
     [Fact]
     public void Observe_DecidesOnAnonymousPlusShmemMemoryAndIgnoresReclaimableFilePages()
     {
         var logger = new CaptureLogger();
-        var monitor = new ProcessMemoryMonitor(logger, TimeProvider.System);
+        var monitor = new ProcessMemoryMonitor(logger, TimeProvider.System, ProcessMemorySnapshot.Read, _ => "{}");
         var nowAtUtc = DateTimeOffset.UnixEpoch;
         var half = ApiMemoryBudget.WarningBytes / 2;
 
@@ -60,7 +95,9 @@ public class ProcessMemoryMonitorTests
 
         monitor.Observe(new ProcessMemorySnapshot(ApiMemoryBudget.WarningBytes, half, ApiMemoryBudget.WarningBytes - half, 100, 200, ApiMemoryBudget.HeapBytes),
             nowAtUtc.AddSeconds(30));
-        logger.Logs.Should().ContainSingle().Which.Should().Be((LogLevel.Warning,
+        logger.Logs.Should().HaveCount(2);
+        logger.Logs[1].Should().Be((LogLevel.Warning, "API memory breakdown {}"));
+        logger.Logs[0].Should().Be((LogLevel.Warning,
             $"API memory budget exceeded: anonymous plus shmem {ApiMemoryBudget.WarningBytes} bytes ({ApiMemoryBudget.WarningBytes * 100d / ApiMemoryBudget.ContainerBytes:F1}% of {ApiMemoryBudget.ContainerBytes}); anonymous {half} bytes; shmem {ApiMemoryBudget.WarningBytes - half} bytes; working set {ApiMemoryBudget.WarningBytes} bytes; managed 100 bytes; committed heap 200 bytes; heap limit {ApiMemoryBudget.HeapBytes} bytes"));
     }
 
@@ -140,6 +177,7 @@ public class ProcessMemoryMonitorTests
         var sampledAgain = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var high = Snapshot(ApiMemoryBudget.WarningBytes);
         var snapshots = new ConcurrentQueue<ProcessMemorySnapshot>([high, Snapshot(1)]);
+        var breakdowns = new ConcurrentQueue<TimeSpan>();
         using var monitor = new ProcessMemoryMonitor(logger, time, () =>
         {
             if (!snapshots.TryDequeue(out var snapshot))
@@ -147,6 +185,10 @@ public class ProcessMemoryMonitorTests
             if (snapshots.IsEmpty)
                 sampledAgain.TrySetResult();
             return snapshot;
+        }, uptime =>
+        {
+            breakdowns.Enqueue(uptime);
+            return $"{{\"uptimeSeconds\":{uptime.TotalSeconds}}}";
         });
 
         await monitor.StartAsync(CancellationToken.None);
@@ -158,18 +200,23 @@ public class ProcessMemoryMonitorTests
             time.Period.Should().Be(TimeSpan.FromSeconds(30));
             if (loggingEnabled)
             {
-                logger.Logs.Should().HaveCount(3);
+                logger.Logs.Should().HaveCount(5);
                 logger.Logs[0].Should().Be((LogLevel.Information,
                     $"API memory budget {ApiMemoryBudget.ContainerBytes} bytes; anonymous plus shmem warning {ApiMemoryBudget.WarningBytes} bytes; heap limit {GC.GetGCMemoryInfo().TotalAvailableMemoryBytes} bytes; server GC {GCSettings.IsServerGC}"));
                 logger.Logs[1].Should().Be((LogLevel.Information,
                     $"API GC configuration {JsonSerializer.Serialize(GC.GetConfigurationVariables())}"));
-                logger.Logs[2].Level.Should().Be(LogLevel.Warning);
-                logger.Logs[2].Message.Should().Contain("API memory budget exceeded");
+                logger.Logs[2].Should().Be((LogLevel.Information, "API memory breakdown at startup {\"uptimeSeconds\":0}"));
+                logger.Logs[3].Level.Should().Be(LogLevel.Warning);
+                logger.Logs[3].Message.Should().Contain("API memory budget exceeded");
+                logger.Logs[4].Should().Be((LogLevel.Warning, "API memory breakdown {\"uptimeSeconds\":0}"));
+                breakdowns.Should().Equal(TimeSpan.Zero, TimeSpan.Zero);
             }
+            else
+                breakdowns.Should().BeEmpty();
 
             time.Advance(TimeSpan.FromSeconds(29));
             snapshots.Should().HaveCount(1);
-            logger.Logs.Should().HaveCount(loggingEnabled ? 3 : 0);
+            logger.Logs.Should().HaveCount(loggingEnabled ? 5 : 0);
 
             time.Advance(TimeSpan.FromSeconds(1));
             await sampledAgain.Task.WaitAsync(TimeSpan.FromSeconds(10));
@@ -186,15 +233,15 @@ public class ProcessMemoryMonitorTests
         snapshots.Should().BeEmpty();
         if (loggingEnabled)
         {
-            logger.Logs.Should().HaveCount(4);
-            logger.Logs[3].Should().Be((LogLevel.Information,
+            logger.Logs.Should().HaveCount(6);
+            logger.Logs[5].Should().Be((LogLevel.Information,
                 $"API memory anonymous plus shmem recovered below budget: 1 bytes; warning {ApiMemoryBudget.WarningBytes} bytes"));
         }
         else
             logger.Logs.Should().BeEmpty();
 
         time.Advance(TimeSpan.FromSeconds(30));
-        logger.Logs.Should().HaveCount(loggingEnabled ? 4 : 0);
+        logger.Logs.Should().HaveCount(loggingEnabled ? 6 : 0);
     }
 
     [Theory]

@@ -1,0 +1,825 @@
+aaaae8f30000-aaaae8f37000 r--p 00000000 00:44 946415                     /usr/share/dotnet/dotnet
+Size:                 28 kB
+KernelPageSize:        4 kB
+MMUPageSize:           4 kB
+Rss:                  28 kB
+Pss:                  26 kB
+Pss_Dirty:             0 kB
+Shared_Clean:          4 kB
+Shared_Dirty:          0 kB
+Private_Clean:        24 kB
+Private_Dirty:         0 kB
+Referenced:           28 kB
+Anonymous:             0 kB
+KSM:                   0 kB
+LazyFree:              0 kB
+AnonHugePages:         0 kB
+ShmemPmdMapped:        0 kB
+FilePmdMapped:         0 kB
+Shared_Hugetlb:        0 kB
+Private_Hugetlb:       0 kB
+Swap:                  0 kB
+SwapPss:               0 kB
+Locked:                0 kB
+THPeligible:           0
+VmFlags: rd mr mw me 
+aaaae8f46000-aaaae8f51000 r-xp 00006000 00:44 946415                     /usr/share/dotnet/dotnet
+Size:                 44 kB
+KernelPageSize:        4 kB
+MMUPageSize:           4 kB
+Rss:                  44 kB
+Pss:                  42 kB
+Pss_Dirty:             0 kB
+Shared_Clean:          4 kB
+Shared_Dirty:          0 kB
+Private_Clean:        40 kB
+Private_Dirty:         0 kB
+Referenced:           44 kB
+Anonymous:             0 kB
+KSM:                   0 kB
+LazyFree:              0 kB
+AnonHugePages:         0 kB
+ShmemPmdMapped:        0 kB
+FilePmdMapped:         0 kB
+Shared_Hugetlb:        0 kB
+Private_Hugetlb:       0 kB
+Swap:                  0 kB
+SwapPss:               0 kB
+Locked:                0 kB
+THPeligible:           0
+VmFlags: rd ex mr mw me 
+aaaae8f60000-aaaae8f61000 r--p 00010000 00:44 946415                     /usr/share/dotnet/dotnet
+Size:                  4 kB
+KernelPageSize:        4 kB
+MMUPageSize:           4 kB
+Rss:                   4 kB
+Pss:                   4 kB
+Pss_Dirty:             4 kB
+Shared_Clean:          0 kB
+Shared_Dirty:          0 kB
+Private_Clean:         0 kB
+Private_Dirty:         4 kB
+Referenced:            4 kB
+Anonymous:             4 kB
+KSM:                   0 kB
+LazyFree:              0 kB
+AnonHugePages:         0 kB
+ShmemPmdMapped:        0 kB
+FilePmdMapped:         0 kB
+Shared_Hugetlb:        0 kB
+Private_Hugetlb:       0 kB
+Swap:                  0 kB
+SwapPss:               0 kB
+Locked:                0 kB
+THPeligible:           0
+VmFlags: rd mr mw me ac 
+aaaae8f70000-aaaae8f71000 rw-p 00010000 00:44 946415                     /usr/share/dotnet/dotnet
+Size:                  4 kB
+KernelPageSize:        4 kB
+MMUPageSize:           4 kB
+Rss:                   4 kB
+Pss:                   4 kB
+Pss_Dirty:             4 kB
+Shared_Clean:          0 kB
+Shared_Dirty:          0 kB
+Private_Clean:         0 kB
+Private_Dirty:         4 kB
+Referenced:            4 kB
+Anonymous:             4 kB
+KSM:                   0 kB
+LazyFree:              0 kB
+AnonHugePages:         0 kB
+ShmemPmdMapped:        0 kB
+FilePmdMapped:         0 kB
+Shared_Hugetlb:        0 kB
+Private_Hugetlb:       0 kB
+Swap:                  0 kB
+SwapPss:               0 kB
+Locked:                0 kB
+THPeligible:           0
+VmFlags: rd wr mr mw me ac 
+aaaafb7f3000-aaaafbad0000 rw-p 00000000 00:00 0                          [heap]
+Size:               2932 kB
+KernelPageSize:        4 kB
+MMUPageSize:           4 kB
+Rss:                2656 kB
+Pss:                2656 kB
+Pss_Dirty:          2656 kB
+Shared_Clean:          0 kB
+Shared_Dirty:          0 kB
+Private_Clean:         0 kB
+Private_Dirty:      2656 kB
+Referenced:         2656 kB
+Anonymous:          2656 kB
+KSM:                   0 kB
+LazyFree:              0 kB
+AnonHugePages:         0 kB
+ShmemPmdMapped:        0 kB
+FilePmdMapped:         0 kB
+Shared_Hugetlb:        0 kB
+Private_Hugetlb:       0 kB
+Swap:                  0 kB
+SwapPss:               0 kB
+Locked:                0 kB
+THPeligible:           1
+VmFlags: rd wr mr mw me ac 
+fffe50000000-fffe501b6000 rw-p 00000000 00:00 0 
+Size:               1752 kB
+KernelPageSize:        4 kB
+MMUPageSize:           4 kB
+Rss:                1748 kB
+Pss:                1748 kB
+Pss_Dirty:          1748 kB
+Shared_Clean:          0 kB
+Shared_Dirty:          0 kB
+Private_Clean:         0 kB
+Private_Dirty:      1748 kB
+Referenced:         1748 kB
+Anonymous:          1748 kB
+KSM:                   0 kB
+LazyFree:              0 kB
+AnonHugePages:         0 kB
+ShmemPmdMapped:        0 kB
+FilePmdMapped:         0 kB
+Shared_Hugetlb:        0 kB
+Private_Hugetlb:       0 kB
+Swap:                  0 kB
+SwapPss:               0 kB
+Locked:                0 kB
+THPeligible:           0
+VmFlags: rd wr mr mw me ac 
+fffe74000000-fffe74023000 rw-p 00000000 00:00 0 
+Size:                140 kB
+KernelPageSize:        4 kB
+MMUPageSize:           4 kB
+Rss:                 136 kB
+Pss:                 136 kB
+Pss_Dirty:           136 kB
+Shared_Clean:          0 kB
+Shared_Dirty:          0 kB
+Private_Clean:         0 kB
+Private_Dirty:       136 kB
+Referenced:          136 kB
+Anonymous:           136 kB
+KSM:                   0 kB
+LazyFree:              0 kB
+AnonHugePages:         0 kB
+ShmemPmdMapped:        0 kB
+FilePmdMapped:         0 kB
+Shared_Hugetlb:        0 kB
+Private_Hugetlb:       0 kB
+Swap:                  0 kB
+SwapPss:               0 kB
+Locked:                0 kB
+THPeligible:           0
+VmFlags: rd wr mr mw me ac 
+fffe80000000-fffe80067000 rw-p 00000000 00:00 0 
+Size:                412 kB
+KernelPageSize:        4 kB
+MMUPageSize:           4 kB
+Rss:                 404 kB
+Pss:                 404 kB
+Pss_Dirty:           404 kB
+Shared_Clean:          0 kB
+Shared_Dirty:          0 kB
+Private_Clean:         0 kB
+Private_Dirty:       404 kB
+Referenced:          404 kB
+Anonymous:           404 kB
+KSM:                   0 kB
+LazyFree:              0 kB
+AnonHugePages:         0 kB
+ShmemPmdMapped:        0 kB
+FilePmdMapped:         0 kB
+Shared_Hugetlb:        0 kB
+Private_Hugetlb:       0 kB
+Swap:                  0 kB
+SwapPss:               0 kB
+Locked:                0 kB
+THPeligible:           0
+VmFlags: rd wr mr mw me ac 
+fffe84079000-fffe8409e000 rw-p 00000000 00:00 0 
+Size:                148 kB
+KernelPageSize:        4 kB
+MMUPageSize:           4 kB
+Rss:                 148 kB
+Pss:                 148 kB
+Pss_Dirty:           148 kB
+Shared_Clean:          0 kB
+Shared_Dirty:          0 kB
+Private_Clean:         0 kB
+Private_Dirty:       148 kB
+Referenced:          148 kB
+Anonymous:           148 kB
+KSM:                   0 kB
+LazyFree:              0 kB
+AnonHugePages:         0 kB
+ShmemPmdMapped:        0 kB
+FilePmdMapped:         0 kB
+Shared_Hugetlb:        0 kB
+Private_Hugetlb:       0 kB
+Swap:                  0 kB
+SwapPss:               0 kB
+Locked:                0 kB
+THPeligible:           0
+VmFlags: rd wr mr mw me ac 
+fffe843dd000-fffe84660000 r--s 00000000 00:44 946702                     /usr/share/dotnet/shared/Microsoft.AspNetCore.App/10.0.14/Microsoft.AspNetCore.Server.Kestrel.Core.dll
+Size:               2572 kB
+KernelPageSize:        4 kB
+MMUPageSize:           4 kB
+Rss:                 780 kB
+Pss:                 747 kB
+Pss_Dirty:             0 kB
+Shared_Clean:         64 kB
+Shared_Dirty:          0 kB
+Private_Clean:       716 kB
+Private_Dirty:         0 kB
+Referenced:          780 kB
+Anonymous:             0 kB
+KSM:                   0 kB
+LazyFree:              0 kB
+AnonHugePages:         0 kB
+ShmemPmdMapped:        0 kB
+FilePmdMapped:         0 kB
+Shared_Hugetlb:        0 kB
+Private_Hugetlb:       0 kB
+Swap:                  0 kB
+SwapPss:               0 kB
+Locked:                0 kB
+THPeligible:           0
+VmFlags: rd mr me ms 
+fffee6400000-fffee65c1000 rw-p 00000000 00:00 0 
+Size:               1796 kB
+KernelPageSize:        4 kB
+MMUPageSize:           4 kB
+Rss:                1740 kB
+Pss:                1740 kB
+Pss_Dirty:          1740 kB
+Shared_Clean:          0 kB
+Shared_Dirty:          0 kB
+Private_Clean:         0 kB
+Private_Dirty:      1740 kB
+Referenced:         1740 kB
+Anonymous:          1740 kB
+KSM:                   0 kB
+LazyFree:              0 kB
+AnonHugePages:         0 kB
+ShmemPmdMapped:        0 kB
+FilePmdMapped:         0 kB
+Shared_Hugetlb:        0 kB
+Private_Hugetlb:       0 kB
+Swap:                  0 kB
+SwapPss:               0 kB
+Locked:                0 kB
+THPeligible:           0
+VmFlags: rd wr mr mw me ac 
+ffff50170000-ffff504be000 r-xp 00000000 00:44 940936                     /usr/lib/aarch64-linux-gnu/libicui18n.so.74.2
+Size:               3384 kB
+KernelPageSize:        4 kB
+MMUPageSize:           4 kB
+Rss:                1472 kB
+Pss:                 736 kB
+Pss_Dirty:             0 kB
+Shared_Clean:       1472 kB
+Shared_Dirty:          0 kB
+Private_Clean:         0 kB
+Private_Dirty:         0 kB
+Referenced:         1472 kB
+Anonymous:             0 kB
+KSM:                   0 kB
+LazyFree:              0 kB
+AnonHugePages:         0 kB
+ShmemPmdMapped:        0 kB
+FilePmdMapped:         0 kB
+Shared_Hugetlb:        0 kB
+Private_Hugetlb:       0 kB
+Swap:                  0 kB
+SwapPss:               0 kB
+Locked:                0 kB
+THPeligible:           0
+VmFlags: rd ex mr mw me 
+ffff504f0000-ffff506f8000 r-xp 00000000 00:44 944911                     /usr/lib/aarch64-linux-gnu/libicuuc.so.74.2
+Size:               2080 kB
+KernelPageSize:        4 kB
+MMUPageSize:           4 kB
+Rss:                1600 kB
+Pss:                 832 kB
+Pss_Dirty:             0 kB
+Shared_Clean:       1536 kB
+Shared_Dirty:          0 kB
+Private_Clean:        64 kB
+Private_Dirty:         0 kB
+Referenced:         1600 kB
+Anonymous:             0 kB
+KSM:                   0 kB
+LazyFree:              0 kB
+AnonHugePages:         0 kB
+ShmemPmdMapped:        0 kB
+FilePmdMapped:         0 kB
+Shared_Hugetlb:        0 kB
+Private_Hugetlb:       0 kB
+Swap:                  0 kB
+SwapPss:               0 kB
+Locked:                0 kB
+THPeligible:           0
+VmFlags: rd ex mr mw me 
+ffff50a70000-ffff50d7a000 r-xp 00080000 00:44 946604                     /usr/share/dotnet/shared/Microsoft.NETCore.App/10.0.14/libclrjit.so
+Size:               3112 kB
+KernelPageSize:        4 kB
+MMUPageSize:           4 kB
+Rss:                3112 kB
+Pss:                1556 kB
+Pss_Dirty:             0 kB
+Shared_Clean:       3112 kB
+Shared_Dirty:          0 kB
+Private_Clean:         0 kB
+Private_Dirty:         0 kB
+Referenced:         3112 kB
+Anonymous:             0 kB
+KSM:                   0 kB
+LazyFree:              0 kB
+AnonHugePages:         0 kB
+ShmemPmdMapped:        0 kB
+FilePmdMapped:         0 kB
+Shared_Hugetlb:        0 kB
+Private_Hugetlb:       0 kB
+Swap:                  0 kB
+SwapPss:               0 kB
+Locked:                0 kB
+THPeligible:           0
+VmFlags: rd ex mr mw me 
+ffff51600000-ffff51630000 rw-p 00000000 00:00 0 
+Size:                192 kB
+KernelPageSize:        4 kB
+MMUPageSize:           4 kB
+Rss:                 132 kB
+Pss:                 132 kB
+Pss_Dirty:           132 kB
+Shared_Clean:          0 kB
+Shared_Dirty:          0 kB
+Private_Clean:         0 kB
+Private_Dirty:       132 kB
+Referenced:          132 kB
+Anonymous:           132 kB
+KSM:                   0 kB
+LazyFree:              0 kB
+AnonHugePages:         0 kB
+ShmemPmdMapped:        0 kB
+FilePmdMapped:         0 kB
+Shared_Hugetlb:        0 kB
+Private_Hugetlb:       0 kB
+Swap:                  0 kB
+SwapPss:               0 kB
+Locked:                0 kB
+THPeligible:           0
+VmFlags: rd wr mr mw me ac 
+ffff51af3000-ffff52b3e000 r--s 00000000 00:44 946513                     /usr/share/dotnet/shared/Microsoft.NETCore.App/10.0.14/System.Private.CoreLib.dll
+Size:              16684 kB
+KernelPageSize:        4 kB
+MMUPageSize:           4 kB
+Rss:                3088 kB
+Pss:                1555 kB
+Pss_Dirty:             0 kB
+Shared_Clean:       3024 kB
+Shared_Dirty:          0 kB
+Private_Clean:        64 kB
+Private_Dirty:         0 kB
+Referenced:         3088 kB
+Anonymous:             0 kB
+KSM:                   0 kB
+LazyFree:              0 kB
+AnonHugePages:         0 kB
+ShmemPmdMapped:        0 kB
+FilePmdMapped:         0 kB
+Shared_Hugetlb:        0 kB
+Private_Hugetlb:       0 kB
+Swap:                  0 kB
+SwapPss:               0 kB
+Locked:                0 kB
+THPeligible:           0
+VmFlags: rd mr me ms 
+ffff63470000-ffff6417b000 r-xp 00000000 00:44 946513                     /usr/share/dotnet/shared/Microsoft.NETCore.App/10.0.14/System.Private.CoreLib.dll
+Size:              13356 kB
+KernelPageSize:        4 kB
+MMUPageSize:           4 kB
+Rss:                8000 kB
+Pss:                4170 kB
+Pss_Dirty:             4 kB
+Shared_Clean:       7612 kB
+Shared_Dirty:          0 kB
+Private_Clean:       384 kB
+Private_Dirty:         4 kB
+Referenced:         8000 kB
+Anonymous:             4 kB
+KSM:                   0 kB
+LazyFree:              0 kB
+AnonHugePages:         0 kB
+ShmemPmdMapped:        0 kB
+FilePmdMapped:         0 kB
+Shared_Hugetlb:        0 kB
+Private_Hugetlb:       0 kB
+Swap:                  0 kB
+SwapPss:               0 kB
+Locked:                0 kB
+THPeligible:           0
+VmFlags: rd ex mr mw me ac 
+ffff6419b000-ffff644ce000 rw-p 00d0b000 00:44 946513                     /usr/share/dotnet/shared/Microsoft.NETCore.App/10.0.14/System.Private.CoreLib.dll
+Size:               3276 kB
+KernelPageSize:        4 kB
+MMUPageSize:           4 kB
+Rss:                2124 kB
+Pss:                1173 kB
+Pss_Dirty:           224 kB
+Shared_Clean:       1900 kB
+Shared_Dirty:          0 kB
+Private_Clean:         0 kB
+Private_Dirty:       224 kB
+Referenced:         2124 kB
+Anonymous:           224 kB
+KSM:                   0 kB
+LazyFree:              0 kB
+AnonHugePages:         0 kB
+ShmemPmdMapped:        0 kB
+FilePmdMapped:         0 kB
+Shared_Hugetlb:        0 kB
+Private_Hugetlb:       0 kB
+Swap:                  0 kB
+SwapPss:               0 kB
+Locked:                0 kB
+THPeligible:           0
+VmFlags: rd wr mr mw me ac 
+ffff64500000-ffff64590000 rw-s 00021000 00:01 12448                      /memfd:doublemapper (deleted)
+Size:                576 kB
+KernelPageSize:        4 kB
+MMUPageSize:           4 kB
+Rss:                 516 kB
+Pss:                 516 kB
+Pss_Dirty:           468 kB
+Shared_Clean:          0 kB
+Shared_Dirty:          0 kB
+Private_Clean:        48 kB
+Private_Dirty:       468 kB
+Referenced:          516 kB
+Anonymous:             0 kB
+KSM:                   0 kB
+LazyFree:              0 kB
+AnonHugePages:         0 kB
+ShmemPmdMapped:        0 kB
+FilePmdMapped:         0 kB
+Shared_Hugetlb:        0 kB
+Private_Hugetlb:       0 kB
+Swap:                  0 kB
+SwapPss:               0 kB
+Locked:                0 kB
+THPeligible:           0
+VmFlags: rd wr sh mr mw me ms 
+ffff645f0000-ffff64650000 r-xs 00111000 00:01 12448                      /memfd:doublemapper (deleted)
+Size:                384 kB
+KernelPageSize:        4 kB
+MMUPageSize:           4 kB
+Rss:                 384 kB
+Pss:                 375 kB
+Pss_Dirty:           375 kB
+Shared_Clean:          0 kB
+Shared_Dirty:         16 kB
+Private_Clean:         0 kB
+Private_Dirty:       368 kB
+Referenced:          384 kB
+Anonymous:             0 kB
+KSM:                   0 kB
+LazyFree:              0 kB
+AnonHugePages:         0 kB
+ShmemPmdMapped:        0 kB
+FilePmdMapped:         0 kB
+Shared_Hugetlb:        0 kB
+Private_Hugetlb:       0 kB
+Swap:                  0 kB
+SwapPss:               0 kB
+Locked:                0 kB
+THPeligible:           0
+VmFlags: rd ex sh mr mw me ms 
+ffff64670000-ffff646c0000 rw-s 00191000 00:01 12448                      /memfd:doublemapper (deleted)
+Size:                320 kB
+KernelPageSize:        4 kB
+MMUPageSize:           4 kB
+Rss:                 320 kB
+Pss:                 320 kB
+Pss_Dirty:           320 kB
+Shared_Clean:          0 kB
+Shared_Dirty:          0 kB
+Private_Clean:         0 kB
+Private_Dirty:       320 kB
+Referenced:          320 kB
+Anonymous:             0 kB
+KSM:                   0 kB
+LazyFree:              0 kB
+AnonHugePages:         0 kB
+ShmemPmdMapped:        0 kB
+FilePmdMapped:         0 kB
+Shared_Hugetlb:        0 kB
+Private_Hugetlb:       0 kB
+Swap:                  0 kB
+SwapPss:               0 kB
+Locked:                0 kB
+THPeligible:           0
+VmFlags: rd wr sh mr mw me ms 
+ffff65aa0000-ffff65b00000 rw-s 00311000 00:01 12448                      /memfd:doublemapper (deleted)
+Size:                384 kB
+KernelPageSize:        4 kB
+MMUPageSize:           4 kB
+Rss:                 372 kB
+Pss:                 372 kB
+Pss_Dirty:           372 kB
+Shared_Clean:          0 kB
+Shared_Dirty:          0 kB
+Private_Clean:         0 kB
+Private_Dirty:       372 kB
+Referenced:          372 kB
+Anonymous:             0 kB
+KSM:                   0 kB
+LazyFree:              0 kB
+AnonHugePages:         0 kB
+ShmemPmdMapped:        0 kB
+FilePmdMapped:         0 kB
+Shared_Hugetlb:        0 kB
+Private_Hugetlb:       0 kB
+Swap:                  0 kB
+SwapPss:               0 kB
+Locked:                0 kB
+THPeligible:           0
+VmFlags: rd wr sh mr mw me ms 
+ffff65ea0000-ffff660bb000 r-xp 00000000 00:44 946702                     /usr/share/dotnet/shared/Microsoft.AspNetCore.App/10.0.14/Microsoft.AspNetCore.Server.Kestrel.Core.dll
+Size:               2156 kB
+KernelPageSize:        4 kB
+MMUPageSize:           4 kB
+Rss:                1280 kB
+Pss:                1247 kB
+Pss_Dirty:             4 kB
+Shared_Clean:         64 kB
+Shared_Dirty:          0 kB
+Private_Clean:      1212 kB
+Private_Dirty:         4 kB
+Referenced:         1280 kB
+Anonymous:             4 kB
+KSM:                   0 kB
+LazyFree:              0 kB
+AnonHugePages:         0 kB
+ShmemPmdMapped:        0 kB
+FilePmdMapped:         0 kB
+Shared_Hugetlb:        0 kB
+Private_Hugetlb:       0 kB
+Swap:                  0 kB
+SwapPss:               0 kB
+Locked:                0 kB
+THPeligible:           0
+VmFlags: rd ex mr mw me ac 
+ffff66af0000-ffff66b50000 rw-s 00491000 00:01 12448                      /memfd:doublemapper (deleted)
+Size:                384 kB
+KernelPageSize:        4 kB
+MMUPageSize:           4 kB
+Rss:                 384 kB
+Pss:                 384 kB
+Pss_Dirty:           384 kB
+Shared_Clean:          0 kB
+Shared_Dirty:          0 kB
+Private_Clean:         0 kB
+Private_Dirty:       384 kB
+Referenced:          384 kB
+Anonymous:             0 kB
+KSM:                   0 kB
+LazyFree:              0 kB
+AnonHugePages:         0 kB
+ShmemPmdMapped:        0 kB
+FilePmdMapped:         0 kB
+Shared_Hugetlb:        0 kB
+Private_Hugetlb:       0 kB
+Swap:                  0 kB
+SwapPss:               0 kB
+Locked:                0 kB
+THPeligible:           0
+VmFlags: rd wr sh mr mw me ms 
+ffff673e0000-ffff67430000 rw-s 00621000 00:01 12448                      /memfd:doublemapper (deleted)
+Size:                320 kB
+KernelPageSize:        4 kB
+MMUPageSize:           4 kB
+Rss:                 320 kB
+Pss:                 320 kB
+Pss_Dirty:           320 kB
+Shared_Clean:          0 kB
+Shared_Dirty:          0 kB
+Private_Clean:         0 kB
+Private_Dirty:       320 kB
+Referenced:          320 kB
+Anonymous:             0 kB
+KSM:                   0 kB
+LazyFree:              0 kB
+AnonHugePages:         0 kB
+ShmemPmdMapped:        0 kB
+FilePmdMapped:         0 kB
+Shared_Hugetlb:        0 kB
+Private_Hugetlb:       0 kB
+Swap:                  0 kB
+SwapPss:               0 kB
+Locked:                0 kB
+THPeligible:           0
+VmFlags: rd wr sh mr mw me ms 
+ffff677a0000-ffff67b17000 r-xp 00000000 00:44 946485                     /usr/share/dotnet/shared/Microsoft.NETCore.App/10.0.14/System.Linq.Expressions.dll
+Size:               3548 kB
+KernelPageSize:        4 kB
+MMUPageSize:           4 kB
+Rss:                 896 kB
+Pss:                 841 kB
+Pss_Dirty:             4 kB
+Shared_Clean:        108 kB
+Shared_Dirty:          0 kB
+Private_Clean:       784 kB
+Private_Dirty:         4 kB
+Referenced:          896 kB
+Anonymous:             4 kB
+KSM:                   0 kB
+LazyFree:              0 kB
+AnonHugePages:         0 kB
+ShmemPmdMapped:        0 kB
+FilePmdMapped:         0 kB
+Shared_Hugetlb:        0 kB
+Private_Hugetlb:       0 kB
+Swap:                  0 kB
+SwapPss:               0 kB
+Locked:                0 kB
+THPeligible:           0
+VmFlags: rd ex mr mw me ac 
+ffffa3617000-ffffa3a78000 r-xp 001d7000 00:44 946605                     /usr/share/dotnet/shared/Microsoft.NETCore.App/10.0.14/libcoreclr.so
+Size:               4484 kB
+KernelPageSize:        4 kB
+MMUPageSize:           4 kB
+Rss:                4292 kB
+Pss:                2242 kB
+Pss_Dirty:             0 kB
+Shared_Clean:       4100 kB
+Shared_Dirty:          0 kB
+Private_Clean:       192 kB
+Private_Dirty:         0 kB
+Referenced:         4292 kB
+Anonymous:             0 kB
+KSM:                   0 kB
+LazyFree:              0 kB
+AnonHugePages:         0 kB
+ShmemPmdMapped:        0 kB
+FilePmdMapped:         0 kB
+Shared_Hugetlb:        0 kB
+Private_Hugetlb:       0 kB
+Swap:                  0 kB
+SwapPss:               0 kB
+Locked:                0 kB
+THPeligible:           0
+VmFlags: rd ex mr mw me 
+ffffa3c40000-ffffa3dda000 r-xp 00000000 00:44 942001                     /usr/lib/aarch64-linux-gnu/libc.so.6
+Size:               1640 kB
+KernelPageSize:        4 kB
+MMUPageSize:           4 kB
+Rss:                1280 kB
+Pss:                 357 kB
+Pss_Dirty:             0 kB
+Shared_Clean:       1280 kB
+Shared_Dirty:          0 kB
+Private_Clean:         0 kB
+Private_Dirty:         0 kB
+Referenced:         1280 kB
+Anonymous:             0 kB
+KSM:                   0 kB
+LazyFree:              0 kB
+AnonHugePages:         0 kB
+ShmemPmdMapped:        0 kB
+FilePmdMapped:         0 kB
+Shared_Hugetlb:        0 kB
+Private_Hugetlb:       0 kB
+Swap:                  0 kB
+SwapPss:               0 kB
+Locked:                0 kB
+THPeligible:           0
+VmFlags: rd ex mr mw me 
+ffffa3ef0000-ffffa415d000 r-xp 00000000 00:44 942089                     /usr/lib/aarch64-linux-gnu/libstdc++.so.6.0.33
+Size:               2484 kB
+KernelPageSize:        4 kB
+MMUPageSize:           4 kB
+Rss:                1408 kB
+Pss:                 704 kB
+Pss_Dirty:             0 kB
+Shared_Clean:       1408 kB
+Shared_Dirty:          0 kB
+Private_Clean:         0 kB
+Private_Dirty:         0 kB
+Referenced:         1408 kB
+Anonymous:             0 kB
+KSM:                   0 kB
+LazyFree:              0 kB
+AnonHugePages:         0 kB
+ShmemPmdMapped:        0 kB
+FilePmdMapped:         0 kB
+Shared_Hugetlb:        0 kB
+Private_Hugetlb:       0 kB
+Swap:                  0 kB
+SwapPss:               0 kB
+Locked:                0 kB
+THPeligible:           0
+VmFlags: rd ex mr mw me 
+ffffa420c000-ffffa420d000 ---p 00000000 00:01 12449                      /memfd:dotnet_ipc_created (deleted)
+Size:                  4 kB
+KernelPageSize:        4 kB
+MMUPageSize:           4 kB
+Rss:                   0 kB
+Pss:                   0 kB
+Pss_Dirty:             0 kB
+Shared_Clean:          0 kB
+Shared_Dirty:          0 kB
+Private_Clean:         0 kB
+Private_Dirty:         0 kB
+Referenced:            0 kB
+Anonymous:             0 kB
+KSM:                   0 kB
+LazyFree:              0 kB
+AnonHugePages:         0 kB
+ShmemPmdMapped:        0 kB
+FilePmdMapped:         0 kB
+Shared_Hugetlb:        0 kB
+Private_Hugetlb:       0 kB
+Swap:                  0 kB
+SwapPss:               0 kB
+Locked:                0 kB
+THPeligible:           0
+VmFlags: mr mw me 
+ffffa4210000-ffffa4214000 r--p 00000000 00:00 0                          [vvar]
+Size:                 16 kB
+KernelPageSize:        4 kB
+MMUPageSize:           4 kB
+Rss:                   0 kB
+Pss:                   0 kB
+Pss_Dirty:             0 kB
+Shared_Clean:          0 kB
+Shared_Dirty:          0 kB
+Private_Clean:         0 kB
+Private_Dirty:         0 kB
+Referenced:            0 kB
+Anonymous:             0 kB
+KSM:                   0 kB
+LazyFree:              0 kB
+AnonHugePages:         0 kB
+ShmemPmdMapped:        0 kB
+FilePmdMapped:         0 kB
+Shared_Hugetlb:        0 kB
+Private_Hugetlb:       0 kB
+Swap:                  0 kB
+SwapPss:               0 kB
+Locked:                0 kB
+THPeligible:           0
+VmFlags: rd mr pf io de dd 
+ffffa4214000-ffffa4216000 r-xp 00000000 00:00 0                          [vdso]
+Size:                  8 kB
+KernelPageSize:        4 kB
+MMUPageSize:           4 kB
+Rss:                   4 kB
+Pss:                   0 kB
+Pss_Dirty:             0 kB
+Shared_Clean:          4 kB
+Shared_Dirty:          0 kB
+Private_Clean:         0 kB
+Private_Dirty:         0 kB
+Referenced:            4 kB
+Anonymous:             0 kB
+KSM:                   0 kB
+LazyFree:              0 kB
+AnonHugePages:         0 kB
+ShmemPmdMapped:        0 kB
+FilePmdMapped:         0 kB
+Shared_Hugetlb:        0 kB
+Private_Hugetlb:       0 kB
+Swap:                  0 kB
+SwapPss:               0 kB
+Locked:                0 kB
+THPeligible:           0
+VmFlags: rd ex mr mw me de 
+ffffda52d000-ffffda54e000 rw-p 00000000 00:00 0                          [stack]
+Size:                132 kB
+KernelPageSize:        4 kB
+MMUPageSize:           4 kB
+Rss:                  60 kB
+Pss:                  60 kB
+Pss_Dirty:            60 kB
+Shared_Clean:          0 kB
+Shared_Dirty:          0 kB
+Private_Clean:         0 kB
+Private_Dirty:        60 kB
+Referenced:           60 kB
+Anonymous:            60 kB
+KSM:                   0 kB
+LazyFree:              0 kB
+AnonHugePages:         0 kB
+ShmemPmdMapped:        0 kB
+FilePmdMapped:         0 kB
+Shared_Hugetlb:        0 kB
+Private_Hugetlb:       0 kB
+Swap:                  0 kB
+SwapPss:               0 kB
+Locked:                0 kB
+THPeligible:           0
+VmFlags: rd wr mr mw me gd ac 

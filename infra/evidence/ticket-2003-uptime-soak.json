@@ -1,0 +1,393 @@
+{
+  "ticket": "thomasluizon/orbit-tickets#2003",
+  "image": "this branch at f2d3a5e82, linux/arm64 native, ReadyToRun",
+  "container": "--memory=512m --memory-swap=512m --cpus=0.5, postgres:17 with TLS, Production environment, migrated database",
+  "warningLineBytes": 314572800,
+  "method": [
+    "The recorded HTTP load runs once after startup.",
+    "Then a light client runs about every 75 seconds until the end of the window.",
+    "Every 5 minutes, /proc/1/status and /proc/1/smaps are read and the resident kB are added up by mapping kind.",
+    "At the end, dotnet-gcdump collects the heap, which forces a full blocking GC, and the memory is read again."
+  ],
+  "soaks": {
+    "uptime": {
+      "minutes": 60,
+      "outbound": "Sentry DSN and PostHog host to a local HTTPS sink whose certificate the API trusts through SSL_CERT_FILE",
+      "lightClient": "Unauthenticated after the first minute: the sign-in code cooldown refused new codes, so the client was close to idle",
+      "samples": [
+        {
+          "seconds": 0,
+          "read": "startup",
+          "RssAnonKb": 62148,
+          "RssShmemKb": 42900,
+          "threads": 43,
+          "residentKbByKind": {
+            "anonymous": 49912,
+            "heap": 5428,
+            "doublemapper": 42900,
+            "dll": 131924,
+            "so": 24472
+          }
+        },
+        {
+          "seconds": 51,
+          "read": "after-load",
+          "RssAnonKb": 151512,
+          "RssShmemKb": 72148,
+          "threads": 48,
+          "residentKbByKind": {
+            "anonymous": 138748,
+            "heap": 5428,
+            "doublemapper": 72148,
+            "dll": 150196,
+            "so": 25240
+          }
+        },
+        {
+          "seconds": 355,
+          "read": "soak",
+          "RssAnonKb": 148232,
+          "RssShmemKb": 84260,
+          "threads": 41,
+          "residentKbByKind": {
+            "anonymous": 135452,
+            "heap": 5428,
+            "doublemapper": 84260,
+            "dll": 154004,
+            "so": 25240
+          }
+        },
+        {
+          "seconds": 657,
+          "read": "soak",
+          "RssAnonKb": 149584,
+          "RssShmemKb": 86668,
+          "threads": 42,
+          "residentKbByKind": {
+            "anonymous": 136756,
+            "heap": 5428,
+            "doublemapper": 86668,
+            "dll": 155664,
+            "so": 25240
+          }
+        },
+        {
+          "seconds": 959,
+          "read": "soak",
+          "RssAnonKb": 154008,
+          "RssShmemKb": 87228,
+          "threads": 41,
+          "residentKbByKind": {
+            "anonymous": 141180,
+            "heap": 5428,
+            "doublemapper": 87228,
+            "dll": 155728,
+            "so": 25240
+          }
+        },
+        {
+          "seconds": 1261,
+          "read": "soak",
+          "RssAnonKb": 153416,
+          "RssShmemKb": 87260,
+          "threads": 42,
+          "residentKbByKind": {
+            "anonymous": 140588,
+            "heap": 5428,
+            "doublemapper": 87260,
+            "dll": 155728,
+            "so": 25240
+          }
+        },
+        {
+          "seconds": 1563,
+          "read": "soak",
+          "RssAnonKb": 155824,
+          "RssShmemKb": 87964,
+          "threads": 43,
+          "residentKbByKind": {
+            "anonymous": 142992,
+            "heap": 5428,
+            "doublemapper": 87964,
+            "dll": 155792,
+            "so": 25240
+          }
+        },
+        {
+          "seconds": 1865,
+          "read": "soak",
+          "RssAnonKb": 157540,
+          "RssShmemKb": 88360,
+          "threads": 43,
+          "residentKbByKind": {
+            "anonymous": 144708,
+            "heap": 5428,
+            "doublemapper": 88360,
+            "dll": 155768,
+            "so": 25240
+          }
+        },
+        {
+          "seconds": 2167,
+          "read": "soak",
+          "RssAnonKb": 161668,
+          "RssShmemKb": 88368,
+          "threads": 44,
+          "residentKbByKind": {
+            "anonymous": 148836,
+            "heap": 5428,
+            "doublemapper": 88368,
+            "dll": 155060,
+            "so": 25216
+          }
+        },
+        {
+          "seconds": 2469,
+          "read": "soak",
+          "RssAnonKb": 161820,
+          "RssShmemKb": 88380,
+          "threads": 42,
+          "residentKbByKind": {
+            "anonymous": 148988,
+            "heap": 5428,
+            "doublemapper": 88380,
+            "dll": 155084,
+            "so": 25216
+          }
+        },
+        {
+          "seconds": 2771,
+          "read": "soak",
+          "RssAnonKb": 162496,
+          "RssShmemKb": 88392,
+          "threads": 42,
+          "residentKbByKind": {
+            "anonymous": 149664,
+            "heap": 5428,
+            "doublemapper": 88392,
+            "dll": 155084,
+            "so": 25216
+          }
+        },
+        {
+          "seconds": 3072,
+          "read": "soak",
+          "RssAnonKb": 162248,
+          "RssShmemKb": 88436,
+          "threads": 43,
+          "residentKbByKind": {
+            "anonymous": 149416,
+            "heap": 5428,
+            "doublemapper": 88436,
+            "dll": 155084,
+            "so": 25216
+          }
+        },
+        {
+          "seconds": 3374,
+          "read": "soak",
+          "RssAnonKb": 163028,
+          "RssShmemKb": 88440,
+          "threads": 42,
+          "residentKbByKind": {
+            "anonymous": 150196,
+            "heap": 5428,
+            "doublemapper": 88440,
+            "dll": 155088,
+            "so": 25216
+          }
+        },
+        {
+          "seconds": 3615,
+          "read": "before-full-gc",
+          "RssAnonKb": 163100,
+          "RssShmemKb": 88456,
+          "threads": 42,
+          "residentKbByKind": {
+            "anonymous": 150268,
+            "heap": 5428,
+            "doublemapper": 88456,
+            "dll": 155088,
+            "so": 25216
+          }
+        },
+        {
+          "seconds": 3622,
+          "read": "after-full-gc",
+          "RssAnonKb": 152344,
+          "RssShmemKb": 88560,
+          "threads": 41,
+          "residentKbByKind": {
+            "anonymous": 139512,
+            "heap": 5428,
+            "doublemapper": 88560,
+            "dll": 156312,
+            "so": 25216
+          }
+        }
+      ],
+      "gcHeapLiveBytesAfterFullGc": 39063400,
+      "anonymousReturnedByFullGcKb": 10756
+    },
+    "chatOverTls": {
+      "minutes": 35,
+      "outbound": "Sentry, PostHog and AI__BaseUrl to a local HTTPS sink; every light client sends one Astra chat turn",
+      "lightClient": "Authenticated with a cached token: Today, habit detail, gamification profile, calendar month, event ticket and one chat turn",
+      "chatResult": "34 of 35 turns ended in AI_UNAVAILABLE after the moderation call to the sink; the o200k_base tokenizer was never mapped",
+      "samples": [
+        {
+          "seconds": 0,
+          "read": "startup",
+          "RssAnonKb": 53164,
+          "RssShmemKb": 39016,
+          "threads": 41,
+          "residentKbByKind": {
+            "anonymous": 40856,
+            "heap": 5500,
+            "doublemapper": 39060,
+            "dll": 131960,
+            "so": 24392
+          }
+        },
+        {
+          "seconds": 27,
+          "read": "after-load",
+          "RssAnonKb": 116264,
+          "RssShmemKb": 69112,
+          "threads": 47,
+          "residentKbByKind": {
+            "anonymous": 103428,
+            "heap": 5500,
+            "doublemapper": 69112,
+            "dll": 150044,
+            "so": 24680
+          }
+        },
+        {
+          "seconds": 329,
+          "read": "soak",
+          "RssAnonKb": 131028,
+          "RssShmemKb": 83328,
+          "threads": 41,
+          "residentKbByKind": {
+            "anonymous": 118100,
+            "heap": 5500,
+            "doublemapper": 83328,
+            "dll": 157756,
+            "so": 24680
+          }
+        },
+        {
+          "seconds": 631,
+          "read": "soak",
+          "RssAnonKb": 137004,
+          "RssShmemKb": 84296,
+          "threads": 42,
+          "residentKbByKind": {
+            "anonymous": 124076,
+            "heap": 5500,
+            "doublemapper": 84296,
+            "dll": 157288,
+            "so": 24656
+          }
+        },
+        {
+          "seconds": 933,
+          "read": "soak",
+          "RssAnonKb": 140000,
+          "RssShmemKb": 85428,
+          "threads": 41,
+          "residentKbByKind": {
+            "anonymous": 127072,
+            "heap": 5500,
+            "doublemapper": 85428,
+            "dll": 157320,
+            "so": 24656
+          }
+        },
+        {
+          "seconds": 1235,
+          "read": "soak",
+          "RssAnonKb": 135032,
+          "RssShmemKb": 86124,
+          "threads": 42,
+          "residentKbByKind": {
+            "anonymous": 122104,
+            "heap": 5500,
+            "doublemapper": 86124,
+            "dll": 157404,
+            "so": 24656
+          }
+        },
+        {
+          "seconds": 1536,
+          "read": "soak",
+          "RssAnonKb": 135596,
+          "RssShmemKb": 86280,
+          "threads": 43,
+          "residentKbByKind": {
+            "anonymous": 122668,
+            "heap": 5500,
+            "doublemapper": 86280,
+            "dll": 157428,
+            "so": 24656
+          }
+        },
+        {
+          "seconds": 1838,
+          "read": "soak",
+          "RssAnonKb": 140052,
+          "RssShmemKb": 86460,
+          "threads": 42,
+          "residentKbByKind": {
+            "anonymous": 127124,
+            "heap": 5500,
+            "doublemapper": 86460,
+            "dll": 157428,
+            "so": 24656
+          }
+        },
+        {
+          "seconds": 2139,
+          "read": "before-full-gc",
+          "RssAnonKb": 139008,
+          "RssShmemKb": 86988,
+          "threads": 41,
+          "residentKbByKind": {
+            "anonymous": 126080,
+            "heap": 5500,
+            "doublemapper": 86988,
+            "dll": 157492,
+            "so": 24656
+          }
+        },
+        {
+          "seconds": 2146,
+          "read": "after-full-gc",
+          "RssAnonKb": 128292,
+          "RssShmemKb": 87132,
+          "threads": 40,
+          "residentKbByKind": {
+            "anonymous": 115364,
+            "heap": 5500,
+            "doublemapper": 87132,
+            "dll": 158700,
+            "so": 24656
+          }
+        }
+      ],
+      "gcHeapLiveBytesAfterFullGc": 37831400,
+      "anonymousReturnedByFullGcKb": 10716
+    }
+  },
+  "findings": [
+    "Neither window shows growth without a limit. Shmem levels off at 86,124 to 88,560 kB after about 15 minutes, and anonymous memory levels off at 135,032 to 163,100 kB.",
+    "A forced full GC returns 10,716 to 10,756 kB of anonymous memory, and the live GC heap is 37,831,400 to 39,063,400 bytes. Thus the local heap holds little garbage.",
+    "The doublemapper split at minute 12 of the uptime soak was 64,608 kB of data and 22,124 kB of code. The cgroup shmem was 88,797,184 bytes, 16,384 bytes below RssShmem (86,732 kB).",
+    "Production logged a committed GC heap of 164,282,368 to 179,068,928 bytes and managed memory of 124,822,976 to 146,550,456 bytes. The local committed GC heap was 70,418,432 bytes at minute 20. The production gap is in the managed heap, which these runs do not reproduce."
+  ],
+  "dotnetCountersAtMinute20OfTheUptimeSoak": {
+    "committedBytes": 70418432,
+    "assemblies": 212
+  }
+}
