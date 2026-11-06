@@ -19,11 +19,6 @@ connection="Host=$database;Port=5432;Database=orbit;Username=orbit;Password=orbi
 sink_dir=$out/sink; state_dir=$out/state; env_file=$out/env
 mkdir -p "$sink_dir" "$state_dir"; chmod 777 "$out" "$state_dir"
 
-openssl req -x509 -newkey rsa:2048 -nodes -keyout "$sink_dir/sink.key" -out "$sink_dir/sink.crt" -days 2 \
-  -subj "/CN=sink" -addext "subjectAltName=DNS:sink" 2>/dev/null
-chmod 644 "$sink_dir/sink.key"
-cp "$sink_dir/sink.crt" "$sink_dir/bundle.crt"
-
 sed -n '/^cat > "\$env_file" <<EOF$/,/^EOF$/p' "$script_dir/api-memory-container.sh" | sed '1d;$d' \
   | sed "s|\$connection|$connection|g; s|\$smoke_email|memory-guard@example.test|; s|\$smoke_code|246810|" \
   | sed "s|^AI__BaseUrl=.*|AI__BaseUrl=https://sink:8443/v1|" > "$env_file"
@@ -41,6 +36,11 @@ cleanup() {
 }
 trap cleanup EXIT
 cleanup
+mkdir -p "$sink_dir"
+openssl req -x509 -newkey rsa:2048 -nodes -keyout "$sink_dir/sink.key" -out "$sink_dir/sink.crt" -days 2 \
+  -subj "/CN=sink" -addext "subjectAltName=DNS:sink" 2>/dev/null
+chmod 644 "$sink_dir/sink.key"
+cp "$sink_dir/sink.crt" "$sink_dir/bundle.crt"
 
 docker build -q -t orbit-memory-diag - >/dev/null <<'EOF'
 FROM mcr.microsoft.com/dotnet/sdk:10.0
