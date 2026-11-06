@@ -303,20 +303,25 @@ public sealed partial class AiCompletionClient
                 .Select(part => part.Text)))
             .Where(text => !string.IsNullOrEmpty(text)));
 
-    internal CompletionCancellation CreateCompletionCancellation(CancellationToken cancellationToken, bool streaming = false)
-        => new(streaming ? StreamingCompletionTimeout : CompletionTimeout, _timeProvider, cancellationToken);
+    internal CompletionCancellation CreateCompletionCancellation(CancellationToken cancellationToken, bool streaming = false,
+        TimeSpan? callerBudget = null)
+    {
+        var timeout = streaming ? StreamingCompletionTimeout : CompletionTimeout;
+        return new(callerBudget is { } budget && budget < timeout ? budget : timeout, _timeProvider, cancellationToken);
+    }
 
     /// <summary>
     /// Bounds one AI call by a deadline linked to the caller's token. The innermost active scope flows
     /// through the async context, so the retry policy and the telemetry can tell a caller cancellation
     /// (a superseded refresh, a closed stream) from a deadline expiry. A scope created on the token of
-    /// an enclosing scope inherits that scope's caller, so a nested deadline still counts as a deadline.
+    /// an enclosing scope inherits its caller, and an upstream <see cref="AiCallDeadline"/> expiry is a deadline.
     /// </summary>
     internal sealed class CompletionCancellation : IDisposable
     {
         private static readonly AsyncLocal<CompletionCancellation?> Active = new();
         private readonly CompletionCancellation? _previous;
         private readonly CompletionCancellation? _enclosing;
+        private readonly AiCallDeadline? _upstream;
         private readonly CancellationToken _caller;
         private readonly CancellationTokenSource _deadline;
         private readonly CancellationTokenSource _linked;
@@ -325,6 +330,7 @@ public sealed partial class AiCompletionClient
         {
             caller.ThrowIfCancellationRequested();
             _caller = caller;
+            _upstream = AiCallDeadline.Current;
             _deadline = new CancellationTokenSource(timeout, timeProvider);
             _linked = CancellationTokenSource.CreateLinkedTokenSource(caller, _deadline.Token);
             Token = _linked.Token;
@@ -338,7 +344,7 @@ public sealed partial class AiCompletionClient
         /// <summary>True when the active scope ended because its caller cancelled, not because a deadline expired.</summary>
         internal static bool CurrentCallerCancelled => Active.Value?.CallerCancelled == true;
 
-        private bool CallerCancelled => !_deadline.IsCancellationRequested
+        private bool CallerCancelled => !_deadline.IsCancellationRequested && _upstream?.Expired != true
             && (_enclosing?.CallerCancelled ?? _caller.IsCancellationRequested);
 
         public void Dispose()

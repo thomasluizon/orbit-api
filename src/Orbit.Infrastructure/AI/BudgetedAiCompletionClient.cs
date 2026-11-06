@@ -9,8 +9,9 @@ namespace Orbit.Infrastructure.AI;
 public sealed class BudgetedAiCompletionClient(AiCompletionClient inner, IAiDailyBudget budget,
     IHttpContextAccessor http, ILogger<BudgetedAiCompletionClient> logger, IAiRequestCostEstimator estimates)
 {
-    internal AiCompletionClient.CompletionCancellation CreateCompletionCancellation(CancellationToken token, bool streaming = false)
-        => inner.CreateCompletionCancellation(token, streaming);
+    internal AiCompletionClient.CompletionCancellation CreateCompletionCancellation(CancellationToken token, bool streaming = false,
+        TimeSpan? callerBudget = null)
+        => inner.CreateCompletionCancellation(token, streaming, callerBudget);
     internal AiCompletionClient Inner => inner;
     internal string ChatModel => inner.ChatModel;
 

@@ -73,7 +73,7 @@ public sealed partial class AiIntentService(
         foreach (var tool in tools.OrderBy(pair => pair.Key, StringComparer.Ordinal))
             options.Tools.Add(tool.Value);
         return await CallWithToolsAsync(messages, options, usageUserId, streamSink, cancellationToken,
-            telemetry: request.Telemetry, purpose: request.Purpose, currentImages: currentImages);
+            telemetry: request.Telemetry, purpose: request.Purpose, currentImages: currentImages, callerBudget: request.Timeout);
     }
 
     private static void AppendStoredHistory(List<ResponseItem> messages, IReadOnlyList<ChatHistoryMessage> history, List<CurrentTurnImage> images)
@@ -225,9 +225,11 @@ public sealed partial class AiIntentService(
         Guid? userId,
         Func<AiStreamEvent, Task>? streamSink,
         CancellationToken cancellationToken,
-        AiTurnTelemetry? telemetry = null, string purpose = "chat", IReadOnlyList<CurrentTurnImage>? currentImages = null)
+        AiTurnTelemetry? telemetry = null, string purpose = "chat", IReadOnlyList<CurrentTurnImage>? currentImages = null,
+        TimeSpan? callerBudget = null)
     {
-        using var completionCancellation = aiClient.CreateCompletionCancellation(cancellationToken, streaming: streamSink is not null);
+        using var completionCancellation = aiClient.CreateCompletionCancellation(cancellationToken,
+            streaming: streamSink is not null, callerBudget);
         cancellationToken = completionCancellation.Token;
         telemetry ??= new AiTurnTelemetry();
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();

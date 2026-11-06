@@ -4,24 +4,36 @@ using System.ClientModel;
 using System.ClientModel.Primitives;
 using System.Diagnostics;
 using FluentAssertions;
+using MediatR;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using NSubstitute;
 using OpenAI.Responses;
+using Orbit.Api.Hosting;
+using Orbit.Api.Idempotency;
+using Orbit.Application.Chat.Commands;
+using Orbit.Application.Common;
+using Orbit.Application.Chat.Models;
+using Orbit.Domain.Common;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 using Orbit.Infrastructure.AI;
 using Orbit.Infrastructure.Services;
+using Orbit.Infrastructure.Tests.Controllers;
 
 namespace Orbit.Infrastructure.Tests.AI;
 
 /// <summary>
 /// A caller that cancels its own token (a superseded daily summary refresh, a closed chat stream) did not
 /// see an AI failure, so the usage recorder and the logs must not report one. A completion deadline that
-/// expires while the provider is still working is a real failure and keeps its failed record and warnings.
+/// expires while the provider is still working is a real failure and keeps its failed record and warnings,
+/// also when the caller owns it (the offer selector budget, the chat turn deadline).
 /// </summary>
 public class AiCallerCancellationTests
 {
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(1);
+    private static readonly TimeSpan SelectorBudget = Timeout / 2;
 
     [Theory]
     [InlineData("text")]
@@ -30,6 +42,7 @@ public class AiCallerCancellationTests
     [InlineData("budget-json")]
     [InlineData("chat")]
     [InlineData("stream")]
+    [InlineData("selector")]
     public async Task CallerCancellation_DuringProviderCall_RecordsCancelledWithoutWarning(string kind)
     {
         var harness = new Harness();
@@ -79,6 +92,63 @@ public class AiCallerCancellationTests
                 && entry.Message == "AI completion failed at completion with cancelled");
     }
 
+    [Fact]
+    public async Task SelectorBudget_ExpiresOnTheCompletionClock_RecordsFailedWithWarning()
+    {
+        var harness = new Harness();
+        using var caller = new CancellationTokenSource();
+        var call = harness.Start("selector", caller.Token);
+        await harness.Handler.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        harness.Clock.Advance(SelectorBudget);
+
+        var thrown = await Record.ExceptionAsync(() => call.WaitAsync(TimeSpan.FromSeconds(5)));
+        thrown.Should().BeAssignableTo<OperationCanceledException>("the caller budget is the deadline of the completion scope");
+        caller.IsCancellationRequested.Should().BeFalse();
+        AssertDeadlineFailure(harness);
+    }
+
+    [Fact]
+    public async Task TurnDeadline_ExpiresOnTheCompletionClock_RecordsFailedWithWarning()
+    {
+        var harness = new Harness();
+        var userId = Guid.NewGuid();
+        var mediator = Substitute.For<IMediator>();
+        using var services = new ChatTurnStreamTestServices(mediator, userId);
+        services.Provider.GetRequiredService<IOptions<ShutdownDrainOptions>>().Value.Timeout = SelectorBudget;
+        mediator.Send(Arg.Any<ProcessUserChatCommand>(), Arg.Any<CancellationToken>()).Returns(async call =>
+        {
+            await harness.Start("stream", call.Arg<CancellationToken>());
+            return Result.Success(new ChatResponse("Reply", []));
+        });
+        var stream = ActivatorUtilities.CreateInstance<ChatTurnStream>(services.Provider,
+            new CollectingLogger<ChatTurnStream>(harness.Entries), (TimeProvider)harness.Clock);
+        var controller = ChatTurnStreamTests.CreateController(services, userId, "turn-deadline");
+        var run = stream.RunAsync(new ProcessUserChatCommand(userId, "Hello"), controller.HttpContext, "turn-deadline", default);
+        await harness.Handler.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        harness.Clock.Advance(SelectorBudget);
+
+        await run.WaitAsync(TimeSpan.FromSeconds(5));
+        var terminal = ChatTurnStreamTests.Events(controller).Last();
+        terminal.GetProperty("code").GetString().Should().Be("CHAT_TURN_INTERRUPTED");
+        AssertDeadlineFailure(harness);
+        harness.Entries.Should().Contain(entry => entry.Level == LogLevel.Warning
+            && entry.Message == $"Chat turn {terminal.GetProperty("turnId").GetGuid()} interrupted by its deadline");
+    }
+
+    private static void AssertDeadlineFailure(Harness harness)
+    {
+        var telemetry = harness.SingleTelemetry();
+        telemetry.IsError.Should().BeTrue("a deadline that the caller owns is still a failure");
+        telemetry.IsCancelled.Should().BeFalse();
+        telemetry.HasUsage.Should().BeFalse();
+        harness.Entries.Should().Contain(entry => entry.Level == LogLevel.Warning
+            && entry.Message.StartsWith("AI attempt 1 failed (", StringComparison.Ordinal));
+        harness.Entries.Should().Contain(entry => entry.Level == LogLevel.Warning
+            && entry.Message == "AI completion failed at completion with cancelled");
+    }
+
     [Theory]
     [InlineData("caller", true)]
     [InlineData("outer-deadline", false)]
@@ -100,6 +170,26 @@ public class AiCallerCancellationTests
 
         inner.Token.IsCancellationRequested.Should().BeTrue();
         AiCompletionClient.CompletionCancellation.CurrentCallerCancelled.Should().Be(callerCancelled);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void BoundDeadline_ReadsItsExpiryAsADeadlineAndRestoresTheEnclosingBinding(bool bound)
+    {
+        var clock = new CompletionTestClock();
+        using var turn = new CancellationTokenSource();
+        var binding = bound ? AiCallDeadline.Bind(turn.Token) : null;
+        using (var scope = new AiCompletionClient.CompletionCancellation(Timeout, clock, turn.Token))
+        {
+            turn.Cancel();
+            scope.Token.IsCancellationRequested.Should().BeTrue();
+            AiCompletionClient.CompletionCancellation.CurrentCallerCancelled.Should().Be(!bound);
+        }
+
+        AiCallDeadline.Current.Should().BeSameAs(binding);
+        binding?.Dispose();
+        AiCallDeadline.Current.Should().BeNull();
     }
 
     [Fact]
@@ -150,6 +240,11 @@ public class AiCallerCancellationTests
             "json" => _client.CompleteJsonAsync<Probe>("system", "user", cancellationToken: token),
             "budget-text" => _budgeted.CompleteTextAsync("system", "user", purpose: "daily_summary", cancellationToken: token),
             "budget-json" => _budgeted.CompleteJsonAsync<Probe>("system", "user", cancellationToken: token),
+            "selector" => _intent.SendWithToolsAsync(new AiToolRequest("user", "system", [])
+            {
+                Purpose = "offer_selection",
+                Timeout = SelectorBudget
+            }, cancellationToken: token),
             _ => _intent.SendWithToolsAsync(new AiToolRequest("user", "system", []),
                 kind == "stream" ? _ => Task.CompletedTask : null, cancellationToken: token)
         };
