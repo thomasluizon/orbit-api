@@ -119,7 +119,7 @@ up the resident memory of `/proc/1/smaps` by mapping kind. At the end,
 These are the conclusions:
 
 - Neither run grows without a limit. Shmem stops at 86,124 to 88,560 kB after about 15 minutes. Anonymous memory stops at 135,032 to 163,100 kB.
-- At minute 12, the `doublemapper` held 64,608 kB of loader data and 22,124 kB of JIT code. The cgroup `shmem` equals `RssShmem`, so the double mapping is not counted twice.
+- At minute 12, the `doublemapper` held 64,608 kB of loader data and 22,124 kB of JIT code. The cgroup `shmem` was within 16 kB of `RssShmem`, so the double mapping is not counted twice.
 - The local GC heap holds little garbage. Production logged a committed GC heap of 164,282,368 to 179,068,928 bytes. Locally, the committed heap was 70,418,432 bytes at minute 20.
 - The chat turns end at the moderation call, so the `o200k_base` tokenizer never loads. Its 42 MB of live memory is absent from these runs, but present in production after the first Astra turn.
 

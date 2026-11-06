@@ -383,7 +383,7 @@
   "findings": [
     "Neither window shows growth without a limit. Shmem levels off at 86,124 to 88,560 kB after about 15 minutes, and anonymous memory levels off at 135,032 to 163,100 kB.",
     "A forced full GC returns 10,716 to 10,756 kB of anonymous memory, and the live GC heap is 37,831,400 to 39,063,400 bytes. Thus the local heap holds little garbage.",
-    "The doublemapper split at minute 12 of the uptime soak was 64,608 kB of data and 22,124 kB of code. The cgroup shmem was 88,797,184 bytes, equal to RssShmem.",
+    "The doublemapper split at minute 12 of the uptime soak was 64,608 kB of data and 22,124 kB of code. The cgroup shmem was 88,797,184 bytes, 16,384 bytes below RssShmem (86,732 kB).",
     "Production logged a committed GC heap of 164,282,368 to 179,068,928 bytes and managed memory of 124,822,976 to 146,550,456 bytes. The local committed GC heap was 70,418,432 bytes at minute 20. The production gap is in the managed heap, which these runs do not reproduce."
   ],
   "dotnetCountersAtMinute20OfTheUptimeSoak": {
