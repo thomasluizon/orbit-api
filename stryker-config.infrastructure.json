@@ -18,6 +18,7 @@
       "**/Services/AgentOperationExecutor.cs",
       "**/Services/Prompts/Sections/Static/ToolFailureSection.cs"
     ],
+    "test-case-filter": "FullyQualifiedName!=Orbit.Infrastructure.Tests.Memory.TokenizerMemoryProbeTests.Estimate_LoadsTheProductionTokenizerAndReportsRetainedMemory",
     "mutation-level": "Standard",
     "reporters": ["cleartext", "html", "json"],
     "thresholds": {

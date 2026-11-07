@@ -188,6 +188,24 @@ for (const project of strykerProjects) {
   });
 }
 
+const tokenizerProbe = "Orbit.Infrastructure.Tests.Memory.TokenizerMemoryProbeTests.Estimate_LoadsTheProductionTokenizerAndReportsRetainedMemory";
+
+// https://github.com/stryker-mutator/stryker-net/blob/f9109e24c615a7030a3b33e5532c665c974e4ec5/src/Stryker.Core/Stryker.Core/StrykerRunner.cs#L66-L74
+// Coverage capture instruments every project mutant before the mutate filter applies, so the BPE loop in this probe never ends inside the job limit.
+test("infrastructure Stryker excludes only the tokenizer probe, which reaches none of the mutated files", () => {
+  assert.equal(strykerConfig("infrastructure")["test-case-filter"], `FullyQualifiedName!=${tokenizerProbe}`);
+  for (const project of ["domain", "application"]) assert.equal(strykerConfig(project)["test-case-filter"], undefined);
+  const probe = readFileSync(new URL("../../tests/Orbit.Infrastructure.Tests/Memory/TokenizerMemoryProbeTests.cs", import.meta.url), "utf8");
+  const [namespace, type, method] = [tokenizerProbe.split(".").slice(0, -2).join("."), ...tokenizerProbe.split(".").slice(-2)];
+  assert.match(probe, new RegExp(`namespace ${namespace.replaceAll(".", "\\.")};[\\s\\S]*class ${type}\\b[\\s\\S]*Task ${method}\\(\\)`));
+  const reach = [probe, ...["AI/AiRequestCostEstimator.cs", "AI/O200kTokenCounter.cs", "Configuration/AiSettings.cs"]
+    .map((file) => readFileSync(new URL(`../../src/Orbit.Infrastructure/${file}`, import.meta.url), "utf8"))].join("\n");
+  const mutated = strykerConfig("infrastructure").mutate.filter((pattern) => !pattern.startsWith("!"))
+    .map((pattern) => pattern.split("/").at(-1).replace(/\.cs$/, ""));
+  assert.equal(mutated.length, 6);
+  for (const name of mutated) assert.doesNotMatch(reach, new RegExp(`\\b${name}\\b`), `${name} is mutated, so its tests must stay in the run`);
+});
+
 test("the report upload covers the output directory of every Stryker working directory", () => {
   const workflow = readFileSync(new URL("../workflows/mutation.yml", import.meta.url), "utf8");
   const paths = workflow.split("      - name: Upload mutation report\n")[1].match(/          path: \|\n((?:            [^\n]*\n)+)/)[1]
@@ -341,20 +359,20 @@ test("nightly and manual runs keep the configured file set and thresholds", () =
   const matrix = select();
   assert.equal(matrix.filter(({ project }) => project === "domain").length, 13);
   assert.equal(matrix.filter(({ project }) => project === "application").length, 13);
-  for (const project of ["domain", "application"]) {
+  assert.equal(matrix.filter(({ project }) => project === "infrastructure").length, 7);
+  assert.ok(matrix.every((scope) => scope.shard && scope.mutate?.length), "Every nightly shard names its own mutate scope");
+  for (const project of strykerProjects) {
     const scopes = matrix.filter((scope) => scope.project === project);
-    const config = JSON.parse(readFileSync(new URL(`../../stryker-config.${project}.json`, import.meta.url), "utf8"))["stryker-config"];
-    const directory = new URL(`../../src/Orbit.${project === "domain" ? "Domain" : "Application"}/`, import.meta.url);
+    const config = strykerConfig(project);
+    const source = `src/${config.project.replace(/\.csproj$/, "")}`;
+    const directory = new URL(`../../${source}/`, import.meta.url);
     const files = readdirSync(directory, { recursive: true }).filter((path) => path.endsWith(".cs"));
     const configured = { mutate: config.mutate };
-    const path = (relative) => `src/Orbit.${project === "domain" ? "Domain" : "Application"}/${relative}`;
+    const path = (relative) => `${source}/${relative}`;
     assert.deepEqual(files.filter((file) => scopes.some((scope) => owns(scope, path(file), 0, 0))),
       files.filter((file) => owns(configured, path(file), 0, 0)));
     assert.deepEqual(config.thresholds, { high: 80, low: 60, break: 0 });
   }
-  const infrastructure = JSON.parse(readFileSync(new URL("../../stryker-config.infrastructure.json", import.meta.url), "utf8"))["stryker-config"];
-  assert.deepEqual(infrastructure.thresholds, { high: 80, low: 60, break: 0 });
-  assert.deepEqual(matrix.at(-1), { project: "infrastructure" });
   assert.match(readFileSync(new URL("../workflows/mutation.yml", import.meta.url), "utf8"), /timeout-minutes: 45\b/);
 });
 
@@ -481,11 +499,33 @@ test("nightly chat processing spans split the slow middle shard and retain compa
   ]);
 });
 
+test("nightly infrastructure spans split the executor and streak mutant time and keep the light services together", () => {
+  const executor = "**/Services/AgentOperationExecutor.cs";
+  const streaks = "**/Services/UserStreakService.cs";
+  assert.deepEqual(select().filter(({ project }) => project === "infrastructure"), [
+    { project: "infrastructure", shard: "infrastructure-agent-executor-1", mutate: [`${executor}{0..7855}`] },
+    { project: "infrastructure", shard: "infrastructure-agent-executor-2", mutate: [`${executor}{0..8563}`, `!${executor}{0..7855}`] },
+    { project: "infrastructure", shard: "infrastructure-agent-executor-3", mutate: [`${executor}{0..25449}`, `!${executor}{0..8563}`] },
+    { project: "infrastructure", shard: "infrastructure-agent-executor-4", mutate: [executor, `!${executor}{0..25449}`] },
+    { project: "infrastructure", shard: "infrastructure-streaks-1", mutate: [`${streaks}{0..11774}`] },
+    { project: "infrastructure", shard: "infrastructure-streaks-2", mutate: [streaks, `!${streaks}{0..11774}`] },
+    {
+      project: "infrastructure", shard: "infrastructure-services", mutate: [
+        "**/Services/JwtTokenService.cs",
+        "**/Services/AuthSessionService.cs",
+        "**/Services/HabitDueDateAdvancementService.cs",
+        "**/Services/Prompts/Sections/Static/ToolFailureSection.cs",
+      ],
+    },
+  ]);
+});
+
 test("nightly scopes split each timed-out or near-limit shard", () => {
   const scopes = select();
   assert.ok(scopes.filter(({ shard }) => shard?.startsWith("domain-habit-update-freeze-")).length >= 3);
   assert.ok(scopes.filter(({ shard }) => shard?.startsWith("domain-user-invariants-")).length >= 3);
   assert.ok(scopes.filter(({ project }) => project === "application").length > 1);
+  assert.ok(scopes.filter(({ project }) => project === "infrastructure").length > 1);
 });
 
 test("diff spans: enclosing statements and blocks preserve multiline mutants within their member", (t) => {
@@ -496,14 +536,18 @@ test("diff spans: enclosing statements and blocks preserve multiline mutants wit
   assert.equal(matrix.filter((scope) => owns(scope, "User.cs", revised.indexOf("true"), revised.indexOf("true") + 4)).length, 0);
 });
 
-test("application: every in-scope character and boundary-crossing span has exactly one nightly owner", () => {
-  const scopes = select().filter(({ project }) => project === "application");
-  const directory = new URL("../../src/Orbit.Application/", import.meta.url);
-  const config = JSON.parse(readFileSync(new URL("../../stryker-config.application.json", import.meta.url), "utf8"))["stryker-config"];
+for (const [project, firstShard, firstFile] of [
+  ["application", "application-chat-processing-1", "Chat/Commands/ProcessUserChatCommand.Tools.cs"],
+  ["infrastructure", "infrastructure-agent-executor-1", "Services/AgentOperationExecutor.cs"],
+]) test(`${project}: every in-scope character and boundary-crossing span has exactly one nightly owner`, () => {
+  const scopes = select().filter((scope) => scope.project === project);
+  const config = strykerConfig(project);
+  const sourceDirectory = `src/${config.project.replace(/\.csproj$/, "")}`;
+  const directory = new URL(`../../${sourceDirectory}/`, import.meta.url);
   const configured = { mutate: config.mutate };
   const sizes = new Map(scopes.map(({ shard }) => [shard, 0]));
   for (const relative of readdirSync(directory, { recursive: true }).filter((path) => path.endsWith(".cs"))) {
-    const path = `src/Orbit.Application/${relative}`;
+    const path = `${sourceDirectory}/${relative}`;
     const matching = scopes.filter((scope) => owns(scope, path, 0, 0)
       || scope.mutate.some((pattern) => pattern.replace(/^!/, "").split("{")[0] === `**/${relative}`));
     if (!owns(configured, path, 0, 0)) {
@@ -523,8 +567,8 @@ test("application: every in-scope character and boundary-crossing span has exact
     }
   }
   for (const [shard, size] of sizes) assert.ok(size > 0 && size < 30000, `${shard} owns ${size} measured UTF-16 characters`);
-  const first = scopes.find(({ shard }) => shard === "application-chat-processing-1");
-  const path = "src/Orbit.Application/Chat/Commands/ProcessUserChatCommand.Tools.cs";
+  const first = scopes.find(({ shard }) => shard === firstShard);
+  const path = `${sourceDirectory}/${firstFile}`;
   assert.throws(() => assertOneOwner(scopes.filter((scope) => scope !== first), path, 0, 1), /exactly one owner/);
   assert.throws(() => assertOneOwner([...scopes, first], path, 0, 1), /exactly one owner/);
 });
@@ -537,6 +581,10 @@ for (const [path, boundary] of [
   ["src/Orbit.Application/Chat/Commands/ProcessUserChatCommand.Tools.cs", 32000],
   ["src/Orbit.Application/Chat/Tools/Implementations/CreateHabitTool.cs", 10500],
   ["src/Orbit.Application/Chat/Tools/Implementations/CreateHabitTool.cs", 15000],
+  ["src/Orbit.Infrastructure/Services/AgentOperationExecutor.cs", 7855],
+  ["src/Orbit.Infrastructure/Services/AgentOperationExecutor.cs", 8563],
+  ["src/Orbit.Infrastructure/Services/AgentOperationExecutor.cs", 25449],
+  ["src/Orbit.Infrastructure/Services/UserStreakService.cs", 11774],
 ]) {
   test(`diff spans: ${path} routes multiline changes across ${boundary} without dropping the mutant`, (t) => {
     const prefix = `/*${" ".repeat(boundary - 50)}*/\n`;

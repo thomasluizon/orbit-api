@@ -1,9 +1,8 @@
-import { readFileSync, realpathSync } from "node:fs";
+import { realpathSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const root = fileURLToPath(new URL("../../", import.meta.url));
 const gitPath = "/usr/bin/git";
 const processOptions = { encoding: "utf8", maxBuffer: 32 * 1024 * 1024 };
 if (process.argv.length > 2 && (process.argv.length !== 4 || process.argv[2] !== "--since")) {
@@ -102,7 +101,18 @@ const shards = [
       "**/Chat/Tools/Implementations/NotificationTools.cs",
     ],
   },
-  { project: "infrastructure" },
+  // https://github.com/thomasluizon/orbit-api/actions/runs/42371280845
+  // Each shard repeats the full initial and coverage runs. The span limits balance the measured mutant test time of each shard.
+  ...spanShards("infrastructure", "infrastructure-agent-executor", "**/Services/AgentOperationExecutor.cs", [7855, 8563, 25449]),
+  ...spanShards("infrastructure", "infrastructure-streaks", "**/Services/UserStreakService.cs", [11774]),
+  {
+    project: "infrastructure", shard: "infrastructure-services", mutate: [
+      "**/Services/JwtTokenService.cs",
+      "**/Services/AuthSessionService.cs",
+      "**/Services/HabitDueDateAdvancementService.cs",
+      "**/Services/Prompts/Sections/Static/ToolFailureSection.cs",
+    ],
+  },
 ];
 
 function patternParts(pattern) {
@@ -132,8 +142,7 @@ function isInScopeFile(path, scopes) {
 function selectDiff(target) {
   const changed = execFileSync(gitPath, ["diff", "--name-only", "--no-ext-diff", "--no-textconv", "--no-renames", "--diff-filter=AM", "-z", "--end-of-options", target, "HEAD", "--"], processOptions).split("\0").filter(Boolean);
   const candidates = [];
-  const scopes = shards.map((shard) => ({ ...shard, mutate: shard.mutate ?? JSON.parse(readFileSync(`${root}stryker-config.${shard.project}.json`, "utf8"))["stryker-config"].mutate }));
-  const paths = changed.filter((path) => isInScopeFile(path, scopes));
+  const paths = changed.filter((path) => isInScopeFile(path, shards));
   for (const path of paths) {
     const patch = execFileSync(gitPath, ["--literal-pathspecs", "diff", "--no-ext-diff", "--no-textconv", "--unified=0", "--no-renames", "--end-of-options", target, "HEAD", "--", path], processOptions);
     const hunks = [...patch.matchAll(/^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/gm)].map((match) => ({
@@ -148,7 +157,7 @@ function selectDiff(target) {
   const spans = JSON.parse(execFileSync(dotnetPath, [fileURLToPath(new URL("./mutation-spans/bin/Debug/net10.0/MutationSpans.dll", import.meta.url))], {
     input: JSON.stringify(candidates), encoding: "utf8", maxBuffer: 32 * 1024 * 1024,
   }));
-  return scopes.flatMap((scope) => {
+  return shards.flatMap((scope) => {
     const mutate = [];
     for (const [index, { path }] of candidates.entries()) {
       if (!inProject(path, scope)) continue;
