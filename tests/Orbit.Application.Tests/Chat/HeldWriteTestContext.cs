@@ -216,7 +216,7 @@ internal sealed class HeldWriteTestContext : IDisposable
         store.GetExecution(UserId, pendingId).Returns(_ => new PendingAgentOperationExecution(
             pendingId, tool.Name, tool.Name, current, AgentExecutionSurface.Chat,
             AgentConfirmationRequirement.FreshConfirmation));
-        store.Revise(UserId, pendingId, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>())
+        store.Revise(UserId, pendingId, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<PendingOperationChangePreview?>())
             .Returns(call =>
             {
                 current = JsonSerializer.Deserialize<JsonElement>(call.ArgAt<string>(3));

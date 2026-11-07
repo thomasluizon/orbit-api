@@ -125,19 +125,11 @@ public sealed partial class PendingOperationRevisionService(
         var revisedJson = (revisedPreview!.ExecutionArguments ?? revised.Value).GetRawText();
         var revisedFingerprint = AgentOperationFingerprint.Compute(execution.OperationId, revisedJson);
         if (!store.Revise(userId, pendingOperationId, expectedFingerprint, revisedJson,
-            revisedFingerprint, revisedPreview.PreviewFingerprint!))
+            revisedFingerprint, revisedPreview.PreviewFingerprint!, revisedPreview))
             return Failure("revision_conflict");
 
-        RecordRevisedPreview(userId, pendingOperationId, revisedPreview);
         await RecordRemovedOffersAsync(userId, request, original, cancellationToken);
         return new PendingOperationRevisionResult(true, null, pendingOperationId, revisedPreview);
-    }
-
-    private void RecordRevisedPreview(Guid userId, Guid pendingOperationId, PendingOperationChangePreview preview)
-    {
-        if (!store.RecordRevisedPreview(userId, pendingOperationId, preview))
-            (logger ?? NullLogger<PendingOperationRevisionService>.Instance)
-                .LogWarning("Pending operation {PendingOperationId} revised preview was not stored", pendingOperationId);
     }
 
     private static string? RevisionError(PendingAgentOperationExecution execution, RevisePendingOperationRequest request) =>

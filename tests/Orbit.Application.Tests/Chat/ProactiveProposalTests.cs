@@ -146,7 +146,7 @@ public sealed class ProactiveProposalTests
         store.GetExecution(user, pending).Returns(new PendingAgentOperationExecution(pending, "habits.write", "create_habit",
             preview.ExecutionArguments!.Value, AgentExecutionSurface.Chat, AgentConfirmationRequirement.FreshConfirmation));
         JsonElement revised = default;
-        store.Revise(user, pending, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>())
+        store.Revise(user, pending, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<PendingOperationChangePreview?>())
             .Returns(call => { revised = Parse(call.ArgAt<string>(3)); return true; });
         var service = new PendingOperationRevisionService(store, previewer, new RevisePendingOperationRequestValidator(), tools, offers);
         var result = await service.ReviseAsync(user, pending, new(preview.PreviewFingerprint!,
@@ -269,7 +269,7 @@ public sealed class ProactiveProposalTests
         var execution = preview.ExecutionArguments!.Value;
         store.GetExecution(user, pending).Returns(_ => new PendingAgentOperationExecution(pending, "habits.write", "bulk_create_habits",
             execution, AgentExecutionSurface.Chat, AgentConfirmationRequirement.FreshConfirmation));
-        store.Revise(user, pending, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>())
+        store.Revise(user, pending, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<PendingOperationChangePreview?>())
             .Returns(call => { execution = Parse(call.ArgAt<string>(3)); return true; });
         var service = new PendingOperationRevisionService(store, previewer, new RevisePendingOperationRequestValidator(), tools);
         var edited = await service.ReviseAsync(user, pending, new(preview.PreviewFingerprint!,
@@ -396,7 +396,7 @@ public sealed class ProactiveProposalTests
         var execution = preview.ExecutionArguments!.Value;
         store.GetExecution(user, pending).Returns(_ => new PendingAgentOperationExecution(pending, "habits.write", "bulk_create_habits",
             execution, AgentExecutionSurface.Chat, AgentConfirmationRequirement.FreshConfirmation));
-        store.Revise(user, pending, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>())
+        store.Revise(user, pending, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<PendingOperationChangePreview?>())
             .Returns(call => { execution = Parse(call.ArgAt<string>(3)); return true; });
         var service = new PendingOperationRevisionService(store, previewer, new RevisePendingOperationRequestValidator(), tools);
         var edited = await service.ReviseAsync(user, pending, new(preview.PreviewFingerprint!,

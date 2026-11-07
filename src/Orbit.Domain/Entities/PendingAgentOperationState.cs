@@ -105,20 +105,8 @@ public class PendingAgentOperationState : Entity
         return true;
     }
 
-    /// <summary>
-    /// Keeps the preview that a revision produced, so a reopened conversation shows the words the person approved.
-    /// The preview must belong to the current preview fingerprint of an open, unconfirmed operation.
-    /// </summary>
-    public bool RecordRevisedPreview(string previewFingerprint, string previewJson, DateTime utcNow)
-    {
-        if (IsExpired(utcNow) || ConsumedAtUtc.HasValue || ConfirmedAtUtc.HasValue || PreviewFingerprint is null
-            || !string.Equals(PreviewFingerprint, previewFingerprint, StringComparison.Ordinal)
-            || string.IsNullOrWhiteSpace(previewJson) || previewJson.Length > MaxRevisedPreviewJsonLength
-            || !IsJsonObject(previewJson))
-            return false;
-        RevisedPreviewJson = previewJson;
-        return true;
-    }
+    private static bool IsStorablePreview(string? previewJson) =>
+        !string.IsNullOrWhiteSpace(previewJson) && previewJson.Length <= MaxRevisedPreviewJsonLength && IsJsonObject(previewJson);
 
     private static bool IsJsonObject(string json)
     {
@@ -133,7 +121,13 @@ public class PendingAgentOperationState : Entity
         }
     }
 
-    public bool Revise(string argumentsJson, string operationFingerprint, string previewFingerprint, DateTime utcNow)
+    /// <summary>
+    /// Binds new arguments and a new preview fingerprint. A valid <paramref name="revisedPreviewJson"/> keeps the preview
+    /// that the person saw, so a reopened conversation shows the approved words. A null or invalid value keeps the stored
+    /// preview on the same preview fingerprint and clears it on a new one.
+    /// </summary>
+    public bool Revise(string argumentsJson, string operationFingerprint, string previewFingerprint, DateTime utcNow,
+        string? revisedPreviewJson = null)
     {
         if (IsExpired(utcNow) || ConsumedAtUtc.HasValue
             || string.IsNullOrWhiteSpace(argumentsJson)
@@ -143,7 +137,9 @@ public class PendingAgentOperationState : Entity
             || AgentOperationFingerprint.Compute(OperationId, argumentsJson) != operationFingerprint)
             return false;
 
-        if (!string.Equals(PreviewFingerprint, previewFingerprint, StringComparison.Ordinal))
+        if (IsStorablePreview(revisedPreviewJson))
+            RevisedPreviewJson = revisedPreviewJson;
+        else if (!string.Equals(PreviewFingerprint, previewFingerprint, StringComparison.Ordinal))
             RevisedPreviewJson = null;
         ArgumentsJson = argumentsJson;
         OperationFingerprint = operationFingerprint;

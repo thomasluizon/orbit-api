@@ -31,7 +31,7 @@ public partial class ProcessUserChatCommandHandlerTests
         EnableComposition();
         _mediator.Send(Arg.Any<CheckChatCommandQuery>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
         _unitOfWork.PassThroughTransactions<AgentExecuteOperationResponse>();
-        _pendingOperationStore.Revise(UserId, Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>()).Returns(true);
+        _pendingOperationStore.Revise(UserId, Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<PendingOperationChangePreview?>()).Returns(true);
         IAiTool tool = bulk ? new BulkCreateHabitsTool(_mediator) : new CreateHabitTool(_userDateService, _mediator);
         var handler = CreateHandler(tool);
         var catalog = new AgentCatalogService([tool]);
@@ -170,7 +170,7 @@ public partial class ProcessUserChatCommandHandlerTests
                 PendingOperation: new(pendingId, capability.Id, "Create habit", "Preview", AgentRiskClass.Low,
                     AgentConfirmationRequirement.FreshConfirmation, TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(10)));
         });
-        _pendingOperationStore.Revise(UserId, pendingId, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>()).Returns(true);
+        _pendingOperationStore.Revise(UserId, pendingId, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<PendingOperationChangePreview?>()).Returns(true);
         var ownership = Substitute.For<IAgentTargetOwnershipService>();
         ownership.GetDenialReasonAsync(Arg.Any<string>(), UserId, Arg.Any<JsonElement>(), Arg.Any<CancellationToken>()).Returns((string?)null);
         var real = new AgentOperationExecutor(catalog, policy, Substitute.For<IAgentAuditService>(),

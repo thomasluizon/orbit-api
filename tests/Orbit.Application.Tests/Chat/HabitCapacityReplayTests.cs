@@ -146,7 +146,7 @@ public partial class ProcessUserChatCommandHandlerTests
     {
         var catalog = new AgentCatalogService([tool]);
         var policy = Substitute.For<IAgentPolicyEvaluator>();
-        _pendingOperationStore.Revise(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>()).Returns(true);
+        _pendingOperationStore.Revise(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<PendingOperationChangePreview?>()).Returns(true);
         policy.EvaluateAsync(Arg.Any<AgentPolicyEvaluationContext>()).Returns(call =>
         {
             var context = call.Arg<AgentPolicyEvaluationContext>();

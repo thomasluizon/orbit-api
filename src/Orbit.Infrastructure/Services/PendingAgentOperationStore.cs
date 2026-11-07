@@ -267,14 +267,18 @@ public class PendingAgentOperationStore(
     }
 
     public bool Revise(Guid userId, Guid pendingOperationId, string expectedFingerprint,
-        string argumentsJson, string operationFingerprint, string previewFingerprint)
+        string argumentsJson, string operationFingerprint, string previewFingerprint,
+        PendingOperationChangePreview? revisedPreview = null)
     {
         var entity = dbContext.PendingAgentOperations.FirstOrDefault(item =>
             item.Id == pendingOperationId && item.UserId == userId);
         var checkedAtUtc = DateTime.UtcNow;
+        var revisedPreviewJson = revisedPreview is not null
+            && string.Equals(revisedPreview.PreviewFingerprint, previewFingerprint, StringComparison.Ordinal)
+                ? PendingOperationExecutionJson.SerializePreview(revisedPreview) : null;
         if (entity is null || entity.ArgumentSchemaVersion != PendingAgentOperationState.CurrentArgumentSchemaVersion
             || entity.OperationFingerprint != expectedFingerprint
-            || !entity.Revise(argumentsJson, operationFingerprint, previewFingerprint, checkedAtUtc))
+            || !entity.Revise(argumentsJson, operationFingerprint, previewFingerprint, checkedAtUtc, revisedPreviewJson))
             return false;
 
         try
@@ -384,25 +388,6 @@ public class PendingAgentOperationStore(
     {
         var entity = dbContext.PendingAgentOperations.FirstOrDefault(item => item.Id == pendingOperationId && item.UserId == userId);
         if (entity is null || !entity.RecordExecution(PendingOperationExecutionJson.Serialize(operation)))
-            return false;
-        try
-        {
-            SaveChangesWithConversationOutcomes();
-            return true;
-        }
-        catch (DbUpdateConcurrencyException)
-        {
-            ResetFailedOutcomeChanges(entity);
-            return false;
-        }
-    }
-
-    public bool RecordRevisedPreview(Guid userId, Guid pendingOperationId, PendingOperationChangePreview preview)
-    {
-        var entity = dbContext.PendingAgentOperations.FirstOrDefault(item => item.Id == pendingOperationId && item.UserId == userId);
-        if (entity is null || preview.PreviewFingerprint is not { } fingerprint
-            || PendingOperationExecutionJson.SerializePreview(preview) is not { } json
-            || !entity.RecordRevisedPreview(fingerprint, json, TimeProvider.System.GetUtcNow().UtcDateTime))
             return false;
         try
         {

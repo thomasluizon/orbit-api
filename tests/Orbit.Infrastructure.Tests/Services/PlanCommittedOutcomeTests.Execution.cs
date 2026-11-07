@@ -137,7 +137,7 @@ public sealed partial class PlanCommittedOutcomeTests
         var targetId = Guid.NewGuid().ToString();
         var operation = new AgentOperationResult("bulk_create_habits", "bulk_create_habits", AgentRiskClass.Low,
             AgentConfirmationRequirement.FreshConfirmation, AgentOperationStatus.Succeeded, Summary: "Created",
-            TargetId: targetId, Payload: new { results = Enumerable.Range(0, 400).Select(index => new { index, title = new string('a', 80) }) });
+            TargetId: targetId, Payload: new { results = Enumerable.Range(0, 150).Select(index => new { index, title = new string('a', 120) }) });
 
         fixture.Pending.RecordExecution(fixture.UserId, id, operation).Should().BeTrue();
 
@@ -148,8 +148,11 @@ public sealed partial class PlanCommittedOutcomeTests
         execution.GetProperty("targetId").GetString().Should().Be(targetId);
         execution.GetProperty("summary").GetString().Should().Be("Created");
         var results = execution.GetProperty("payload").GetProperty("results").EnumerateArray().ToArray();
-        results.Select(result => result.GetProperty("index").GetInt32()).Should().Equal(Enumerable.Range(0, 400));
-        results.Select(result => result.EnumerateObject().Select(property => property.Name).Single()).Should().OnlyContain(name => name == "index");
+        results.Select(result => result.GetProperty("index").GetInt32()).Should().Equal(Enumerable.Range(0, 150));
+        results.Should().OnlyContain(result => result.EnumerateObject().Select(property => property.Name).Order()
+            .SequenceEqual(ClientBulkItemKeys), "each item must parse with the client bulk create item schema");
+        results.Should().OnlyContain(result => result.EnumerateObject().Where(property => property.Name != "index")
+            .All(property => property.Value.ValueKind == JsonValueKind.Null));
     }
 
     [Fact]

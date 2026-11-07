@@ -53,7 +53,7 @@ public sealed class AgentArgumentPreviewTests
         var args = Parse($$"""{"goal_id":"{{goal.Id}}","clear_fields":["description"],"title":null}""");
         SetupExecution(pendingId, "update_goal", args);
         JsonElement revised = default;
-        _store.Revise(_userId, pendingId, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>())
+        _store.Revise(_userId, pendingId, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<PendingOperationChangePreview?>())
             .Returns(call => { revised = Parse(call.ArgAt<string>(3)); return true; });
         var previewer = CreatePreviewer();
         var preview = (await previewer.PreviewAsync(_userId, "update_goal", args)).Value;
@@ -166,7 +166,7 @@ public sealed class AgentArgumentPreviewTests
         var arguments = Parse("""{"title":"Beber agua","frequency_unit":"Day"}""");
         SetupExecution(pendingId, "create_habit", arguments);
         _store.Revise(_userId, pendingId, Arg.Any<string>(), Arg.Any<string>(),
-            Arg.Any<string>(), Arg.Any<string>()).Returns(true);
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<PendingOperationChangePreview?>()).Returns(true);
         var previewer = CreatePreviewer();
         var original = (await previewer.PreviewAsync(_userId, "create_habit", arguments)).Value;
         using var edits = JsonDocument.Parse("""{"title":"Beber mais agua"}""");
@@ -179,7 +179,7 @@ public sealed class AgentArgumentPreviewTests
         result.IsSuccess.Should().BeTrue();
         _store.Received(1).Revise(_userId, pendingId, Arg.Any<string>(),
             Arg.Is<string>(value => ReadTitle(value) == "Beber mais agua"),
-            Arg.Any<string>(), Arg.Any<string>());
+            Arg.Any<string>(), Arg.Any<string>(), result.Preview);
     }
 
     [Fact]
@@ -252,7 +252,7 @@ public sealed class AgentArgumentPreviewTests
     {
         var (pendingId, preview) = await HoldAsync(operationId);
         _store.Revise(_userId, pendingId, Arg.Any<string>(), Arg.Any<string>(),
-            Arg.Any<string>(), Arg.Any<string>()).Returns(true);
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<PendingOperationChangePreview?>()).Returns(true);
         using var document = JsonDocument.Parse(edits);
 
         var result = await CreateService(CreatePreviewer()).ReviseAsync(_userId, pendingId,
@@ -262,7 +262,7 @@ public sealed class AgentArgumentPreviewTests
 
         result.IsSuccess.Should().BeTrue();
         _store.Received(1).Revise(_userId, pendingId, Arg.Any<string>(), Arg.Any<string>(),
-            Arg.Any<string>(), Arg.Any<string>());
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<PendingOperationChangePreview?>());
     }
 
     [Fact]
@@ -279,7 +279,7 @@ public sealed class AgentArgumentPreviewTests
         SetupExecution(pendingId, "update_goal", arguments);
         JsonElement revised = default;
         _store.Revise(_userId, pendingId, Arg.Any<string>(), Arg.Any<string>(),
-            Arg.Any<string>(), Arg.Any<string>()).Returns(call =>
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<PendingOperationChangePreview?>()).Returns(call =>
             {
                 revised = Parse(call.ArgAt<string>(3));
                 return true;

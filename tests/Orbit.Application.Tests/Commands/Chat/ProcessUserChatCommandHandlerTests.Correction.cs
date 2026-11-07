@@ -572,7 +572,7 @@ public partial class ProcessUserChatCommandHandlerTests
                 capability, PendingOperation: pending);
         });
         _pendingOperationStore.Revise(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(),
-            Arg.Any<string>(), Arg.Any<string>()).Returns(true);
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<PendingOperationChangePreview?>()).Returns(true);
         var previewer = new PendingOperationChangePreviewer(_habitRepo, _goalRepo, _tagRepo, _userDateService, registry);
         var ownership = Substitute.For<IAgentTargetOwnershipService>();
         ownership.GetDenialReasonAsync(Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<JsonElement>(), Arg.Any<CancellationToken>())

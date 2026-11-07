@@ -187,7 +187,7 @@ public partial class ProcessUserChatCommandHandlerTests
         EnableComposition();
         _mediator.Send(Arg.Any<CheckChatCommandQuery>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
         _unitOfWork.PassThroughTransactions<AgentExecuteOperationResponse>();
-        _pendingOperationStore.Revise(UserId, Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>()).Returns(true);
+        _pendingOperationStore.Revise(UserId, Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<PendingOperationChangePreview?>()).Returns(true);
         IAiTool create = new CreateHabitTool(_userDateService, _mediator);
         var goals = CompositionTool("query_goals");
         var handler = CreateHandler(create, goals);

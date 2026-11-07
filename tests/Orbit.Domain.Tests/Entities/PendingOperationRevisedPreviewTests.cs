@@ -13,69 +13,62 @@ public sealed class PendingOperationRevisedPreviewTests
     private const string Preview = """{"changes":[],"changeTargetCount":1,"items":[{"itemId":"0","entityName":"Read more"}],"previewFingerprint":"revised"}""";
 
     [Fact]
-    public void RecordRevisedPreview_CurrentFingerprint_KeepsThePreview()
+    public void Revise_WithPreview_KeepsThePreviewWithTheRevision()
     {
-        var state = Revised();
-
-        state.RecordRevisedPreview("revised", Preview, DateTime.UtcNow).Should().BeTrue();
+        var state = Revised(Preview);
 
         state.RevisedPreviewJson.Should().Be(Preview);
+        state.ArgumentsJson.Should().Be(RevisedArguments);
+        state.PreviewFingerprint.Should().Be("revised");
     }
 
     [Fact]
-    public void RecordRevisedPreview_OtherFingerprint_IsRejected()
-    {
-        var state = Revised();
+    public void Revise_WithoutPreview_StoresNoPreview() =>
+        Revised().RevisedPreviewJson.Should().BeNull();
 
-        state.RecordRevisedPreview("bound", Preview, DateTime.UtcNow).Should().BeFalse();
+    [Fact]
+    public void Revise_ExpiredOperation_StoresNoPreview()
+    {
+        var state = Proposal();
+
+        state.Revise(RevisedArguments, AgentOperationFingerprint.Compute("create_habit", RevisedArguments), "revised",
+            state.ExpiresAtUtc, Preview).Should().BeFalse();
 
         state.RevisedPreviewJson.Should().BeNull();
-    }
-
-    [Fact]
-    public void RecordRevisedPreview_UnboundOperation_IsRejected() =>
-        Proposal().RecordRevisedPreview("revised", Preview, DateTime.UtcNow).Should().BeFalse();
-
-    [Fact]
-    public void RecordRevisedPreview_ConfirmedOrConsumedOperation_IsRejected()
-    {
-        var confirmed = Revised();
-        confirmed.SetConfirmationTokenHash("hash");
-        var consumed = Revised();
-        consumed.Cancel(DateTime.UtcNow).Should().BeTrue();
-
-        confirmed.RecordRevisedPreview("revised", Preview, DateTime.UtcNow).Should().BeFalse();
-        consumed.RecordRevisedPreview("revised", Preview, DateTime.UtcNow).Should().BeFalse();
-    }
-
-    [Fact]
-    public void RecordRevisedPreview_ExpiredOperation_IsRejected()
-    {
-        var state = Revised();
-
-        state.RecordRevisedPreview("revised", Preview, state.ExpiresAtUtc).Should().BeFalse();
     }
 
     [Theory]
     [InlineData("")]
     [InlineData("[]")]
     [InlineData("{")]
-    public void RecordRevisedPreview_NonObjectJson_IsRejected(string json) =>
-        Revised().RecordRevisedPreview("revised", json, DateTime.UtcNow).Should().BeFalse();
+    public void Revise_NonObjectPreview_UsesTheFingerprintRule(string json)
+    {
+        var state = Revised(Preview);
+
+        state.Revise(RevisedArguments, state.OperationFingerprint, "revised", DateTime.UtcNow, json).Should().BeTrue();
+        state.RevisedPreviewJson.Should().Be(Preview);
+        state.Revise(Arguments, AgentOperationFingerprint.Compute("create_habit", Arguments), "again", DateTime.UtcNow, json)
+            .Should().BeTrue();
+        state.RevisedPreviewJson.Should().BeNull();
+    }
 
     [Fact]
-    public void RecordRevisedPreview_OverBudget_IsRejected()
+    public void Revise_OverBudgetPreview_UsesTheFingerprintRule()
     {
         var json = JsonSerializer.Serialize(new { summary = new string('a', PendingAgentOperationState.MaxRevisedPreviewJsonLength) });
+        var state = Revised(Preview);
 
-        Revised().RecordRevisedPreview("revised", json, DateTime.UtcNow).Should().BeFalse();
+        state.Revise(RevisedArguments, state.OperationFingerprint, "revised", DateTime.UtcNow, json).Should().BeTrue();
+        state.RevisedPreviewJson.Should().Be(Preview);
+        state.Revise(Arguments, AgentOperationFingerprint.Compute("create_habit", Arguments), "again", DateTime.UtcNow, json)
+            .Should().BeTrue();
+        state.RevisedPreviewJson.Should().BeNull();
     }
 
     [Fact]
     public void Revise_NewPreviewFingerprint_ClearsTheStoredPreview()
     {
-        var state = Revised();
-        state.RecordRevisedPreview("revised", Preview, DateTime.UtcNow).Should().BeTrue();
+        var state = Revised(Preview);
 
         state.Revise(Arguments, AgentOperationFingerprint.Compute("create_habit", Arguments), "again", DateTime.UtcNow).Should().BeTrue();
 
@@ -85,12 +78,23 @@ public sealed class PendingOperationRevisedPreviewTests
     [Fact]
     public void Revise_SamePreviewFingerprint_KeepsTheStoredPreview()
     {
-        var state = Revised();
-        state.RecordRevisedPreview("revised", Preview, DateTime.UtcNow).Should().BeTrue();
+        var state = Revised(Preview);
 
         state.Revise(RevisedArguments, state.OperationFingerprint, "revised", DateTime.UtcNow).Should().BeTrue();
 
         state.RevisedPreviewJson.Should().Be(Preview);
+    }
+
+    [Fact]
+    public void Revise_NewPreview_ReplacesTheStoredPreview()
+    {
+        const string again = """{"changes":[],"changeTargetCount":1,"items":[{"itemId":"0","entityName":"Read"}],"previewFingerprint":"again"}""";
+        var state = Revised(Preview);
+
+        state.Revise(Arguments, AgentOperationFingerprint.Compute("create_habit", Arguments), "again", DateTime.UtcNow, again)
+            .Should().BeTrue();
+
+        state.RevisedPreviewJson.Should().Be(again);
     }
 
     [Fact]
@@ -118,12 +122,12 @@ public sealed class PendingOperationRevisedPreviewTests
         json.GetProperty("RevisedPreview").GetProperty("items")[0].GetProperty("entityName").GetString().Should().Be("Read more");
     }
 
-    private static PendingAgentOperationState Revised()
+    private static PendingAgentOperationState Revised(string? preview = null)
     {
         var state = Proposal();
         state.Revise(Arguments, state.OperationFingerprint, "bound", DateTime.UtcNow).Should().BeTrue();
-        state.Revise(RevisedArguments, AgentOperationFingerprint.Compute("create_habit", RevisedArguments), "revised", DateTime.UtcNow)
-            .Should().BeTrue();
+        state.Revise(RevisedArguments, AgentOperationFingerprint.Compute("create_habit", RevisedArguments), "revised", DateTime.UtcNow,
+            preview).Should().BeTrue();
         return state;
     }
 

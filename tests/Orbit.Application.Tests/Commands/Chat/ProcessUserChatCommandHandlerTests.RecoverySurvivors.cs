@@ -304,7 +304,7 @@ public partial class ProcessUserChatCommandHandlerTests
         var handler = CreateHandler(tool);
         var gateway = InstallCorrectionGateway(tool, hold: true);
         _pendingOperationStore.Revise(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(),
-            Arg.Any<string>(), Arg.Any<string>()).Returns(false);
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<PendingOperationChangePreview?>()).Returns(false);
         SetupAiResponse(ToolResponse(tool.Name, "rejected", WithMinuteSeconds(ProductionAdaptationArguments)));
         QueueCorrection(ParseArguments(ProductionAdaptationArguments));
 

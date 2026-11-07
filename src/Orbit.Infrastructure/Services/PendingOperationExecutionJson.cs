@@ -19,10 +19,12 @@ internal static class PendingOperationExecutionJson
 
     private static readonly string[] BulkSummaryFields = ["partial", "applied_count", "total_matched", "skipped_count"];
     private static readonly string[] BulkItemFields = ["index", "status", "habitId"];
+    private static readonly string[] ClearedBulkItemFields = ["title", "error", "field"];
 
     /// <summary>
     /// Keeps the full result when it fits the stored budget. Then keeps a compact bulk result (each item's index,
     /// status and habit id, plus the totals) in place of the payload, removes the read block, and last the free text.
+    /// Each compact item writes its title, error and field as null, so it still has every key of the client item schema.
     /// The status and the target ids always stay.
     /// </summary>
     public static string Serialize(AgentOperationResult operation)
@@ -82,8 +84,9 @@ internal static class PendingOperationExecutionJson
             if (result is not JsonObject item) continue;
             var kept = new JsonObject();
             foreach (var field in BulkItemFields)
-                if (item.TryGetPropertyValue(field, out var value))
-                    kept[field] = value?.DeepClone();
+                kept[field] = item.TryGetPropertyValue(field, out var value) ? value?.DeepClone() : null;
+            foreach (var field in ClearedBulkItemFields)
+                kept[field] = null;
             items.Add(kept);
         }
         compact["results"] = items;

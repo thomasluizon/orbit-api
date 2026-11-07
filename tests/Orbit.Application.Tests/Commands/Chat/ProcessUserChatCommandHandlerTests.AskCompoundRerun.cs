@@ -136,7 +136,7 @@ public partial class ProcessUserChatCommandHandlerTests
             Arg.Any<string>(), Arg.Any<string>(), AgentExecutionSurface.Chat, Arg.Any<PendingOperationConversation?>()).Returns(call =>
                 new PendingAgentOperation(Guid.NewGuid(), call.Arg<AgentCapability>().Id, "Review", "Review",
                     AgentRiskClass.Low, AgentConfirmationRequirement.FreshConfirmation, DateTime.UtcNow.AddMinutes(10)));
-        _pendingOperationStore.Revise(UserId, Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>())
+        _pendingOperationStore.Revise(UserId, Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<PendingOperationChangePreview?>())
             .Returns(true);
         _operationExecutor.ExecuteAsync(Arg.Any<AgentExecuteOperationRequest>(), Arg.Any<CancellationToken>()).Returns(async call =>
         {

@@ -12,6 +12,7 @@ namespace Orbit.Infrastructure.Tests.Services;
 
 public sealed partial class PlanCommittedOutcomeTests
 {
+    private static readonly string[] ClientBulkItemKeys = ["error", "field", "habitId", "index", "status", "title"];
     private static readonly object ReadPagesHabit = new { title = "Ler 20 paginas 2048", frequency_unit = "Day", frequency_quantity = 1 };
 
     [Fact]
@@ -115,6 +116,10 @@ public sealed partial class PlanCommittedOutcomeTests
             .Should().Equal(results.Select(item => item.Status.ToString()));
         items.Select(item => item.GetProperty("habitId").ValueKind == JsonValueKind.Null ? null : item.GetProperty("habitId").GetString())
             .Should().Equal(results.Select(item => item.HabitId?.ToString()));
+        items.Should().OnlyContain(item => item.EnumerateObject().Select(property => property.Name).Order()
+            .SequenceEqual(ClientBulkItemKeys), "each item must parse with the client bulk create item schema");
+        items.Should().OnlyContain(item => item.GetProperty("title").ValueKind == JsonValueKind.Null
+            && item.GetProperty("error").ValueKind == JsonValueKind.Null && item.GetProperty("field").ValueKind == JsonValueKind.Null);
         _output.WriteLine(execution.GetRawText());
     }
 
