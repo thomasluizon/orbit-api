@@ -102,7 +102,18 @@ const shards = [
       "**/Chat/Tools/Implementations/NotificationTools.cs",
     ],
   },
-  { project: "infrastructure" },
+  // https://github.com/thomasluizon/orbit-api/actions/runs/42371280845
+  // Each shard repeats the full initial and coverage runs. The span limits balance the measured mutant test time of each shard.
+  ...spanShards("infrastructure", "infrastructure-agent-executor", "**/Services/AgentOperationExecutor.cs", [7855, 8563, 25449]),
+  ...spanShards("infrastructure", "infrastructure-streaks", "**/Services/UserStreakService.cs", [11774]),
+  {
+    project: "infrastructure", shard: "infrastructure-services", mutate: [
+      "**/Services/JwtTokenService.cs",
+      "**/Services/AuthSessionService.cs",
+      "**/Services/HabitDueDateAdvancementService.cs",
+      "**/Services/Prompts/Sections/Static/ToolFailureSection.cs",
+    ],
+  },
 ];
 
 function patternParts(pattern) {
