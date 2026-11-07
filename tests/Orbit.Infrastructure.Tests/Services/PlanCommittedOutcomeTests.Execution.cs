@@ -125,6 +125,44 @@ public sealed partial class PlanCommittedOutcomeTests
         history.Content.Should().NotContain("Execution");
     }
 
+    [Fact]
+    public async Task OverBudgetExecution_KeepsStatusAndTargetWithinTheTurnBudget()
+    {
+        using var fixture = new Fixture();
+        var id = await fixture.ProposeAsync();
+        fixture.Pending.Confirm(fixture.UserId, id).Should().NotBeNull();
+        var targetId = Guid.NewGuid().ToString();
+        var operation = new AgentOperationResult("bulk_create_habits", "bulk_create_habits", AgentRiskClass.Low,
+            AgentConfirmationRequirement.FreshConfirmation, AgentOperationStatus.Succeeded, Summary: "Created",
+            TargetId: targetId, Payload: new { results = Enumerable.Range(0, 400).Select(index => new { index, title = new string('a', 40) }) });
+
+        fixture.Pending.RecordExecution(fixture.UserId, id, operation).Should().BeTrue();
+
+        fixture.Db.ChangeTracker.Clear();
+        var execution = (await StoredOutcomeAsync(fixture, id)).GetProperty("Execution");
+        execution.GetRawText().Length.Should().BeLessThanOrEqualTo(PendingAgentOperationState.MaxExecutionJsonLength);
+        execution.GetProperty("status").GetString().Should().Be("Succeeded");
+        execution.GetProperty("targetId").GetString().Should().Be(targetId);
+        execution.GetProperty("summary").GetString().Should().Be("Created");
+        execution.GetProperty("payload").ValueKind.Should().Be(JsonValueKind.Null);
+    }
+
+    [Fact]
+    public async Task RecordExecution_UnconfirmedOperation_StoresNothing()
+    {
+        using var fixture = new Fixture();
+        var id = await fixture.ProposeAsync();
+        var operation = new AgentOperationResult("create_goal", "create_goal", AgentRiskClass.Low,
+            AgentConfirmationRequirement.FreshConfirmation, AgentOperationStatus.Succeeded);
+
+        fixture.Pending.RecordExecution(fixture.UserId, id, operation).Should().BeFalse();
+        fixture.Pending.RecordExecution(Guid.NewGuid(), id, operation).Should().BeFalse();
+
+        fixture.Db.ChangeTracker.Clear();
+        (await fixture.Db.PendingAgentOperations.SingleAsync()).ExecutionJson.Should().BeNull();
+        (await StoredOutcomeAsync(fixture, id)).TryGetProperty("Execution", out _).Should().BeFalse();
+    }
+
     private static async Task<AgentExecuteOperationResponse> ConfirmAndExecuteAsync(Fixture fixture, Guid id)
     {
         var execution = fixture.Pending.GetExecution(fixture.UserId, id)!;

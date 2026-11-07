@@ -137,6 +137,30 @@ public class ExportUserDataQueryHandlerTests
         JsonSerializer.Serialize(result.Value).Should().NotContain("/conversations/").And.NotContain("ImageData");
     }
 
+    [Fact]
+    public async Task Handle_Conversations_IncludeTheStoredExecutionWithThePreviewOutcome()
+    {
+        ArrangeUser(CreateTestUser());
+        var pendingOperationId = Guid.NewGuid();
+        var outcomes = JsonSerializer.Serialize(new[]
+        {
+            new ConversationPreviewOutcome(pendingOperationId, "approved",
+                JsonSerializer.SerializeToElement(new { title = "Read" }), 2,
+                JsonSerializer.SerializeToElement(new { operationId = "create_habit", status = "Succeeded", targetId = "habit-1" }))
+        });
+        var conversation = Guid.NewGuid();
+        var turn = ConversationTurn.Create(UserId, Guid.NewGuid(), "assistant", DateTime.UtcNow, "model", "Done", "[]",
+            conversationId: conversation, turnOrder: 2, previewOutcomesJson: outcomes).Value;
+        Returns(_conversations, turn);
+
+        var result = await _handler.Handle(new ExportUserDataQuery(UserId), CancellationToken.None);
+
+        var exported = JsonSerializer.Deserialize<JsonElement>(result.Value.Conversations!.Single().PreviewOutcomesJson!);
+        var execution = exported.EnumerateArray().Single().GetProperty("Execution");
+        execution.GetProperty("status").GetString().Should().Be("Succeeded");
+        execution.GetProperty("targetId").GetString().Should().Be("habit-1");
+    }
+
     private static void ReturnsEmpty<T>(IGenericRepository<T> repository) where T : Orbit.Domain.Common.Entity
     {
         repository.FindAsync(
