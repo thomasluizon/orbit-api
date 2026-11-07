@@ -229,7 +229,8 @@ public class AiControllerTests
                 Arg.Any<CancellationToken>())
             .Returns(Result.Success<PendingOperationChangePreview?>(new PendingOperationChangePreview([], 1, [item], "fresh")));
         _pendingOperationStore.Revise(UserId, pendingId, Arg.Any<string>(), Arg.Any<string>(),
-            Arg.Any<string>(), "fresh").Returns(true);
+            Arg.Any<string>(), "fresh", Arg.Is<PendingOperationChangePreview?>(preview => preview!.PreviewFingerprint == "fresh"))
+            .Returns(true);
 
         var result = await _controller.RefreshPendingOperationPreview(pendingId, CancellationToken.None);
 
