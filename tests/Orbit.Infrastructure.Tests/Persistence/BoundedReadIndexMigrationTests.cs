@@ -24,7 +24,7 @@ public class BoundedReadIndexMigrationTests(Xunit.Abstractions.ITestOutputHelper
             "20261102153013_PersistOAuthClients",
             "20261102193912_CompleteBoundedReadIndexes");
         var initializer = db.GetService<IModelRuntimeInitializer>();
-        var target = initializer.Initialize(new AddPendingOperationRevisedPreview().TargetModel, designTime: true);
+        var target = initializer.Initialize(new AddPendingOperationPreviewRevised().TargetModel, designTime: true);
         var snapshot = initializer.Initialize(new OrbitDbContextModelSnapshot().Model, designTime: true);
 
         target.FindEntityType("Orbit.Domain.Entities.OAuthClient").Should().NotBeNull();
@@ -37,6 +37,8 @@ public class BoundedReadIndexMigrationTests(Xunit.Abstractions.ITestOutputHelper
         target.FindEntityType("Orbit.Domain.Entities.Habit")!.FindProperty("MonthDays").Should().NotBeNull();
         target.FindEntityType("Orbit.Domain.Entities.PendingAgentOperationState")!.FindProperty("ExecutionJson").Should().NotBeNull();
         target.FindEntityType("Orbit.Domain.Entities.PendingAgentOperationState")!.FindProperty("RevisedPreviewJson").Should().NotBeNull();
+        target.FindEntityType("Orbit.Domain.Entities.PendingAgentOperationState")!.FindProperty("PreviewRevised")!.IsNullable
+            .Should().BeTrue("an operation stored before the flag existed has unknown revisions");
         db.GetService<IMigrationsModelDiffer>().GetDifferences(target.GetRelationalModel(), snapshot.GetRelationalModel())
             .Should().BeEmpty();
         db.Database.HasPendingModelChanges().Should().BeFalse();

@@ -56,7 +56,7 @@ public sealed partial class PendingOperationRevisionService(
         var operationFingerprint = AgentOperationFingerprint.Compute(
             execution.OperationId, argumentsJson);
         if (!store.Revise(userId, pendingOperationId, expectedFingerprint,
-            argumentsJson, operationFingerprint, preview.PreviewFingerprint))
+            argumentsJson, operationFingerprint, preview.PreviewFingerprint, preview))
             return Failure("revision_conflict");
 
         return new PendingOperationRevisionResult(true, null, pendingOperationId, preview);

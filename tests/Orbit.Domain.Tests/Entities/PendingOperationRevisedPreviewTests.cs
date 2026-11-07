@@ -122,6 +122,57 @@ public sealed class PendingOperationRevisedPreviewTests
         json.GetProperty("RevisedPreview").GetProperty("items")[0].GetProperty("entityName").GetString().Should().Be("Read more");
     }
 
+    [Fact]
+    public void Create_MarksThePreviewNotRevised() =>
+        Proposal().PreviewRevised.Should().BeFalse();
+
+    [Fact]
+    public void Revise_ServerBinding_KeepsThePreviewNotRevised()
+    {
+        var state = Revised(Preview);
+
+        state.RevisionNumber.Should().Be(2);
+        state.PreviewRevised.Should().BeFalse("only a revision or a refresh by the person marks the preview revised");
+    }
+
+    [Fact]
+    public void Revise_ByThePerson_MarksThePreviewRevisedAlsoWithoutAStorablePreview()
+    {
+        var state = Proposal();
+        var oversized = JsonSerializer.Serialize(new { summary = new string('a', PendingAgentOperationState.MaxRevisedPreviewJsonLength) });
+
+        state.Revise(RevisedArguments, AgentOperationFingerprint.Compute("create_habit", RevisedArguments), "revised", DateTime.UtcNow,
+            oversized, revisedByPerson: true).Should().BeTrue();
+
+        state.RevisedPreviewJson.Should().BeNull();
+        state.PreviewRevised.Should().BeTrue();
+        state.Revise(Arguments, AgentOperationFingerprint.Compute("create_habit", Arguments), "again", DateTime.UtcNow).Should().BeTrue();
+        state.PreviewRevised.Should().BeTrue("a later server binding does not undo the revision by the person");
+    }
+
+    [Fact]
+    public void Revise_RejectedRevision_DoesNotMarkThePreviewRevised()
+    {
+        var state = Proposal();
+
+        state.Revise(RevisedArguments, "wrong", "revised", DateTime.UtcNow, Preview, revisedByPerson: true).Should().BeFalse();
+
+        state.PreviewRevised.Should().BeFalse();
+    }
+
+    [Fact]
+    public void PreviewOutcome_WithPreviewRevised_WritesItAfterTheExistingFields()
+    {
+        var outcome = new ConversationPreviewOutcome(Guid.NewGuid(), "approved", JsonSerializer.SerializeToElement(new { title = "Read more" }),
+            3, JsonSerializer.SerializeToElement(new { status = "Succeeded" }), PreviewRevised: false);
+
+        var json = JsonSerializer.SerializeToElement(outcome);
+
+        json.EnumerateObject().Select(property => property.Name).Should()
+            .Equal("PendingOperationId", "Outcome", "Arguments", "Revision", "Execution", "PreviewRevised");
+        json.GetProperty("PreviewRevised").GetBoolean().Should().BeFalse();
+    }
+
     private static PendingAgentOperationState Revised(string? preview = null)
     {
         var state = Proposal();

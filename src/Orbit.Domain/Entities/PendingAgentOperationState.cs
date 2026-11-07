@@ -8,7 +8,11 @@ public class PendingAgentOperationState : Entity
 {
     public const int CurrentArgumentSchemaVersion = 1;
     public const int MaxExecutionJsonLength = 16_000;
-    public const int MaxRevisedPreviewJsonLength = 16_000;
+    /// <summary>
+    /// The largest stored approved preview. It holds the smallest preview tier of a bulk batch of 100 items at the
+    /// longest habit title: each item keeps its id, its entity id, its name and its title field.
+    /// </summary>
+    public const int MaxRevisedPreviewJsonLength = 160_000;
 
     public int ArgumentSchemaVersion { get; private set; }
     public Guid UserId { get; private set; }
@@ -33,6 +37,12 @@ public class PendingAgentOperationState : Entity
     public string? ExecutionJson { get; private set; }
     public string? RevisedPreviewJson { get; private set; }
 
+    /// <summary>
+    /// True when the person revised or refreshed the preview before approval. Null on an operation stored before
+    /// this flag existed, because its revisions are unknown.
+    /// </summary>
+    public bool? PreviewRevised { get; private set; }
+
     private PendingAgentOperationState() { }
 
     public static PendingAgentOperationState Create(PendingAgentOperationStateCreateRequest request)
@@ -52,7 +62,8 @@ public class PendingAgentOperationState : Entity
             RiskClass = request.Capability.RiskClass,
             ConfirmationRequirement = request.Capability.ConfirmationRequirement,
             CreatedAtUtc = request.Conversation?.StartedAtUtc ?? DateTime.UtcNow,
-            ExpiresAtUtc = request.ExpiresAtUtc
+            ExpiresAtUtc = request.ExpiresAtUtc,
+            PreviewRevised = false
         };
     }
 
@@ -124,10 +135,11 @@ public class PendingAgentOperationState : Entity
     /// <summary>
     /// Binds new arguments and a new preview fingerprint. A valid <paramref name="revisedPreviewJson"/> keeps the preview
     /// that the person saw, so a reopened conversation shows the approved words. A null or invalid value keeps the stored
-    /// preview on the same preview fingerprint and clears it on a new one.
+    /// preview on the same preview fingerprint and clears it on a new one. <paramref name="revisedByPerson"/> marks a
+    /// revision or a refresh that the person asked for, also when the preview is too large to keep.
     /// </summary>
     public bool Revise(string argumentsJson, string operationFingerprint, string previewFingerprint, DateTime utcNow,
-        string? revisedPreviewJson = null)
+        string? revisedPreviewJson = null, bool revisedByPerson = false)
     {
         if (IsExpired(utcNow) || ConsumedAtUtc.HasValue
             || string.IsNullOrWhiteSpace(argumentsJson)
@@ -148,6 +160,8 @@ public class PendingAgentOperationState : Entity
         ConfirmedAtUtc = null;
         StepUpSatisfiedAtUtc = null;
         ExecutionJson = null;
+        if (revisedByPerson)
+            PreviewRevised = true;
         RevisionNumber++;
         return true;
     }
