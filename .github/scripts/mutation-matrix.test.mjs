@@ -188,6 +188,24 @@ for (const project of strykerProjects) {
   });
 }
 
+const tokenizerProbe = "Orbit.Infrastructure.Tests.Memory.TokenizerMemoryProbeTests.Estimate_LoadsTheProductionTokenizerAndReportsRetainedMemory";
+
+// https://github.com/stryker-mutator/stryker-net/blob/f9109e24c615a7030a3b33e5532c665c974e4ec5/src/Stryker.Core/Stryker.Core/StrykerRunner.cs#L66-L74
+// Coverage capture instruments every project mutant before the mutate filter applies, so the BPE loop in this probe never ends inside the job limit.
+test("infrastructure Stryker excludes only the tokenizer probe, which reaches none of the mutated files", () => {
+  assert.equal(strykerConfig("infrastructure")["test-case-filter"], `FullyQualifiedName!=${tokenizerProbe}`);
+  for (const project of ["domain", "application"]) assert.equal(strykerConfig(project)["test-case-filter"], undefined);
+  const probe = readFileSync(new URL("../../tests/Orbit.Infrastructure.Tests/Memory/TokenizerMemoryProbeTests.cs", import.meta.url), "utf8");
+  const [namespace, type, method] = [tokenizerProbe.split(".").slice(0, -2).join("."), ...tokenizerProbe.split(".").slice(-2)];
+  assert.match(probe, new RegExp(`namespace ${namespace.replaceAll(".", "\\.")};[\\s\\S]*class ${type}\\b[\\s\\S]*Task ${method}\\(\\)`));
+  const reach = [probe, ...["AI/AiRequestCostEstimator.cs", "AI/O200kTokenCounter.cs", "Configuration/AiSettings.cs"]
+    .map((file) => readFileSync(new URL(`../../src/Orbit.Infrastructure/${file}`, import.meta.url), "utf8"))].join("\n");
+  const mutated = strykerConfig("infrastructure").mutate.filter((pattern) => !pattern.startsWith("!"))
+    .map((pattern) => pattern.split("/").at(-1).replace(/\.cs$/, ""));
+  assert.equal(mutated.length, 6);
+  for (const name of mutated) assert.doesNotMatch(reach, new RegExp(`\\b${name}\\b`), `${name} is mutated, so its tests must stay in the run`);
+});
+
 test("the report upload covers the output directory of every Stryker working directory", () => {
   const workflow = readFileSync(new URL("../workflows/mutation.yml", import.meta.url), "utf8");
   const paths = workflow.split("      - name: Upload mutation report\n")[1].match(/          path: \|\n((?:            [^\n]*\n)+)/)[1]
