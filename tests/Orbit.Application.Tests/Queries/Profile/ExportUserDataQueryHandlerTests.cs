@@ -170,7 +170,8 @@ public class ExportUserDataQueryHandlerTests
             new ConversationPreviewOutcome(Guid.NewGuid(), "approved",
                 JsonSerializer.SerializeToElement(new { title = "Read more" }), 3,
                 JsonSerializer.SerializeToElement(new { status = "Succeeded" }),
-                JsonSerializer.SerializeToElement(new { items = new[] { new { itemId = "0", entityName = "Read more" } }, previewFingerprint = "revised" }))
+                JsonSerializer.SerializeToElement(new { items = new[] { new { itemId = "0", entityName = "Read more" } }, previewFingerprint = "revised" }),
+                PreviewRevised: true)
         });
         var turn = ConversationTurn.Create(UserId, Guid.NewGuid(), "assistant", DateTime.UtcNow, "model", "Done", "[]",
             conversationId: Guid.NewGuid(), turnOrder: 2, previewOutcomesJson: outcomes).Value;
@@ -179,6 +180,7 @@ public class ExportUserDataQueryHandlerTests
         var result = await _handler.Handle(new ExportUserDataQuery(UserId), CancellationToken.None);
 
         var exported = JsonSerializer.Deserialize<JsonElement>(result.Value.Conversations!.Single().PreviewOutcomesJson!);
+        exported.EnumerateArray().Single().GetProperty("PreviewRevised").GetBoolean().Should().BeTrue();
         exported.EnumerateArray().Single().GetProperty("RevisedPreview").GetProperty("items")[0]
             .GetProperty("entityName").GetString().Should().Be("Read more");
     }

@@ -74,7 +74,7 @@ public sealed class PendingOperationRevisionServiceTests
         result.Preview.PreviewFingerprint.Should().NotBe("stale-fingerprint");
         var fingerprint = AgentOperationFingerprint.Compute("bulk_update_habits", arguments.GetRawText());
         _store.Received(1).Revise(_userId, pendingId, fingerprint,
-            arguments.GetRawText(), fingerprint, result.Preview.PreviewFingerprint!);
+            arguments.GetRawText(), fingerprint, result.Preview.PreviewFingerprint!, result.Preview);
         _store.DidNotReceiveWithAnyArgs().Cancel(default, default, default!);
 
         var revision = await service.ReviseAsync(_userId, pendingId,

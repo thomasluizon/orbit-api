@@ -63,6 +63,11 @@ public interface IPendingAgentOperationStore
     IReadOnlyList<PendingAgentOperationExecution> GetAwaiting(Guid userId);
     Task<IReadOnlyList<PendingAgentOperationExecution>> GetAwaitingAsync(Guid userId, CancellationToken cancellationToken = default);
     bool SupersedeHabitCreation(Guid userId, string title, Guid? parentHabitId);
+    /// <summary>
+    /// Binds new arguments and a new preview fingerprint. Pass <paramref name="revisedPreview"/> only for a revision or
+    /// a refresh that the person asked for: it keeps the preview that the person approves and marks the preview revised.
+    /// A server preview binding passes no preview.
+    /// </summary>
     bool Revise(Guid userId, Guid pendingOperationId, string expectedFingerprint,
         string argumentsJson, string operationFingerprint, string previewFingerprint,
         PendingOperationChangePreview? revisedPreview = null);

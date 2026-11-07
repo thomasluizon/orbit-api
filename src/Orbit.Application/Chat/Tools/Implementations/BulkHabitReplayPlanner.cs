@@ -27,7 +27,8 @@ public sealed class BulkHabitReplayPlanner(
         Func<TResult, int> countApplied,
         string verb,
         string noMatchError,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Func<TResult, int>? countUnchanged = null)
     {
         var (filter, filterError) = BulkHabitToolArguments.ParseActionFilter(args);
         if (filterError is not null)
@@ -55,7 +56,8 @@ public sealed class BulkHabitReplayPlanner(
             executeChunk,
             countApplied,
             verb,
-            cancellationToken);
+            cancellationToken,
+            countUnchanged);
     }
 
     public async Task<BulkHabitReplayPlan> GetOrCreateAsync(

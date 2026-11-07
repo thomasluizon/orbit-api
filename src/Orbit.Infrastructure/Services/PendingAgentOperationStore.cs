@@ -278,7 +278,8 @@ public class PendingAgentOperationStore(
                 ? PendingOperationExecutionJson.SerializePreview(revisedPreview) : null;
         if (entity is null || entity.ArgumentSchemaVersion != PendingAgentOperationState.CurrentArgumentSchemaVersion
             || entity.OperationFingerprint != expectedFingerprint
-            || !entity.Revise(argumentsJson, operationFingerprint, previewFingerprint, checkedAtUtc, revisedPreviewJson))
+            || !entity.Revise(argumentsJson, operationFingerprint, previewFingerprint, checkedAtUtc, revisedPreviewJson,
+                revisedByPerson: revisedPreview is not null))
             return false;
 
         try

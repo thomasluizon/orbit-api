@@ -134,4 +134,5 @@ public sealed class ConversationTurn : Entity
 
 public sealed record ConversationPreviewOutcome(Guid PendingOperationId, string Outcome, JsonElement Arguments, int Revision,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] JsonElement? Execution = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] JsonElement? RevisedPreview = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] JsonElement? RevisedPreview = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? PreviewRevised = null);

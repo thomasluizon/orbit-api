@@ -2064,6 +2064,9 @@ namespace Orbit.Infrastructure.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
 
+                    b.Property<bool?>("PreviewRevised")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("RevisedPreviewJson")
                         .HasColumnType("jsonb");
 

@@ -94,8 +94,7 @@ public sealed class BulkLogHabitsTool(
             return await BulkUpdateHabitsTool.ExecuteInChunksAsync(
                 revised!.Select(item => new BulkLogItem(item.HabitId, item.Date)).ToList(),
                 (items, token) => mediator.Send(new BulkLogHabitsCommand(userId, items), token),
-                result => result.Results.Count(item => item.Status == BulkItemStatus.Success && item.LogId.HasValue),
-                "Logged", ct);
+                CountLogged, "Logged", ct, CountAlreadyLogged);
         }
 
         return await replayPlanner.ExecuteAsync(
@@ -104,9 +103,19 @@ public sealed class BulkLogHabitsTool(
             (items, cancellationToken) => mediator.Send(
                 new BulkLogHabitsCommand(userId, items),
                 cancellationToken),
-            result => result.Results.Count(item => item.Status == BulkItemStatus.Success && item.LogId.HasValue),
+            CountLogged,
             "Logged",
             "No matching habits found to log.",
-            ct);
+            ct,
+            CountAlreadyLogged);
     }
+
+    private static int CountLogged(BulkLogResult result) =>
+        result.Results.Count(item => item.Status == BulkItemStatus.Success && item.LogId.HasValue);
+
+    /// <summary>
+    /// A habit already logged on the date returns success with no new log. It already has the requested state.
+    /// </summary>
+    private static int CountAlreadyLogged(BulkLogResult result) =>
+        result.Results.Count(item => item.Status == BulkItemStatus.Success && !item.LogId.HasValue);
 }

@@ -74,11 +74,16 @@ public sealed record BulkUpdateHabitsCommand(
     BulkHabitFilter Filter,
     BulkHabitChanges Changes) : IRequest<Result<BulkHabitMutationResult>>;
 
+/// <summary>
+/// The counts of a bulk habit write. <paramref name="UnchangedCount"/> counts the matched habits that already had the
+/// requested state, so they need no write. Such a habit is not a skipped item and does not make the result partial.
+/// </summary>
 public sealed record BulkHabitMutationResult(
     int AppliedCount,
     int TotalMatched,
     int SkippedCount,
-    bool Partial);
+    bool Partial,
+    int UnchangedCount = 0);
 
 public sealed partial class BulkUpdateHabitsCommandHandler(
     IGenericRepository<Habit> habitRepository,

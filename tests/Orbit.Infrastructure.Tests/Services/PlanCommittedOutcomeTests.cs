@@ -2,6 +2,7 @@ using System.Security.Claims;
 using System.Text.Json;
 using FluentAssertions;
 using FluentValidation;
+using MediatR;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -239,6 +240,8 @@ public sealed partial class PlanCommittedOutcomeTests
         internal AgentOperationExecutor Executor { get; }
         internal PendingOperationRevisionService Revisions { get; }
         internal IPendingOperationChangePreviewer Previewer => _previewer;
+        internal IMediator BulkLogMediator { get; } = Substitute.For<IMediator>();
+        internal IConversationPlanStore Plans => _plans;
 
         internal Fixture(bool failGoal = false)
         {
@@ -252,10 +255,15 @@ public sealed partial class PlanCommittedOutcomeTests
             dates.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(new DateOnly(2026, 11, 7));
             var quota = Substitute.For<IPayGateService>();
             quota.CanCreateHabits(UserId, Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
-            var habit = new CreateHabitTool(dates, Orbit.Tests.Shared.HabitToolCommandMediator.Create(new GenericRepository<Habit>(Db),
-                new GenericRepository<Tag>(Db), new GenericRepository<Goal>(Db), dates, quota, unit, configureTransactions: false));
-            _tools = new([registered, update, habit]);
-            _catalog = new([registered, update, habit]);
+            var habitMediator = Orbit.Tests.Shared.HabitToolCommandMediator.Create(new GenericRepository<Habit>(Db),
+                new GenericRepository<Tag>(Db), new GenericRepository<Goal>(Db), dates, quota, unit, configureTransactions: false);
+            var habit = new CreateHabitTool(dates, habitMediator);
+            var bulkCreate = new BulkCreateHabitsTool(habitMediator);
+            BulkLogMediator.Send(Arg.Any<CheckChatCommandQuery>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
+            var bulkLog = new BulkLogHabitsTool(BulkLogMediator, new GenericRepository<Habit>(Db), dates,
+                new BulkHabitReplayPlanner(Substitute.For<IIdempotencyContext>(), Substitute.For<IIdempotencyStore>(), unit));
+            _tools = new([registered, update, habit, bulkLog, bulkCreate]);
+            _catalog = new([registered, update, habit, bulkLog, bulkCreate]);
             Pending = new(Db, Options.Create(new AgentPlatformSettings()), _conversation.Flags);
             _previewer = new PendingOperationChangePreviewer(new GenericRepository<Habit>(Db), new GenericRepository<Goal>(Db),
                 new GenericRepository<Tag>(Db), Substitute.For<IUserDateService>(), _tools);

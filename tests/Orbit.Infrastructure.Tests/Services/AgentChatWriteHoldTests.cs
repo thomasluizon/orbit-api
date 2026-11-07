@@ -805,7 +805,8 @@ public partial class AgentChatWriteHoldTests : IDisposable
                 total_matched = expected.Count,
                 skipped_count = 0,
                 partial = false,
-                updated_count = expected.Count
+                updated_count = expected.Count,
+                unchanged_count = 0
             })).Should().BeTrue();
             _pendingOperationStore.GetExecution(_userId, pending.Id).Should().BeNull();
         }
