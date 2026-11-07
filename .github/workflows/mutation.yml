@@ -51,7 +51,7 @@ jobs:
           fi
 
   mutation:
-    name: Mutation (${{ matrix.shard || matrix.project }})
+    name: Mutation (${{ matrix.shard }})
     needs: changes
     if: needs.changes.outputs.has-shards == 'true'
     runs-on: ubuntu-latest
@@ -82,7 +82,7 @@ jobs:
       - name: Run Stryker (PR changed in-scope files only)
         if: github.event_name == 'pull_request'
         env:
-          MUTATE_FILES: ${{ matrix.mutate && join(matrix.mutate, ' ') || '' }}
+          MUTATE_FILES: ${{ join(matrix.mutate, ' ') }}
           MUTATION_PROJECT: ${{ matrix.project }}
         run: |
           since_target=$(git rev-parse HEAD^1)
@@ -101,7 +101,7 @@ jobs:
       - name: Run Stryker (nightly full in-scope)
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         env:
-          MUTATE_FILES: ${{ matrix.mutate && join(matrix.mutate, ' ') || '' }}
+          MUTATE_FILES: ${{ join(matrix.mutate, ' ') }}
           MUTATION_PROJECT: ${{ matrix.project }}
         run: |
           concurrency=$(nproc)
@@ -120,7 +120,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: mutation-report-${{ github.event_name }}-${{ matrix.shard || matrix.project }}
+          name: mutation-report-${{ github.event_name }}-${{ matrix.shard }}
           path: |
             src/Orbit.*/StrykerOutput/**/reports/*.html
             src/Orbit.*/StrykerOutput/**/reports/*.json
