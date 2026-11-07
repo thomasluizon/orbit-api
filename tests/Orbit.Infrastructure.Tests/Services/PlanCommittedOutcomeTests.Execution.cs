@@ -137,7 +137,7 @@ public sealed partial class PlanCommittedOutcomeTests
         var targetId = Guid.NewGuid().ToString();
         var operation = new AgentOperationResult("bulk_create_habits", "bulk_create_habits", AgentRiskClass.Low,
             AgentConfirmationRequirement.FreshConfirmation, AgentOperationStatus.Succeeded, Summary: "Created",
-            TargetId: targetId, Payload: new { results = Enumerable.Range(0, 400).Select(index => new { index, title = new string('a', 40) }) });
+            TargetId: targetId, Payload: new { results = Enumerable.Range(0, 400).Select(index => new { index, title = new string('a', 80) }) });
 
         fixture.Pending.RecordExecution(fixture.UserId, id, operation).Should().BeTrue();
 
@@ -147,7 +147,9 @@ public sealed partial class PlanCommittedOutcomeTests
         execution.GetProperty("status").GetString().Should().Be("Succeeded");
         execution.GetProperty("targetId").GetString().Should().Be(targetId);
         execution.GetProperty("summary").GetString().Should().Be("Created");
-        execution.GetProperty("payload").ValueKind.Should().Be(JsonValueKind.Null);
+        var results = execution.GetProperty("payload").GetProperty("results").EnumerateArray().ToArray();
+        results.Select(result => result.GetProperty("index").GetInt32()).Should().Equal(Enumerable.Range(0, 400));
+        results.Select(result => result.EnumerateObject().Select(property => property.Name).Single()).Should().OnlyContain(name => name == "index");
     }
 
     [Fact]

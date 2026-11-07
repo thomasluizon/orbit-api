@@ -75,6 +75,7 @@ public interface IPendingAgentOperationStore
         string confirmationToken,
         bool requireStepUp);
     bool RecordExecution(Guid userId, Guid pendingOperationId, AgentOperationResult operation);
+    bool RecordRevisedPreview(Guid userId, Guid pendingOperationId, PendingOperationChangePreview preview);
 }
 
 public interface IPendingClarificationStore

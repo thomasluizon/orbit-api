@@ -161,6 +161,28 @@ public class ExportUserDataQueryHandlerTests
         execution.GetProperty("targetId").GetString().Should().Be("habit-1");
     }
 
+    [Fact]
+    public async Task Handle_Conversations_IncludeTheRevisedPreviewWithThePreviewOutcome()
+    {
+        ArrangeUser(CreateTestUser());
+        var outcomes = JsonSerializer.Serialize(new[]
+        {
+            new ConversationPreviewOutcome(Guid.NewGuid(), "approved",
+                JsonSerializer.SerializeToElement(new { title = "Read more" }), 3,
+                JsonSerializer.SerializeToElement(new { status = "Succeeded" }),
+                JsonSerializer.SerializeToElement(new { items = new[] { new { itemId = "0", entityName = "Read more" } }, previewFingerprint = "revised" }))
+        });
+        var turn = ConversationTurn.Create(UserId, Guid.NewGuid(), "assistant", DateTime.UtcNow, "model", "Done", "[]",
+            conversationId: Guid.NewGuid(), turnOrder: 2, previewOutcomesJson: outcomes).Value;
+        Returns(_conversations, turn);
+
+        var result = await _handler.Handle(new ExportUserDataQuery(UserId), CancellationToken.None);
+
+        var exported = JsonSerializer.Deserialize<JsonElement>(result.Value.Conversations!.Single().PreviewOutcomesJson!);
+        exported.EnumerateArray().Single().GetProperty("RevisedPreview").GetProperty("items")[0]
+            .GetProperty("entityName").GetString().Should().Be("Read more");
+    }
+
     private static void ReturnsEmpty<T>(IGenericRepository<T> repository) where T : Orbit.Domain.Common.Entity
     {
         repository.FindAsync(

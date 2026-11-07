@@ -7,7 +7,8 @@ namespace Orbit.Domain.Entities;
 public class PendingAgentOperationState : Entity
 {
     public const int CurrentArgumentSchemaVersion = 1;
-    public const int MaxExecutionJsonLength = 8_000;
+    public const int MaxExecutionJsonLength = 16_000;
+    public const int MaxRevisedPreviewJsonLength = 16_000;
 
     public int ArgumentSchemaVersion { get; private set; }
     public Guid UserId { get; private set; }
@@ -30,6 +31,7 @@ public class PendingAgentOperationState : Entity
     public DateTime? StepUpSatisfiedAtUtc { get; private set; }
     public DateTime? ConsumedAtUtc { get; private set; }
     public string? ExecutionJson { get; private set; }
+    public string? RevisedPreviewJson { get; private set; }
 
     private PendingAgentOperationState() { }
 
@@ -103,6 +105,21 @@ public class PendingAgentOperationState : Entity
         return true;
     }
 
+    /// <summary>
+    /// Keeps the preview that a revision produced, so a reopened conversation shows the words the person approved.
+    /// The preview must belong to the current preview fingerprint of an open, unconfirmed operation.
+    /// </summary>
+    public bool RecordRevisedPreview(string previewFingerprint, string previewJson, DateTime utcNow)
+    {
+        if (IsExpired(utcNow) || ConsumedAtUtc.HasValue || ConfirmedAtUtc.HasValue || PreviewFingerprint is null
+            || !string.Equals(PreviewFingerprint, previewFingerprint, StringComparison.Ordinal)
+            || string.IsNullOrWhiteSpace(previewJson) || previewJson.Length > MaxRevisedPreviewJsonLength
+            || !IsJsonObject(previewJson))
+            return false;
+        RevisedPreviewJson = previewJson;
+        return true;
+    }
+
     private static bool IsJsonObject(string json)
     {
         try
@@ -126,6 +143,8 @@ public class PendingAgentOperationState : Entity
             || AgentOperationFingerprint.Compute(OperationId, argumentsJson) != operationFingerprint)
             return false;
 
+        if (!string.Equals(PreviewFingerprint, previewFingerprint, StringComparison.Ordinal))
+            RevisedPreviewJson = null;
         ArgumentsJson = argumentsJson;
         OperationFingerprint = operationFingerprint;
         PreviewFingerprint = previewFingerprint;

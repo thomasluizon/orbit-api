@@ -34,7 +34,11 @@ public sealed partial class PendingOperationRevisionService
         var arguments = preview.Value.ExecutionArguments ?? revised;
         var updated = store.Revise(userId, execution.PendingOperationId, expected, arguments.GetRawText(),
             AgentOperationFingerprint.Compute(execution.OperationId, arguments.GetRawText()), preview.Value.PreviewFingerprint!);
-        if (updated) await RecordRemovedOffersAsync(userId, request, original.Value, ct);
+        if (updated)
+        {
+            RecordRevisedPreview(userId, execution.PendingOperationId, preview.Value);
+            await RecordRemovedOffersAsync(userId, request, original.Value, ct);
+        }
         return updated ? new(true, null, execution.PendingOperationId, preview.Value) : Failure("revision_conflict");
     }
     private async Task<List<AccountChangeSet.Member>?> ReviseChangeSetMembersAsync(Guid userId,

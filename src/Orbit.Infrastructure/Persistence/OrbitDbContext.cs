@@ -613,6 +613,7 @@ public class OrbitDbContext : DbContext
             entity.Property(item => item.OperationId).HasMaxLength(100);
             entity.Property(item => item.ArgumentsJson).HasColumnType(JsonbColumnType);
             entity.Property(item => item.ExecutionJson).HasColumnType(JsonbColumnType);
+            entity.Property(item => item.RevisedPreviewJson).HasColumnType(JsonbColumnType);
             entity.Property(item => item.DisplayName).HasMaxLength(200);
             entity.Property(item => item.Summary).HasMaxLength(500);
             entity.Property(item => item.OperationFingerprint).HasMaxLength(256);

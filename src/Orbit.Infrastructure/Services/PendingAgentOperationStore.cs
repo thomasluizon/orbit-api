@@ -397,6 +397,25 @@ public class PendingAgentOperationStore(
         }
     }
 
+    public bool RecordRevisedPreview(Guid userId, Guid pendingOperationId, PendingOperationChangePreview preview)
+    {
+        var entity = dbContext.PendingAgentOperations.FirstOrDefault(item => item.Id == pendingOperationId && item.UserId == userId);
+        if (entity is null || preview.PreviewFingerprint is not { } fingerprint
+            || PendingOperationExecutionJson.SerializePreview(preview) is not { } json
+            || !entity.RecordRevisedPreview(fingerprint, json, TimeProvider.System.GetUtcNow().UtcDateTime))
+            return false;
+        try
+        {
+            SaveChangesWithConversationOutcomes();
+            return true;
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            ResetFailedOutcomeChanges(entity);
+            return false;
+        }
+    }
+
     private void ResetFailedOutcomeChanges(PendingAgentOperationState entity)
     {
         dbContext.Entry(entity).State = EntityState.Detached;
