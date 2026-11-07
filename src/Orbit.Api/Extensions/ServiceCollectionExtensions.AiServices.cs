@@ -193,6 +193,7 @@ public static partial class ServiceCollectionExtensions
 
     private static void AddChatCommandDependencies(WebApplicationBuilder builder)
     {
+        var transactionTimeout = TimeSpan.FromSeconds(DatabaseConnectionSettings.From(builder.Configuration).TransactionTimeoutSeconds);
         builder.Services.AddScoped<Orbit.Application.Chat.Commands.ChatAiDependencies>(sp =>
             new Orbit.Application.Chat.Commands.ChatAiDependencies(
                 sp.GetRequiredService<IAiIntentService>(),
@@ -226,6 +227,6 @@ public static partial class ServiceCollectionExtensions
                 sp.GetRequiredService<IPendingOperationChangePreviewer>(),
                 ChatTurnLimits.BlockAnswerTimeout(
                     sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<AiSettings>>().Value.CompletionTimeout,
-                    TimeSpan.FromSeconds(DatabaseConnectionSettings.From(builder.Configuration).TransactionTimeoutSeconds))));
+                    transactionTimeout)));
     }
 }

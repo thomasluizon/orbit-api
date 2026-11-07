@@ -100,20 +100,16 @@ public static class SharedHabitRules
     public static void AddDaysRules<T>(
         AbstractValidator<T> validator,
         System.Linq.Expressions.Expression<Func<T, IReadOnlyList<System.DayOfWeek>?>> daysExpr,
-        System.Linq.Expressions.Expression<Func<T, int?>> freqQtyExpr,
-        System.Linq.Expressions.Expression<Func<T, Domain.Enums.FrequencyUnit?>> freqUnitExpr,
-        System.Linq.Expressions.Expression<Func<T, bool>> isFlexibleExpr)
+        Func<T, int?> freqQty,
+        Func<T, Domain.Enums.FrequencyUnit?> freqUnit,
+        Func<T, bool> isFlexible)
     {
-        var freqQtyFunc = freqQtyExpr.Compile();
-        var freqUnitFunc = freqUnitExpr.Compile();
-        var isFlexibleFunc = isFlexibleExpr.Compile();
-
         validator.RuleFor(daysExpr)
             .Must((command, days) =>
             {
                 if (days is null || days.Count == 0) return true;
-                if (isFlexibleFunc(command)) return true;
-                return freqQtyFunc(command) == 1 && freqUnitFunc(command) == Domain.Enums.FrequencyUnit.Day;
+                if (isFlexible(command)) return true;
+                return freqQty(command) == 1 && freqUnit(command) == Domain.Enums.FrequencyUnit.Day;
             })
             .WithCopy(ValidationErrorCodes.DaysDailyOnly);
     }
@@ -121,35 +117,32 @@ public static class SharedHabitRules
     public static void AddOneTimeTaskEndDateRules<T>(
         AbstractValidator<T> validator,
         System.Linq.Expressions.Expression<Func<T, DateOnly?>> endDateExpr,
-        System.Linq.Expressions.Expression<Func<T, Domain.Enums.FrequencyUnit?>> freqUnitExpr)
+        Func<T, Domain.Enums.FrequencyUnit?> freqUnit)
     {
-        var freqUnitFunc = freqUnitExpr.Compile();
         validator.RuleFor(endDateExpr)
             .Must((command, endDate) =>
-                !endDate.HasValue || freqUnitFunc(command) is not null)
+                !endDate.HasValue || freqUnit(command) is not null)
             .WithCopy(ValidationErrorCodes.EndDateRecurringOnly);
     }
 
     public static void AddGeneralHabitRules<T>(
         AbstractValidator<T> validator,
-        System.Linq.Expressions.Expression<Func<T, bool>> isGeneralExpr,
+        Func<T, bool> isGeneral,
         System.Linq.Expressions.Expression<Func<T, Domain.Enums.FrequencyUnit?>> freqUnitExpr,
         System.Linq.Expressions.Expression<Func<T, int?>> freqQtyExpr,
         System.Linq.Expressions.Expression<Func<T, IReadOnlyList<System.DayOfWeek>?>> daysExpr)
     {
-        var isGeneralFunc = isGeneralExpr.Compile();
-        AddGeneralHabitRulesCore(validator, x => isGeneralFunc(x), freqUnitExpr, freqQtyExpr, daysExpr);
+        AddGeneralHabitRulesCore(validator, isGeneral, freqUnitExpr, freqQtyExpr, daysExpr);
     }
 
     public static void AddGeneralHabitRules<T>(
         AbstractValidator<T> validator,
-        System.Linq.Expressions.Expression<Func<T, bool?>> isGeneralExpr,
+        Func<T, bool?> isGeneral,
         System.Linq.Expressions.Expression<Func<T, Domain.Enums.FrequencyUnit?>> freqUnitExpr,
         System.Linq.Expressions.Expression<Func<T, int?>> freqQtyExpr,
         System.Linq.Expressions.Expression<Func<T, IReadOnlyList<System.DayOfWeek>?>> daysExpr)
     {
-        var isGeneralFunc = isGeneralExpr.Compile();
-        AddGeneralHabitRulesCore(validator, x => isGeneralFunc(x) == true, freqUnitExpr, freqQtyExpr, daysExpr);
+        AddGeneralHabitRulesCore(validator, x => isGeneral(x) == true, freqUnitExpr, freqQtyExpr, daysExpr);
     }
 
     public static void AddScheduledReminderRules<T>(IRuleBuilder<T, IReadOnlyList<ScheduledReminderTime>?> rule)

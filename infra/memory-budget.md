@@ -82,51 +82,126 @@ less than about 12 MB is noise.
 These are the conclusions:
 
 - The JIT and loader memory of the production image grows with the variety of requests. ReadyToRun with TieredPGO off stops that growth.
-- `MALLOC_ARENA_MAX` and the JIT settings do not move the number. The [glibc tunables](https://sourceware.org/glibc/manual/latest/html_node/Memory-Allocation-Tunables.html) limit the arena count, but the arena heaps held only 17 to 45 MB in the
-  [native attribution](evidence/ticket-2003-native-memory.json).
+- The JIT settings do not move the number. `MALLOC_ARENA_MAX=2` does not move it 60 seconds after the load, but it does after an hour of uptime. See [Production owners](#production-owners).
 - The GC heap commits 66,060,288 bytes under the recorded HTTP load. The heap hard limit is a ceiling, so a lower limit does not lower the number.
 - Sentry and PostHog add about 25 MB together. Production needs both, so they stay.
-- The `o200k_base` tokenizer already loads on first use. Its vocabulary holds 42 MB of live managed memory after the first count. The library caches it statically, so the API cannot release it.
 - `Microsoft.CodeAnalysis` was never mapped at runtime. The API project no longer references it directly, so the image ships 55 MB less in `/app`. The memory does not change.
 
-The in-process recorded load in `tests/Orbit.Memory.Tests` also runs the Astra
-ranking turn and the tokenizer. In the 512 MiB, half-CPU container, it retains
-83.6 MB of managed memory and commits up to 124 MB of GC heap. A 128 MiB heap limit
-lowers anonymous plus shmem memory by 11 MB, but production logged 144 MB of managed
-memory. Thus the 256 MiB limit stays.
+The in-process recorded load in `tests/Orbit.Memory.Tests` retains 45,913,448 bytes
+of managed memory after a diagnostic full GC in the 512 MiB, half-CPU container.
+With the library tokenizer, it retained 83,647,248 bytes. Production logged up to
+144 MB of managed memory before these fixes, so the 256 MiB heap limit stays.
 
-The working set after the recorded load is 366 to 398 MB on the current image. It is
-above 300 MB because ReadyToRun puts about 150 MB of precompiled code in clean file
-pages, which the kernel reclaims under pressure.
+The working set after the recorded load is 366 to 398 MB. It is above 300 MB
+because ReadyToRun puts about 150 MB of precompiled code in clean file pages, which
+the kernel reclaims under pressure.
 
-About 150 MB of the production anonymous plus shmem memory does not appear in these
-runs. The local runs have no outbound TLS calls to OpenAI, Firebase, Stripe or SES,
-no Hangfire work on real accounts, and fewer hours of uptime.
+## Production owners
 
-## Uptime soak
+[`evidence/ticket-2003-live-heap.json`](evidence/ticket-2003-live-heap.json) records
+the measurements in this section. Production logged these values on instance
+`25dlm` of image `a93b9ace8`, 3 hours and 22 minutes after startup:
 
-[`evidence/ticket-2003-uptime-soak.json`](evidence/ticket-2003-uptime-soak.json)
-records two longer runs of the same container. Each run applies the recorded HTTP
-load once and then a light client about every 75 seconds. Every 5 minutes, it adds
-up the resident memory of `/proc/1/smaps` by mapping kind. At the end,
-`dotnet-gcdump` forces a full GC, and the memory is read again.
+| Read | Startup | 3 hours 22 minutes |
+| --- | ---: | ---: |
+| `rollupKb.Anonymous` plus `rollupKb.Pss_Shmem` | 82,275 kB | 348,668 kB |
+| Live GC heap after the last full GC (`gc.lastFull.promoted`) | 25,336,648 bytes | 105,034,640 bytes |
+| Large object heap size | 0.2 MB | 37.2 MB |
+| Anonymous memory outside the committed GC heap | 6,424 kB | 90,280 kB |
+| JIT-compiled methods (`runtime.jitMethods`) | 6,315 | 64,004 |
 
-| Run | Outbound HTTPS to a local sink | Window | Anonymous plus shmem at the end | Anonymous that a full GC returns | Live GC heap |
-| --- | --- | ---: | ---: | ---: | ---: |
-| Uptime, near idle | Sentry, PostHog | 60 minutes | 251,556 kB | 10,756 kB | 39,063,400 bytes |
-| Authenticated, one chat turn a minute | Sentry, PostHog, the AI base URL | 35 minutes | 225,996 kB | 10,716 kB | 37,831,400 bytes |
+The highest read of that instance was 360,903 kB, 3 hours and 59 minutes after
+startup.
 
-These are the conclusions:
+### Uptime soak
 
-- Neither run grows without a limit. Shmem stops at 86,124 to 88,560 kB after about 15 minutes. Anonymous memory stops at 135,032 to 163,100 kB.
-- At minute 12, the `doublemapper` held 64,608 kB of loader data and 22,124 kB of JIT code. The cgroup `shmem` was within 16 kB of `RssShmem`, so the double mapping is not counted twice.
-- The local GC heap holds little garbage. Production logged a committed GC heap of 164,282,368 to 179,068,928 bytes. Locally, the committed heap was 70,418,432 bytes at minute 20.
-- The chat turns end at the moderation call, so the `o200k_base` tokenizer never loads. Its 42 MB of live memory is absent from these runs, but present in production after the first Astra turn.
+[`api-memory-soak.sh`](../.github/scripts/api-memory-soak.sh) reproduces that
+production state locally. It runs the image in the 512 MiB, half-CPU container
+with the recorded HTTP load. Then, about once a minute, it runs
+[`api-memory-soak-client.mjs`](../.github/scripts/api-memory-soak-client.mjs). Each
+round reads Today, a habit, its metrics, the profile and the month. It also asks
+for the daily summary, creates and deletes a habit, and sends two Astra turns.
+The fake answer is not a usable summary, so each summary request logs
+`AI returned an unusable daily summary` three times and then answers 400.
+[`api-memory-fake-openai.mjs`](../.github/scripts/api-memory-fake-openai.mjs)
+answers the moderation and Responses calls over TLS like OpenAI. Thus each
+Astra turn passes moderation, and the cost estimator counts its tokens. The same
+TLS sink receives the Sentry and PostHog traffic.
 
-Thus the production excess is in the managed heap, and these runs do not show its
-owner. The memory breakdown in each production warning names it: compare
-`gc.heapSize` with `gc.lastFull.promoted`, and compare `kindsKb` with the startup
-line.
+Every 5 minutes, the soak adds up the resident memory of `/proc/1/smaps` by mapping
+kind. `dotnet-counters` records the GC and JIT counters every minute. At the end,
+`dotnet-gcdump` forces a full GC and reports the live heap by type. The `JIT
+summary` reads come from `DOTNET_JitStdOutFile` and `DOTNET_JitDisasmSummary`.
+
+```sh
+ORBIT_MEMORY_PLATFORM=linux/arm64 bash .github/scripts/api-memory-soak.sh <image tag> 60 /tmp/api-memory-soak
+```
+
+### Owners that the soak names
+
+These are the owners of the production excess, with the measurement that names
+each one:
+
+| Owner | Measurement | Fix |
+| --- | --- | --- |
+| `TiktokenTokenizer` vocabulary | The first token count retains 42,610,848 bytes. After 60 minutes, the gcdump shows three vocabulary dictionary arrays of 25,234,456 bytes in the large object heap. It also shows about 200,000 more strings and 200,000 more byte arrays than the fixed image. | `O200kTokenCounter` keeps the vocabulary in four arrays and retains 4,855,144 bytes. |
+| Validators that compile their rules on each request | 50 validations of `CreateHabitCommand` in new scopes compile 402 methods. 50 constructions of the scoped `UpdateHabitCommandValidator` compile 153 methods. | Validators without constructor dependencies are singletons, and `SharedHabitRules` takes delegates. `UpdateHabitCommandValidator` includes two static validators for the rules that need no repository. Both measurements fall to no method. |
+| The daily summary compiles a query expression | `GetHabitScheduleQuery` called `Expression.Compile` on `StaleBadHabitsFor` for each read with loaded summary habits. The soak does not isolate its cost. | `HabitScheduleService.IsStaleBadHabit` filters the loaded habits. |
+| Database settings bound on each scope | 10 request scopes read the `Database` configuration 90 times. The runtime emits the setter invoke stubs again when its reflection cache is collected. | The connection strings and the transaction timeout are computed once at registration. |
+| glibc malloc arenas | In the pair below, the image without a limit has 55 arena heaps at the last read, about 40 minutes after the first read. They hold 78,236 kB, up from 63,988 kB. glibc creates an arena for each thread that allocates natively, up to 8 for each processor. | The image sets `MALLOC_ARENA_MAX=2`. At the same read, the fixed image has 3 arena heaps of 14,928 kB, and its main heap holds 28,880 kB instead of 5,436 kB. |
+
+The remaining live heap is runtime and library state, not request data:
+
+- About 10,500 live `DynamicMethod` objects. They are the EF Core compiled queries, which the EF query cache keeps, and their reader columns. A 6-minute soak with the EF query log on compiles 116 query shapes.
+- 1,246 EF model properties and the reflection caches of the runtime.
+
+The JIT summary of the last 3,000 compilations after 20 minutes shows bounded work:
+2,943 are tier-1 compilations of methods that tiered compilation promotes once,
+and 43 are full-opt compilations. Without the database settings fix, the last 3,000
+compilations after 14 minutes had 352 full-opt compilations. 322 of them were the
+repeated invoke stubs of the `DatabaseConnectionSettings` setters.
+
+### Before and after
+
+The pair ran at the same time on the same host, with the same harness. Before is
+main without these fixes, whose `src` and `Dockerfile` are equal to the production
+image `a93b9ace8`. After is `9c4a6d035`, which has every fix except the update
+validator change. The pair was planned for 60 minutes. The worker time limit
+stopped it at about 41 minutes, so it has no final gcdump. Each run answered 110
+`POST /api/chat` requests with 200 in 55 soak rounds.
+
+| Read | Seconds (before / after) | Before | After | Difference |
+| --- | ---: | ---: | ---: | ---: |
+| Startup | 0 / 0 | 90,788 kB | 87,576 kB | 3,212 kB |
+| After the recorded load | 46 / 40 | 215,760 kB | 184,900 kB | 30,860 kB |
+| Soak | 385 / 378 | 302,552 kB | 233,140 kB | 69,412 kB |
+| Soak | 658 / 652 | 308,096 kB | 237,412 kB | 70,684 kB |
+| Soak | 977 / 971 | 314,872 kB | 242,236 kB | 72,636 kB |
+| Soak | 1,251 / 1,245 | 317,288 kB | 238,272 kB | 79,016 kB |
+| Soak | 1,571 / 1,565 | 314,500 kB | 243,428 kB | 71,072 kB |
+| Soak | 1,889 / 1,884 | 321,812 kB | 243,460 kB | 78,352 kB |
+| Soak | 2,163 / 2,157 | 321,628 kB | 243,840 kB | 77,788 kB |
+| Soak | 2,481 / 2,475 | 324,928 kB | 245,300 kB | 79,628 kB |
+
+The values are `RssAnon` plus `RssShmem`. The warning line is 307,200 kB. Before
+crosses it at 658 seconds and stays above it at each later read. After stays at or
+below 245,300 kB, 79.9% of the line.
+
+### Levers that stay within the noise
+
+Each lever ran on the image with the tokenizer, validator and summary fixes. The
+change compares each soak read from minute 10 with the read of that image at the
+same uptime.
+
+| Lever | Change at the same uptime | Decision |
+| --- | ---: | --- |
+| `DOTNET_EnableWriteXorExecute=0` | 8.7 to 19.5 MB less | Not a fix. It removes the W^X hardening of JIT memory. |
+| No `EnableRetryOnFailure` | 6.7 to 15.8 MB less | Not a fix. `VerifiedTransaction` depends on the retrying strategy. |
+
+With `EnableRetryOnFailure`, EF buffers every result. Thus each query shape
+compiles one reader lambda for each column, 5,370 of the 12,666 dynamic methods in
+the JIT summary. The lambdas are bounded by the query shapes, so they do not grow
+with uptime.
 
 ## Selected configuration
 
@@ -139,6 +214,9 @@ and the [TieredPGO setting](https://learn.microsoft.com/dotnet/core/runtime-conf
 The GC policy is workstation GC, a 256 MiB heap hard limit, memory conservation
 level 7, concurrent GC and tiered compilation. It follows the runtime's
 [GC configuration contract](https://learn.microsoft.com/dotnet/core/runtime-config/garbage-collector).
+The image sets `MALLOC_ARENA_MAX=2` in the `Dockerfile`, so glibc keeps two malloc
+arenas instead of one for each thread that allocates natively. See the
+[glibc memory allocation tunables](https://sourceware.org/glibc/manual/latest/html_node/Memory-Allocation-Tunables.html).
 The production environment group sets no memory variable. The instance plan and
 its cost do not change.
 
@@ -152,15 +230,24 @@ on the image that the job builds. It does these steps:
 3. It reads memory at startup and after 60 seconds of rest.
 4. It runs the recorded HTTP load and reads memory again, at once and after 60 seconds.
 
-The guard fails when the container stops, when the kernel kills it, or when
-`RssAnon` plus `RssShmem` reaches 314,572,800 bytes at any read. Set
-`ORBIT_MEMORY_PLATFORM=linux/arm64` to run it natively on Apple silicon.
+The guard fails when the image does not set `MALLOC_ARENA_MAX=2`, when the
+container stops, when the kernel kills it, or when `RssAnon` plus `RssShmem`
+reaches 314,572,800 bytes at any read. Set `ORBIT_MEMORY_PLATFORM=linux/arm64` to
+run it natively on Apple silicon.
 
 `Orbit.Memory.Tests` runs the in-process recorded load in a fresh test host. The
 workload holds 150 slow event subscriptions for 50 accounts. Across 20 rounds, it
 reads Today and the daily summary, and runs four bulk actions, an Astra ranking
 turn, a tokenizer count and an export of 10,000 conversation rows. Every round after
-the first must stay below the same anonymous plus shmem line.
+the first must stay below the same anonymous plus shmem line. The first token count
+must retain less than 12 MiB of managed memory.
+
+These unit tests keep the owners in [Owners that the soak names](#owners-that-the-soak-names) from coming back:
+
+- `O200kTokenCounterTests` compares the counter with `TiktokenTokenizer` on the recorded production requests, fails when the vocabulary needs 8 MiB or more, and fails when `Orbit.Infrastructure` references `Microsoft.ML.Tokenizers`.
+- `ValidatorRegistrationTests` fails when a validator without constructor dependencies is not a singleton, when 50 validations in new scopes compile a method, or when 50 constructions of the update validator compile a method.
+- `DatabaseRegistrationTests` fails when a request scope reads the `Database` configuration.
+- `StaleBadHabitPredicateTests` keeps `IsStaleBadHabit` equal to the query expression.
 
 ```sh
 dotnet build tests/Orbit.Memory.Tests

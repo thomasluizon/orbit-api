@@ -42,6 +42,7 @@ public sealed class MemoryLoadFactAttribute : FactAttribute
 public class ApiMemoryLoadTests(ITestOutputHelper output)
 {
     private static readonly DateOnly Today = new(2026, 6, 1);
+    private const long TokenizerRetainedLimitBytes = 12L * 1024 * 1024;
 
     [MemoryLoadFact]
     public async Task MixedLoad_SteadyAnonymousPlusShmemMemoryStaysBelowTheWarningLine()
@@ -77,8 +78,13 @@ public class ApiMemoryLoadTests(ITestOutputHelper output)
             await using var gzip = new GZipStream(compressed, CompressionMode.Decompress);
             using var captured = await JsonDocument.ParseAsync(gzip);
             var request = captured.RootElement.GetProperty("request").GetRawText();
+            var beforeTokenizer = GC.GetTotalMemory(forceFullCollection: true);
             (await estimator.EstimateMicroDollarsAsync(request, default)).Should().BePositive();
+            var tokenizerRetained = GC.GetTotalMemory(forceFullCollection: true) - beforeTokenizer;
             Sample("production-ai-request");
+            output.WriteLine($"TokenizerRetainedBytes={tokenizerRetained}");
+            tokenizerRetained.Should().BeLessThan(TokenizerRetainedLimitBytes,
+                "the o200k counter keeps its vocabulary in flat arrays; the library tokenizer retains about 42 MB");
             using var factory = new SqliteOrbitDbContextFactory(Path.Combine(Path.GetTempPath(), $"orbit-memory-{Guid.NewGuid():N}.db"));
             var account = await SeedAccountAsync(factory);
             var encryption = new EncryptionService(Options.Create(new EncryptionSettings

@@ -10,9 +10,11 @@ public sealed class PostgresScheduledJobLeaseProvider : IScheduledJobLeaseProvid
     private readonly Func<DbConnection> _createConnection;
 
     public PostgresScheduledJobLeaseProvider(IConfiguration configuration)
-        : this(() => new NpgsqlConnection(OrbitConnectionStringFactory.ForJobLocks(configuration))) { }
+        : this(ConnectionFactory(OrbitConnectionStringFactory.ForJobLocks(configuration))) { }
 
     internal PostgresScheduledJobLeaseProvider(Func<DbConnection> createConnection) => _createConnection = createConnection;
+
+    private static Func<DbConnection> ConnectionFactory(string connectionString) => () => new NpgsqlConnection(connectionString);
 
     public async Task<IAsyncDisposable?> TryAcquireAsync(string jobName, CancellationToken cancellationToken)
     {

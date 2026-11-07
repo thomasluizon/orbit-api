@@ -235,7 +235,7 @@ public class GetHabitScheduleQueryHandler(
     {
         var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         var weekStartDay = await userDateService.GetUserWeekStartDayAsync(request.UserId, cancellationToken);
-        var staleProvided = summaryHabits?.Where(HabitScheduleService.StaleBadHabitsFor(request.UserId, today).Compile()).ToArray();
+        var staleProvided = summaryHabits?.Where(habit => HabitScheduleService.IsStaleBadHabit(habit, request.UserId, today)).ToArray();
         if (summaryHabits is null || staleProvided is { Length: > 0 })
         {
             await HabitScheduleService.AdvanceStaleBadHabitDueDates(habitRepository, unitOfWork,

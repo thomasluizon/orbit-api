@@ -2,7 +2,6 @@ using System.Text.Json;
 using System.Text;
 using System.Security.Cryptography;
 using Microsoft.Extensions.Caching.Memory;
-using Microsoft.ML.Tokenizers;
 using Microsoft.Extensions.Options;
 using Orbit.Infrastructure.Configuration;
 
@@ -15,8 +14,6 @@ public interface IAiRequestCostEstimator
 
 public sealed class AiRequestCostEstimator(MemoryCache cache, IOptions<AiSettings> settings) : IAiRequestCostEstimator
 {
-    private static readonly Lazy<TiktokenTokenizer> Tokenizer = new(() => TiktokenTokenizer.CreateForEncoding("o200k_base"));
-
     public Task<long> EstimateMicroDollarsAsync(string requestJson, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -100,7 +97,7 @@ public sealed class AiRequestCostEstimator(MemoryCache cache, IOptions<AiSetting
         var knownEncoding = model.StartsWith("gpt-6", StringComparison.Ordinal)
             || model.StartsWith("gpt-5", StringComparison.Ordinal)
             || model.StartsWith("gpt-4.1", StringComparison.Ordinal);
-        return knownEncoding ? Tokenizer.Value.CountTokens(text) : Encoding.UTF8.GetByteCount(text);
+        return knownEncoding ? O200kTokenCounter.Shared.CountTokens(text) : Encoding.UTF8.GetByteCount(text);
     }
 
     internal static AiModelPrice GetPrice(AiSettings settings, string model)
