@@ -15,6 +15,7 @@ using Orbit.Application.Chat.Commands;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Application.Chat.Validators;
+using Orbit.Application.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Common;
 using Orbit.Domain.Interfaces;
@@ -237,6 +238,7 @@ public sealed partial class PlanCommittedOutcomeTests
         internal PendingAgentOperationStore Pending { get; }
         internal AgentOperationExecutor Executor { get; }
         internal PendingOperationRevisionService Revisions { get; }
+        internal IPendingOperationChangePreviewer Previewer => _previewer;
 
         internal Fixture(bool failGoal = false)
         {
@@ -246,8 +248,14 @@ public sealed partial class PlanCommittedOutcomeTests
             IAiTool registered = failGoal ? new FailingGoalTool(tool) : tool;
             var update = new UpdateGoalTool(new GenericRepository<Goal>(Db), Orbit.Tests.Shared.GoalToolCommandMediator.Create(
                 new GenericRepository<Goal>(Db), unit, habits: new GenericRepository<Habit>(Db), configureTransactions: false));
-            _tools = new([registered, update]);
-            _catalog = new([registered, update]);
+            var dates = Substitute.For<IUserDateService>();
+            dates.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(new DateOnly(2026, 11, 7));
+            var quota = Substitute.For<IPayGateService>();
+            quota.CanCreateHabits(UserId, Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
+            var habit = new CreateHabitTool(dates, Orbit.Tests.Shared.HabitToolCommandMediator.Create(new GenericRepository<Habit>(Db),
+                new GenericRepository<Tag>(Db), new GenericRepository<Goal>(Db), dates, quota, unit, configureTransactions: false));
+            _tools = new([registered, update, habit]);
+            _catalog = new([registered, update, habit]);
             Pending = new(Db, Options.Create(new AgentPlatformSettings()), _conversation.Flags);
             _previewer = new PendingOperationChangePreviewer(new GenericRepository<Habit>(Db), new GenericRepository<Goal>(Db),
                 new GenericRepository<Tag>(Db), Substitute.For<IUserDateService>(), _tools);
