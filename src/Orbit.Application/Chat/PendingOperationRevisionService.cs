@@ -125,7 +125,7 @@ public sealed partial class PendingOperationRevisionService(
         var revisedJson = (revisedPreview!.ExecutionArguments ?? revised.Value).GetRawText();
         var revisedFingerprint = AgentOperationFingerprint.Compute(execution.OperationId, revisedJson);
         if (!store.Revise(userId, pendingOperationId, expectedFingerprint, revisedJson,
-            revisedFingerprint, revisedPreview.PreviewFingerprint!))
+            revisedFingerprint, revisedPreview.PreviewFingerprint!, revisedPreview))
             return Failure("revision_conflict");
 
         await RecordRemovedOffersAsync(userId, request, original, cancellationToken);

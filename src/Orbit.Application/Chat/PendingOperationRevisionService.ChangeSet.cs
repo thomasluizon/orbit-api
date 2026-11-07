@@ -33,7 +33,7 @@ public sealed partial class PendingOperationRevisionService
         if (preview.IsFailure || preview.Value?.Items?.Count != request.Items.Count) return Failure("invalid_revision");
         var arguments = preview.Value.ExecutionArguments ?? revised;
         var updated = store.Revise(userId, execution.PendingOperationId, expected, arguments.GetRawText(),
-            AgentOperationFingerprint.Compute(execution.OperationId, arguments.GetRawText()), preview.Value.PreviewFingerprint!);
+            AgentOperationFingerprint.Compute(execution.OperationId, arguments.GetRawText()), preview.Value.PreviewFingerprint!, preview.Value);
         if (updated) await RecordRemovedOffersAsync(userId, request, original.Value, ct);
         return updated ? new(true, null, execution.PendingOperationId, preview.Value) : Failure("revision_conflict");
     }

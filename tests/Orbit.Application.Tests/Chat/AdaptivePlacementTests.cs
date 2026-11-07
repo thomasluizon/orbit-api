@@ -167,7 +167,7 @@ public sealed class AdaptivePlacementTests
         var store = Substitute.For<IPendingAgentOperationStore>();
         store.GetExecution(context.UserId, pendingId).Returns(_ => new PendingAgentOperationExecution(pendingId,
             "habit", operation, current, AgentExecutionSurface.Chat, AgentConfirmationRequirement.FreshConfirmation));
-        store.Revise(context.UserId, pendingId, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>())
+        store.Revise(context.UserId, pendingId, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<PendingOperationChangePreview?>())
             .Returns(call => { current = JsonSerializer.Deserialize<JsonElement>(call.ArgAt<string>(3)); return true; });
         var service = new PendingOperationRevisionService(store, previewer, new RevisePendingOperationRequestValidator(), registry);
 

@@ -45,7 +45,7 @@ public sealed class DatedPendingOperationRevisionTests
         var store = Substitute.For<IPendingAgentOperationStore>();
         store.GetExecution(context.UserId, pendingId).Returns(_ => current);
         store.Revise(context.UserId, pendingId, Arg.Any<string>(), Arg.Any<string>(),
-            Arg.Any<string>(), Arg.Any<string>()).Returns(call =>
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<PendingOperationChangePreview?>()).Returns(call =>
         {
             current = current with
             {

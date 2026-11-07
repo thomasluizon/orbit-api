@@ -57,7 +57,7 @@ public sealed class PendingOperationRevisionServiceTests
             AgentExecutionSurface.Chat, AgentConfirmationRequirement.FreshConfirmation,
             PreviewFingerprint: "stale-fingerprint"));
         _store.Revise(_userId, pendingId, Arg.Any<string>(), Arg.Any<string>(),
-            Arg.Any<string>(), Arg.Any<string>()).Returns(true);
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<PendingOperationChangePreview?>()).Returns(true);
         var service = new PendingOperationRevisionService(_store,
             new PendingOperationChangePreviewer(_habits, _goals, _tags, _dateService, _tools),
             new RevisePendingOperationRequestValidator(), _tools);
@@ -83,6 +83,8 @@ public sealed class PendingOperationRevisionServiceTests
             CancellationToken.None);
         revision.IsSuccess.Should().BeTrue();
         AssertPreviewEmoji(revision.Preview!, "🦷");
+        _store.Received(1).Revise(_userId, pendingId, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
+            revision.Preview!.PreviewFingerprint!, revision.Preview);
     }
 
     [Theory]
@@ -105,7 +107,7 @@ public sealed class PendingOperationRevisionServiceTests
             previewer.PreviewAsync(_userId, "bulk_create_habits", arguments, Arg.Any<CancellationToken>())
                 .Returns(Result.Success<PendingOperationChangePreview?>(new PendingOperationChangePreview([], 0, [], "fresh")));
             _store.Revise(_userId, pendingId, Arg.Any<string>(), Arg.Any<string>(),
-                Arg.Any<string>(), Arg.Any<string>()).Returns(false);
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<PendingOperationChangePreview?>()).Returns(false);
         }
         var service = new PendingOperationRevisionService(_store, previewer,
             new RevisePendingOperationRequestValidator(), _tools);
@@ -137,7 +139,7 @@ public sealed class PendingOperationRevisionServiceTests
             pendingId, AgentCapabilityIds.HabitsBulkWrite, "bulk_update_habits", arguments,
             AgentExecutionSurface.Chat, AgentConfirmationRequirement.FreshConfirmation));
         _store.Revise(_userId, pendingId, Arg.Any<string>(), Arg.Any<string>(),
-            Arg.Any<string>(), Arg.Any<string>()).Returns(true);
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<PendingOperationChangePreview?>()).Returns(true);
         var previewer = new PendingOperationChangePreviewer(_habits, _goals, _tags, _dateService, _tools);
         var original = (await previewer.PreviewAsync(_userId, "bulk_update_habits", arguments)).Value;
         var service = new PendingOperationRevisionService(_store, previewer,
@@ -154,7 +156,7 @@ public sealed class PendingOperationRevisionServiceTests
             .Which.EntityId.Should().Be(second.Id);
         _store.Received(1).Revise(_userId, pendingId, Arg.Any<string>(),
             Arg.Is<string>(value => RevisedArgsMatch(value, second.Id, "B")),
-            Arg.Any<string>(), Arg.Any<string>());
+            Arg.Any<string>(), Arg.Any<string>(), result.Preview);
     }
 
     [Theory]
@@ -214,7 +216,7 @@ public sealed class PendingOperationRevisionServiceTests
             arguments.RootElement.Clone(), AgentExecutionSurface.Chat,
             AgentConfirmationRequirement.FreshConfirmation));
         _store.Revise(_userId, pendingId, Arg.Any<string>(), Arg.Any<string>(),
-            Arg.Any<string>(), Arg.Any<string>()).Returns(true);
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<PendingOperationChangePreview?>()).Returns(true);
         var previewer = new PendingOperationChangePreviewer(_habits, _goals, _tags, _dateService, _tools);
         var preview = (await previewer.PreviewAsync(_userId, "bulk_update_habits", arguments.RootElement)).Value;
         var service = new PendingOperationRevisionService(_store, previewer,
@@ -250,7 +252,7 @@ public sealed class PendingOperationRevisionServiceTests
         _store.GetExecution(_userId, pendingId).Returns(new PendingAgentOperationExecution(
             pendingId, AgentCapabilityIds.HabitsBulkWrite, "bulk_update_habit_emojis", arguments,
             AgentExecutionSurface.Chat, AgentConfirmationRequirement.FreshConfirmation));
-        _store.Revise(_userId, pendingId, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>())
+        _store.Revise(_userId, pendingId, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<PendingOperationChangePreview?>())
             .Returns(true);
         var service = new PendingOperationRevisionService(_store, previewer,
             new RevisePendingOperationRequestValidator(), tools);
@@ -265,7 +267,7 @@ public sealed class PendingOperationRevisionServiceTests
         result.Preview!.Items!.Single().Fields.Single().NewValue.Should().Be("🏃");
         _store.Received(1).Revise(_userId, pendingId, Arg.Any<string>(),
             Arg.Is<string>(json => JsonSerializer.Deserialize<JsonElement>(json).GetProperty("revised_items")[0]
-                .GetProperty("emoji").GetString() == "🏃"), Arg.Any<string>(), Arg.Any<string>());
+                .GetProperty("emoji").GetString() == "🏃"), Arg.Any<string>(), Arg.Any<string>(), result.Preview);
         await inference.Received(1).InferAsync(_userId, Arg.Any<IReadOnlyList<HabitEmojiInferenceInput>>(),
             Arg.Any<CancellationToken>());
     }
@@ -283,7 +285,7 @@ public sealed class PendingOperationRevisionServiceTests
             pendingId, AgentCapabilityIds.HabitsBulkWrite, "bulk_log_habits", arguments,
             AgentExecutionSurface.Chat, AgentConfirmationRequirement.FreshConfirmation));
         _store.Revise(_userId, pendingId, Arg.Any<string>(), Arg.Any<string>(),
-            Arg.Any<string>(), Arg.Any<string>()).Returns(true);
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<PendingOperationChangePreview?>()).Returns(true);
         var previewer = new PendingOperationChangePreviewer(_habits, _goals, _tags, _dateService, _tools);
         var preview = (await previewer.PreviewAsync(_userId, "bulk_log_habits", arguments)).Value;
         using var edits = JsonDocument.Parse("{\"date\":\"2026-09-26\"}");
@@ -298,7 +300,7 @@ public sealed class PendingOperationRevisionServiceTests
         result.IsSuccess.Should().BeTrue();
         _store.Received(1).Revise(_userId, pendingId, Arg.Any<string>(),
             Arg.Is<string>(json => DatesMatch(json, first.Id, second.Id)),
-            Arg.Any<string>(), Arg.Any<string>());
+            Arg.Any<string>(), Arg.Any<string>(), result.Preview);
     }
 
     [Fact]
@@ -312,7 +314,7 @@ public sealed class PendingOperationRevisionServiceTests
             AgentExecutionSurface.Chat, AgentConfirmationRequirement.FreshConfirmation);
         _store.GetExecution(_userId, pendingId).Returns(_ => current);
         _store.Revise(_userId, pendingId, Arg.Any<string>(), Arg.Any<string>(),
-            Arg.Any<string>(), Arg.Any<string>()).Returns(call =>
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<PendingOperationChangePreview?>()).Returns(call =>
             {
                 current = current with
                 {
@@ -376,7 +378,7 @@ public sealed class PendingOperationRevisionServiceTests
             AgentConfirmationRequirement.FreshConfirmation, original!.PreviewFingerprint);
         _store.GetExecution(_userId, pendingId).Returns(_ => current);
         _store.Revise(_userId, pendingId, Arg.Any<string>(), Arg.Any<string>(),
-            Arg.Any<string>(), Arg.Any<string>()).Returns(call =>
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<PendingOperationChangePreview?>()).Returns(call =>
             {
                 current = current with
                 {

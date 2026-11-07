@@ -334,6 +334,40 @@ public partial class PendingAgentOperationStoreTests : IDisposable
     }
 
     [Fact]
+    public void Revise_WithRevisedPreview_StoresThePreviewInTheSameSave()
+    {
+        var capability = _catalogService.GetCapability(AgentCapabilityIds.HabitsBulkWrite)!;
+        const string json = "{\"filter\":{\"all\":true},\"updates\":{\"emoji\":\"A\"}}";
+        var fingerprint = AgentOperationFingerprint.Compute("bulk_update_habits", json);
+        var pending = _store.Create(_userId, capability, "bulk_update_habits", json,
+            "Update habits", fingerprint, AgentExecutionSurface.Chat);
+        var preview = new PendingOperationChangePreview([], 1, PreviewFingerprint: "fresh-preview");
+
+        _store.Revise(_userId, pending.Id, fingerprint, json, fingerprint, "fresh-preview", preview).Should().BeTrue();
+
+        _dbContext.ChangeTracker.Clear();
+        var stored = JsonDocument.Parse(_dbContext.PendingAgentOperations.Single(item => item.Id == pending.Id).RevisedPreviewJson!);
+        stored.RootElement.GetProperty("previewFingerprint").GetString().Should().Be("fresh-preview");
+        stored.RootElement.GetProperty("changeTargetCount").GetInt32().Should().Be(1);
+    }
+
+    [Fact]
+    public void Revise_WithPreviewOfAnotherFingerprint_StoresNoPreview()
+    {
+        var capability = _catalogService.GetCapability(AgentCapabilityIds.HabitsBulkWrite)!;
+        const string json = "{\"filter\":{\"all\":true},\"updates\":{\"emoji\":\"A\"}}";
+        var fingerprint = AgentOperationFingerprint.Compute("bulk_update_habits", json);
+        var pending = _store.Create(_userId, capability, "bulk_update_habits", json,
+            "Update habits", fingerprint, AgentExecutionSurface.Chat);
+        var preview = new PendingOperationChangePreview([], 1, PreviewFingerprint: "stale-preview");
+
+        _store.Revise(_userId, pending.Id, fingerprint, json, fingerprint, "fresh-preview", preview).Should().BeTrue();
+
+        _dbContext.ChangeTracker.Clear();
+        _dbContext.PendingAgentOperations.Single(item => item.Id == pending.Id).RevisedPreviewJson.Should().BeNull();
+    }
+
+    [Fact]
     public void Revise_WithSameArgumentsRefreshesPreviewAndInvalidatesApproval()
     {
         var capability = _catalogService.GetCapability(AgentCapabilityIds.HabitsBulkWrite)!;

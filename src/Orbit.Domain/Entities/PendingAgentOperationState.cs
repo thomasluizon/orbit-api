@@ -7,7 +7,8 @@ namespace Orbit.Domain.Entities;
 public class PendingAgentOperationState : Entity
 {
     public const int CurrentArgumentSchemaVersion = 1;
-    public const int MaxExecutionJsonLength = 8_000;
+    public const int MaxExecutionJsonLength = 16_000;
+    public const int MaxRevisedPreviewJsonLength = 16_000;
 
     public int ArgumentSchemaVersion { get; private set; }
     public Guid UserId { get; private set; }
@@ -30,6 +31,7 @@ public class PendingAgentOperationState : Entity
     public DateTime? StepUpSatisfiedAtUtc { get; private set; }
     public DateTime? ConsumedAtUtc { get; private set; }
     public string? ExecutionJson { get; private set; }
+    public string? RevisedPreviewJson { get; private set; }
 
     private PendingAgentOperationState() { }
 
@@ -103,6 +105,9 @@ public class PendingAgentOperationState : Entity
         return true;
     }
 
+    private static bool IsStorablePreview(string? previewJson) =>
+        !string.IsNullOrWhiteSpace(previewJson) && previewJson.Length <= MaxRevisedPreviewJsonLength && IsJsonObject(previewJson);
+
     private static bool IsJsonObject(string json)
     {
         try
@@ -116,7 +121,13 @@ public class PendingAgentOperationState : Entity
         }
     }
 
-    public bool Revise(string argumentsJson, string operationFingerprint, string previewFingerprint, DateTime utcNow)
+    /// <summary>
+    /// Binds new arguments and a new preview fingerprint. A valid <paramref name="revisedPreviewJson"/> keeps the preview
+    /// that the person saw, so a reopened conversation shows the approved words. A null or invalid value keeps the stored
+    /// preview on the same preview fingerprint and clears it on a new one.
+    /// </summary>
+    public bool Revise(string argumentsJson, string operationFingerprint, string previewFingerprint, DateTime utcNow,
+        string? revisedPreviewJson = null)
     {
         if (IsExpired(utcNow) || ConsumedAtUtc.HasValue
             || string.IsNullOrWhiteSpace(argumentsJson)
@@ -126,6 +137,10 @@ public class PendingAgentOperationState : Entity
             || AgentOperationFingerprint.Compute(OperationId, argumentsJson) != operationFingerprint)
             return false;
 
+        if (IsStorablePreview(revisedPreviewJson))
+            RevisedPreviewJson = revisedPreviewJson;
+        else if (!string.Equals(PreviewFingerprint, previewFingerprint, StringComparison.Ordinal))
+            RevisedPreviewJson = null;
         ArgumentsJson = argumentsJson;
         OperationFingerprint = operationFingerprint;
         PreviewFingerprint = previewFingerprint;
