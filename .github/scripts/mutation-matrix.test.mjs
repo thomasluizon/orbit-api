@@ -551,7 +551,8 @@ test("nightly executor spans partition AgentOperationExecutor.cs in order with n
 
 // https://github.com/thomasluizon/orbit-api/actions/runs/42392781471
 // Start offset, end offset and covering test count of each Timeout mutant in the old executor-2 (7855 to 8563)
-// and executor-4 (after 25449) spans. A mutant with more than 800 covering tests waits about 4 minutes on CI.
+// and executor-4 (after 25449) spans. Stryker runs a Timeout mutant again, and the timeout of a mutant with more than
+// 800 covering tests was 57 to 77 seconds in a local run, so each one holds a runner for 4 to 8 minutes on CI.
 const executorTimeouts = [
   [8182, 8318, 1691], [8198, 8287, 1691], [8198, 8258, 1691], [8198, 8236, 1691], [8198, 8212, 1691],
   [8216, 8236, 1691], [8240, 8258, 1691], [8274, 8287, 1691], [8291, 8318, 1691], [8461, 8526, 851],
