@@ -134,7 +134,8 @@ public sealed partial class ConversationTurnRecorder(
             : state.ConfirmedAtUtc.HasValue ? "approved"
             : state.IsExpired(TimeProvider.System.GetUtcNow().UtcDateTime) ? "expired"
             : state.RevisionNumber > 1 ? "edited" : "pending";
-        return new(state.Id, outcome, JsonSerializer.SerializeToElement(ModelToolPayload.Fit(state.ArgumentsJson, 8_000)), state.RevisionNumber);
+        var execution = outcome == "approved" && state.ExecutionJson is { } json ? JsonSerializer.Deserialize<JsonElement>(json) : (JsonElement?)null;
+        return new(state.Id, outcome, JsonSerializer.SerializeToElement(ModelToolPayload.Fit(state.ArgumentsJson, 8_000)), state.RevisionNumber, execution);
     }
 
     public async Task<Result<StoredConversationHistory>> LoadHistoryAsync(Guid userId, Guid conversationId,
@@ -176,7 +177,8 @@ public sealed partial class ConversationTurnRecorder(
             assistant_text = content,
             assistant_parts = response is null ? null : ModelToolPayload.Fit(response, 4_000),
             tool_results = JsonSerializer.Deserialize<JsonElement>(results),
-            preview_outcomes = JsonSerializer.Deserialize<JsonElement>(previews)
+            preview_outcomes = (JsonSerializer.Deserialize<ConversationPreviewOutcome[]>(previews) ?? [])
+                .Select(preview => preview with { Execution = null })
         }, JsonOptions);
         return ModelToolPayload.Fit(context, 12_000).ToJsonString();
     }

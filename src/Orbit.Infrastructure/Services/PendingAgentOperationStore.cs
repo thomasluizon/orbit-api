@@ -380,6 +380,23 @@ public class PendingAgentOperationStore(
         }
     }
 
+    public bool RecordExecution(Guid userId, Guid pendingOperationId, AgentOperationResult operation)
+    {
+        var entity = dbContext.PendingAgentOperations.FirstOrDefault(item => item.Id == pendingOperationId && item.UserId == userId);
+        if (entity is null || !entity.RecordExecution(PendingOperationExecutionJson.Serialize(operation)))
+            return false;
+        try
+        {
+            SaveChangesWithConversationOutcomes();
+            return true;
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            ResetFailedOutcomeChanges(entity);
+            return false;
+        }
+    }
+
     private void ResetFailedOutcomeChanges(PendingAgentOperationState entity)
     {
         dbContext.Entry(entity).State = EntityState.Detached;
