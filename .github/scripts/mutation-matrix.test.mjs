@@ -359,7 +359,7 @@ test("nightly and manual runs keep the configured file set and thresholds", () =
   const matrix = select();
   assert.equal(matrix.filter(({ project }) => project === "domain").length, 13);
   assert.equal(matrix.filter(({ project }) => project === "application").length, 13);
-  assert.equal(matrix.filter(({ project }) => project === "infrastructure").length, 7);
+  assert.equal(matrix.filter(({ project }) => project === "infrastructure").length, 10);
   assert.ok(matrix.every((scope) => scope.shard && scope.mutate?.length), "Every nightly shard names its own mutate scope");
   for (const project of strykerProjects) {
     const scopes = matrix.filter((scope) => scope.project === project);
@@ -373,7 +373,7 @@ test("nightly and manual runs keep the configured file set and thresholds", () =
       files.filter((file) => owns(configured, path(file), 0, 0)));
     assert.deepEqual(config.thresholds, { high: 80, low: 60, break: 0 });
   }
-  assert.match(readFileSync(new URL("../workflows/mutation.yml", import.meta.url), "utf8"), /timeout-minutes: 45\b/);
+  assert.match(readFileSync(new URL("../workflows/mutation.yml", import.meta.url), "utf8"), /timeout-minutes: 60\b/);
 });
 
 for (const file of ["Habit.cs", "StreakFreeze.cs", "User.cs", "HabitInvariants.cs"]) {
@@ -505,8 +505,11 @@ test("nightly infrastructure spans split the executor and streak mutant time and
   assert.deepEqual(select().filter(({ project }) => project === "infrastructure"), [
     { project: "infrastructure", shard: "infrastructure-agent-executor-1", mutate: [`${executor}{0..7855}`] },
     { project: "infrastructure", shard: "infrastructure-agent-executor-2", mutate: [`${executor}{0..8563}`, `!${executor}{0..7855}`] },
-    { project: "infrastructure", shard: "infrastructure-agent-executor-3", mutate: [`${executor}{0..25449}`, `!${executor}{0..8563}`] },
-    { project: "infrastructure", shard: "infrastructure-agent-executor-4", mutate: [executor, `!${executor}{0..25449}`] },
+    { project: "infrastructure", shard: "infrastructure-agent-executor-3", mutate: [`${executor}{0..19553}`, `!${executor}{0..8563}`] },
+    { project: "infrastructure", shard: "infrastructure-agent-executor-4", mutate: [`${executor}{0..25449}`, `!${executor}{0..19553}`] },
+    { project: "infrastructure", shard: "infrastructure-agent-executor-5", mutate: [`${executor}{0..28541}`, `!${executor}{0..25449}`] },
+    { project: "infrastructure", shard: "infrastructure-agent-executor-6", mutate: [`${executor}{0..31550}`, `!${executor}{0..28541}`] },
+    { project: "infrastructure", shard: "infrastructure-agent-executor-7", mutate: [executor, `!${executor}{0..31550}`] },
     { project: "infrastructure", shard: "infrastructure-streaks-1", mutate: [`${streaks}{0..11774}`] },
     { project: "infrastructure", shard: "infrastructure-streaks-2", mutate: [streaks, `!${streaks}{0..11774}`] },
     {
@@ -518,6 +521,70 @@ test("nightly infrastructure spans split the executor and streak mutant time and
       ],
     },
   ]);
+});
+
+function spanLimits(scope) {
+  const limit = (pattern) => Number(pattern.match(/\{0\.\.(\d+)\}$/)?.[1] ?? Infinity);
+  const included = scope.mutate.filter((pattern) => !pattern.startsWith("!"));
+  const excluded = scope.mutate.filter((pattern) => pattern.startsWith("!"));
+  assert.equal(included.length, 1, `${scope.shard} names one included span`);
+  assert.ok(excluded.length <= 1, `${scope.shard} names at most one excluded prefix`);
+  return { lower: excluded.length ? limit(excluded[0]) : 0, upper: limit(included[0]) };
+}
+
+test("nightly executor spans partition AgentOperationExecutor.cs in order with no gap and no overlap", () => {
+  const scopes = select().filter(({ shard }) => shard?.startsWith("infrastructure-agent-executor-"));
+  assert.deepEqual(scopes.map(({ shard }) => shard), scopes.map((_, index) => `infrastructure-agent-executor-${index + 1}`));
+  const limits = scopes.map(spanLimits);
+  assert.equal(limits[0].lower, 0);
+  assert.equal(limits.at(-1).upper, Infinity);
+  for (const [index, { lower, upper }] of limits.entries()) {
+    assert.ok(lower < upper, `${scopes[index].shard} owns a non-empty span`);
+    if (index > 0) assert.equal(lower, limits[index - 1].upper, `${scopes[index].shard} starts where ${scopes[index - 1].shard} ends`);
+  }
+  const path = "src/Orbit.Infrastructure/Services/AgentOperationExecutor.cs";
+  const length = readFileSync(new URL(`../../${path}`, import.meta.url), "utf8").length;
+  assert.ok(limits.at(-2).upper < length, "The last limit is inside the file, so the last shard owns the tail");
+  for (let end = 1; end <= length; end++) assertOneOwner(scopes, path, end - 1, end);
+});
+
+const executorFile = "**/Services/AgentOperationExecutor.cs";
+const streakFile = "**/Services/UserStreakService.cs";
+
+// https://github.com/thomasluizon/orbit-api/actions/runs/42392781471
+// https://github.com/thomasluizon/orbit-api/actions/runs/42415985803
+// One row for each measured infrastructure job: file, span, minutes from the Stryker start to "total mutants will be tested",
+// and minutes of the mutant phase. The second 8563 to 25449 row stopped at the job timeout, so its 14.2 is a lower limit.
+const infrastructurePhases = [
+  [executorFile, 0, 7855, 22.0, 7.2], [executorFile, 0, 7855, 26.1, 11.3],
+  [executorFile, 7855, 8563, 30.6, 13.1], [executorFile, 7855, 8240, 20.6, 3.2], [executorFile, 8240, 8300, 23.9, 4.0],
+  [executorFile, 8300, 8563, 26.3, 6.0], [executorFile, 8563, 25449, 21.6, 8.6], [executorFile, 8563, 25449, 30.7, 14.2],
+  [executorFile, 25449, Infinity, 26.2, 16.9], [executorFile, 25449, 28541, 31.7, 5.2], [executorFile, 28541, 31550, 21.6, 4.3],
+  [executorFile, 31550, Infinity, 30.3, 7.5], [streakFile, 0, 11774, 25.6, 2.5], [streakFile, 0, 11774, 26.0, 2.6],
+  [streakFile, 11774, Infinity, 31.2, 3.9], [streakFile, 11774, Infinity, 31.4, 3.7],
+  ["infrastructure-services", 0, Infinity, 27.2, 9.6], ["infrastructure-services", 0, Infinity, 31.2, 9.4],
+];
+
+// Each shard takes the nearest measured span that contains it, and the mutant phase scales to the slowest measured runner.
+// Checkout, restore and upload used at most 0.7 minutes of each job.
+test("nightly infrastructure shards end 10 minutes before the job timeout on the slowest measured runner", () => {
+  const timeout = Number(readFileSync(new URL("../workflows/mutation.yml", import.meta.url), "utf8").match(/timeout-minutes: (\d+)\n/)[1]);
+  const slowest = Math.max(...infrastructurePhases.map(([, , , fixed]) => fixed));
+  const projected = select().filter(({ project }) => project === "infrastructure").map((scope) => {
+    const [key, { lower, upper }] = scope.shard === "infrastructure-services"
+      ? [scope.shard, { lower: 0, upper: Infinity }]
+      : [scope.mutate[0].split("{")[0], spanLimits(scope)];
+    const rows = infrastructurePhases.filter(([file, start, end]) => file === key && start <= lower && end >= upper);
+    assert.ok(rows.length, `${scope.shard} has a measured span that contains it`);
+    const start = Math.max(...rows.map(([, rowStart]) => rowStart));
+    const end = Math.min(...rows.filter(([, rowStart]) => rowStart === start).map(([, , rowEnd]) => rowEnd));
+    const nearest = rows.filter(([, rowStart, rowEnd]) => rowStart === start && rowEnd === end);
+    const phase = Math.max(...nearest.map(([, , , fixed, minutes]) => minutes * slowest / fixed));
+    const total = Math.round((slowest + phase + 1) * 10) / 10;
+    assert.ok(total <= timeout - 10, `${scope.shard} needs ${total} of ${timeout} minutes`);
+    return total;
+  });
+  assert.deepEqual(projected, [46.4, 46.3, 47.4, 47.4, 37.9, 39.0, 40.5, 35.9, 36.7, 43.9]);
 });
 
 test("nightly scopes split each timed-out or near-limit shard", () => {
@@ -583,7 +650,10 @@ for (const [path, boundary] of [
   ["src/Orbit.Application/Chat/Tools/Implementations/CreateHabitTool.cs", 15000],
   ["src/Orbit.Infrastructure/Services/AgentOperationExecutor.cs", 7855],
   ["src/Orbit.Infrastructure/Services/AgentOperationExecutor.cs", 8563],
+  ["src/Orbit.Infrastructure/Services/AgentOperationExecutor.cs", 19553],
   ["src/Orbit.Infrastructure/Services/AgentOperationExecutor.cs", 25449],
+  ["src/Orbit.Infrastructure/Services/AgentOperationExecutor.cs", 28541],
+  ["src/Orbit.Infrastructure/Services/AgentOperationExecutor.cs", 31550],
   ["src/Orbit.Infrastructure/Services/UserStreakService.cs", 11774],
 ]) {
   test(`diff spans: ${path} routes multiline changes across ${boundary} without dropping the mutant`, (t) => {

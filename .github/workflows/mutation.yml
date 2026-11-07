@@ -55,7 +55,11 @@ jobs:
     needs: changes
     if: needs.changes.outputs.has-shards == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # https://github.com/stryker-mutator/stryker-net/blob/f9109e24c615a7030a3b33e5532c665c974e4ec5/src/Stryker.TestRunner.VsTest/VsTestContextInformation.cs#L288-L322
+    # https://github.com/thomasluizon/orbit-api/actions/runs/42415985803
+    # Before the mutate filter applies, Stryker runs every test in two serial sessions: the initial run and the coverage run.
+    # Each infrastructure shard used 21 to 32 minutes before its first mutant test, so 45 minutes left too little time for the mutant phase.
+    timeout-minutes: 60
 
     strategy:
       fail-fast: false

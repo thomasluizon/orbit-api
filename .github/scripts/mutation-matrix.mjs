@@ -101,9 +101,13 @@ const shards = [
       "**/Chat/Tools/Implementations/NotificationTools.cs",
     ],
   },
-  // https://github.com/thomasluizon/orbit-api/actions/runs/42371280845
-  // Each shard repeats the full initial and coverage runs. The span limits balance the measured mutant test time of each shard.
-  ...spanShards("infrastructure", "infrastructure-agent-executor", "**/Services/AgentOperationExecutor.cs", [7855, 8563, 25449]),
+  // https://github.com/thomasluizon/orbit-api/actions/runs/42371280845 gave the measured mutant time for the limits 7855, 25449 and 11774.
+  // https://github.com/thomasluizon/orbit-api/actions/runs/42392781471 gave the tail session time for 28541 and 31550, with each Timeout counted twice.
+  // https://github.com/thomasluizon/orbit-api/actions/runs/42415985803
+  // Each shard uses 21 to 32 minutes before its first mutant test, so a split pays only where the measured mutant phase is long.
+  // The span 7855 to 8563 is one shard again: its mutant phase was 13.1 minutes, and as three shards each phase was 3 to 6 minutes.
+  // The limit 19553 splits the span 8563 to 25449, whose mutant phase passed 14 minutes, at the middle of its covering-test count.
+  ...spanShards("infrastructure", "infrastructure-agent-executor", "**/Services/AgentOperationExecutor.cs", [7855, 8563, 19553, 25449, 28541, 31550]),
   ...spanShards("infrastructure", "infrastructure-streaks", "**/Services/UserStreakService.cs", [11774]),
   {
     project: "infrastructure", shard: "infrastructure-services", mutate: [
