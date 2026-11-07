@@ -17,7 +17,7 @@ internal static class PendingOperationExecutionJson
         Converters = { new JsonStringEnumConverter() }
     };
 
-    private static readonly string[] BulkSummaryFields = ["partial", "applied_count", "total_matched", "skipped_count"];
+    private static readonly string[] BulkSummaryFields = ["partial", "applied_count", "total_matched", "skipped_count", "unchanged_count"];
     private static readonly string[] BulkItemFields = ["index", "status", "habitId"];
     private static readonly string[] ClearedBulkItemFields = ["title", "error", "field"];
 

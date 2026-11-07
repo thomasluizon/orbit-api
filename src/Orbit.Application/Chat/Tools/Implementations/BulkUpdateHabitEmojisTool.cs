@@ -202,6 +202,7 @@ public sealed partial class BulkUpdateHabitEmojisTool(
             .Select(habit => new HabitEmojiInferenceInput(habit.Id, habit.Title, habit.Description))
             .ToList();
         var appliedCount = 0;
+        var unchangedCount = 0;
         var stopped = false;
         foreach (var chunk in inputs.Chunk(InferenceChunkSize))
         {
@@ -225,6 +226,7 @@ public sealed partial class BulkUpdateHabitEmojisTool(
             try
             {
                 var chunkIds = chunk.Select(input => input.HabitId).ToHashSet();
+                var chunkUnchanged = 0;
                 var chunkApplied = await unitOfWork.ExecuteInTransactionAsync(async transactionToken =>
                 {
                     var trackedHabits = await habitRepository.FindTrackedAsync(
@@ -232,6 +234,7 @@ public sealed partial class BulkUpdateHabitEmojisTool(
                         query => query,
                         transactionToken);
                     var attemptApplied = 0;
+                    chunkUnchanged = 0;
                     foreach (var habit in trackedHabits)
                     {
                         string? emoji;
@@ -250,7 +253,10 @@ public sealed partial class BulkUpdateHabitEmojisTool(
                         }
 
                         if (string.Equals(habit.Emoji, emoji, StringComparison.Ordinal))
+                        {
+                            chunkUnchanged++;
                             continue;
+                        }
                         if (ApplyEmoji(habit, emoji).IsSuccess)
                             attemptApplied++;
                     }
@@ -261,6 +267,7 @@ public sealed partial class BulkUpdateHabitEmojisTool(
                     return attemptApplied;
                 }, ct);
                 appliedCount += chunkApplied;
+                unchangedCount += chunkUnchanged;
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
             {
@@ -272,10 +279,10 @@ public sealed partial class BulkUpdateHabitEmojisTool(
         }
 
         var totalMatched = habits.Count;
-        var skippedCount = totalMatched - appliedCount;
+        var skippedCount = totalMatched - appliedCount - unchangedCount;
         var partial = stopped || skippedCount > 0;
         return BulkUpdateHabitsTool.BuildResult(
-            new BulkHabitMutationResult(appliedCount, totalMatched, skippedCount, partial),
+            new BulkHabitMutationResult(appliedCount, totalMatched, skippedCount, partial, unchangedCount),
             "Updated emojis for",
             includeUpdatedCount: true);
     }

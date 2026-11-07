@@ -171,6 +171,7 @@ public sealed class BulkUpdateHabitsTool(IMediator mediator) : IAiTool, IArgumen
             return new ToolResult(false, Error: "No matching habits found.");
 
         var completion = result.Partial ? "Partial result." : "Complete result.";
+        var unchanged = result.UnchangedCount > 0 ? $" {result.UnchangedCount} already in that state." : string.Empty;
         object payload = includeUpdatedCount
             ? new
             {
@@ -178,29 +179,37 @@ public sealed class BulkUpdateHabitsTool(IMediator mediator) : IAiTool, IArgumen
                 total_matched = result.TotalMatched,
                 skipped_count = result.SkippedCount,
                 partial = result.Partial,
-                updated_count = result.AppliedCount
+                updated_count = result.AppliedCount,
+                unchanged_count = result.UnchangedCount
             }
             : new
             {
                 applied_count = result.AppliedCount,
                 total_matched = result.TotalMatched,
                 skipped_count = result.SkippedCount,
-                partial = result.Partial
+                partial = result.Partial,
+                unchanged_count = result.UnchangedCount
             };
         return new ToolResult(
             true,
-            EntityName: $"{verb} {result.AppliedCount} of {result.TotalMatched} matching habit(s). Skipped {result.SkippedCount}. {completion}",
+            EntityName: $"{verb} {result.AppliedCount} of {result.TotalMatched} matching habit(s).{unchanged} Skipped {result.SkippedCount}. {completion}",
             Payload: payload);
     }
 
+    /// <summary>
+    /// Runs the items in bounded chunks. <paramref name="countUnchanged"/> counts the items that already had the
+    /// requested state, so the result is partial only when an item did not end in that state.
+    /// </summary>
     internal static async Task<ToolResult> ExecuteInChunksAsync<TItem, TResult>(
         IReadOnlyList<TItem> items,
         Func<IReadOnlyList<TItem>, CancellationToken, Task<Result<TResult>>> executeChunk,
         Func<TResult, int> countApplied,
         string verb,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Func<TResult, int>? countUnchanged = null)
     {
         var appliedCount = 0;
+        var unchangedCount = 0;
         foreach (var chunk in items.Chunk(AppConstants.MaxBulkOperationSize))
         {
             Result<TResult> result;
@@ -214,27 +223,28 @@ public sealed class BulkUpdateHabitsTool(IMediator mediator) : IAiTool, IArgumen
             }
             catch (Exception)
             {
-                return appliedCount == 0
+                return appliedCount + unchangedCount == 0
                     ? new ToolResult(false, Error: "Bulk habit operation failed before any changes were applied.")
-                    : BuildResult(
-                        new BulkHabitMutationResult(appliedCount, items.Count, items.Count - appliedCount, true),
-                        verb);
+                    : BuildResult(Counts(appliedCount, unchangedCount, items.Count, stopped: true), verb);
             }
 
             if (result.IsFailure)
             {
-                return appliedCount == 0
+                return appliedCount + unchangedCount == 0
                     ? ToolResult.FromFailure(result)
-                    : BuildResult(
-                        new BulkHabitMutationResult(appliedCount, items.Count, items.Count - appliedCount, true),
-                        verb);
+                    : BuildResult(Counts(appliedCount, unchangedCount, items.Count, stopped: true), verb);
             }
 
             appliedCount += countApplied(result.Value);
+            unchangedCount += countUnchanged?.Invoke(result.Value) ?? 0;
         }
 
-        return BuildResult(
-            new BulkHabitMutationResult(appliedCount, items.Count, items.Count - appliedCount, appliedCount != items.Count),
-            verb);
+        return BuildResult(Counts(appliedCount, unchangedCount, items.Count, stopped: false), verb);
+    }
+
+    private static BulkHabitMutationResult Counts(int applied, int unchanged, int total, bool stopped)
+    {
+        var skipped = total - applied - unchanged;
+        return new BulkHabitMutationResult(applied, total, skipped, stopped || skipped > 0, unchanged);
     }
 }

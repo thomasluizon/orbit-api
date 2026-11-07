@@ -101,7 +101,7 @@ public class BulkLogHabitsToolTests
     }
 
     [Fact]
-    public async Task AlreadyLogged_SkipsAlreadyLogged()
+    public async Task AlreadyLogged_CountsTheHabitAsUnchangedAndKeepsTheResultComplete()
     {
         var logged = CreateHabit("Water");
         var fresh = CreateHabit("Exercise");
@@ -115,6 +115,33 @@ public class BulkLogHabitsToolTests
 
         result.Success.Should().BeTrue();
         result.EntityName.Should().Contain("Logged 1 of 2");
+        result.EntityName.Should().Contain("1 already in that state");
+        result.EntityName.Should().Contain("Complete result");
+        var payload = JsonSerializer.SerializeToElement(result.Payload);
+        payload.GetProperty("applied_count").GetInt32().Should().Be(1);
+        payload.GetProperty("unchanged_count").GetInt32().Should().Be(1);
+        payload.GetProperty("skipped_count").GetInt32().Should().Be(0);
+        payload.GetProperty("partial").GetBoolean().Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task AlreadyLoggedNextToAFailedItem_StillReportsAPartialResult()
+    {
+        var logged = CreateHabit("Water");
+        var failed = CreateHabit("Exercise");
+        SetupHabitsFound(logged, failed);
+        _mediator.Send(Arg.Any<BulkLogHabitsCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new BulkLogResult([
+                new(0, BulkItemStatus.Success, logged.Id),
+                new(1, BulkItemStatus.Failed, failed.Id, Error: "Not scheduled")])));
+
+        var result = await Execute($$$"""{"habit_ids": ["{{{logged.Id}}}", "{{{failed.Id}}}"]}""");
+
+        var payload = JsonSerializer.SerializeToElement(result.Payload);
+        payload.GetProperty("applied_count").GetInt32().Should().Be(0);
+        payload.GetProperty("unchanged_count").GetInt32().Should().Be(1);
+        payload.GetProperty("skipped_count").GetInt32().Should().Be(1);
+        payload.GetProperty("partial").GetBoolean().Should().BeTrue();
         result.EntityName.Should().Contain("Partial result");
     }
 

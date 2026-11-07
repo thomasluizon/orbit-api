@@ -97,7 +97,12 @@ public class BulkUpdateHabitEmojisToolTests
         var result = await Execute("{\"emoji\":\"📚\"}");
 
         result.Success.Should().BeTrue();
-        JsonSerializer.SerializeToElement(result.Payload).GetProperty("applied_count").GetInt32().Should().Be(0);
+        var payload = JsonSerializer.SerializeToElement(result.Payload);
+        payload.GetProperty("applied_count").GetInt32().Should().Be(0);
+        payload.GetProperty("partial").GetBoolean().Should().BeFalse();
+        payload.GetProperty("skipped_count").GetInt32().Should().Be(0);
+        payload.GetProperty("unchanged_count").GetInt32().Should().Be(1);
+        result.EntityName.Should().Contain("Complete result");
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
