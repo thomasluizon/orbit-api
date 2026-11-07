@@ -122,7 +122,10 @@ public sealed partial class PlanCommittedOutcomeTests
         fixture.Db.ChangeTracker.Clear();
         (await StoredOutcomeAsync(fixture, id)).TryGetProperty("Execution", out _).Should().BeTrue();
         var history = (await fixture.HistoryAsync()).Messages.Single(message => message.Role == "assistant");
-        history.Content.Should().NotContain("Execution");
+        using var context = JsonDocument.Parse(history.Content);
+        context.RootElement.GetProperty("preview_outcomes").EnumerateArray().Single().EnumerateObject()
+            .Select(property => property.Name)
+            .Should().Equal("PendingOperationId", "Outcome", "Arguments", "Revision");
     }
 
     [Fact]

@@ -177,8 +177,8 @@ public sealed partial class ConversationTurnRecorder(
             assistant_text = content,
             assistant_parts = response is null ? null : ModelToolPayload.Fit(response, 4_000),
             tool_results = JsonSerializer.Deserialize<JsonElement>(results),
-            preview_outcomes = (JsonSerializer.Deserialize<ConversationPreviewOutcome[]>(previews) ?? [])
-                .Select(preview => preview with { Execution = null })
+            preview_outcomes = JsonSerializer.SerializeToElement((JsonSerializer.Deserialize<ConversationPreviewOutcome[]>(previews) ?? [])
+                .Select(preview => preview with { Execution = null }))
         }, JsonOptions);
         return ModelToolPayload.Fit(context, 12_000).ToJsonString();
     }
