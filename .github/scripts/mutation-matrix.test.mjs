@@ -359,7 +359,7 @@ test("nightly and manual runs keep the configured file set and thresholds", () =
   const matrix = select();
   assert.equal(matrix.filter(({ project }) => project === "domain").length, 13);
   assert.equal(matrix.filter(({ project }) => project === "application").length, 13);
-  assert.equal(matrix.filter(({ project }) => project === "infrastructure").length, 7);
+  assert.equal(matrix.filter(({ project }) => project === "infrastructure").length, 9);
   assert.ok(matrix.every((scope) => scope.shard && scope.mutate?.length), "Every nightly shard names its own mutate scope");
   for (const project of strykerProjects) {
     const scopes = matrix.filter((scope) => scope.project === project);
@@ -504,9 +504,11 @@ test("nightly infrastructure spans split the executor and streak mutant time and
   const streaks = "**/Services/UserStreakService.cs";
   assert.deepEqual(select().filter(({ project }) => project === "infrastructure"), [
     { project: "infrastructure", shard: "infrastructure-agent-executor-1", mutate: [`${executor}{0..7855}`] },
-    { project: "infrastructure", shard: "infrastructure-agent-executor-2", mutate: [`${executor}{0..8563}`, `!${executor}{0..7855}`] },
-    { project: "infrastructure", shard: "infrastructure-agent-executor-3", mutate: [`${executor}{0..25449}`, `!${executor}{0..8563}`] },
-    { project: "infrastructure", shard: "infrastructure-agent-executor-4", mutate: [executor, `!${executor}{0..25449}`] },
+    { project: "infrastructure", shard: "infrastructure-agent-executor-2", mutate: [`${executor}{0..8240}`, `!${executor}{0..7855}`] },
+    { project: "infrastructure", shard: "infrastructure-agent-executor-3", mutate: [`${executor}{0..8300}`, `!${executor}{0..8240}`] },
+    { project: "infrastructure", shard: "infrastructure-agent-executor-4", mutate: [`${executor}{0..8563}`, `!${executor}{0..8300}`] },
+    { project: "infrastructure", shard: "infrastructure-agent-executor-5", mutate: [`${executor}{0..25449}`, `!${executor}{0..8563}`] },
+    { project: "infrastructure", shard: "infrastructure-agent-executor-6", mutate: [executor, `!${executor}{0..25449}`] },
     { project: "infrastructure", shard: "infrastructure-streaks-1", mutate: [`${streaks}{0..11774}`] },
     { project: "infrastructure", shard: "infrastructure-streaks-2", mutate: [streaks, `!${streaks}{0..11774}`] },
     {
@@ -518,6 +520,52 @@ test("nightly infrastructure spans split the executor and streak mutant time and
       ],
     },
   ]);
+});
+
+function spanLimits(scope) {
+  const limit = (pattern) => Number(pattern.match(/\{0\.\.(\d+)\}$/)?.[1] ?? Infinity);
+  const included = scope.mutate.filter((pattern) => !pattern.startsWith("!"));
+  const excluded = scope.mutate.filter((pattern) => pattern.startsWith("!"));
+  assert.equal(included.length, 1, `${scope.shard} names one included span`);
+  assert.ok(excluded.length <= 1, `${scope.shard} names at most one excluded prefix`);
+  return { lower: excluded.length ? limit(excluded[0]) : 0, upper: limit(included[0]) };
+}
+
+test("nightly executor spans partition AgentOperationExecutor.cs in order with no gap and no overlap", () => {
+  const scopes = select().filter(({ shard }) => shard?.startsWith("infrastructure-agent-executor-"));
+  assert.deepEqual(scopes.map(({ shard }) => shard), scopes.map((_, index) => `infrastructure-agent-executor-${index + 1}`));
+  const limits = scopes.map(spanLimits);
+  assert.equal(limits[0].lower, 0);
+  assert.equal(limits.at(-1).upper, Infinity);
+  for (const [index, { lower, upper }] of limits.entries()) {
+    assert.ok(lower < upper, `${scopes[index].shard} owns a non-empty span`);
+    if (index > 0) assert.equal(lower, limits[index - 1].upper, `${scopes[index].shard} starts where ${scopes[index - 1].shard} ends`);
+  }
+  const path = "src/Orbit.Infrastructure/Services/AgentOperationExecutor.cs";
+  const length = readFileSync(new URL(`../../${path}`, import.meta.url), "utf8").length;
+  assert.ok(limits.at(-2).upper < length, "The last limit is inside the file, so the last shard owns the tail");
+  for (let end = 1; end <= length; end++) assertOneOwner(scopes, path, end - 1, end);
+});
+
+// https://github.com/thomasluizon/orbit-api/actions/runs/42392781471
+// Offsets of the Timeout mutants that the old executor-2 span (7855 to 8563) reported. Each one uses the full Stryker timeout.
+const executorLine158Timeouts = [
+  [8182, 8318], [8198, 8287], [8198, 8258], [8198, 8236], [8198, 8212],
+  [8216, 8236], [8240, 8258], [8274, 8287], [8291, 8318], [8461, 8526],
+];
+
+test("nightly executor spans give each shard at most one measured Timeout mutant per runner", () => {
+  const scopes = select().filter(({ shard }) => shard?.startsWith("infrastructure-agent-executor-"));
+  const path = "src/Orbit.Infrastructure/Services/AgentOperationExecutor.cs";
+  const runners = 4;
+  const counts = new Map(scopes.map(({ shard }) => [shard, 0]));
+  for (const [start, end] of executorLine158Timeouts) {
+    assertOneOwner(scopes, path, start, end);
+    const owner = scopes.find((scope) => owns(scope, path, start, end));
+    counts.set(owner.shard, counts.get(owner.shard) + 1);
+  }
+  for (const [shard, count] of counts) assert.ok(count <= runners, `${shard} owns ${count} measured Timeout mutants`);
+  assert.equal([...counts.values()].filter((count) => count > 0).length, 3);
 });
 
 test("nightly scopes split each timed-out or near-limit shard", () => {
@@ -582,6 +630,8 @@ for (const [path, boundary] of [
   ["src/Orbit.Application/Chat/Tools/Implementations/CreateHabitTool.cs", 10500],
   ["src/Orbit.Application/Chat/Tools/Implementations/CreateHabitTool.cs", 15000],
   ["src/Orbit.Infrastructure/Services/AgentOperationExecutor.cs", 7855],
+  ["src/Orbit.Infrastructure/Services/AgentOperationExecutor.cs", 8240],
+  ["src/Orbit.Infrastructure/Services/AgentOperationExecutor.cs", 8300],
   ["src/Orbit.Infrastructure/Services/AgentOperationExecutor.cs", 8563],
   ["src/Orbit.Infrastructure/Services/AgentOperationExecutor.cs", 25449],
   ["src/Orbit.Infrastructure/Services/UserStreakService.cs", 11774],

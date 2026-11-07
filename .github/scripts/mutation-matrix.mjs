@@ -103,7 +103,9 @@ const shards = [
   },
   // https://github.com/thomasluizon/orbit-api/actions/runs/42371280845
   // Each shard repeats the full initial and coverage runs. The span limits balance the measured mutant test time of each shard.
-  ...spanShards("infrastructure", "infrastructure-agent-executor", "**/Services/AgentOperationExecutor.cs", [7855, 8563, 25449]),
+  // https://github.com/thomasluizon/orbit-api/actions/runs/42392781471
+  // Lines 158 to 161 gave 10 Timeout mutants. The limits 8240 and 8300 give each shard at most 4, one per runner of nproc 4.
+  ...spanShards("infrastructure", "infrastructure-agent-executor", "**/Services/AgentOperationExecutor.cs", [7855, 8240, 8300, 8563, 25449]),
   ...spanShards("infrastructure", "infrastructure-streaks", "**/Services/UserStreakService.cs", [11774]),
   {
     project: "infrastructure", shard: "infrastructure-services", mutate: [
