@@ -74,6 +74,7 @@ public interface IPendingAgentOperationStore
         string operationFingerprint,
         string confirmationToken,
         bool requireStepUp);
+    bool RecordExecution(Guid userId, Guid pendingOperationId, AgentOperationResult operation);
 }
 
 public interface IPendingClarificationStore

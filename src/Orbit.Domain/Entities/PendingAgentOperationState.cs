@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Orbit.Domain.Common;
 using Orbit.Domain.Models;
 
@@ -6,6 +7,7 @@ namespace Orbit.Domain.Entities;
 public class PendingAgentOperationState : Entity
 {
     public const int CurrentArgumentSchemaVersion = 1;
+    public const int MaxExecutionJsonLength = 8_000;
 
     public int ArgumentSchemaVersion { get; private set; }
     public Guid UserId { get; private set; }
@@ -27,6 +29,7 @@ public class PendingAgentOperationState : Entity
     public DateTime? ConfirmedAtUtc { get; private set; }
     public DateTime? StepUpSatisfiedAtUtc { get; private set; }
     public DateTime? ConsumedAtUtc { get; private set; }
+    public string? ExecutionJson { get; private set; }
 
     private PendingAgentOperationState() { }
 
@@ -88,6 +91,31 @@ public class PendingAgentOperationState : Entity
         ConsumedAtUtc = DateTime.UtcNow;
     }
 
+    /// <summary>
+    /// Keeps the operation result that the approved execution returned, so a reopened conversation can show it.
+    /// </summary>
+    public bool RecordExecution(string executionJson)
+    {
+        if (!ConfirmedAtUtc.HasValue || ConfirmationTokenHash is null || string.IsNullOrWhiteSpace(executionJson)
+            || executionJson.Length > MaxExecutionJsonLength || !IsJsonObject(executionJson))
+            return false;
+        ExecutionJson = executionJson;
+        return true;
+    }
+
+    private static bool IsJsonObject(string json)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            return document.RootElement.ValueKind == JsonValueKind.Object;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
     public bool Revise(string argumentsJson, string operationFingerprint, string previewFingerprint, DateTime utcNow)
     {
         if (IsExpired(utcNow) || ConsumedAtUtc.HasValue
@@ -104,6 +132,7 @@ public class PendingAgentOperationState : Entity
         ConfirmationTokenHash = null;
         ConfirmedAtUtc = null;
         StepUpSatisfiedAtUtc = null;
+        ExecutionJson = null;
         RevisionNumber++;
         return true;
     }

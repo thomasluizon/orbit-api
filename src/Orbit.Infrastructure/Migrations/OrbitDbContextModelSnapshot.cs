@@ -2044,6 +2044,9 @@ namespace Orbit.Infrastructure.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<string>("ExecutionJson")
+                        .HasColumnType("jsonb");
+
                     b.Property<DateTime>("ExpiresAtUtc")
                         .HasColumnType("timestamp with time zone");
 

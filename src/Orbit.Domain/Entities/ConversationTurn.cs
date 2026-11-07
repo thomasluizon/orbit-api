@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Orbit.Domain.Common;
 using Orbit.Domain.Models;
 
@@ -131,4 +132,5 @@ public sealed class ConversationTurn : Entity
     }
 }
 
-public sealed record ConversationPreviewOutcome(Guid PendingOperationId, string Outcome, JsonElement Arguments, int Revision);
+public sealed record ConversationPreviewOutcome(Guid PendingOperationId, string Outcome, JsonElement Arguments, int Revision,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] JsonElement? Execution = null);

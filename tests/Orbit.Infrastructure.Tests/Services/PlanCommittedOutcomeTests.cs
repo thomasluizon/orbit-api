@@ -25,7 +25,7 @@ using Orbit.Infrastructure.Services;
 
 namespace Orbit.Infrastructure.Tests.Services;
 
-public sealed class PlanCommittedOutcomeTests
+public sealed partial class PlanCommittedOutcomeTests
 {
     [Fact]
     public async Task Execute_AwaitsPolicyBeforeCommittingAndRepairingPlan()
@@ -244,8 +244,10 @@ public sealed class PlanCommittedOutcomeTests
             var tool = new CreateGoalTool(Orbit.Tests.Shared.GoalToolCommandMediator.Create(new GenericRepository<Goal>(Db), unit,
                 habits: new GenericRepository<Habit>(Db), configureTransactions: false));
             IAiTool registered = failGoal ? new FailingGoalTool(tool) : tool;
-            _tools = new([registered]);
-            _catalog = new([registered]);
+            var update = new UpdateGoalTool(new GenericRepository<Goal>(Db), Orbit.Tests.Shared.GoalToolCommandMediator.Create(
+                new GenericRepository<Goal>(Db), unit, habits: new GenericRepository<Habit>(Db), configureTransactions: false));
+            _tools = new([registered, update]);
+            _catalog = new([registered, update]);
             Pending = new(Db, Options.Create(new AgentPlatformSettings()), _conversation.Flags);
             _previewer = new PendingOperationChangePreviewer(new GenericRepository<Habit>(Db), new GenericRepository<Goal>(Db),
                 new GenericRepository<Tag>(Db), Substitute.For<IUserDateService>(), _tools);
@@ -268,7 +270,7 @@ public sealed class PlanCommittedOutcomeTests
 
         private AgentPolicyDecision EvaluatePolicy(AgentPolicyEvaluationContext context)
         {
-            var capability = _catalog.GetCapabilityByChatTool("create_goal")!;
+            var capability = _catalog.GetCapability(context.CapabilityId)!;
             return Pending.TryConsumeFreshConfirmation(UserId, capability.Id,
                 context.OperationFingerprint!, context.ConfirmationToken!, false)
                 ? new AgentPolicyDecision(AgentPolicyDecisionStatus.Allowed, capability, ConsumedConfirmation: true)
@@ -282,15 +284,16 @@ public sealed class PlanCommittedOutcomeTests
                 return EvaluatePolicy(call.Arg<AgentPolicyEvaluationContext>());
             });
 
-        internal async Task<Guid> ProposeAsync(bool changeSet = false, bool recordPlan = true)
+        internal async Task<Guid> ProposeAsync(bool changeSet = false, bool recordPlan = true,
+            string operationId = "create_goal", object? toolArguments = null)
         {
             var capture = _conversation.Capture();
-            var arguments = JsonSerializer.SerializeToElement(new { title = "Read books" });
-            var capability = _catalog.GetCapabilityByChatTool("create_goal")!;
-            var fingerprint = AgentOperationFingerprint.Compute("create_goal", arguments.GetRawText());
-            var proposed = Pending.Create(UserId, capability, "create_goal", arguments.GetRawText(), "Reading", fingerprint,
+            var arguments = JsonSerializer.SerializeToElement(toolArguments ?? new { title = "Read books" });
+            var capability = _catalog.GetCapabilityByChatTool(operationId)!;
+            var fingerprint = AgentOperationFingerprint.Compute(operationId, arguments.GetRawText());
+            var proposed = Pending.Create(UserId, capability, operationId, arguments.GetRawText(), "Reading", fingerprint,
                 AgentExecutionSurface.Chat, new(_conversation.ConversationId, capture.CreatedAtUtc));
-            var preview = (await _previewer.PreviewAsync(UserId, "create_goal", arguments)).Value!;
+            var preview = (await _previewer.PreviewAsync(UserId, operationId, arguments)).Value!;
             Pending.Revise(UserId, proposed.Id, fingerprint, arguments.GetRawText(), fingerprint, preview.PreviewFingerprint!).Should().BeTrue();
             var id = proposed.Id;
             if (changeSet)
@@ -304,8 +307,8 @@ public sealed class PlanCommittedOutcomeTests
                     new(_conversation.ConversationId, capture.CreatedAtUtc)).Id;
                 Pending.Revise(UserId, id, fingerprint, arguments.GetRawText(), fingerprint, preview.PreviewFingerprint!).Should().BeTrue();
             }
-            var plan = AstraPlan.Create("Reading", [new("1", "Prepare a preview", "done", "create_goal", "execution"),
-                new("2", "Save your goal", "pending", "create_goal", "approval", PendingOperationId: id)]).Value;
+            var plan = AstraPlan.Create("Reading", [new("1", "Prepare a preview", "done", operationId, "execution"),
+                new("2", "Save your goal", "pending", operationId, "approval", PendingOperationId: id)]).Value;
             await _conversation.Store.RecordAsync(capture with
             { ResponseJson = JsonSerializer.Serialize(new ChatResponse(null, [], Plan: recordPlan ? plan : null), AstraPlan.JsonOptions) });
             return id;
@@ -340,6 +343,9 @@ public sealed class PlanCommittedOutcomeTests
             _conversation.Flags.ResolveForUser(UserId).Returns([new(Orbit.Application.Common.FeatureFlagKeys.AstraConversationRecording, enabled, null)]);
         }
         internal void AssertError(Guid id) => _logs.Should().Contain(entry => entry.Level == LogLevel.Error && entry.Text.Contains(id.ToString()));
+        internal async Task<StoredConversationHistory> HistoryAsync() =>
+            (await _conversation.Store.LoadHistoryAsync(UserId, _conversation.ConversationId)).Value;
+        internal Task<ConversationPage?> PageAsync() => _conversation.Store.GetLatestAsync(UserId, _conversation.ConversationId, null, 10);
         internal async Task<AstraPlan> ReloadAsync() => (await _conversation.Store.GetLatestAsync(UserId,
             _conversation.ConversationId, null, 10))!.Turns.Single(turn => turn.Role == "assistant").Plan!;
         public void Dispose() => _conversation.Dispose();

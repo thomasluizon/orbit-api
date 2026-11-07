@@ -33,10 +33,12 @@ public partial class AgentOperationExecutor(
     {
         var operation = catalogService.GetOperation(request.OperationId);
         var arguments = request.Arguments.ValueKind == JsonValueKind.Undefined ? EmptyArguments : request.Arguments;
-        var pending = request.ConfirmationToken is { } token && operation is { IsMutation: true } && plans is not null
+        var pending = request.ConfirmationToken is { } token && operation is { IsMutation: true }
             ? pendingOperationStore.GetConfirmedExecution(request.UserId, operation.CapabilityId,
                 AgentOperationFingerprint.Compute(operation.Id, arguments.GetRawText()), token) : null;
         var response = await ExecuteCoreAsync(request, cancellationToken);
+        if (pending is not null)
+            RecordExecution(request.UserId, pending.PendingOperationId, response.Operation);
         if (pending is not null && plans is not null)
         {
             var succeeded = response.Operation.Status == AgentOperationStatus.Succeeded && !IsPartialMutation(response.Operation.Payload);
@@ -51,6 +53,19 @@ public partial class AgentOperationExecutor(
             };
         }
         return response;
+    }
+
+    private void RecordExecution(Guid userId, Guid pendingOperationId, AgentOperationResult operation)
+    {
+        try
+        {
+            if (!pendingOperationStore.RecordExecution(userId, pendingOperationId, operation))
+                logger.LogWarning("Pending operation {PendingOperationId} execution result was not stored", pendingOperationId);
+        }
+        catch (Exception exception)
+        {
+            logger.LogWarning(exception, "Pending operation {PendingOperationId} execution result was not stored", pendingOperationId);
+        }
     }
 
     private async Task<AgentExecuteOperationResponse> ExecuteCoreAsync(
