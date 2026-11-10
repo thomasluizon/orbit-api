@@ -255,11 +255,15 @@ public class ProcessMemoryMonitorTests
         var logger = new CaptureLogger();
         var time = new PeriodicTestClock();
         var samples = 0;
+        var sampledTwice = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var sampledThreeTimes = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         using var monitor = new ProcessMemoryMonitor(logger, time, () =>
         {
             var snapshot = ProcessMemorySnapshot.Read(() => status);
-            if (Interlocked.Increment(ref samples) == 3)
+            var sample = Interlocked.Increment(ref samples);
+            if (sample == 2)
+                sampledTwice.TrySetResult();
+            if (sample == 3)
                 sampledThreeTimes.TrySetResult();
             return snapshot;
         });
@@ -270,7 +274,9 @@ public class ProcessMemoryMonitorTests
             await Task.WhenAny(time.TimerCreated, monitor.ExecuteTask!).WaitAsync(TimeSpan.FromSeconds(10));
             monitor.ExecuteTask!.IsFaulted.Should().BeFalse("a missing status field must not stop the API host: {0}",
                 monitor.ExecuteTask.Exception?.InnerException);
+            // PeriodicTimer holds one pending tick, so a second tick before the loop takes the first is lost: https://github.com/dotnet/runtime/blob/v10.0.0/src/libraries/System.Private.CoreLib/src/System/Threading/PeriodicTimer.cs
             time.Advance(TimeSpan.FromSeconds(30));
+            await sampledTwice.Task.WaitAsync(TimeSpan.FromSeconds(10));
             time.Advance(TimeSpan.FromSeconds(30));
             await sampledThreeTimes.Task.WaitAsync(TimeSpan.FromSeconds(10));
         }
