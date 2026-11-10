@@ -78,7 +78,8 @@ internal sealed class StreamingImageRequest : BinaryContent
     {
         if (images is not { Count: > 0 })
         {
-            await foreach (var update in client.CreateResponseStreamingAsync(options, ct)) yield return update;
+            await using var streaming = await client.CreateResponseStreamingAsync(options, ct);
+            await foreach (var update in streaming) yield return update;
             yield break;
         }
         using var content = new StreamingImageRequest(options, images);
