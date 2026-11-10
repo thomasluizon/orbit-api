@@ -80,6 +80,7 @@ public partial class OAuthControllerTests
         pipeline.UseCookiePolicy();
         pipeline.Run(context =>
         {
+            // The cookie omits Secure on purpose so the test proves the policy adds it: https://github.com/thomasluizon/orbit-api/security/code-scanning/28
             context.Response.Cookies.Append(name, "value", new CookieOptions { SameSite = SameSiteMode.Lax, Path = path });
             return Task.CompletedTask;
         });
