@@ -65,7 +65,7 @@ jobs:
       # release commit because a moving tag is an unpinned dependency.
       - name: Run agent
         id: claude
-        uses: pullfrog/pullfrog@895164fc90f5c493e72693c919c6cf269af158eb # v0, release 0.1.110
+        uses: pullfrog/pullfrog@0613df0079954102a9727e833b1e4da229b8f440 # v0, release 0.1.122
         with:
           prompt: ${{ inputs.prompt }}
           model: anthropic/claude-opus-5-5
