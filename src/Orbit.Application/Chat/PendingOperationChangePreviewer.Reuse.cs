@@ -39,7 +39,9 @@ public sealed partial class PendingOperationChangePreviewer
             var childFingerprint = await BindCreationReuseAsync(userId, child, reused, known, childFields, ct);
             if (childFingerprint is null) return null;
             state.Append(childFingerprint);
-            previousChildren.Add(childFields.ToDictionary(field => field.Field, field => field.OldValue));
+            var previous = childFields.ToDictionary(field => field.Field, field => field.OldValue);
+            if (reused is not null) previous.TryAdd("emoji", reused.Emoji);
+            previousChildren.Add(previous);
             proposedChildren.Add(childFields.ToDictionary(field => field.Field, field =>
                 field.Field == SubHabits && field.NewValue is { } displayed
                     ? JsonSerializer.Deserialize<JsonElement>(displayed) : field.ProposedValue));

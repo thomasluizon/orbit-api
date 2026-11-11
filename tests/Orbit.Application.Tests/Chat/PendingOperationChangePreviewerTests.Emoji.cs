@@ -3,6 +3,7 @@ using System.Text.Json;
 using FluentAssertions;
 using NSubstitute;
 using Orbit.Application.Chat;
+using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Models;
 
@@ -94,6 +95,108 @@ public sealed partial class PendingOperationChangePreviewerTests
         preview.Should().NotBeNull();
         AssertEmoji(preview!, emoji);
     }
+
+    [Fact]
+    public async Task ReusedChild_CarriesStoredEmojiAsDisplayOnlyOldValue()
+    {
+        var walk = CreateHabit("Walk", "🚶");
+        var arguments = $$"""{"habits":[{"title":"Routine","frequency_unit":"Day","sub_habits":[{"habit_id":"{{walk.Id}}","title":"Walk"}]}]}""";
+
+        var preview = await PreviewReuse(arguments, walk);
+
+        var field = preview.Items!.Single().Fields.Single(f => f.Field == "sub_habits");
+        ChildOldValues(field).Single().GetProperty("emoji").GetString().Should().Be("🚶");
+        var proposed = field.ProposedValue!.Value;
+        proposed.GetRawText().Should().Be(JsonDocument.Parse(arguments).RootElement.GetProperty("habits")[0].GetProperty("sub_habits").GetRawText());
+        proposed[0].TryGetProperty("emoji", out _).Should().BeFalse();
+        preview.ExecutionArguments!.Value.GetRawText().Should().Be(JsonDocument.Parse(arguments).RootElement.GetRawText());
+        walk.Emoji.Should().Be("🚶");
+    }
+
+    [Fact]
+    public async Task ReusedChild_ExecutedArgumentsCarryNoEmoji()
+    {
+        var walk = CreateHabit("Walk", "🚶");
+        var arguments = $$"""{"habits":[{"title":"Routine","frequency_unit":"Day","sub_habits":[{"habit_id":"{{walk.Id}}","title":"Walk"}]}]}""";
+
+        var preview = await PreviewReuse(arguments, walk);
+
+        var executed = (preview.ExecutionArguments ?? JsonDocument.Parse(arguments).RootElement).GetProperty("habits")[0].GetProperty("sub_habits")[0];
+        executed.TryGetProperty("emoji", out _).Should().BeFalse();
+        var command = BulkCreateHabitsTool.ParseBulkHabitItem(JsonDocument.Parse(arguments).RootElement.GetProperty("habits")[0], allowEmptyTitle: true);
+        command!.SubHabits!.Single().Emoji.Should().BeNull();
+        walk.Emoji.Should().Be("🚶");
+    }
+
+    [Fact]
+    public async Task ReusedChild_WithNullStoredEmoji_SerializesNull()
+    {
+        var walk = CreateHabit("Walk", null);
+
+        var preview = await PreviewReuse(
+            $$"""{"habits":[{"title":"Routine","frequency_unit":"Day","sub_habits":[{"habit_id":"{{walk.Id}}","title":"Walk"}]}]}""", walk);
+
+        var child = ChildOldValues(preview.Items!.Single().Fields.Single(f => f.Field == "sub_habits")).Single();
+        child.TryGetProperty("emoji", out var emoji).Should().BeTrue();
+        emoji.ValueKind.Should().Be(JsonValueKind.Null);
+    }
+
+    [Fact]
+    public async Task MixedChildren_KeepPositionsAlignedAndOnlyReusedChildCarriesStoredEmoji()
+    {
+        var walk = CreateHabit("Walk", "🚶");
+        var arguments = $$"""{"habits":[{"title":"Routine","frequency_unit":"Day","sub_habits":[{"title":"Stretch","emoji":"🧘"},{"habit_id":"{{walk.Id}}","title":"Walk"}]}]}""";
+
+        var preview = await PreviewReuse(arguments, walk);
+
+        var children = ChildOldValues(preview.Items!.Single().Fields.Single(f => f.Field == "sub_habits"));
+        children.Should().HaveCount(2);
+        children[0].TryGetProperty("emoji", out var draft).Should().BeTrue();
+        draft.ValueKind.Should().Be(JsonValueKind.Null);
+        children[1].GetProperty("emoji").GetString().Should().Be("🚶");
+        children[0].GetProperty("title").ValueKind.Should().Be(JsonValueKind.Null);
+        children[1].GetProperty("title").GetString().Should().Be("Walk");
+    }
+
+    [Fact]
+    public async Task NestedReusedChild_CarriesStoredEmojiAtItsDepth()
+    {
+        var walk = CreateHabit("Walk", "🚶");
+        var arguments = $$"""{"habits":[{"title":"Routine","frequency_unit":"Day","sub_habits":[{"title":"Outdoors","sub_habits":[{"habit_id":"{{walk.Id}}","title":"Walk"}]}]}]}""";
+
+        var preview = await PreviewReuse(arguments, walk);
+
+        var outer = ChildOldValues(preview.Items!.Single().Fields.Single(f => f.Field == "sub_habits")).Single();
+        outer.TryGetProperty("emoji", out _).Should().BeFalse();
+        var nested = JsonDocument.Parse(outer.GetProperty("sub_habits").GetString()!).RootElement;
+        nested[0].GetProperty("emoji").GetString().Should().Be("🚶");
+    }
+
+    [Fact]
+    public async Task ReusedChild_WithProposedEmoji_KeepsProposalAndStoredEmojiAsOldValue()
+    {
+        var walk = CreateHabit("Walk", "🚶");
+
+        var preview = await PreviewReuse(
+            $$"""{"habits":[{"title":"Routine","frequency_unit":"Day","sub_habits":[{"habit_id":"{{walk.Id}}","title":"Walk","emoji":"🏃"}]}]}""", walk);
+
+        var field = preview.Items!.Single().Fields.Single(f => f.Field == "sub_habits");
+        ChildOldValues(field).Single().GetProperty("emoji").GetString().Should().Be("🚶");
+        field.ProposedValue!.Value[0].GetProperty("emoji").GetString().Should().Be("🏃");
+        JsonDocument.Parse(field.NewValue!).RootElement[0].GetProperty("emoji").GetString().Should().Be("🏃");
+    }
+
+    private async Task<PendingOperationChangePreview> PreviewReuse(string arguments, Habit reused)
+    {
+        Setup([reused]);
+        _habits.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>()).Returns([reused]);
+        var preview = await Preview("bulk_create_habits", arguments);
+        preview.Should().NotBeNull();
+        return preview!;
+    }
+
+    private static List<JsonElement> ChildOldValues(PendingOperationChange field) =>
+        JsonDocument.Parse(field.OldValue!).RootElement.EnumerateArray().Select(child => child.Clone()).ToList();
 
     [Fact]
     public async Task AccountChanges_KeepEachTargetsEmoji()
