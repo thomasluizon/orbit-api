@@ -155,7 +155,7 @@ public partial class ProcessUserChatCommandHandlerTests
     /// The block as the server stores it after the ask tool accepted it: the options carry the ids of the habits they
     /// stand for under <c>target_ids</c>. The JSON form keeps the test independent of the option record.
     /// </summary>
-    private IssuedAiBlock StoredPositionChoice(Habit[] children, string question)
+    private IssuedAiBlock StoredPositionChoice(Habit[] children, string question, bool allowFreeText = false)
     {
         var first = children[..4].Select(child => child.Id.ToString()).ToArray();
         var last = children[2..].Select(child => child.Id.ToString()).ToArray();
@@ -170,7 +170,7 @@ public partial class ProcessUserChatCommandHandlerTests
             },
             Items = Array.Empty<object>(),
             MultiSelect = false,
-            AllowFreeText = false
+            AllowFreeText = allowFreeText
         }))!;
         var block = IssuedAiBlock.Create(UserId, definition);
         _blockStore.GetAsync(block.Id, UserId, Arg.Any<CancellationToken>()).Returns(block);
@@ -227,6 +227,34 @@ public partial class ProcessUserChatCommandHandlerTests
             .Should().BeEquivalentTo(children.Select(child => child.Id));
         result.Value.Parts?.OfType<ChatBlockPart>().Should().NotContain(part => part.Block is AiChoiceBlock);
         result.Value.AiMessage.Should().NotContain("Which habit").And.NotContain("Qual hábito");
+    }
+
+    [Fact]
+    public async Task G14_TypedFullAnswerInTheCardFreeTextSettlesTheSetsWithoutAConfirmation()
+    {
+        SetupUserAndPayGate();
+        EnableComposition();
+        _unitOfWork.PassThroughTransactions<Result<PreparedAiBlockAnswer>>();
+        var (_, children) = SetupSameTitleChildren("Water - 710ml", 6);
+        var delete = new BulkDeleteHabitsTool(_mediator, _habitRepo);
+        var handler = CreateHandler(delete);
+        var held = HoldReplayWrites(delete);
+        var block = StoredPositionChoice(children, "Keep which ones?", allowFreeText: true);
+        SetupAiResponse(new AiResponse
+        {
+            ConversationContext = TestConversationContext,
+            ToolCalls = [SplitWrites(children).ToolCalls![0]]
+        });
+        ReplyToReplay("Review the changes.");
+
+        var result = await handler.Handle(new(UserId, "Answer", BlockAnswer: new(block.Id, [], "excluir os 2 últimos"),
+            ClientContext: new(SupportsParts: true, SupportsPendingOperationChanges: true, PartKinds: ["choice"])), default);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        held.Select(request => request.OperationId).Should().Equal("bulk_delete_habits");
+        result.Value.PendingOperations.Should().ContainSingle().Which.Items!.Select(item => item.EntityId)
+            .Should().BeEquivalentTo(children[4..].Select(child => child.Id));
+        result.Value.Parts?.OfType<ChatBlockPart>().Should().NotContain(part => part.Block is AiChoiceBlock);
     }
 
     [Fact]
@@ -353,5 +381,71 @@ public partial class ProcessUserChatCommandHandlerTests
         result.IsSuccess.Should().BeTrue(result.Error);
         result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>()
             .Which.Block.Should().BeOfType<AiChoiceBlock>();
+    }
+
+    private async Task<(Result<ChatResponse> Result, IssuedAiBlock? Issued, Habit[] Children)> AskPositionChoiceAsync(bool readTargets)
+    {
+        SetupUserAndPayGate();
+        EnableComposition();
+        var (_, children) = SetupSameTitleChildren("Water - 710ml", 6);
+        var query = new QueryHabitsTool(_habitRepo, _userRepo, _userDateService, _scheduleLogReader);
+        var handler = CreateHandler(RealAskTool(), query);
+        UseProductionReadExecutor(query);
+        IssuedAiBlock? issued = null;
+        _blockStore.AddAsync(Arg.Do<IssuedAiBlock>(value => issued = value), Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
+        var first = readTargets ? children[..4].Select(child => child.Id.ToString()).ToArray() : [Guid.NewGuid().ToString()];
+        SetupAiResponse(new AiResponse
+        {
+            ConversationContext = TestConversationContext,
+            ToolCalls =
+            [
+                new(query.Name, "read", ParseArguments("""{"search":"Water 710ml","for_selection":true,"orbit_read_complete":false}""")),
+                new("ask", "choose", JsonSerializer.SerializeToElement(new
+                {
+                    input = new
+                    {
+                        form = "choice",
+                        missing_input = "record_selection",
+                        question = "Keep which ones?",
+                        options = new object[]
+                        {
+                            new { id = "first4", label = "4 primeiros", target_ids = first },
+                            new { id = "last2", label = "2 últimos", target_ids = children[4..].Select(child => child.Id.ToString()) }
+                        }
+                    }
+                }))
+            ]
+        });
+        _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
+                Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AiResponse { TextMessage = "Which ones should I keep?" }));
+        var result = await handler.Handle(new(UserId, "Keep four of them.",
+            ClientContext: new(SupportsParts: true, PartKinds: ["choice", "habitList"], SupportsHabitListCard: true)), default);
+        return (result, issued, children);
+    }
+
+    [Fact]
+    public async Task G14_IssuedChoiceKeepsTargetIdsOnTheServerAndDropsThemFromTheClientBlock()
+    {
+        var (result, issued, children) = await AskPositionChoiceAsync(readTargets: true);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        var choice = result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>()
+            .Which.Block.Should().BeOfType<AiChoiceBlock>().Subject;
+        JsonSerializer.Serialize(result.Value, ChatStreamEvent.SerializerOptions).Should()
+            .NotContain("target_ids").And.NotContain("targetIds");
+        choice.Options.Should().OnlyContain(option => option.TargetIds == null);
+        issued!.ReadDefinition().Options[0].TargetIds.Should()
+            .BeEquivalentTo(children[..4].Select(child => child.Id.ToString()));
+    }
+
+    [Fact]
+    public async Task G14_ChoiceRefusesTargetIdsThatNoReadReturned()
+    {
+        var (result, issued, _) = await AskPositionChoiceAsync(readTargets: false);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        issued.Should().BeNull();
+        result.Value.Parts?.OfType<ChatBlockPart>().Should().BeEmpty();
     }
 }

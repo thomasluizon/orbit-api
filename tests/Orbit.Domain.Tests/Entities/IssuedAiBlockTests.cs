@@ -107,4 +107,43 @@ public class IssuedAiBlockTests
         block.MatchesAnswer(new(Guid.NewGuid(), ["0", "1"], "After dinner")).Should().BeFalse();
     }
 
+    [Fact]
+    public void Create_KeepsOptionTargetIdsInTheStoredDefinitionAndDropsThemFromTheClientCopy()
+    {
+        var ids = new[] { Guid.NewGuid().ToString(), Guid.NewGuid().ToString() };
+        var definition = new AiBlockDefinition("choice", "Keep which?",
+            [new("first", "First", TargetIds: ids), new("rest", "The rest")], []);
+
+        var block = IssuedAiBlock.Create(Guid.NewGuid(), definition);
+
+        block.ReadDefinition().Options[0].TargetIds.Should().Equal(ids);
+        block.ReadDefinition().Options[1].TargetIds.Should().BeNull();
+        JsonSerializer.Serialize(block.ReadDefinition().Options[0].ForClient()).Should().NotContain("target_ids");
+        JsonSerializer.Serialize(block.ReadDefinition().Options[1]).Should().NotContain("target_ids");
+    }
+
+    [Theory]
+    [InlineData("empty")]
+    [InlineData("not-a-guid")]
+    [InlineData("empty-guid")]
+    [InlineData("duplicate")]
+    [InlineData("too-many")]
+    public void Create_RejectsMalformedOptionTargetIds(string variant)
+    {
+        var id = Guid.NewGuid().ToString();
+        IReadOnlyList<string> targets = variant switch
+        {
+            "empty" => [],
+            "not-a-guid" => ["first"],
+            "empty-guid" => [Guid.Empty.ToString()],
+            "duplicate" => [id, id.ToUpperInvariant()],
+            _ => Enumerable.Range(0, AiBlockOption.MaxTargetIds + 1).Select(_ => Guid.NewGuid().ToString()).ToArray()
+        };
+        var definition = new AiBlockDefinition("choice", "Keep which?",
+            [new("first", "First", TargetIds: targets), new("rest", "The rest")], []);
+
+        var create = () => IssuedAiBlock.Create(Guid.NewGuid(), definition);
+
+        create.Should().Throw<ArgumentException>().WithMessage("target_ids*");
+    }
 }
