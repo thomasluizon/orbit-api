@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Orbit.Domain.ValueObjects;
 
 namespace Orbit.Application.Profile.Models;
@@ -54,9 +55,9 @@ public sealed record ExportedSettings(
     string? ThemePreference,
     string? ColorScheme,
     bool AiSummaryEnabled,
-    bool ProactiveAstraEnabled,
+    [property: JsonPropertyName("proactiveAstraEnabled")] bool ProactiveAstraEnabled,
     bool? Uses24HourClock,
-    bool? StoredProactiveAstraEnabled = null,
+    [property: JsonPropertyName("storedProactiveAstraEnabled")] bool? StoredProactiveAstraEnabled = null,
     bool MascotMotionEnabled = true);
 
 public sealed record ExportedHabit(

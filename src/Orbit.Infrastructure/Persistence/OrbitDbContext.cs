@@ -284,6 +284,7 @@ public class OrbitDbContext : DbContext
         ConfigurePendingClarificationEntity(modelBuilder);
         modelBuilder.Entity<IssuedAstraBlock>(entity =>
         {
+            entity.ToTable("IssuedAstraBlocks");
             entity.HasIndex(block => new { block.UserId, block.CreatedAtUtc });
             entity.HasIndex(block => block.ExpiresAtUtc);
             entity.Property(block => block.Form).HasMaxLength(16);
@@ -851,7 +852,8 @@ public class OrbitDbContext : DbContext
             entity.Property(u => u.SubscriptionExpiresAtUtc).HasColumnName("PlanExpiresAt");
             entity.Property(u => u.StripeRenewalStoppedByDeletion).HasDefaultValue(false);
             entity.Property(u => u.PlayRenewalStoppedByDeletion).HasDefaultValue(false);
-            entity.Property(u => u.ProactiveAstraEnabled).HasDefaultValue(true).ValueGeneratedNever();
+            entity.Property(u => u.ProactiveAstraEnabled).HasColumnName("ProactiveAstraEnabled").HasDefaultValue(true).ValueGeneratedNever();
+            entity.Property(u => u.HasTriedAstra).HasColumnName("HasTriedAstra");
             entity.Property(u => u.PublicProfileSlug).HasMaxLength(32);
             entity.Property(u => u.MascotMotionEnabled).HasDefaultValue(true).ValueGeneratedNever();
 

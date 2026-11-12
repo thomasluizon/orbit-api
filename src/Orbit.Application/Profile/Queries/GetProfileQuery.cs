@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using MediatR;
 using Orbit.Application.ApiKeys.Services;
 using Orbit.Application.Common;
@@ -22,7 +23,7 @@ public record ProfileResponse(
     bool HasCompletedTour,
     bool HasCreatedFirstHabit,
     bool HasLoggedFirstHabit,
-    bool HasTriedAstra,
+    [property: JsonPropertyName("hasTriedAstra")] bool HasTriedAstra,
     bool HasCompletedOnboardingChecklist,
     string? Language,
     string Plan,
@@ -59,7 +60,7 @@ public record ProfileResponse(
     bool SocialOptIn,
     bool Uses24HourClock = true,
     PublicProfileSettings? PublicProfile = null,
-    bool ProactiveAstraEnabled = false,
+    [property: JsonPropertyName("proactiveAstraEnabled")] bool ProactiveAstraEnabled = false,
     bool? MarketingEmailConsent = null,
     DateOnly? LastCompletionDate = null,
     int? ActiveApiKeyCount = null,
