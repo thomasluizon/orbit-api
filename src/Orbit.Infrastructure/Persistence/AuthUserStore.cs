@@ -26,8 +26,8 @@ public sealed class AuthUserStore(OrbitDbContext context) : IAuthUserStore
                 "Language", "TrialEndsAt", "SignupLanguage", "SignupReferralCode")
             VALUES (
                 {candidate.Id}, {candidate.Name}, {candidate.Email}, {candidate.AiMemoryEnabled},
-                {candidate.AiSummaryEnabled}, {candidate.ProactiveAstraEnabled}, {candidate.HasCompletedOnboarding}, {candidate.HasCompletedTour},
-                {candidate.HasCreatedFirstHabit}, {candidate.HasLoggedFirstHabit}, {candidate.HasTriedAstra}, {candidate.HasCompletedOnboardingChecklist},
+                {candidate.AiSummaryEnabled}, {candidate.ProactiveAiEnabled}, {candidate.HasCompletedOnboarding}, {candidate.HasCompletedTour},
+                {candidate.HasCreatedFirstHabit}, {candidate.HasLoggedFirstHabit}, {candidate.HasTriedAi}, {candidate.HasCompletedOnboardingChecklist},
                 {(int)candidate.SubscriptionPlan}, {candidate.IsLifetimePro}, {candidate.AiMessagesUsedToday}, {candidate.AiMessagesUsedThisWeek}, {candidate.AiMessagesWeekStart}, {candidate.PhraseReadsToday}, {candidate.CreatedAtUtc},
                 {candidate.HasImportedCalendar}, {candidate.HasSeenImportPrompt}, {candidate.GoogleCalendarAutoSyncEnabled}, {candidate.IsDeactivated},
                 {candidate.WeekStartDay}, {candidate.ReminderPreferencesVersion}, {candidate.SocialOptIn}, {candidate.IsAdmin},

@@ -146,7 +146,7 @@ public partial class ProcessUserChatCommandHandlerTests
             reminder_enabled = true,
             tag_names = new[] { "Home" }
         });
-        _unitOfWork.PassThroughTransactions<Result<PreparedAstraBlockAnswer>>();
+        _unitOfWork.PassThroughTransactions<Result<PreparedAiBlockAnswer>>();
         var clarificationId = Guid.NewGuid();
         PendingClarificationData? pending = null;
         _pendingClarificationStore.CreateAsync(UserId, "create_habit", Arg.Any<string>(), "frequency_unit",
@@ -160,9 +160,9 @@ public partial class ProcessUserChatCommandHandlerTests
             });
         _pendingClarificationStore.GetForResolutionAsync(clarificationId, UserId, Arg.Any<CancellationToken>())
             .Returns(_ => pending);
-        Orbit.Domain.Entities.IssuedAstraBlock? issued = null;
-        _blockStore.When(store => store.AddAsync(Arg.Any<Orbit.Domain.Entities.IssuedAstraBlock>(), Arg.Any<CancellationToken>()))
-            .Do(call => issued = call.Arg<Orbit.Domain.Entities.IssuedAstraBlock>());
+        Orbit.Domain.Entities.IssuedAiBlock? issued = null;
+        _blockStore.When(store => store.AddAsync(Arg.Any<Orbit.Domain.Entities.IssuedAiBlock>(), Arg.Any<CancellationToken>()))
+            .Do(call => issued = call.Arg<Orbit.Domain.Entities.IssuedAiBlock>());
         var prompt = language == "en" ? "How often?" : "Com que frequência?";
         var options = new[] { new { id = "day", label = language == "en" ? "Daily" : "Todo dia" },
             new { id = "week", label = language == "en" ? "Weekly" : "Toda semana" } };
@@ -193,15 +193,15 @@ public partial class ProcessUserChatCommandHandlerTests
         first.IsSuccess.Should().BeTrue(first.Error);
         issued.Should().NotBeNull(JsonSerializer.Serialize(first.Value));
         pending.Should().NotBeNull();
-        issued!.ReadDefinition().DraftClarification.Should().Be(new AstraDraftClarification("image-draft", "frequency_unit", clarificationId));
+        issued!.ReadDefinition().DraftClarification.Should().Be(new AiDraftClarification("image-draft", "frequency_unit", clarificationId));
         first.Value.Actions.Should().NotContain(action => action.Status == ActionStatus.NeedsClarification);
         var visible = JsonSerializer.Serialize(first.Value, ChatStreamEvent.SerializerOptions);
         visible.Should().NotContain(clarificationId.ToString()).And.NotContain(description).And.NotContain("draft_call_id");
         _blockStore.GetAsync(issued!.Id, UserId, Arg.Any<CancellationToken>()).Returns(issued);
         _blockStore.MarkAnsweredAsync(issued.Id, UserId, Arg.Any<DateTime>(), Arg.Any<CancellationToken>()).Returns(true);
         var freeText = language == "en" ? "Every day" : "Todos os dias";
-        var answer = answerType == "choice" ? new AstraBlockAnswer(issued.Id, ["day"])
-            : new AstraBlockAnswer(issued.Id, [], Answers: [new AstraQuestionAnswer("frequency_unit",
+        var answer = answerType == "choice" ? new AiBlockAnswer(issued.Id, ["day"])
+            : new AiBlockAnswer(issued.Id, [], Answers: [new AiQuestionAnswer("frequency_unit",
                 SelectedIds: answerType == "singleChoice" ? ["day"] : null,
                 FreeText: answerType == "freeText" ? freeText : null)]);
         AiToolRequest? continuation = null;

@@ -31,7 +31,7 @@ public sealed partial class ChatWriteHoldHandlerTests
         string language, string message, string first, string smaller, bool composition)
     {
         _user.SetLanguage(language);
-        if (composition) _featureFlagService.GetEnabledKeysForUserAsync(_userId, Arg.Any<CancellationToken>()).Returns(new[] { FeatureFlagKeys.AstraBlockFirst });
+        if (composition) _featureFlagService.GetEnabledKeysForUserAsync(_userId, Arg.Any<CancellationToken>()).Returns(new[] { FeatureFlagKeys.AiBlockFirst });
         var client = new AgentClientContext(SupportsParts: true, PartKinds: ["oneSmallStep"], SupportsPendingOperationChanges: true,
             SupportsStartingStepContext: true);
         var firstResponse = await ReplayStartingStep(message, message, first, language, client);
@@ -74,7 +74,7 @@ public sealed partial class ChatWriteHoldHandlerTests
             legacy.AiMessage.Should().Be(first);
             legacy.Parts?.OfType<ChatBlockPart>().Should().BeEmpty();
         }
-        var disabled = ChatResponseNegotiation.ForClient(storedResponse, client, [FeatureFlagKeys.AstraPartsDisabled], language);
+        var disabled = ChatResponseNegotiation.ForClient(storedResponse, client, [FeatureFlagKeys.AiPartsDisabled], language);
         disabled.AiMessage.Should().Be(first);
         disabled.Parts.Should().BeNull();
 
@@ -133,8 +133,8 @@ public sealed partial class ChatWriteHoldHandlerTests
     {
         _user.SetLanguage(language);
         var flags = new List<string>();
-        if (composition) flags.Add(FeatureFlagKeys.AstraBlockFirst);
-        if (clientMode == "partsDisabled") flags.Add(FeatureFlagKeys.AstraPartsDisabled);
+        if (composition) flags.Add(FeatureFlagKeys.AiBlockFirst);
+        if (clientMode == "partsDisabled") flags.Add(FeatureFlagKeys.AiPartsDisabled);
         _featureFlagService.GetEnabledKeysForUserAsync(_userId, Arg.Any<CancellationToken>()).Returns(flags);
         AgentClientContext? client = clientMode == "legacy" ? null
             : new(SupportsParts: true, PartKinds: clientMode == "unknownKind" ? [] : ["oneSmallStep"]);

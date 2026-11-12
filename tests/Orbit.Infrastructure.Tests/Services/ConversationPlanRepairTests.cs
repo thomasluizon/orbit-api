@@ -58,7 +58,7 @@ public sealed class ConversationPlanRepairTests
         failure.Enabled = false;
         var retry = await fixture.Store.GetLatestAsync(fixture.User.Id, fixture.ConversationId, null, 10);
         retry!.Turns.Single(turn => turn.Role == "assistant").Plan!.Steps.Last().Status.Should().Be("skipped");
-        AstraPlan.Read((await fixture.Db.ConversationTurns.AsNoTracking().SingleAsync(row => row.Role == "assistant")).ResponseJson)!
+        AiPlan.Read((await fixture.Db.ConversationTurns.AsNoTracking().SingleAsync(row => row.Role == "assistant")).ResponseJson)!
             .Steps.Last().Status.Should().Be("skipped");
     }
 
@@ -97,18 +97,18 @@ public sealed class ConversationPlanRepairTests
         var proposal = pending.Create(fixture.User.Id, new AgentCatalogService().GetCapabilityByChatTool("create_habit")!,
             "create_habit", arguments, "Reading", fingerprint, AgentExecutionSurface.Chat, new(fixture.ConversationId, capture.CreatedAtUtc));
         pending.Revise(fixture.User.Id, proposal.Id, fingerprint, arguments, fingerprint, "preview").Should().BeTrue();
-        var plan = AstraPlan.Create("Reading", [new("1", "Prepare a preview", "done", "create_habit", "execution"),
+        var plan = AiPlan.Create("Reading", [new("1", "Prepare a preview", "done", "create_habit", "execution"),
             new("2", "Save reading", "pending", "create_habit", "approval", PendingOperationId: proposal.Id)]).Value;
         (await fixture.Store.RecordAsync(capture with
-        { ResponseJson = JsonSerializer.Serialize(new ChatResponse(null, [], Plan: plan), AstraPlan.JsonOptions) })).Should().BeTrue();
+        { ResponseJson = JsonSerializer.Serialize(new ChatResponse(null, [], Plan: plan), AiPlan.JsonOptions) })).Should().BeTrue();
         fixture.Flags.GetEnabledKeysForUserAsync(fixture.User.Id, Arg.Any<CancellationToken>(), Arg.Any<bool>()).Returns(Array.Empty<string>());
-        fixture.Flags.ResolveForUser(fixture.User.Id).Returns([new(FeatureFlagKeys.AstraConversationRecording, false, null)]);
+        fixture.Flags.ResolveForUser(fixture.User.Id).Returns([new(FeatureFlagKeys.AiConversationRecording, false, null)]);
         pending.Cancel(fixture.User.Id, proposal.Id, fingerprint).Should().BeTrue();
         fixture.Flags.GetEnabledKeysForUserAsync(fixture.User.Id, Arg.Any<CancellationToken>(), Arg.Any<bool>())
-            .Returns([FeatureFlagKeys.AstraConversationRecording]);
-        fixture.Flags.ResolveForUser(fixture.User.Id).Returns([new(FeatureFlagKeys.AstraConversationRecording, true, null)]);
+            .Returns([FeatureFlagKeys.AiConversationRecording]);
+        fixture.Flags.ResolveForUser(fixture.User.Id).Returns([new(FeatureFlagKeys.AiConversationRecording, true, null)]);
         var stored = await fixture.Db.ConversationTurns.AsNoTracking().OrderBy(row => row.TurnOrder).ToArrayAsync();
-        AstraPlan.Read(stored[1].ResponseJson)!.Steps.Last().Status.Should().Be("pending");
+        AiPlan.Read(stored[1].ResponseJson)!.Steps.Last().Status.Should().Be("pending");
         stored[1].ModelContextJson.Should().NotBeNull();
         return stored;
     }

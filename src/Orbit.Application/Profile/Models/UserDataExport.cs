@@ -55,9 +55,9 @@ public sealed record ExportedSettings(
     string? ThemePreference,
     string? ColorScheme,
     bool AiSummaryEnabled,
-    [property: JsonPropertyName("proactiveAstraEnabled")] bool ProactiveAstraEnabled,
+    [property: JsonPropertyName("proactiveAstraEnabled")] bool ProactiveAiEnabled,
     bool? Uses24HourClock,
-    [property: JsonPropertyName("storedProactiveAstraEnabled")] bool? StoredProactiveAstraEnabled = null,
+    [property: JsonPropertyName("storedProactiveAstraEnabled")] bool? StoredProactiveAiEnabled = null,
     bool MascotMotionEnabled = true);
 
 public sealed record ExportedHabit(

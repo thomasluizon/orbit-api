@@ -173,7 +173,7 @@ public sealed partial class PushNotificationServiceTests : IDisposable
                 PeriodCloseNotificationService.BuildNotification(9, locale),
                 StreakFreezeAutoActivationService.BuildNotification(12, locale),
                 (goal.Title, GoalDeadlineNotificationService.FormatDeadlineBody(goal, 3, 1, locale)),
-                ("Astra", locale == "en" ? "Time to read 📚" : "Hora de ler 📚"),
+                ("Orbit", locale == "en" ? "Time to read 📚" : "Hora de ler 📚"),
                 (new string('a', 300) + "\n", new string('é', 500) + "\t")
             };
             foreach (var (title, body) in contents)

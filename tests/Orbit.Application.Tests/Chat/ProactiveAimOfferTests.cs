@@ -62,7 +62,7 @@ public partial class ProcessUserChatCommandHandlerTests
             ? [new(goalsTool.Name, "goals", ParseArguments(goalRead.ToJsonString())),
                new(habitsTool.Name, "habits", ParseArguments("""{"date":"today","orbit_read_complete":true,"orbit_offer_intent":"none"}"""))]
             : [new(goalsTool.Name, "goals", ParseArguments(goalRead.ToJsonString()))];
-        _offers.IssuedAsync(UserId, Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Array.Empty<AstraOfferFact>());
+        _offers.IssuedAsync(UserId, Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Array.Empty<AiOfferFact>());
         _aiIntentService.SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>>(), Arg.Any<CancellationToken>())
             .Returns(call => call.Arg<AiToolRequest>().SystemPrompt == ProactiveOfferPlanner.SelectionInstruction
                 ? Result.Failure<AiResponse>("selector_not_expected")

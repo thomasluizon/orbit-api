@@ -4,7 +4,7 @@ Tracks thomasluizon/orbit-tickets#1617. The API owns composition; #1620 owns the
 and #26 owns real-call bilingual assertions in `evals/astra/`. No second eval harness applies.
 
 The date, attachment continuity and bounded tool-result contract for
-thomasluizon/orbit-tickets#1944 is documented in [AstraDateContext.md](AstraDateContext.md),
+thomasluizon/orbit-tickets#1944 is documented in [AiDateContext.md](AiDateContext.md),
 including the bilingual copy inventory and unit replay cases supplied to #26.
 
 The database flag `astra_block_first` is seeded off. Composition requires `supportsParts`
@@ -137,13 +137,13 @@ introduction or progress display does not require a questionnaire. Several field
 retain the question form. See [AskValidation.md](AskValidation.md).
 
 Choice answers carry their validated selected option IDs, labels and descriptions in
-typed `AstraChoiceSelection` data through the prepared answer and turn state to the
+typed `AiChoiceSelection` data through the prepared answer and turn state to the
 model request's `DynamicContext`. Only selected options from the issued definition
 enter that context, including after question-to-choice negotiation. The visible and
 recorded choice-answer message retains the question and selected labels without IDs.
 Selection never approves a write; the normal approve/edit/reject preview remains required.
 
-Bound habit-setup blocks persist a server-owned `AstraDraftClarification` in their
+Bound habit-setup blocks persist a server-owned `AiDraftClarification` in their
 stored definition: the create call id, missing field and existing clarification id.
 Only a validated binding retires the legacy clarification action. The public choice
 and question payloads omit this association. After validating an answer against the

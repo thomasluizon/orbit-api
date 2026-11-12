@@ -45,12 +45,12 @@ public record ProcessUserChatCommand(
     bool IsReadOnlyCredential = false,
     string? CorrelationId = null,
     Func<ChatStreamEvent, Task>? StreamSink = null,
-    AstraBlockAnswer? BlockAnswer = null,
+    AiBlockAnswer? BlockAnswer = null,
     bool EvalTraceRequested = false,
     Guid? TurnId = null) : IRequest<Result<ChatResponse>>
 {
     [JsonIgnore]
-    public AstraOfferFact? SelectedOffer { get; init; }
+    public AiOfferFact? SelectedOffer { get; init; }
 
     [JsonIgnore]
     public PendingOperationConversation? PendingOperationConversation { get; init; }
@@ -79,7 +79,7 @@ public record ChatResponse(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<ChatFollowUp>? FollowUpContext = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? MessageAllowanceConsumed = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Guid? ConversationId = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] AstraPlan? Plan = null)
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] AiPlan? Plan = null)
 {
     [JsonIgnore]
     public TurnFactSet GroundingFacts { get; init; } = TurnFactSet.Empty;
@@ -166,7 +166,7 @@ public record ChatExecutionDependencies(
     IMediator Mediator,
     IProductAnalytics ProductAnalytics,
     IHabitScheduleLogReader ScheduleLogReader,
-    IIssuedAstraBlockStore BlockStore,
+    IIssuedAiBlockStore BlockStore,
     IPendingAgentOperationStore PendingOperationStore,
     IPendingOperationChangePreviewer? PendingOperationPreviewer = null,
     TimeSpan? BlockAnswerTimeout = null);
@@ -219,7 +219,7 @@ public partial class ProcessUserChatCommandHandler(
             if (request.EvalTraceRequested)
             {
                 var flags = await ResolveTurnFeatureFlagsAsync(request.UserId, cancellationToken);
-                if (flags.Contains(FeatureFlagKeys.AstraEvalTrace, StringComparer.Ordinal))
+                if (flags.Contains(FeatureFlagKeys.AiEvalTrace, StringComparer.Ordinal))
                     evalTrace = new ChatEvalTraceCollector(request.CorrelationId ?? Guid.NewGuid().ToString("N"), ai.ToolRegistry);
             }
             request = await LoadOfferDismissalsAsync(request, cancellationToken);
@@ -250,7 +250,7 @@ public partial class ProcessUserChatCommandHandler(
                 response = Result.Success(await ConversationErasedReplyAsync(request, recording, cancellationToken));
             }
             var timing = timer.Complete();
-            logger.LogDebug("Astra turn timing {Phases} total {TotalMilliseconds} ms",
+            logger.LogDebug("AI turn timing {Phases} total {TotalMilliseconds} ms",
                 JsonSerializer.Serialize(timing.Phases, ChatStreamEvent.SerializerOptions), timing.TotalMilliseconds);
         }
         return response.IsSuccess && evalTrace is not null
@@ -278,7 +278,7 @@ public partial class ProcessUserChatCommandHandler(
             recording.Enabled = true;
             var moderationFlags = await data.FeatureFlagService.GetEnabledKeysForUserAsync(request.UserId, cancellationToken);
             ChatContext? choiceContext = null;
-            var answerService = new AstraBlockAnswerService(execution.BlockStore, execution.UnitOfWork,
+            var answerService = new AiBlockAnswerService(execution.BlockStore, execution.UnitOfWork,
                 execution.PayGateService, execution.OperationExecutor, data.UserRepository, execution.ProductAnalytics,
                 data.FeatureFlagService, execution.PendingOperationStore, execution.UserDateService, logger, execution.PendingOperationPreviewer, execution.BlockAnswerTimeout,
                 prepared =>
@@ -316,7 +316,7 @@ public partial class ProcessUserChatCommandHandler(
                 var preparedConversation = await PrepareConversationAsync(request, recording, cancellationToken, enabledFlags);
                 if (preparedConversation.IsFailure) return preparedConversation.PropagateError<ChatResponse>();
                 request = preparedConversation.Value;
-                recording.Enabled = enabledFlags.Contains(FeatureFlagKeys.AstraConversationRecording);
+                recording.Enabled = enabledFlags.Contains(FeatureFlagKeys.AiConversationRecording);
                 return await HandleCrisisTurnAsync(request, crisis, captureMessage: true);
             }
         }
@@ -443,7 +443,7 @@ public partial class ProcessUserChatCommandHandler(
             return contextResult.PropagateError<ChatResponse>();
 
         var context = contextResult.Value;
-        recording.Enabled = context.EnabledFeatureFlags.Contains(FeatureFlagKeys.AstraConversationRecording);
+        recording.Enabled = context.EnabledFeatureFlags.Contains(FeatureFlagKeys.AiConversationRecording);
         var preparedConversation = await PrepareConversationAsync(request, recording, cancellationToken, context.EnabledFeatureFlags);
         if (preparedConversation.IsFailure) return preparedConversation.PropagateError<ChatResponse>();
         request = preparedConversation.Value;
@@ -679,13 +679,13 @@ public partial class ProcessUserChatCommandHandler(
             ClientContext = clientContext with
             {
                 SupportsPendingOperationChanges = clientContext.SupportsPendingOperationChanges == true
-                    && !enabledFlags.Contains(FeatureFlagKeys.AstraChangePreviewDisabled, StringComparer.OrdinalIgnoreCase),
+                    && !enabledFlags.Contains(FeatureFlagKeys.AiChangePreviewDisabled, StringComparer.OrdinalIgnoreCase),
                 SupportsToolSteps = clientContext.SupportsToolSteps == true
-                    && !enabledFlags.Contains(FeatureFlagKeys.AstraToolStepsDisabled, StringComparer.OrdinalIgnoreCase),
+                    && !enabledFlags.Contains(FeatureFlagKeys.AiToolStepsDisabled, StringComparer.OrdinalIgnoreCase),
                 SupportsParts = clientContext.SupportsParts == true
-                    && !enabledFlags.Contains(FeatureFlagKeys.AstraPartsDisabled, StringComparer.OrdinalIgnoreCase),
+                    && !enabledFlags.Contains(FeatureFlagKeys.AiPartsDisabled, StringComparer.OrdinalIgnoreCase),
                 SupportsFollowUps = clientContext.SupportsFollowUps == true
-                    && !enabledFlags.Contains(FeatureFlagKeys.AstraFollowUpsDisabled, StringComparer.OrdinalIgnoreCase)
+                    && !enabledFlags.Contains(FeatureFlagKeys.AiFollowUpsDisabled, StringComparer.OrdinalIgnoreCase)
             }
         };
     }
@@ -960,7 +960,7 @@ public partial class ProcessUserChatCommandHandler(
             aiMessage = strippedGoalMessage;
             if (request.ClientContext?.SupportsGoalListCard == true)
             {
-                var includeProjections = !context.EnabledFeatureFlags.Contains(FeatureFlagKeys.AstraGoalProjectionsDisabled);
+                var includeProjections = !context.EnabledFeatureFlags.Contains(FeatureFlagKeys.AiGoalProjectionsDisabled);
                 goalList = await BuildGoalReadAsync(request, context, executionResults, includeProjections, cancellationToken);
                 if (!includeProjections && goalList is not null)
                     goalList = GoalListCardBuilder.WithoutProjections(goalList);
@@ -972,7 +972,7 @@ public partial class ProcessUserChatCommandHandler(
         {
             aiMessage = strippedMetricsMessage;
             if (request.ClientContext?.SupportsMetricsCard == true
-                && !context.EnabledFeatureFlags.Contains(FeatureFlagKeys.AstraPeriodBlocksDisabled))
+                && !context.EnabledFeatureFlags.Contains(FeatureFlagKeys.AiPeriodBlocksDisabled))
             {
                 var habitMetrics = executionResults.LastSuccessfulPayload<HabitMetrics>("get_habit_metrics");
                 metricsCard = habitMetrics?.HabitId is not null
@@ -984,7 +984,7 @@ public partial class ProcessUserChatCommandHandler(
         PeriodInsightCard? periodInsight = null;
         if (aiMessage?.Contains(PeriodInsightCardBuilder.Directive, StringComparison.OrdinalIgnoreCase) == true
             && request.ClientContext?.SupportsPeriodInsightCard == true
-            && !context.EnabledFeatureFlags.Contains(FeatureFlagKeys.AstraPeriodBlocksDisabled))
+            && !context.EnabledFeatureFlags.Contains(FeatureFlagKeys.AiPeriodBlocksDisabled))
         {
             periodInsight = PeriodInsightCardBuilder.Build(
                 executionResults.LastSuccessfulPayload<RetrospectiveResponse>("get_retrospective"));
@@ -1005,7 +1005,7 @@ public partial class ProcessUserChatCommandHandler(
         string? aiMessage, ProcessUserChatCommand request, ChatContext context, ToolExecutionAccumulator results)
     {
         if (request.ClientContext?.SupportsAccountRowsCard != true
-            || context.EnabledFeatureFlags.Contains(FeatureFlagKeys.AstraAccountRowsDisabled)
+            || context.EnabledFeatureFlags.Contains(FeatureFlagKeys.AiAccountRowsDisabled)
             || string.IsNullOrEmpty(aiMessage))
             return null;
 
@@ -1034,7 +1034,7 @@ public partial class ProcessUserChatCommandHandler(
         ToolExecutionAccumulator results)
     {
         if (request.ClientContext?.SupportsRecordListCard != true
-            || context.EnabledFeatureFlags.Contains(FeatureFlagKeys.AstraRecordListsDisabled)
+            || context.EnabledFeatureFlags.Contains(FeatureFlagKeys.AiRecordListsDisabled)
             || string.IsNullOrEmpty(aiMessage))
             return null;
 
@@ -1068,7 +1068,7 @@ public partial class ProcessUserChatCommandHandler(
     private static (DaySummaryCard? Day, StreakCard? Streak, CalendarCard? Calendar) BuildStatusCards(
         string? aiMessage, ProcessUserChatCommand request, ChatContext context, ToolExecutionAccumulator executionResults)
     {
-        if (context.EnabledFeatureFlags.Contains(FeatureFlagKeys.AstraStatusBlocksDisabled))
+        if (context.EnabledFeatureFlags.Contains(FeatureFlagKeys.AiStatusBlocksDisabled))
             return (null, null, null);
 
         DaySummaryCard? day = null;
@@ -1135,7 +1135,7 @@ public partial class ProcessUserChatCommandHandler(
         && results.CalledToolNames.All(name => name == DescribeFeatureToolName)
         && results.OperationResults.All(operation => operation.Status == AgentOperationStatus.Succeeded);
 
-    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "Processing Astra turn")]
+    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "Processing AI turn")]
     private static partial void LogProcessingChatMessage(ILogger logger);
 
     [LoggerMessage(EventId = 2, Level = LogLevel.Debug, Message = "Context loaded in {ElapsedMs}ms (Habits: {HabitCount})")]

@@ -24,7 +24,7 @@ public class GamificationAccessParityTests
     [InlineData(false, false)]
     [InlineData(false, true)]
     [InlineData(true, false)]
-    public async Task RestMcpAndAstra_UseTheSameAccessRule(bool pro, bool enabled)
+    public async Task RestMcpAndAi_UseTheSameAccessRule(bool pro, bool enabled)
     {
         await using var db = new OrbitDbContext(new DbContextOptionsBuilder<OrbitDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
@@ -48,10 +48,10 @@ public class GamificationAccessParityTests
             new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, user.Id.ToString())], "Test")));
         var evaluator = new AgentPolicyEvaluator(db, new AgentCatalogService(), Substitute.For<IPendingAgentOperationStore>(),
             Substitute.For<IAgentStepUpAuthorizationBridge>(), flags);
-        var astra = await evaluator.EvaluateAsync(new(AgentCapabilityIds.GamificationRead, user.Id,
+        var assistant = await evaluator.EvaluateAsync(new(AgentCapabilityIds.GamificationRead, user.Id,
             AgentExecutionSurface.Chat, AgentAuthMethod.Jwt, [], "get_gamification_overview", "Gamification"));
         rest.IsSuccess.Should().Be(pro || enabled);
         mcp.IsError.GetValueOrDefault().Should().Be(!(pro || enabled));
-        astra.Status.Should().Be(pro || enabled ? AgentPolicyDecisionStatus.Allowed : AgentPolicyDecisionStatus.Denied);
+        assistant.Status.Should().Be(pro || enabled ? AgentPolicyDecisionStatus.Allowed : AgentPolicyDecisionStatus.Denied);
     }
 }

@@ -49,7 +49,7 @@ public partial class ProcessUserChatCommandHandlerTests
     private readonly IServiceScopeFactory _scopeFactory = Substitute.For<IServiceScopeFactory>();
     private readonly IAgentCatalogService _catalogService = Substitute.For<IAgentCatalogService>();
     private readonly IAgentOperationExecutor _operationExecutor = Substitute.For<IAgentOperationExecutor>();
-    private readonly IIssuedAstraBlockStore _blockStore = Substitute.For<IIssuedAstraBlockStore>();
+    private readonly IIssuedAiBlockStore _blockStore = Substitute.For<IIssuedAiBlockStore>();
     private readonly IPendingAgentOperationStore _pendingOperationStore = Substitute.For<IPendingAgentOperationStore>();
     private readonly IPendingClarificationStore _pendingClarificationStore = Substitute.For<IPendingClarificationStore>();
     private readonly IGamificationService _gamificationService = Substitute.For<IGamificationService>();
@@ -937,7 +937,7 @@ public partial class ProcessUserChatCommandHandlerTests
     {
         SetupUserAndPayGate();
         _featureFlagService.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>())
-            .Returns([FeatureFlagKeys.AstraCrisisResourcesDisabled]);
+            .Returns([FeatureFlagKeys.AiCrisisResourcesDisabled]);
         SetupAiResponse(new AiResponse { TextMessage = "Model reply" });
 
         var result = await CreateHandler().Handle(
@@ -981,7 +981,7 @@ public partial class ProcessUserChatCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_SuccessfulTurn_FiresOnboardingAstraUsedSignal()
+    public async Task Handle_SuccessfulTurn_FiresOnboardingAiUsedSignal()
     {
         SetupUserAndPayGate();
         SetupAiResponse(new AiResponse { TextMessage = "Hello! How can I help?", ToolCalls = null });
@@ -991,7 +991,7 @@ public partial class ProcessUserChatCommandHandlerTests
         await handler.Handle(command, CancellationToken.None);
 
         await _gamificationService.Received(1).ProcessOnboardingChecklistAsync(
-            UserId, OnboardingChecklistSignal.AstraUsed, Arg.Any<CancellationToken>());
+            UserId, OnboardingChecklistSignal.AiUsed, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -1221,7 +1221,7 @@ public partial class ProcessUserChatCommandHandlerTests
         SetupUserAndPayGate();
         if (disabled)
             _featureFlagService.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>())
-                .Returns([FeatureFlagKeys.AstraPartsDisabled]);
+                .Returns([FeatureFlagKeys.AiPartsDisabled]);
         SetupAiResponse(new AiResponse { TextMessage = "A\n[[orbit:habits:today]]\nB\n[[orbit:metrics]]" });
         SetupProgress(Metrics(totalScheduled: 1));
 
@@ -1290,7 +1290,7 @@ public partial class ProcessUserChatCommandHandlerTests
         SetupAiResponse(new AiResponse { TextMessage = "A\n[[orbit:metrics]]\nB" });
         if (disabled)
             _featureFlagService.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>())
-                .Returns([FeatureFlagKeys.AstraPeriodBlocksDisabled]);
+                .Returns([FeatureFlagKeys.AiPeriodBlocksDisabled]);
 
         var result = await CreateHandler().Handle(new ProcessUserChatCommand(UserId, "Show my week",
             ClientContext: new AgentClientContext(SupportsParts: true,
@@ -1455,7 +1455,7 @@ public partial class ProcessUserChatCommandHandlerTests
         SetupUserAndPayGate();
         if (disabled)
             _featureFlagService.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>())
-                .Returns([FeatureFlagKeys.AstraStatusBlocksDisabled]);
+                .Returns([FeatureFlagKeys.AiStatusBlocksDisabled]);
         var profile = new GamificationProfileResponse(
             120, 3, "Level", "level", 100, 200, 80, 0, 0, [], [],
             7, 9, Today, true, false, new NextRewardCarrot(4, "Next", 80, null));
@@ -1732,7 +1732,7 @@ public partial class ProcessUserChatCommandHandlerTests
     {
         SetupUserAndPayGate();
         _featureFlagService.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>())
-            .Returns([FeatureFlagKeys.AstraPeriodBlocksDisabled]);
+            .Returns([FeatureFlagKeys.AiPeriodBlocksDisabled]);
         SetupAiResponse(new AiResponse { TextMessage = "Your week [[orbit:metrics]]" });
         SetupProgress(Metrics(totalScheduled: 3));
 
@@ -1803,7 +1803,7 @@ public partial class ProcessUserChatCommandHandlerTests
     {
         SetupUserAndPayGate();
         _featureFlagService.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>())
-            .Returns([FeatureFlagKeys.AstraStatusBlocksDisabled]);
+            .Returns([FeatureFlagKeys.AiStatusBlocksDisabled]);
         SetupAiResponse(new AiResponse { TextMessage = "Today [[orbit:day]]" });
 
         var result = await CreateHandler().Handle(new ProcessUserChatCommand(
@@ -1969,7 +1969,7 @@ public partial class ProcessUserChatCommandHandlerTests
     {
         SetupUserAndPayGate();
         _featureFlagService.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>())
-            .Returns([FeatureFlagKeys.AstraRecordListsDisabled]);
+            .Returns([FeatureFlagKeys.AiRecordListsDisabled]);
         var notifications = new GetNotificationsResponse([], 0, 0);
         var tool = ReadTool("get_notifications", new ToolResult(true, Payload: notifications));
         SetupReadToolReply("get_notifications", "Here [[orbit:records:notifications]]");
@@ -2083,7 +2083,7 @@ public partial class ProcessUserChatCommandHandlerTests
     {
         SetupUserAndPayGate();
         _featureFlagService.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>())
-            .Returns([FeatureFlagKeys.AstraAccountRowsDisabled]);
+            .Returns([FeatureFlagKeys.AiAccountRowsDisabled]);
         var dashboard = new ReferralDashboardResponse("CODE", "https://example.test/r/CODE",
             new ReferralStatsResponse("CODE", "https://example.test/r/CODE", 1, 0, 10, "discount", 20));
         var tool = ReadTool("get_referral_overview", new ToolResult(true, Payload: dashboard));
@@ -2609,7 +2609,7 @@ public partial class ProcessUserChatCommandHandlerTests
         SetupUserAndPayGate();
         if (disabledByServer)
             _featureFlagService.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>())
-                .Returns([FeatureFlagKeys.AstraToolStepsDisabled]);
+                .Returns([FeatureFlagKeys.AiToolStepsDisabled]);
         var first = FakeTool("read_habits_one");
         var second = FakeTool("read_habits_two");
         first.ExecuteAsync(Arg.Any<JsonElement>(), UserId, Arg.Any<CancellationToken>())
@@ -2867,7 +2867,7 @@ public partial class ProcessUserChatCommandHandlerTests
         SetupUserAndPayGate();
         if (previewDisabled)
             _featureFlagService.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>())
-                .Returns([FeatureFlagKeys.AstraChangePreviewDisabled]);
+                .Returns([FeatureFlagKeys.AiChangePreviewDisabled]);
         var tool = FakeTool("bulk_update_habits");
         const string toolName = "bulk_update_habits";
         var handler = CreateHandler(tool);
@@ -2981,7 +2981,7 @@ public partial class ProcessUserChatCommandHandlerTests
     {
         SetupUserAndPayGate();
         _featureFlagService.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>())
-            .Returns([FeatureFlagKeys.AstraFollowUpsDisabled]);
+            .Returns([FeatureFlagKeys.AiFollowUpsDisabled]);
         SetupAiResponse(new AiResponse
         {
             TextMessage = "Ready.\n[[orbit:followups]]\nWhat changed?\nWhat next?"
@@ -3326,7 +3326,7 @@ public partial class ProcessUserChatCommandHandlerTests
         SetupUserAndPayGate();
         if (disabled)
             _featureFlagService.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>())
-                .Returns([FeatureFlagKeys.AstraPartsDisabled]);
+                .Returns([FeatureFlagKeys.AiPartsDisabled]);
         string? prompt = null;
         _aiIntentService.SendWithToolsAsync(Arg.Do<AiToolRequest>(request => prompt = request.SystemPrompt + Environment.NewLine + request.AccountContext + Environment.NewLine + request.DynamicContext),
                 Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())

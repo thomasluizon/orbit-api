@@ -36,13 +36,13 @@ public partial class ProcessUserChatCommandHandler
         return (cards, true);
     }
 
-    private static List<AstraOfferFact> PreviewOffers(PendingAgentOperation preview, ChatContext context, string? message)
+    private static List<AiOfferFact> PreviewOffers(PendingAgentOperation preview, ChatContext context, string? message)
     {
         var pt = LocaleHelper.IsPortuguese(context.Language);
-        AstraOfferFact Offer(string key, string family, string evidence, AstraNextAction action) =>
+        AiOfferFact Offer(string key, string family, string evidence, AiNextAction action) =>
             new(key, family, evidence, action, preview.Id, preview.PreviewFingerprint!, context.UserToday)
             { PendingOperationId = preview.Id, SourceKind = "pendingOperation" };
-        var offers = new List<AstraOfferFact>();
+        var offers = new List<AiOfferFact>();
         if (context.HasProAccess && context.EnabledFeatureFlags.Contains(FeatureFlagKeys.CalendarIntegration)
             && context.User?.GoogleAccessToken is null && CalendarOfferEligibility.HasRequestedEventDate(preview, message, context.UserToday))
             offers.Add(Offer("calendar:calendar-sync", "calendar", "An editable dated draft and an available disconnected Google Calendar connection; requires dated_event interpretation.",

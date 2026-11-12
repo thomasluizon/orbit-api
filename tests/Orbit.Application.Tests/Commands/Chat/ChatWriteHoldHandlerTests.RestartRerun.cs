@@ -93,7 +93,7 @@ public sealed partial class ChatWriteHoldHandlerTests
         _user.SetLanguage(language);
         _userDateService.GetUserTodayAsync(_userId, Arg.Any<CancellationToken>()).Returns(RestartRerunToday);
         _featureFlagService.GetEnabledKeysForUserAsync(_userId, Arg.Any<CancellationToken>())
-            .Returns([FeatureFlagKeys.AstraBlockFirst]);
+            .Returns([FeatureFlagKeys.AiBlockFirst]);
         var facts = capture.GetProperty("groundingEvidence").GetProperty("successfulTools").EnumerateArray()
             .Single(tool => tool.GetProperty("name").GetString() == "query_habits").GetProperty("result");
         facts.GetProperty("date").GetString().Should().Be("2026-10-29");

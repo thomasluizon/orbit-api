@@ -19,7 +19,7 @@ public partial class ProcessUserChatCommandHandler
     };
 
     private async Task<GroundingTurn> LoadGroundingTurnAsync(ChatContext context, CancellationToken cancellationToken) => new(
-        await appConfig.GetAsync(AppConfigKeys.AstraGroundingEnforce, false, cancellationToken),
+        await appConfig.GetAsync(AppConfigKeys.AiGroundingEnforce, false, cancellationToken),
         new GroundingNameIndex(context.ActiveHabits.Select(habit => habit.Title)
             .Concat(context.ActiveGoals.Select(goal => goal.Title))
             .Concat(context.UserTags.Select(tag => tag.Name))

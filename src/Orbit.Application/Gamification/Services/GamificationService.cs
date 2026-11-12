@@ -332,7 +332,7 @@ public partial class GamificationService(
 
         ApplyOnboardingSignal(user, signal);
 
-        if (!(user.HasCreatedFirstHabit && user.HasLoggedFirstHabit && user.HasTriedAstra))
+        if (!(user.HasCreatedFirstHabit && user.HasLoggedFirstHabit && user.HasTriedAi))
             return true;
 
         user.CompleteOnboardingChecklist();
@@ -372,8 +372,8 @@ public partial class GamificationService(
             case OnboardingChecklistSignal.HabitLogged:
                 user.MarkFirstHabitLogged();
                 break;
-            case OnboardingChecklistSignal.AstraUsed:
-                user.MarkAstraUsed();
+            case OnboardingChecklistSignal.AiUsed:
+                user.MarkAiUsed();
                 break;
         }
     }

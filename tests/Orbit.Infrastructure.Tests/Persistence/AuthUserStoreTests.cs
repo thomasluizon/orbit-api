@@ -56,7 +56,7 @@ public class AuthUserStoreTests
 
         var first = await store.UpsertAsync(candidate, CancellationToken.None);
         await context.SaveChangesAsync();
-        first.ProactiveAstraEnabled.Should().Be(true);
+        first.ProactiveAiEnabled.Should().Be(true);
         await using (var command = context.Database.GetDbConnection().CreateCommand())
         {
             command.CommandText = "SELECT \"ProactiveAstraEnabled\" FROM \"Users\"";
@@ -212,7 +212,7 @@ public class AuthUserStoreTests
         var context = database.Context;
         var original = Candidate("Original", "pt-BR");
         original.SetGoogleTokens("calendar-access", "calendar-refresh");
-        original.SetProactiveAstraEnabled(false);
+        original.SetProactiveAiEnabled(false);
         original.Deactivate(DateTime.UtcNow.AddDays(7));
         context.Users.Add(original);
         await context.SaveChangesAsync();

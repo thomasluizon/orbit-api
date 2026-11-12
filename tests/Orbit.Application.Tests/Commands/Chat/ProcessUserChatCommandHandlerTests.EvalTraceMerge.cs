@@ -27,9 +27,9 @@ public partial class ProcessUserChatCommandHandlerTests
         SetupUserAndPayGate();
         var flags = new List<string>();
         if (traceFlag)
-            flags.Add(FeatureFlagKeys.AstraEvalTrace);
+            flags.Add(FeatureFlagKeys.AiEvalTrace);
         if (recordingFlag)
-            flags.Add(FeatureFlagKeys.AstraConversationRecording);
+            flags.Add(FeatureFlagKeys.AiConversationRecording);
         _featureFlagService.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>()).Returns(flags);
         var first = ReadTool("query_habits", new ToolResult(true));
         var second = ReadTool("query_goals", new ToolResult(true));
@@ -76,7 +76,7 @@ public partial class ProcessUserChatCommandHandlerTests
     {
         SetupUserAndPayGate();
         _featureFlagService.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>())
-            .Returns(new[] { FeatureFlagKeys.AstraEvalTrace });
+            .Returns(new[] { FeatureFlagKeys.AiEvalTrace });
         _mediator.Send(Arg.Any<UpdateChecklistTemplateCommand>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
         _mediator.Send(Arg.Any<SetNameCommand>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
         _mediator.Send(Arg.Any<SetSelectedCalendarsCommand>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
@@ -114,7 +114,7 @@ public partial class ProcessUserChatCommandHandlerTests
     {
         SetupResolutionAccount();
         _featureFlagService.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>())
-            .Returns(new[] { FeatureFlagKeys.AstraEvalTrace });
+            .Returns(new[] { FeatureFlagKeys.AiEvalTrace });
         var tool = new BulkLogHabitsTool(_mediator, _habitRepo, _userDateService,
             new BulkHabitReplayPlanner(Substitute.For<IIdempotencyContext>(), Substitute.For<IIdempotencyStore>(), _unitOfWork));
         var handler = CreateHandler(tool);

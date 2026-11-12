@@ -1,6 +1,6 @@
 # Orbit infrastructure
 
-## Astra cost controls and evaluation credentials
+## AI cost controls and evaluation credentials
 
 The owner creates a separate evaluation project in OpenAI Platform, configures its budget,
 and creates a project API key. Store that key as a SecureString in AWS Systems Manager
@@ -94,7 +94,7 @@ and a masked `Wns__ClientSecret`. Release the production API through the normal 
 The coordinator owns Windows live push acceptance under `thomasluizon/orbit-tickets#1861`.
 The desktop channel Object ID remains a separate GitHub environment setting.
 
-## Astra answer composition activation
+## AI answer composition activation
 
 Deploy the query-bound read and ranking producers before this composition producer. Startup
 applies `PersistComposedChatResponses`, which adds encrypted recording storage and seeds
@@ -394,7 +394,7 @@ Proactive history keeps recent rows and at most three older ended items per user
 and trigger. Those rows are the evidence for the existing rest rule, whose three
 ignored observations can span more than thirty days. Purging that bounded evidence
 would change which proactive items the engine produces. Calendar-day claims retain
-thirty days. Issued Astra blocks are not read to render conversation history;
+thirty days. Issued AI blocks are not read to render conversation history;
 conversation turns contain the rendered content.
 
 The `ScheduledJobIndexes` migration builds indexes concurrently outside migration
@@ -735,7 +735,7 @@ Deploy the append-only API before the paired client advertises `periodTotal` or
 `supportsHabitHistoryCard: true`. Each advertisement promises compatible parsing,
 display and date-correct interactions; unadvertised subtypes fall back to queried
 text. Refresh rechecks the subtype and may return HTTP 403 after a local-date
-rollover for a client without dated support. The existing `AstraPeriodBlocksDisabled` feature flag disables
+rollover for a client without dated support. The existing `AiPeriodBlocksDisabled` feature flag disables
 those producers; no fleet-floor change or new secret is required. Read tokens use
 the shared `Jwt:SecretKey`; rotating that key expires outstanding queries and
 requires repeating the original request.

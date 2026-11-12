@@ -20,13 +20,13 @@ public partial class User : Entity
     public string? TimeZone { get; private set; }
     public bool AiMemoryEnabled { get; private set; } = true;
     public bool AiSummaryEnabled { get; private set; } = true;
-    public bool ProactiveAstraEnabled { get; private set; } = true;
-    public bool EffectiveProactivePushEnabled => HasProAccess && ProactiveAstraEnabled;
+    public bool ProactiveAiEnabled { get; private set; } = true;
+    public bool EffectiveProactivePushEnabled => HasProAccess && ProactiveAiEnabled;
     public bool HasCompletedOnboarding { get; private set; } = false;
     public bool HasCompletedTour { get; private set; } = false;
     public bool HasCreatedFirstHabit { get; private set; } = false;
     public bool HasLoggedFirstHabit { get; private set; } = false;
-    public bool HasTriedAstra { get; private set; } = false;
+    public bool HasTriedAi { get; private set; } = false;
     public bool HasCompletedOnboardingChecklist { get; private set; } = false;
     public string? Language { get; private set; }
     public UserPlan SubscriptionPlan { get; private set; } = UserPlan.Free;
@@ -213,7 +213,7 @@ public partial class User : Entity
 
     public void SetAiSummary(bool enabled) => AiSummaryEnabled = enabled;
 
-    public void SetProactiveAstraEnabled(bool enabled) => ProactiveAstraEnabled = enabled;
+    public void SetProactiveAiEnabled(bool enabled) => ProactiveAiEnabled = enabled;
 
     public void SetLanguage(string? language)
     {
@@ -273,7 +273,7 @@ public partial class User : Entity
 
     public void MarkFirstHabitLogged() => HasLoggedFirstHabit = true;
 
-    public void MarkAstraUsed() => HasTriedAstra = true;
+    public void MarkAiUsed() => HasTriedAi = true;
 
     public void CompleteOnboardingChecklist() => HasCompletedOnboardingChecklist = true;
 
@@ -827,7 +827,7 @@ public partial class User : Entity
         HasCompletedTour = false;
         HasCreatedFirstHabit = false;
         HasLoggedFirstHabit = false;
-        HasTriedAstra = false;
+        HasTriedAi = false;
         HasCompletedOnboardingChecklist = false;
         TotalXp = 0;
         Level = 1;

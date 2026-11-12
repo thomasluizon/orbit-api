@@ -47,7 +47,7 @@ internal static class ApplicationHistoryRetention
         await Purge("Sessions", 30, days => db.UserSessionRefreshTokens.Where(row => db.UserSessions.Any(session => session.Id == row.UserSessionId
             && (session.ExpiresAtUtc < nowAtUtc.AddDays(-days) || session.RevokedAtUtc < nowAtUtc.AddDays(-days)))));
         await Purge("Sessions", 30, days => db.UserSessions.Where(row => row.ExpiresAtUtc < nowAtUtc.AddDays(-days) || row.RevokedAtUtc < nowAtUtc.AddDays(-days)));
-        await Purge("IssuedAstraBlocks", 30, days => db.IssuedAstraBlocks.Where(row => row.ExpiresAtUtc < nowAtUtc.AddDays(-days)));
+        await Purge("IssuedAstraBlocks", 30, days => db.IssuedAiBlocks.Where(row => row.ExpiresAtUtc < nowAtUtc.AddDays(-days)));
         await Purge("PendingClarifications", 7, days => db.PendingClarifications.Where(row => row.ExpiresAtUtc < nowAtUtc.AddDays(-days)));
         await Purge("AgentAuditLogs", 365, days => db.AgentAuditLogs.Where(row => row.CreatedAtUtc < nowAtUtc.AddDays(-days)));
         await Purge("AiUsageDaily", 400, days => db.AiUsageDaily.Where(row => row.Date < today.AddDays(-days)));

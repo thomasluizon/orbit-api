@@ -69,7 +69,7 @@ public class OrbitDbContext : DbContext
     public DbSet<DesktopHandoff> DesktopHandoffs => Set<DesktopHandoff>();
     public DbSet<ApiKey> ApiKeys => Set<ApiKey>();
     public DbSet<PendingAgentOperationState> PendingAgentOperations => Set<PendingAgentOperationState>();
-    public DbSet<IssuedAstraBlock> IssuedAstraBlocks => Set<IssuedAstraBlock>();
+    public DbSet<IssuedAiBlock> IssuedAiBlocks => Set<IssuedAiBlock>();
     public DbSet<PendingClarification> PendingClarifications => Set<PendingClarification>();
     public DbSet<AgentStepUpChallengeState> AgentStepUpChallenges => Set<AgentStepUpChallengeState>();
     public DbSet<AgentAuditLog> AgentAuditLogs => Set<AgentAuditLog>();
@@ -282,7 +282,7 @@ public class OrbitDbContext : DbContext
         ConfigurePendingAgentOperationEntity(modelBuilder);
         ConfigureAgentStepUpChallengeEntity(modelBuilder);
         ConfigurePendingClarificationEntity(modelBuilder);
-        modelBuilder.Entity<IssuedAstraBlock>(entity =>
+        modelBuilder.Entity<IssuedAiBlock>(entity =>
         {
             entity.ToTable("IssuedAstraBlocks");
             entity.HasIndex(block => new { block.UserId, block.CreatedAtUtc });
@@ -852,8 +852,8 @@ public class OrbitDbContext : DbContext
             entity.Property(u => u.SubscriptionExpiresAtUtc).HasColumnName("PlanExpiresAt");
             entity.Property(u => u.StripeRenewalStoppedByDeletion).HasDefaultValue(false);
             entity.Property(u => u.PlayRenewalStoppedByDeletion).HasDefaultValue(false);
-            entity.Property(u => u.ProactiveAstraEnabled).HasColumnName("ProactiveAstraEnabled").HasDefaultValue(true).ValueGeneratedNever();
-            entity.Property(u => u.HasTriedAstra).HasColumnName("HasTriedAstra");
+            entity.Property(u => u.ProactiveAiEnabled).HasColumnName("ProactiveAstraEnabled").HasDefaultValue(true).ValueGeneratedNever();
+            entity.Property(u => u.HasTriedAi).HasColumnName("HasTriedAstra");
             entity.Property(u => u.PublicProfileSlug).HasMaxLength(32);
             entity.Property(u => u.MascotMotionEnabled).HasDefaultValue(true).ValueGeneratedNever();
 

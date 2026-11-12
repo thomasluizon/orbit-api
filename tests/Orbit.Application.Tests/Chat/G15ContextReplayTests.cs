@@ -55,7 +55,7 @@ public partial class ProcessUserChatCommandHandlerTests
         targets.Select(target => target.GetProperty("id").GetString()).Should().BeEquivalentTo(habits.Take(2).Select(habit => habit.Id.ToString()));
         request.AccountContext.Should().Contain(SharedTitleGuidance);
         result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>().Which.Block.Should()
-            .BeOfType<AstraChoiceBlock>().Which.Options.Select(option => option.Id).Should().Equal(habits.Take(2).Select(habit => habit.Id.ToString()));
+            .BeOfType<AiChoiceBlock>().Which.Options.Select(option => option.Id).Should().Equal(habits.Take(2).Select(habit => habit.Id.ToString()));
         await _operationExecutor.DidNotReceive().ExecuteAsync(Arg.Is<AgentExecuteOperationRequest>(value => value.OperationId == write.Name), Arg.Any<CancellationToken>());
         result.Value.PendingOperations.Should().BeNullOrEmpty();
     }

@@ -25,11 +25,11 @@ public partial class ProcessUserChatCommandHandlerTests
     {
         SetupUserAndPayGate();
         SetupAiResponse(new AiResponse { TextMessage = "Allowed" });
-        AstraBlockAnswer? answer = null;
+        AiBlockAnswer? answer = null;
         if (blockAnswer)
         {
-            _unitOfWork.PassThroughTransactions<Result<PreparedAstraBlockAnswer>>();
-            var block = IssuedAstraBlock.Create(UserId, new("choice", "When?", [new("a", "Morning"), new("b", "Evening")], []));
+            _unitOfWork.PassThroughTransactions<Result<PreparedAiBlockAnswer>>();
+            var block = IssuedAiBlock.Create(UserId, new("choice", "When?", [new("a", "Morning"), new("b", "Evening")], []));
             answer = new(block.Id, ["b"]);
             _blockStore.GetAsync(block.Id, UserId, Arg.Any<CancellationToken>()).Returns(block);
             _blockStore.MarkAnsweredAsync(block.Id, UserId, Arg.Any<DateTime>(), Arg.Any<CancellationToken>()).Returns(true);
@@ -173,12 +173,12 @@ public partial class ProcessUserChatCommandHandlerTests
         user.SetLanguage(language);
         SetupUserAndPayGate(user, payGatePass: false);
         EnableRecording();
-        _unitOfWork.PassThroughTransactions<Result<PreparedAstraBlockAnswer>>();
+        _unitOfWork.PassThroughTransactions<Result<PreparedAiBlockAnswer>>();
         var definition = form == "pickList"
-            ? new AstraBlockDefinition("pickList", "Choose", [], [new("b", "Read", ParseArguments("{\"title\":\"Read\"}"))],
+            ? new AiBlockDefinition("pickList", "Choose", [], [new("b", "Read", ParseArguments("{\"title\":\"Read\"}"))],
                 MultiSelect: true, Action: "create_habits")
-            : new AstraBlockDefinition("choice", "When?", [new("a", "Morning"), new("b", "Evening")], []);
-        var block = IssuedAstraBlock.Create(UserId, definition);
+            : new AiBlockDefinition("choice", "When?", [new("a", "Morning"), new("b", "Evening")], []);
+        var block = IssuedAiBlock.Create(UserId, definition);
         _blockStore.GetAsync(block.Id, UserId, Arg.Any<CancellationToken>()).Returns(block);
         _moderation.CheckTextAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(new ModerationResult(true, false, []));
@@ -247,12 +247,12 @@ public partial class ProcessUserChatCommandHandlerTests
         user.SetLanguage(language);
         SetupUserAndPayGate(user, payGatePass: false);
         EnableRecording();
-        _unitOfWork.PassThroughTransactions<Result<PreparedAstraBlockAnswer>>();
+        _unitOfWork.PassThroughTransactions<Result<PreparedAiBlockAnswer>>();
         var definition = form == "pickList"
-            ? new AstraBlockDefinition("pickList", "Choose", [], [new("b", "Read", ParseArguments("{\"title\":\"Read\"}"))],
+            ? new AiBlockDefinition("pickList", "Choose", [], [new("b", "Read", ParseArguments("{\"title\":\"Read\"}"))],
                 MultiSelect: true, Action: "create_habits")
-            : new AstraBlockDefinition("choice", "When?", [new("a", "Morning"), new("b", "Evening")], []);
-        var block = IssuedAstraBlock.Create(UserId, definition);
+            : new AiBlockDefinition("choice", "When?", [new("a", "Morning"), new("b", "Evening")], []);
+        var block = IssuedAiBlock.Create(UserId, definition);
         _blockStore.GetAsync(block.Id, UserId, Arg.Any<CancellationToken>()).Returns(block);
         _moderation.CheckTextAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(new ModerationResult(true, false, [category]));

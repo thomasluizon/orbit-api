@@ -13,7 +13,7 @@ public sealed record HabitSetupAnswerContext(string ToolName, JsonElement Argume
         + "Validated habit draft: " + JsonSerializer.Serialize(this, ChatStreamEvent.SerializerOptions);
 
     internal static HabitSetupAnswerContext? FromValidatedAnswer(PendingClarificationData pending,
-        AstraBlockDefinition definition, AstraBlockAnswer answer)
+        AiBlockDefinition definition, AiBlockAnswer answer)
     {
         if (definition.DraftClarification is not { } draft || pending.MissingArgumentKey != draft.MissingField
             || pending.ToolName is not ("create_habit" or "create_sub_habit"))
@@ -22,9 +22,9 @@ public sealed record HabitSetupAnswerContext(string ToolName, JsonElement Argume
         {
             if (JsonNode.Parse(pending.PartialArgumentsJson) is not JsonObject arguments)
                 return null;
-            var value = definition.Form == AstraBlockKinds.Question ? answer.Answers!.Single() : null;
-            var options = definition.Form == AstraBlockKinds.Choice ? definition.Options
-                : definition.Questions!.Single().Options?.Select(option => new AstraBlockOption(option.Id, option.Label)).ToArray() ?? [];
+            var value = definition.Form == AiBlockKinds.Question ? answer.Answers!.Single() : null;
+            var options = definition.Form == AiBlockKinds.Choice ? definition.Options
+                : definition.Questions!.Single().Options?.Select(option => new AiBlockOption(option.Id, option.Label)).ToArray() ?? [];
             var selected = options.Where(option => (value?.SelectedIds ?? answer.SelectedIds).Contains(option.Id))
                 .Select(option => OptionValue(pending, option)).ToArray();
             var freeText = value?.FreeText ?? answer.FreeText;
@@ -41,7 +41,7 @@ public sealed record HabitSetupAnswerContext(string ToolName, JsonElement Argume
         }
     }
 
-    private static JsonNode OptionValue(PendingClarificationData pending, AstraBlockOption option)
+    private static JsonNode OptionValue(PendingClarificationData pending, AiBlockOption option)
     {
         foreach (var offered in pending.AllowedValues)
         {

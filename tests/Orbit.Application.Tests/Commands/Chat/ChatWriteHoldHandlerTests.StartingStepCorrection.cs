@@ -27,7 +27,7 @@ public sealed partial class ChatWriteHoldHandlerTests
         var language = args.GetProperty("language").GetString()!;
         _user.SetLanguage(language);
         _featureFlagService.GetEnabledKeysForUserAsync(_userId, Arg.Any<CancellationToken>())
-            .Returns(new[] { FeatureFlagKeys.AstraBlockFirst });
+            .Returns(new[] { FeatureFlagKeys.AiBlockFirst });
         ScriptToolCall(args.GetRawText(), call.GetProperty("name").GetString()!);
         var corrected = ScriptedStartingStepCorrection(args, capture.StartsWith("composition-coaching", StringComparison.Ordinal));
         var errors = new List<AiToolCallResult>();
@@ -111,7 +111,7 @@ public sealed partial class ChatWriteHoldHandlerTests
             "Fixtures", "StartingSteps", "composition-one-small-step-en-r1.json")));
         var args = WithReadCompletion(capture.RootElement.GetProperty("toolCalls")[0].GetProperty("arguments"), complete);
         _featureFlagService.GetEnabledKeysForUserAsync(_userId, Arg.Any<CancellationToken>())
-            .Returns(new[] { FeatureFlagKeys.AstraBlockFirst });
+            .Returns(new[] { FeatureFlagKeys.AiBlockFirst });
         ScriptToolCall(args.GetRawText(), "suggest_breakdown");
         var create = new AiToolCall("create_habit", "write", JsonSerializer.SerializeToElement(new
         {

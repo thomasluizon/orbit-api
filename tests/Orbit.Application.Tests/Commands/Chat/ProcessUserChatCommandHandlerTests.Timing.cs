@@ -35,7 +35,7 @@ public partial class ProcessUserChatCommandHandlerTests
         var clock = new ChatTimingClock();
         _turnClock = clock;
         _featureFlagService.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>())
-            .Returns(new[] { FeatureFlagKeys.AstraEvalTrace });
+            .Returns(new[] { FeatureFlagKeys.AiEvalTrace });
         _moderation.CheckTextAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(_ =>
         {
             clock.Advance(1);

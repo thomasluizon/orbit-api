@@ -1198,9 +1198,9 @@ public class GamificationServiceTests
         SetupUserLookup(user);
         SetupNoEarnedAchievements();
 
-        await _sut.ProcessOnboardingChecklistAsync(UserId, OnboardingChecklistSignal.AstraUsed);
+        await _sut.ProcessOnboardingChecklistAsync(UserId, OnboardingChecklistSignal.AiUsed);
 
-        user.HasTriedAstra.Should().BeTrue();
+        user.HasTriedAi.Should().BeTrue();
         user.HasCompletedOnboardingChecklist.Should().BeTrue();
         await _achievementRepo.Received(1).AddAsync(
             Arg.Is<UserAchievement>(a => a.AchievementId == AchievementDefinitions.OnboardingComplete),
@@ -1219,7 +1219,7 @@ public class GamificationServiceTests
         await _sut.ProcessOnboardingChecklistAsync(UserId, OnboardingChecklistSignal.HabitLogged);
 
         user.HasLoggedFirstHabit.Should().BeTrue();
-        user.HasTriedAstra.Should().BeFalse();
+        user.HasTriedAi.Should().BeFalse();
         user.HasCompletedOnboardingChecklist.Should().BeFalse();
         await _achievementRepo.DidNotReceive().AddAsync(
             Arg.Any<UserAchievement>(),
@@ -1236,7 +1236,7 @@ public class GamificationServiceTests
         SetupUserLookup(user);
         SetupNoEarnedAchievements();
 
-        await _sut.ProcessOnboardingChecklistAsync(UserId, OnboardingChecklistSignal.AstraUsed);
+        await _sut.ProcessOnboardingChecklistAsync(UserId, OnboardingChecklistSignal.AiUsed);
 
         user.HasCompletedOnboardingChecklist.Should().BeTrue();
         await _achievementRepo.DidNotReceive().AddAsync(
@@ -1255,7 +1255,7 @@ public class GamificationServiceTests
         SetupUserLookup(user);
         SetupNoEarnedAchievements();
 
-        await _sut.ProcessOnboardingChecklistAsync(UserId, OnboardingChecklistSignal.AstraUsed);
+        await _sut.ProcessOnboardingChecklistAsync(UserId, OnboardingChecklistSignal.AiUsed);
 
         user.HasCompletedOnboardingChecklist.Should().BeTrue();
         await _achievementRepo.Received(1).AddAsync(
@@ -1270,11 +1270,11 @@ public class GamificationServiceTests
         var user = CreateProUser();
         user.MarkFirstHabitCreated();
         user.MarkFirstHabitLogged();
-        user.MarkAstraUsed();
+        user.MarkAiUsed();
         user.CompleteOnboardingChecklist();
         SetupUserLookup(user);
 
-        await _sut.ProcessOnboardingChecklistAsync(UserId, OnboardingChecklistSignal.AstraUsed);
+        await _sut.ProcessOnboardingChecklistAsync(UserId, OnboardingChecklistSignal.AiUsed);
 
         await _achievementRepo.DidNotReceive().AddAsync(
             Arg.Any<UserAchievement>(),
@@ -1291,7 +1291,7 @@ public class GamificationServiceTests
         SetupUserLookup(user);
         SetupEarnedAchievements(AchievementDefinitions.OnboardingComplete);
 
-        await _sut.ProcessOnboardingChecklistAsync(UserId, OnboardingChecklistSignal.AstraUsed);
+        await _sut.ProcessOnboardingChecklistAsync(UserId, OnboardingChecklistSignal.AiUsed);
 
         user.HasCompletedOnboardingChecklist.Should().BeTrue();
         await _achievementRepo.DidNotReceive().AddAsync(
@@ -1309,7 +1309,7 @@ public class GamificationServiceTests
             Arg.Any<CancellationToken>())
             .Returns((User?)null);
 
-        await _sut.ProcessOnboardingChecklistAsync(UserId, OnboardingChecklistSignal.AstraUsed);
+        await _sut.ProcessOnboardingChecklistAsync(UserId, OnboardingChecklistSignal.AiUsed);
 
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }

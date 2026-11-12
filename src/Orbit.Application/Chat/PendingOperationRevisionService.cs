@@ -24,7 +24,7 @@ public sealed record PendingOperationRevisionResult(
     Guid? PendingOperationId,
     PendingOperationChangePreview? Preview,
     bool Cancelled = false,
-    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] AstraPlan? Plan = null);
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] AiPlan? Plan = null);
 
 public sealed partial class PendingOperationRevisionService(
     IPendingAgentOperationStore store,

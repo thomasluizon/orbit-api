@@ -67,7 +67,7 @@ public partial class PendingAgentOperationStoreTests
                 var callback = revise;
                 revise = null;
                 callback?.Invoke();
-                return [new(FeatureFlagKeys.AstraConversationRecording, true, null)];
+                return [new(FeatureFlagKeys.AiConversationRecording, true, null)];
             });
             store.TryConsumeFreshConfirmation(fixture.User.Id, capability.Id, fingerprint,
                 confirmation.ConfirmationToken, false).Should().BeFalse();

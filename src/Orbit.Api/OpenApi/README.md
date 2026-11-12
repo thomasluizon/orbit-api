@@ -1,7 +1,7 @@
 # Selecting an OpenAPI artifact
 
 The additive AI turn plan, progress events and approval outcomes for
-thomasluizon/orbit-tickets#1976 are documented in [AstraPlans.md](AstraPlans.md).
+thomasluizon/orbit-tickets#1976 are documented in [AiPlans.md](AiPlans.md).
 Deploy this API before the paired shared schemas and plan renderer.
 
 `POST /api/habits/read-phrase` reads a free-form habit phrase and costs the person no

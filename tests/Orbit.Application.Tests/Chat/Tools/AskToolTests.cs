@@ -118,7 +118,7 @@ public partial class AskToolTests
         result.Success.Should().Be(valid);
         if (valid)
         {
-            var item = result.Payload.Should().BeOfType<AstraBlockDefinition>().Subject.Items.Should().ContainSingle().Subject;
+            var item = result.Payload.Should().BeOfType<AiBlockDefinition>().Subject.Items.Should().ContainSingle().Subject;
             item.Label.Should().Be(label);
             item.Detail.Should().Be(detail);
         }
@@ -158,7 +158,7 @@ public partial class AskToolTests
 
         result.Success.Should().Be(valid, result.Error);
         if (!valid) return;
-        var item = result.Payload.Should().BeOfType<AstraBlockDefinition>().Subject.Items.Should().ContainSingle().Subject;
+        var item = result.Payload.Should().BeOfType<AiBlockDefinition>().Subject.Items.Should().ContainSingle().Subject;
         var expanded = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(arguments)!;
         foreach (var field in expanded)
             item.Arguments.GetProperty(field.Key).GetRawText().Should().Be(field.Value.GetRawText());
@@ -191,7 +191,7 @@ public partial class AskToolTests
             intro = includeIntro ? "Choose habits to prepare a preview." : null
         }), UserId, default);
         result.Success.Should().BeTrue(result.Error);
-        var definition = result.Payload.Should().BeOfType<AstraBlockDefinition>().Subject;
+        var definition = result.Payload.Should().BeOfType<AiBlockDefinition>().Subject;
         definition.Intro.Should().BeNull();
         definition.Items.Should().HaveCount(2);
         if (action == "create_habits")

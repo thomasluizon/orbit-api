@@ -110,7 +110,7 @@ public class AiController(
     }
 
     public record ConfirmPendingOperationResponse(Guid PendingOperationId, string ConfirmationToken, DateTime ExpiresAtUtc,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] AstraPlan? Plan = null);
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] AiPlan? Plan = null);
     public record StepUpChallengeRequest(string Language = "en");
     public record VerifyStepUpRequest([property: JsonRequired] Guid ChallengeId, string Code);
     public record ExecutePendingOperationRequest(string ConfirmationToken, AgentClientContext? ClientContext = null);

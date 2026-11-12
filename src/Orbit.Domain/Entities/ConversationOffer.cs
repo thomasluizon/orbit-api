@@ -14,7 +14,7 @@ public sealed class ConversationOffer : Entity
 
     private ConversationOffer() { }
 
-    public static Result<ConversationOffer> Create(Guid userId, Guid conversationId, string key, AstraOfferFact? fact = null)
+    public static Result<ConversationOffer> Create(Guid userId, Guid conversationId, string key, AiOfferFact? fact = null)
     {
         if (userId == Guid.Empty || conversationId == Guid.Empty || string.IsNullOrWhiteSpace(key)
             || key.Length > 200 || key.Any(char.IsControl) || fact is not null && fact.Action.OfferKey != key)

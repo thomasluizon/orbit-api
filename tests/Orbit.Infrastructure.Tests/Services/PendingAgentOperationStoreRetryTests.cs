@@ -40,7 +40,7 @@ public class PendingAgentOperationStoreRetryTests
         db.Users.Add(user);
         db.SaveChanges();
         var flags = Substitute.For<IFeatureFlagService>();
-        flags.ResolveForUser(user.Id).Returns([new(FeatureFlagKeys.AstraConversationRecording, true, null)]);
+        flags.ResolveForUser(user.Id).Returns([new(FeatureFlagKeys.AiConversationRecording, true, null)]);
         var store = new PendingAgentOperationStore(db, Options.Create(new AgentPlatformSettings()), flags);
         var conversation = new PendingOperationConversation(Guid.NewGuid(), DateTime.UtcNow, usesServerHistory: true);
         const string arguments = "{\"title\":\"Reservation\",\"due_date\":\"2026-12-31\",\"due_time\":\"20:30\"}";

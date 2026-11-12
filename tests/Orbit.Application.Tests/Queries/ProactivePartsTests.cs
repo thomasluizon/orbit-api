@@ -157,7 +157,7 @@ public sealed class ProactivePartsTests
         if (missing.EndsWith("Flag", StringComparison.Ordinal))
             h.Flags.GetEnabledKeysForUserAsync(h.User.Id, Arg.Any<CancellationToken>()).Returns(new[]
             {
-                missing == "partsFlag" ? FeatureFlagKeys.AstraPartsDisabled : FeatureFlagKeys.AstraStatusBlocksDisabled
+                missing == "partsFlag" ? FeatureFlagKeys.AiPartsDisabled : FeatureFlagKeys.AiStatusBlocksDisabled
             });
 
         var response = (await h.Handler.Handle(new(h.User.Id, client), default)).Value!;

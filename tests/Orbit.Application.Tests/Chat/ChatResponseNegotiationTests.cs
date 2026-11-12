@@ -69,14 +69,14 @@ public sealed class ChatResponseNegotiationTests
     [InlineData("pickList", true)]
     public void Replay_ClarificationsKeepTheirQuestionWhenCapabilityIsWithdrawn(string kind, bool disabled)
     {
-        var issued = IssuedAstraBlock.Create(Guid.NewGuid(), kind == "choice"
+        var issued = IssuedAiBlock.Create(Guid.NewGuid(), kind == "choice"
             ? new("choice", "Which time?", [new("morning", "Morning"), new("evening", "Evening")], [])
             : new("pickList", "Choose habits", [], [new("read", "Read", JsonSerializer.SerializeToElement(new { title = "Read" }))],
                 MultiSelect: true, Action: "create_habits"));
         var definition = issued.ReadDefinition();
         object block = kind == "choice"
-            ? new AstraChoiceBlock(issued.Id, definition.Title, definition.Options, definition.MultiSelect, definition.AllowFreeText, issued.ExpiresAtUtc)
-            : new AstraPickListBlock(issued.Id, definition.Title, definition.Items.Select(item => new AstraPickListItem(item.Id, item.Label, item.Detail)).ToArray(),
+            ? new AiChoiceBlock(issued.Id, definition.Title, definition.Options, definition.MultiSelect, definition.AllowFreeText, issued.ExpiresAtUtc)
+            : new AiPickListBlock(issued.Id, definition.Title, definition.Items.Select(item => new AiPickListItem(item.Id, item.Label, item.Detail)).ToArray(),
                 definition.Action!, issued.ExpiresAtUtc);
         var response = Replay(new(null, [], Parts: [new ChatBlockPart(kind, block)]));
         var client = new AgentClientContext(SupportsParts: true, PartKinds: [kind]);
@@ -85,7 +85,7 @@ public sealed class ChatResponseNegotiationTests
         supported.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>().Which.Kind.Should().Be(kind);
         supported.AiMessage.Should().BeNull();
         var fallback = ChatResponseNegotiation.ForClient(response, disabled ? client : client with { PartKinds = [] },
-            disabled ? [FeatureFlagKeys.AstraAskBlocksDisabled] : []);
+            disabled ? [FeatureFlagKeys.AiAskBlocksDisabled] : []);
         fallback.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatTextPart>().Which.Text.Should().Be(definition.Title);
         fallback.AiMessage.Should().Be(definition.Title);
         fallback.Actions.Should().BeEmpty();
@@ -119,8 +119,8 @@ public sealed class ChatResponseNegotiationTests
             SupportsFollowUps: mode != "legacy", SupportsFollowUpContext: mode != "context");
         var flags = mode switch
         {
-            "parts" => new[] { FeatureFlagKeys.AstraPartsDisabled },
-            "followups" => [FeatureFlagKeys.AstraFollowUpsDisabled],
+            "parts" => new[] { FeatureFlagKeys.AiPartsDisabled },
+            "followups" => [FeatureFlagKeys.AiFollowUpsDisabled],
             _ => Array.Empty<string>()
         };
         var result = ChatResponseNegotiation.ForClient(response, client, flags);
@@ -181,7 +181,7 @@ public sealed class ChatResponseNegotiationTests
             result.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>().Which.Kind.Should().Be(kind);
             foreach (var unsupported in new[] { client with { PartKinds = [] }, client with { SupportsParts = false } })
                 ChatResponseNegotiation.ForClient(response, unsupported, []).AiMessage.Should().Contain("Habits completed: 3");
-            ChatResponseNegotiation.ForClient(response, client, [FeatureFlagKeys.AstraPeriodBlocksDisabled])
+            ChatResponseNegotiation.ForClient(response, client, [FeatureFlagKeys.AiPeriodBlocksDisabled])
                 .AiMessage.Should().Contain("Habits completed: 3");
         }
         else

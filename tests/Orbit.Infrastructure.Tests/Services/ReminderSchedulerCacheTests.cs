@@ -27,7 +27,7 @@ namespace Orbit.Infrastructure.Tests.Services;
 public class ReminderSchedulerCacheTests
 {
     [Fact]
-    public async Task ReminderTick_AstraDeleteAndReplacement_RefreshesCandidates()
+    public async Task ReminderTick_AiDeleteAndReplacement_RefreshesCandidates()
     {
         var reads = new SchedulerReadInterceptor();
         using var factory = new SqliteOrbitDbContextFactory(reads);

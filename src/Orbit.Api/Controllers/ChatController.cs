@@ -214,21 +214,21 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
         return result.IsSuccess ? Ok(result.Value) : result.ToErrorResult();
     }
 
-    private (AstraBlockAnswer? Answer, IActionResult? Error) ParseBlockAnswer(string? json)
+    private (AiBlockAnswer? Answer, IActionResult? Error) ParseBlockAnswer(string? json)
     {
         if (json is null)
             return (null, null);
         try
         {
-            var answer = JsonSerializer.Deserialize<AstraBlockAnswer>(json, ChatHistoryJsonOptions);
+            var answer = JsonSerializer.Deserialize<AiBlockAnswer>(json, ChatHistoryJsonOptions);
             if (answer is not null)
                 return (answer, null);
         }
         catch (JsonException)
         {
-            return (null, BadRequest(new AppError(ErrorCodes.AstraBlockInvalidJson, ErrorCopy.English(ErrorCodes.AstraBlockInvalidJson)).ToErrorBody()));
+            return (null, BadRequest(new AppError(ErrorCodes.AiBlockInvalidJson, ErrorCopy.English(ErrorCodes.AiBlockInvalidJson)).ToErrorBody()));
         }
-        return (null, BadRequest(new AppError(ErrorCodes.AstraBlockInvalidJson, ErrorCopy.English(ErrorCodes.AstraBlockInvalidJson)).ToErrorBody()));
+        return (null, BadRequest(new AppError(ErrorCodes.AiBlockInvalidJson, ErrorCopy.English(ErrorCodes.AiBlockInvalidJson)).ToErrorBody()));
     }
     private bool CanAccessChat() =>
         HttpContext.User.GetAgentAuthMethod() is not (AgentAuthMethod.ApiKey or AgentAuthMethod.OAuth) ||

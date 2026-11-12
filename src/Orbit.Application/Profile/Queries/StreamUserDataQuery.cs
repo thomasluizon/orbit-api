@@ -50,7 +50,7 @@ public sealed class StreamUserDataQueryHandler(
         Write(writer, "account", new ExportedAccount(user.Name, user.Email, user.CreatedAtUtc, user.HasProAccess ? "pro" : "free"));
         Write(writer, "settings", new ExportedSettings(user.TimeZone, user.Language, user.WeekStartDay,
             user.ThemePreference, user.ColorScheme, user.AiSummaryEnabled, user.EffectiveProactivePushEnabled,
-            user.Uses24HourClockPreference, user.ProactiveAstraEnabled, MascotMotionEnabled: user.MascotMotionEnabled));
+            user.Uses24HourClockPreference, user.ProactiveAiEnabled, MascotMotionEnabled: user.MascotMotionEnabled));
         Write(writer, "subscription", new ExportedSubscription(user.Plan.ToString(), user.IsLifetimePro,
             user.SubscriptionSource?.ToString(), user.SubscriptionInterval?.ToString(), user.PlanExpiresAt, user.TrialEndsAt));
         await WriteHabitsAsync(output, user.Id, ct);

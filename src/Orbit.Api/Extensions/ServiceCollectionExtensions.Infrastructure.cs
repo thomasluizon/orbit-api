@@ -435,7 +435,7 @@ public static partial class ServiceCollectionExtensions
         var type = Nullable.GetUnderlyingType(context.JsonTypeInfo.Type) ?? context.JsonTypeInfo.Type;
         if (type == typeof(Orbit.Application.Chat.ReadBlockCard))
             schema.Discriminator = null;
-        if (type == typeof(AstraQuestion) && schema.Properties?["type"] is OpenApiSchema questionType)
+        if (type == typeof(AiQuestion) && schema.Properties?["type"] is OpenApiSchema questionType)
             questionType.Enum = new[] { "singleChoice", "multipleChoice", "scale", "slider", "yesNo" }
                 .Select(value => (JsonNode)JsonValue.Create(value)).ToList();
         if (context.JsonPropertyInfo?.AttributeProvider is PropertyInfo pendingProperty

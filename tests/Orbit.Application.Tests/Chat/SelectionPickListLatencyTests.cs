@@ -28,7 +28,7 @@ public partial class ProcessUserChatCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue(result.Error);
         var block = result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>()
-            .Which.Block.Should().BeOfType<AstraPickListBlock>().Subject;
+            .Which.Block.Should().BeOfType<AiPickListBlock>().Subject;
         block.Action.Should().Be(action);
         block.Items.Select(item => item.Id).Should().BeEquivalentTo(habits.Select(habit => habit.Id.ToString()));
         result.Value.PendingOperations.Should().BeNullOrEmpty();
@@ -58,14 +58,14 @@ public partial class ProcessUserChatCommandHandlerTests
     {
         var yesterday = Today.AddDays(-1);
         SetupDatedPickListTurn(language, SelectionReadOn("read-yesterday", yesterday));
-        IssuedAstraBlock? stored = null;
-        _blockStore.AddAsync(Arg.Do<IssuedAstraBlock>(block => stored = block), Arg.Any<CancellationToken>());
+        IssuedAiBlock? stored = null;
+        _blockStore.AddAsync(Arg.Do<IssuedAiBlock>(block => stored = block), Arg.Any<CancellationToken>());
 
         var result = await PickListTurnAsync(message, language);
 
         result.IsSuccess.Should().BeTrue(result.Error);
         result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>()
-            .Which.Block.Should().BeOfType<AstraPickListBlock>();
+            .Which.Block.Should().BeOfType<AiPickListBlock>();
         stored.Should().NotBeNull();
         stored!.ReadDefinition().Items.Select(item => item.Arguments.GetProperty("date").GetString())
             .Should().HaveCount(2).And.OnlyContain(date => date == yesterday.ToString("yyyy-MM-dd"));

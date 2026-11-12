@@ -105,7 +105,7 @@ public partial class ProcessUserChatCommandHandler
             Block = card with
             { Items = card.Items.Select(item => item.Status == "done" ? item with { Status = "none" } : item).ToList() }
         },
-        GoalListCard card when flags.Contains(Orbit.Application.Common.FeatureFlagKeys.AstraGoalProjectionsDisabled) =>
+        GoalListCard card when flags.Contains(Orbit.Application.Common.FeatureFlagKeys.AiGoalProjectionsDisabled) =>
             read with { Block = GoalListCardBuilder.WithoutProjections(card) },
         _ => read
     };
@@ -190,7 +190,7 @@ public partial class ProcessUserChatCommandHandler
 
     private static bool ReadEnabled(QueryReadBlock read, AgentClientContext? client, IReadOnlyList<string> flags) =>
         ReadKindEnabled(read.Kind, client, flags) && ReadSubtypeEnabled(read.Block, client,
-            flags.Contains(Orbit.Application.Common.FeatureFlagKeys.AstraBlockFirst) || ProactiveProposal.Enabled(client));
+            flags.Contains(Orbit.Application.Common.FeatureFlagKeys.AiBlockFirst) || ProactiveProposal.Enabled(client));
 
     internal static string ReadFallback(object block, string? language, string? timeZone = null, DateOnly? userToday = null) =>
         new ReadFallbackText(language ?? (block as HabitMonthCard)?.Language, timeZone, userToday).Format(block);
@@ -324,18 +324,18 @@ public partial class ProcessUserChatCommandHandler
             "habitSuggestions" => SupportsSuggestionBlock(client),
             "habitMonth" => client?.SupportsParts == true
                 && client.PartKinds?.Contains(kind, StringComparer.Ordinal) == true
-                && !flags.Contains(Orbit.Application.Common.FeatureFlagKeys.AstraStatusBlocksDisabled),
+                && !flags.Contains(Orbit.Application.Common.FeatureFlagKeys.AiStatusBlocksDisabled),
             "periodTotal" or "periodComparison" => client?.SupportsParts == true
                 && client.PartKinds?.Contains(kind, StringComparer.Ordinal) == true
-                && !flags.Contains(Orbit.Application.Common.FeatureFlagKeys.AstraPeriodBlocksDisabled),
+                && !flags.Contains(Orbit.Application.Common.FeatureFlagKeys.AiPeriodBlocksDisabled),
             "habitList" => client?.SupportsHabitListCard == true,
             "goalList" => client?.SupportsGoalListCard == true,
-            "metrics" => client?.SupportsMetricsCard == true && !flags.Contains(Orbit.Application.Common.FeatureFlagKeys.AstraPeriodBlocksDisabled),
-            "periodInsight" => client?.SupportsPeriodInsightCard == true && !flags.Contains(Orbit.Application.Common.FeatureFlagKeys.AstraPeriodBlocksDisabled),
+            "metrics" => client?.SupportsMetricsCard == true && !flags.Contains(Orbit.Application.Common.FeatureFlagKeys.AiPeriodBlocksDisabled),
+            "periodInsight" => client?.SupportsPeriodInsightCard == true && !flags.Contains(Orbit.Application.Common.FeatureFlagKeys.AiPeriodBlocksDisabled),
             "daySummary" or "streak" or "calendar" or "gamification" => StatusCardBuilder.IsSupported(kind, client)
-                && !flags.Contains(Orbit.Application.Common.FeatureFlagKeys.AstraStatusBlocksDisabled),
-            "recordList" => client?.SupportsRecordListCard == true && !flags.Contains(Orbit.Application.Common.FeatureFlagKeys.AstraRecordListsDisabled),
-            "accountRows" => client?.SupportsAccountRowsCard == true && !flags.Contains(Orbit.Application.Common.FeatureFlagKeys.AstraAccountRowsDisabled),
+                && !flags.Contains(Orbit.Application.Common.FeatureFlagKeys.AiStatusBlocksDisabled),
+            "recordList" => client?.SupportsRecordListCard == true && !flags.Contains(Orbit.Application.Common.FeatureFlagKeys.AiRecordListsDisabled),
+            "accountRows" => client?.SupportsAccountRowsCard == true && !flags.Contains(Orbit.Application.Common.FeatureFlagKeys.AiAccountRowsDisabled),
             _ => false
         };
     }

@@ -31,7 +31,7 @@ public sealed partial class ConversationTurnRecorder(
 
     public async Task<bool> RecordAsync(ConversationTurnCapture turn, CancellationToken cancellationToken = default)
     {
-        if (!(await flags.GetEnabledKeysForUserAsync(turn.UserId, cancellationToken, forceRefresh: true)).Contains(FeatureFlagKeys.AstraConversationRecording))
+        if (!(await flags.GetEnabledKeysForUserAsync(turn.UserId, cancellationToken, forceRefresh: true)).Contains(FeatureFlagKeys.AiConversationRecording))
             return false;
         await new ConversationTurnCaptureValidator().ValidateAndThrowAsync(turn, cancellationToken);
         var conversationId = turn.ConversationId ?? turn.TurnId;
@@ -64,7 +64,7 @@ public sealed partial class ConversationTurnRecorder(
         return work.ExecuteInTransactionAsync(async token =>
         {
             await work.AcquireUserRowLockAsync(turn.UserId, token);
-            if (!(await flags.GetEnabledKeysForUserAsync(turn.UserId, token, forceRefresh: true)).Contains(FeatureFlagKeys.AstraConversationRecording))
+            if (!(await flags.GetEnabledKeysForUserAsync(turn.UserId, token, forceRefresh: true)).Contains(FeatureFlagKeys.AiConversationRecording))
                 return false;
             await new ConversationTurnCaptureValidator().ValidateAndThrowAsync(turn, token);
             if (!encryption.IsConfigured || !db.HasEncryptionService)
@@ -86,10 +86,10 @@ public sealed partial class ConversationTurnRecorder(
                 && item.PreviewFingerprint != null).OrderBy(item => item.Id).ToListAsync(token);
             var outcomes = JsonSerializer.Serialize(previews.Select(Preview));
             var responseJson = turn.ResponseJson;
-            var plan = AstraPlan.Read(responseJson);
+            var plan = AiPlan.Read(responseJson);
             foreach (var preview in previews.Select(Preview))
                 plan = plan?.PreviewOutcome(preview.PendingOperationId, preview.Outcome);
-            responseJson = AstraPlan.Write(responseJson, plan);
+            responseJson = AiPlan.Write(responseJson, plan);
             var userRow = ConversationTurn.Create(turn.UserId, turn.TurnId, "user", turn.CreatedAtUtc, null,
                 turn.UserContent, "[]", conversationId: conversationId, turnOrder: order,
                 imageObjectKey: imageKey, imageContentType: imageKey is null ? null : turn.ImageMimeType, imageSha256: imageSha256);
@@ -202,7 +202,7 @@ public sealed partial class ConversationTurnRecorder(
         var selected = rows.Take(pageSize).Reverse().ToArray();
         return new(conversationId.Value, selected.Select(row => new ConversationDisplayTurn(row.TurnId, row.TurnOrder!.Value,
             row.Role, row.CreatedAtUtc, row.Content, row.ResponseJson, row.PreviewOutcomesJson,
-            row.ImageObjectKey is null ? null : new($"{row.TurnId}{Path.GetExtension(row.ImageObjectKey)}", row.ImageContentType!, row.ImageSha256!, $"/api/chat/conversations/{conversationId}/images/{row.TurnId}"), AstraPlan.Read(row.ResponseJson))).ToArray(),
+            row.ImageObjectKey is null ? null : new($"{row.TurnId}{Path.GetExtension(row.ImageObjectKey)}", row.ImageContentType!, row.ImageSha256!, $"/api/chat/conversations/{conversationId}/images/{row.TurnId}"), AiPlan.Read(row.ResponseJson))).ToArray(),
             hasMore ? selected[0].TurnOrder : null);
     }
 

@@ -43,7 +43,7 @@ public partial class AiDailyBudgetTests(ITestOutputHelper output)
         var other = User.Create("Other", "other-eval@example.com").Value;
         other.GrantLifetimePro();
         fixture.Database.Context.Users.Add(other);
-        fixture.Database.Context.AppFeatureFlagAccounts.Add(AppFeatureFlagAccount.Create(FeatureFlagKeys.AstraEvalUnmetered, other.Id));
+        fixture.Database.Context.AppFeatureFlagAccounts.Add(AppFeatureFlagAccount.Create(FeatureFlagKeys.AiEvalUnmetered, other.Id));
         await fixture.Database.Context.SaveChangesAsync();
         fixture.AccountConfiguration[EvalAccountAccess.AccountIdsKey] = $"{fixture.User.Id},{other.Id}";
         await fixture.Budget.ReserveAsync(fixture.User.Id, 500_000, default);
@@ -666,7 +666,7 @@ public partial class AiDailyBudgetTests(ITestOutputHelper output)
             User.StartTrial(DateTime.UtcNow.AddDays(pro ? 1 : -1));
             Database.Context.Users.Add(User);
             if (evalExempt)
-                Database.Context.AppFeatureFlagAccounts.Add(AppFeatureFlagAccount.Create(FeatureFlagKeys.AstraEvalUnmetered, User.Id));
+                Database.Context.AppFeatureFlagAccounts.Add(AppFeatureFlagAccount.Create(FeatureFlagKeys.AiEvalUnmetered, User.Id));
             Database.Context.SaveChanges();
             SetUser(User.Id);
             Config.GetAsync(Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(call => call.ArgAt<int>(1));

@@ -40,7 +40,7 @@ public sealed partial class ChatWriteHoldHandlerTests
         var eventDate = DateOnly.Parse(items[1].GetProperty("due_date").GetString()!, CultureInfo.InvariantCulture);
         _userDateService.GetUserTodayAsync(_userId, Arg.Any<CancellationToken>()).Returns(eventDate.AddDays(-1));
         _featureFlagService.GetEnabledKeysForUserAsync(_userId, Arg.Any<CancellationToken>())
-            .Returns([FeatureFlagKeys.AstraBlockFirst]);
+            .Returns([FeatureFlagKeys.AiBlockFirst]);
         _promptBuilder.BuildStatic(Arg.Any<PromptBuildRequest>())
             .Returns(request => new SystemPromptBuilder().BuildStatic(request.Arg<PromptBuildRequest>()));
         _aiIntentService.SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())

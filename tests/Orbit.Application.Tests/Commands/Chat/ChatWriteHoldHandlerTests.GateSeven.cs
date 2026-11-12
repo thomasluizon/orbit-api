@@ -37,7 +37,7 @@ public sealed partial class ChatWriteHoldHandlerTests
     {
         _userDateService.GetUserTodayAsync(_userId, Arg.Any<CancellationToken>()).Returns(GateSevenToday);
         _featureFlagService.GetEnabledKeysForUserAsync(_userId, Arg.Any<CancellationToken>())
-            .Returns([FeatureFlagKeys.AstraBlockFirst]);
+            .Returns([FeatureFlagKeys.AiBlockFirst]);
         var calls = GateSevenCapture(name).GetProperty("toolCalls").EnumerateArray().Select((call, index) =>
         {
             var arguments = JsonNode.Parse(call.GetProperty("arguments").GetRawText())!.AsObject();

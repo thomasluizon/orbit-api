@@ -116,7 +116,7 @@ public class ChatEmptySuccessTests
         users.GetByIdAsync(user.Id, Arg.Any<CancellationToken>()).Returns(user);
         var flags = Substitute.For<IFeatureFlagService>();
         flags.GetEnabledKeysForUserAsync(user.Id, Arg.Any<CancellationToken>())
-            .Returns(composition ? [FeatureFlagKeys.AstraBlockFirst] : []);
+            .Returns(composition ? [FeatureFlagKeys.AiBlockFirst] : []);
         var habits = Substitute.For<IGenericRepository<Habit>>();
         habits.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>>(), Arg.Any<CancellationToken>())
             .Returns(Array.Empty<Habit>());
@@ -142,7 +142,7 @@ public class ChatEmptySuccessTests
         var intent = new AiIntentService(AiBudgetTestDouble.Wrap(new AiCompletionClient(responses,
             NullLogger<AiCompletionClient>.Instance, usage)), usage, NullLogger<AiIntentService>.Instance);
         var config = Substitute.For<IAppConfigService>();
-        config.GetAsync(AppConfigKeys.AstraGroundingEnforce, false, Arg.Any<CancellationToken>()).Returns(enforceGrounding);
+        config.GetAsync(AppConfigKeys.AiGroundingEnforce, false, Arg.Any<CancellationToken>()).Returns(enforceGrounding);
         var recorder = Substitute.For<IConversationTurnRecorder>();
         var mediator = Substitute.For<IMediator>();
         IAiTool[] tools = successfulRead ? [new DescribeFeatureTool(new FeatureExplanationService(), new AppSurfaceCatalog())] : [];
@@ -183,7 +183,7 @@ public class ChatEmptySuccessTests
             new ChatExecutionDependencies(dateService, Substitute.For<IUserStreakService>(), payGate, work,
                 scopes, operationPort, clarifications,
                 progress, Substitute.For<IGamificationService>(), mediator, Substitute.For<IProductAnalytics>(),
-                Substitute.For<IHabitScheduleLogReader>(), Substitute.For<IIssuedAstraBlockStore>(), Substitute.For<IPendingAgentOperationStore>()),
+                Substitute.For<IHabitScheduleLogReader>(), Substitute.For<IIssuedAiBlockStore>(), Substitute.For<IPendingAgentOperationStore>()),
             logger, config, ModerationTestDouble.Clean(), recorder);
         mediator.Send(Arg.Any<ProcessUserChatCommand>(), Arg.Any<CancellationToken>())
             .Returns(call => handler.Handle(call.Arg<ProcessUserChatCommand>(), call.Arg<CancellationToken>()));

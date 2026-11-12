@@ -9720,7 +9720,7 @@
       }
     },
     {
-      "capability": "AgentCapabilityIds.ProfileProactiveAstraWrite",
+      "capability": "AgentCapabilityIds.ProfileProactiveAiWrite",
       "surfaces": {
         "chat": {
           "verdict": "covered",
@@ -30967,7 +30967,7 @@
           }
         },
         {
-          "name": "HasTriedAstra",
+          "name": "HasTriedAi",
           "type": "bool",
           "surfaces": {
             "chat": {
@@ -32946,7 +32946,7 @@
           }
         },
         {
-          "name": "ProactiveAstraEnabled",
+          "name": "ProactiveAiEnabled",
           "type": "bool",
           "surfaces": {
             "chat": {
@@ -49546,7 +49546,7 @@
     },
     {
       "ticket": "thomasluizon/orbit-tickets#396",
-      "observation": "set_proactive_astra is registered on both surfaces; readback is checked separately in Profile.ProactiveAstraEnabled."
+      "observation": "set_proactive_astra is registered on both surfaces; readback is checked separately in Profile.ProactiveAiEnabled."
     },
     {
       "ticket": "thomasluizon/orbit-tickets#513",

@@ -33,7 +33,7 @@ public partial class ProcessUserChatCommandHandler
 
     private static bool HasAnswerCorrectionAllowance(ProcessUserChatCommand request, ChatContext context,
         int iteration, long budgetTokens) => iteration < ChatTurnLimits.MaxToolIterations
-        && (context.EnabledFeatureFlags.Contains(FeatureFlagKeys.AstraEvalUnmetered, StringComparer.Ordinal)
+        && (context.EnabledFeatureFlags.Contains(FeatureFlagKeys.AiEvalUnmetered, StringComparer.Ordinal)
             || budgetTokens < AppConstants.MaxAiRequestTotalTokens)
         && request.BlockAnswer is null && request.ConfirmationToken is null;
 

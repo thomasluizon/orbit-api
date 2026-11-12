@@ -68,7 +68,7 @@ public sealed class ApiVersioningTests : IAsyncLifetime
                 UserId: _userId, Name: "Member", Email: "member@example.com", TimeZone: "America/Sao_Paulo",
                 AiMemoryEnabled: false, AiSummaryEnabled: true,
                 HasCompletedOnboarding: true, HasCompletedTour: true,
-                HasCreatedFirstHabit: true, HasLoggedFirstHabit: true, HasTriedAstra: false,
+                HasCreatedFirstHabit: true, HasLoggedFirstHabit: true, HasTriedAi: false,
                 HasCompletedOnboardingChecklist: true, Language: "en", Plan: "Free",
                 HasProAccess: false, IsTrialActive: false, TrialEndsAt: null, PlanExpiresAt: null,
                 AiMessagesUsed: 0, AiMessagesLimit: 10, HasImportedCalendar: false,

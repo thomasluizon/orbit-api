@@ -37,7 +37,7 @@ public sealed partial class ChatWriteHoldHandlerTests
         _scopeFactory.CreateScope().Returns(scope);
         _userDateService.GetUserTodayAsync(_userId, Arg.Any<CancellationToken>()).Returns(GateSevenToday);
         _featureFlagService.GetEnabledKeysForUserAsync(_userId, Arg.Any<CancellationToken>())
-            .Returns([FeatureFlagKeys.AstraBlockFirst]);
+            .Returns([FeatureFlagKeys.AiBlockFirst]);
         _scheduleLogReader.ReadDaysAsync(Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<DateOnly>(),
             Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
             .Returns([new HabitScheduleLogDay(habits[^1].Id, GateSevenToday, 0, 1, true)]);

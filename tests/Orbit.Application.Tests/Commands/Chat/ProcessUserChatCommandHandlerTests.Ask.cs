@@ -47,8 +47,8 @@ public partial class ProcessUserChatCommandHandlerTests
         response.IsSuccess.Should().BeTrue();
         var block = response.Value.Parts!.OfType<ChatBlockPart>().Should().ContainSingle().Subject;
         block.Kind.Should().Be("choice");
-        block.Block.Should().BeOfType<AstraChoiceBlock>().Which.Options.Should().HaveCount(2);
-        await _blockStore.Received(1).AddAsync(Arg.Any<IssuedAstraBlock>(), Arg.Any<CancellationToken>());
+        block.Block.Should().BeOfType<AiChoiceBlock>().Which.Options.Should().HaveCount(2);
+        await _blockStore.Received(1).AddAsync(Arg.Any<IssuedAiBlock>(), Arg.Any<CancellationToken>());
         await AssertOnlyAskSelectionRead();
         await _aiIntentService.DidNotReceiveWithAnyArgs().ContinueWithToolResultsAsync(default!, default!, default, default);
         _productAnalytics.Received(1).CaptureUserEvent(UserId, "astra_block_issued", Arg.Any<string>(), Arg.Any<IReadOnlyDictionary<string, object>>());
@@ -92,7 +92,7 @@ public partial class ProcessUserChatCommandHandlerTests
         result.Value.PendingOperations.Should().BeNullOrEmpty();
         result.Value.Actions.Should().BeEmpty();
         var block = result.Value.Parts!.OfType<ChatBlockPart>().Should().ContainSingle().Which.Block
-            .Should().BeOfType<AstraChoiceBlock>().Subject;
+            .Should().BeOfType<AiChoiceBlock>().Subject;
         block.Question.Should().Be(question);
         block.Options.Select(option => option.Label).Should().Equal(first, second);
         await write.DidNotReceiveWithAnyArgs().ExecuteAsync(default, default, default);
@@ -106,7 +106,7 @@ public partial class ProcessUserChatCommandHandlerTests
     {
         SetupUserAndPayGate();
         if (disabled)
-            _featureFlagService.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>()).Returns(new[] { FeatureFlagKeys.AstraAskBlocksDisabled });
+            _featureFlagService.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>()).Returns(new[] { FeatureFlagKeys.AiAskBlocksDisabled });
         SetupAiResponse(ToolResponse("ask", "ask1", ChoiceArguments));
         AiToolRequest? initial = null;
         _aiIntentService.SendWithToolsAsync(Arg.Do<AiToolRequest>(value => initial = value), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
@@ -138,8 +138,8 @@ public partial class ProcessUserChatCommandHandlerTests
     {
         SetupUserAndPayGate();
         EnableRecording();
-        _unitOfWork.PassThroughTransactions<Result<Orbit.Application.Chat.PreparedAstraBlockAnswer>>();
-        var block = IssuedAstraBlock.Create(UserId, new("choice", "When?", [new("a", "Morning"), new("b", "Evening")], []));
+        _unitOfWork.PassThroughTransactions<Result<Orbit.Application.Chat.PreparedAiBlockAnswer>>();
+        var block = IssuedAiBlock.Create(UserId, new("choice", "When?", [new("a", "Morning"), new("b", "Evening")], []));
         _blockStore.GetAsync(block.Id, UserId, Arg.Any<CancellationToken>()).Returns(block);
         _blockStore.MarkAnsweredAsync(block.Id, UserId, Arg.Any<DateTime>(), Arg.Any<CancellationToken>()).Returns(true);
         SetupAiResponse(new AiResponse { TextMessage = "Evening works." });
@@ -164,8 +164,8 @@ public partial class ProcessUserChatCommandHandlerTests
         string freeText, string support, string resource, bool allowanceRemaining)
     {
         SetupUserAndPayGate(payGatePass: allowanceRemaining);
-        _unitOfWork.PassThroughTransactions<Result<PreparedAstraBlockAnswer>>();
-        var block = IssuedAstraBlock.Create(UserId, new("choice", "When?",
+        _unitOfWork.PassThroughTransactions<Result<PreparedAiBlockAnswer>>();
+        var block = IssuedAiBlock.Create(UserId, new("choice", "When?",
             [new("a", "Morning"), new("b", "Evening")], [], AllowFreeText: true));
         _blockStore.GetAsync(block.Id, UserId, Arg.Any<CancellationToken>()).Returns(block);
         _blockStore.MarkAnsweredAsync(block.Id, UserId, Arg.Any<DateTime>(), Arg.Any<CancellationToken>()).Returns(true);
@@ -190,8 +190,8 @@ public partial class ProcessUserChatCommandHandlerTests
     {
         SetupUserAndPayGate();
         EnableRecording();
-        _unitOfWork.PassThroughTransactions<Result<PreparedAstraBlockAnswer>>();
-        var block = IssuedAstraBlock.Create(UserId, new("choice", "When?",
+        _unitOfWork.PassThroughTransactions<Result<PreparedAiBlockAnswer>>();
+        var block = IssuedAiBlock.Create(UserId, new("choice", "When?",
             [new("a", "Morning"), new("b", "Evening")], [], AllowFreeText: true));
         _blockStore.GetAsync(block.Id, UserId, Arg.Any<CancellationToken>()).Returns(block);
         _blockStore.MarkAnsweredAsync(block.Id, UserId, Arg.Any<DateTime>(), Arg.Any<CancellationToken>()).Returns(true);
@@ -224,9 +224,9 @@ public partial class ProcessUserChatCommandHandlerTests
         string message, string resource, bool flagged, bool unavailable)
     {
         SetupUserAndPayGate(payGatePass: false);
-        _unitOfWork.PassThroughTransactions<Result<PreparedAstraBlockAnswer>>();
-        var item = new AstraBlockItem("a", message, ParseArguments("{\"title\":\"Walk\"}"));
-        var block = IssuedAstraBlock.Create(UserId, new("pickList", "Choose", [], [item], true, Action: "create_habits"));
+        _unitOfWork.PassThroughTransactions<Result<PreparedAiBlockAnswer>>();
+        var item = new AiBlockItem("a", message, ParseArguments("{\"title\":\"Walk\"}"));
+        var block = IssuedAiBlock.Create(UserId, new("pickList", "Choose", [], [item], true, Action: "create_habits"));
         _blockStore.GetAsync(block.Id, UserId, Arg.Any<CancellationToken>()).Returns(block);
         _blockStore.MarkAnsweredAsync(block.Id, UserId, Arg.Any<DateTime>(), Arg.Any<CancellationToken>()).Returns(true);
         _moderation.CheckTextAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
@@ -255,8 +255,8 @@ public partial class ProcessUserChatCommandHandlerTests
         bool flagged, bool unavailable, bool supportsAllowance, bool stream)
     {
         SetupUserAndPayGate();
-        _unitOfWork.PassThroughTransactions<Result<PreparedAstraBlockAnswer>>();
-        var block = IssuedAstraBlock.Create(UserId, new("choice", "When?",
+        _unitOfWork.PassThroughTransactions<Result<PreparedAiBlockAnswer>>();
+        var block = IssuedAiBlock.Create(UserId, new("choice", "When?",
             [new("a", "Morning"), new("b", "Evening")], []));
         _blockStore.GetAsync(block.Id, UserId, Arg.Any<CancellationToken>()).Returns(block);
         _moderation.CheckTextAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
@@ -295,9 +295,9 @@ public partial class ProcessUserChatCommandHandlerTests
     {
         SetupUserAndPayGate(payGatePass: allowanceRemaining);
         _featureFlagService.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>())
-            .Returns([FeatureFlagKeys.AstraCrisisResourcesDisabled]);
-        _unitOfWork.PassThroughTransactions<Result<PreparedAstraBlockAnswer>>();
-        var block = IssuedAstraBlock.Create(UserId, new("choice", "When?",
+            .Returns([FeatureFlagKeys.AiCrisisResourcesDisabled]);
+        _unitOfWork.PassThroughTransactions<Result<PreparedAiBlockAnswer>>();
+        var block = IssuedAiBlock.Create(UserId, new("choice", "When?",
             [new("a", "Morning"), new("b", "Evening")], [], AllowFreeText: true));
         _blockStore.GetAsync(block.Id, UserId, Arg.Any<CancellationToken>()).Returns(block);
         _blockStore.MarkAnsweredAsync(block.Id, UserId, Arg.Any<DateTime>(), Arg.Any<CancellationToken>()).Returns(true);
@@ -399,9 +399,9 @@ public partial class ProcessUserChatCommandHandlerTests
     {
         SetupUserAndPayGate(payGatePass: false);
         if (recordingEnabled) EnableRecording();
-        _unitOfWork.PassThroughTransactions<Result<Orbit.Application.Chat.PreparedAstraBlockAnswer>>();
-        var item = new AstraBlockItem("a", "Walk", ParseArguments("{\"title\":\"Walk\"}"));
-        var block = IssuedAstraBlock.Create(UserId, new("pickList", "Choose", [], [item], true, Action: "create_habits"));
+        _unitOfWork.PassThroughTransactions<Result<Orbit.Application.Chat.PreparedAiBlockAnswer>>();
+        var item = new AiBlockItem("a", "Walk", ParseArguments("{\"title\":\"Walk\"}"));
+        var block = IssuedAiBlock.Create(UserId, new("pickList", "Choose", [], [item], true, Action: "create_habits"));
         _blockStore.GetAsync(block.Id, UserId, Arg.Any<CancellationToken>()).Returns(block);
         _blockStore.MarkAnsweredAsync(block.Id, UserId, Arg.Any<DateTime>(), Arg.Any<CancellationToken>()).Returns(true);
         var handler = CreateHandler();

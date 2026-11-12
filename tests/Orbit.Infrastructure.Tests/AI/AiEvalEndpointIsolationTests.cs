@@ -47,7 +47,7 @@ public class AiEvalEndpointIsolationTests
         var handler = new RejectedRequestCapture();
         var flags = Substitute.For<IFeatureFlagService>();
         flags.GetEnabledKeysForUserAsync(userId, Arg.Any<CancellationToken>())
-            .Returns(flagged ? [FeatureFlagKeys.AstraEvalUnmetered] : []);
+            .Returns(flagged ? [FeatureFlagKeys.AiEvalUnmetered] : []);
         var eval = listed || flagged;
         if (kind == "audio")
         {

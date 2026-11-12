@@ -73,12 +73,12 @@ public sealed class BadHabitParentSlipTests : IAsyncDisposable
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task Log_AllChildrenRequired_ParentSlipIsIdempotent(bool astra)
+    public async Task Log_AllChildrenRequired_ParentSlipIsIdempotent(bool assistant)
     {
         var (parent, first, second) = await SeedAsync();
-        await LogAsync(first, astra);
+        await LogAsync(first, assistant);
         ActiveSlips(parent).Should().BeEmpty();
-        await LogAsync(second, astra);
+        await LogAsync(second, assistant);
         ActiveSlips(parent).Should().ContainSingle().Which.LoggedOnLocalDate.Should().Be(Today);
         (await _single.Handle(new LogHabitCommand(_userId, second.Id, ToggleExisting: false), default))
             .IsFailure.Should().BeTrue();
@@ -203,7 +203,7 @@ public sealed class BadHabitParentSlipTests : IAsyncDisposable
     [InlineData(true, false)]
     [InlineData(false, true)]
     [InlineData(true, true)]
-    public async Task Unlog_DerivedSlipCompletedParent_ReopensParent(bool astra, bool oneTime)
+    public async Task Unlog_DerivedSlipCompletedParent_ReopensParent(bool assistant, bool oneTime)
     {
         var parent = Habit.Create(new HabitCreateParams(
             oneTime ? HabitSchedule.OneTime : HabitSchedule.Recurring, _userId, "Parent",
@@ -215,7 +215,7 @@ public sealed class BadHabitParentSlipTests : IAsyncDisposable
         parent.IsCompleted.Should().BeTrue();
         ActiveSlips(parent).Should().ContainSingle();
 
-        if (astra)
+        if (assistant)
             (await _unlogTool.ExecuteAsync(Args(first), _userId, default)).Success.Should().BeTrue();
         else
             (await _single.Handle(new LogHabitCommand(_userId, first.Id), default)).IsSuccess.Should().BeTrue();
@@ -259,14 +259,14 @@ public sealed class BadHabitParentSlipTests : IAsyncDisposable
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task Unlog_ChildBreaksSet_RemovesParentSlip(bool astra)
+    public async Task Unlog_ChildBreaksSet_RemovesParentSlip(bool assistant)
     {
         var (parent, first, second) = await SeedAsync();
         _context.HabitLogs.Add(first.Log(Today).Value);
         _context.HabitLogs.Add(second.Log(Today).Value);
         _context.HabitLogs.Add(parent.Log(Today).Value);
         await _context.SaveChangesAsync();
-        if (astra)
+        if (assistant)
             (await _unlogTool.ExecuteAsync(Args(first), _userId, default)).Success.Should().BeTrue();
         else
             (await _single.Handle(new LogHabitCommand(_userId, first.Id), default)).IsSuccess.Should().BeTrue();
@@ -325,7 +325,7 @@ public sealed class BadHabitParentSlipTests : IAsyncDisposable
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task Unlog_ChildBreaksSet_RemovesAllParentSlipsOnlyOnTargetDate(bool astra)
+    public async Task Unlog_ChildBreaksSet_RemovesAllParentSlipsOnlyOnTargetDate(bool assistant)
     {
         var (parent, first, second) = await SeedAsync();
         _context.HabitLogs.Add(first.Log(Today).Value);
@@ -335,7 +335,7 @@ public sealed class BadHabitParentSlipTests : IAsyncDisposable
         _context.HabitLogs.Add(parent.Log(Today).Value);
         await _context.SaveChangesAsync();
 
-        if (astra)
+        if (assistant)
             (await _unlogTool.ExecuteAsync(Args(first), _userId, default)).Success.Should().BeTrue();
         else
             (await _single.Handle(new LogHabitCommand(_userId, first.Id), default)).IsSuccess.Should().BeTrue();
@@ -407,9 +407,9 @@ public sealed class BadHabitParentSlipTests : IAsyncDisposable
         ActiveSlips(root).Should().ContainSingle();
     }
 
-    private async Task LogAsync(Habit habit, bool astra)
+    private async Task LogAsync(Habit habit, bool assistant)
     {
-        if (astra)
+        if (assistant)
             (await _logTool.ExecuteAsync(Args(habit), _userId, default)).Success.Should().BeTrue();
         else
             (await _single.Handle(new LogHabitCommand(_userId, habit.Id, ToggleExisting: false), default)).IsSuccess.Should().BeTrue();

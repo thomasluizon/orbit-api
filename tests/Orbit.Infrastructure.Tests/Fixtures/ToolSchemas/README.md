@@ -1,4 +1,4 @@
-# Astra schema and cost evidence
+# AI schema and cost evidence
 
 The baseline is the inlined catalog from `8e6e3690`, exported through the real SDK
 request builder with a local HTTP transport. It contains the unnormalized source

@@ -9,14 +9,14 @@ namespace Orbit.Infrastructure.Services;
 
 public sealed class ConversationPlanStore(OrbitDbContext db, IUnitOfWork work, IFeatureFlagService flags) : IConversationPlanStore
 {
-    public async Task<AstraPlan?> ChangeAsync(Guid userId, Guid pendingOperationId, string status, CancellationToken cancellationToken = default)
+    public async Task<AiPlan?> ChangeAsync(Guid userId, Guid pendingOperationId, string status, CancellationToken cancellationToken = default)
     {
-        if (!(await flags.GetEnabledKeysForUserAsync(userId, cancellationToken, forceRefresh: true)).Contains(FeatureFlagKeys.AstraConversationRecording))
+        if (!(await flags.GetEnabledKeysForUserAsync(userId, cancellationToken, forceRefresh: true)).Contains(FeatureFlagKeys.AiConversationRecording))
             return null;
         return await work.ExecuteInTransactionAsync(async ct =>
         {
             await work.AcquireUserRowLockAsync(userId, ct);
-            if (!(await flags.GetEnabledKeysForUserAsync(userId, ct, forceRefresh: true)).Contains(FeatureFlagKeys.AstraConversationRecording))
+            if (!(await flags.GetEnabledKeysForUserAsync(userId, ct, forceRefresh: true)).Contains(FeatureFlagKeys.AiConversationRecording))
                 return null;
             var pending = await db.PendingAgentOperations.AsNoTracking().SingleOrDefaultAsync(item => item.UserId == userId && item.Id == pendingOperationId, ct);
             if (pending?.ConversationId is null) return null;
@@ -25,10 +25,10 @@ public sealed class ConversationPlanStore(OrbitDbContext db, IUnitOfWork work, I
                 entry.State = EntityState.Detached;
             var rows = await db.ConversationTurns.Where(row => row.UserId == userId && row.ConversationId == pending.ConversationId
                 && row.Role == "assistant" && row.CreatedAtUtc >= pending.CreatedAtUtc).ToListAsync(ct);
-            AstraPlan? updated = null;
+            AiPlan? updated = null;
             foreach (var row in rows)
             {
-                var plan = AstraPlan.Read(row.ResponseJson);
+                var plan = AiPlan.Read(row.ResponseJson);
                 if (plan is null) continue;
                 var steps = plan.Steps.Where(step => step.PendingOperationId == pendingOperationId).ToArray();
                 if (steps.Length == 0) continue;

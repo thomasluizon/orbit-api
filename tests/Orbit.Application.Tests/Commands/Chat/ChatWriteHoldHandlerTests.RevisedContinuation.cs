@@ -26,7 +26,7 @@ public sealed partial class ChatWriteHoldHandlerTests
         _user.SetLanguage(language);
         _mediator.Send(Arg.Any<CheckChatCommandQuery>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
         _featureFlagService.GetEnabledKeysForUserAsync(_userId, Arg.Any<CancellationToken>())
-            .Returns(new[] { FeatureFlagKeys.AstraBlockFirst });
+            .Returns(new[] { FeatureFlagKeys.AiBlockFirst });
         const string arguments = """
             {"title":"Evening routine","frequency_unit":"Day","due_time":"21:00","sub_habits":[
                 {"title":"Read","frequency_unit":"Day","due_time":"21:30","due_end_time":"21:50","description":"Read for 20 minutes"},

@@ -95,7 +95,7 @@ public partial class ProcessUserChatCommandHandlerTests
         EnableComposition();
         if (mode == "disabled")
             _featureFlagService.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>())
-                .Returns([FeatureFlagKeys.AstraBlockFirst, FeatureFlagKeys.AstraPeriodBlocksDisabled]);
+                .Returns([FeatureFlagKeys.AiBlockFirst, FeatureFlagKeys.AiPeriodBlocksDisabled]);
         var ranking = await ProduceRankingAsync();
         if (mode == "invalid") ranking = ranking with { Query = ranking.Query with { Metric = "unsupported" } };
         var tool = ReadTool("get_habit_ranking", new ToolResult(true, Payload: ranking));

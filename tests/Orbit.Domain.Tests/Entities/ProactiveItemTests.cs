@@ -139,13 +139,13 @@ public sealed class ProactiveItemTests
     public void EffectivePushSetting_RequiresProAccess(bool? choice, bool expected)
     {
         var user = User.Create("Person", "person@example.com").Value;
-        if (choice.HasValue) user.SetProactiveAstraEnabled(choice.Value);
+        if (choice.HasValue) user.SetProactiveAiEnabled(choice.Value);
         user.GrantLifetimePro();
         user.EffectiveProactivePushEnabled.Should().Be(expected);
-        user.ProactiveAstraEnabled.Should().Be(choice ?? true);
+        user.ProactiveAiEnabled.Should().Be(choice ?? true);
         var free = User.Create("Free", "free@example.com").Value;
         free.StartTrial(DateTime.UtcNow.AddDays(-1));
-        free.SetProactiveAstraEnabled(true);
+        free.SetProactiveAiEnabled(true);
         free.EffectiveProactivePushEnabled.Should().BeFalse();
     }
 

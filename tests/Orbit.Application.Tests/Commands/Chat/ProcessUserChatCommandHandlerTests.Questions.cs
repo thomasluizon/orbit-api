@@ -24,8 +24,8 @@ public partial class ProcessUserChatCommandHandlerTests
         var user = User.Create("Person", "question-safety@example.com").Value;
         user.SetLanguage(locale);
         SetupUserAndPayGate(user);
-        _unitOfWork.PassThroughTransactions<Result<PreparedAstraBlockAnswer>>();
-        var block = IssuedAstraBlock.Create(UserId, new("question", "", [], [], Questions:
+        _unitOfWork.PassThroughTransactions<Result<PreparedAiBlockAnswer>>();
+        var block = IssuedAiBlock.Create(UserId, new("question", "", [], [], Questions:
             [new("feeling", "singleChoice", prompt, [new("fine", fine), new("distress", distress)])]));
         _blockStore.GetAsync(block.Id, UserId, Arg.Any<CancellationToken>()).Returns(block);
         _blockStore.MarkAnsweredAsync(block.Id, UserId, Arg.Any<DateTime>(), Arg.Any<CancellationToken>()).Returns(true);
@@ -68,12 +68,12 @@ public partial class ProcessUserChatCommandHandlerTests
         var user = User.Create("Person", "question-crisis@example.com").Value;
         user.SetLanguage(locale);
         SetupUserAndPayGate(user, payGatePass: false);
-        _unitOfWork.PassThroughTransactions<Result<PreparedAstraBlockAnswer>>();
-        var block = IssuedAstraBlock.Create(UserId, new("question", "", [], [], Questions:
+        _unitOfWork.PassThroughTransactions<Result<PreparedAiBlockAnswer>>();
+        var block = IssuedAiBlock.Create(UserId, new("question", "", [], [], Questions:
             [new("feeling", "singleChoice", "Feeling?", [new("fine", "Fine"), new("distress", distress)], AllowFreeText: true)]));
         _blockStore.GetAsync(block.Id, UserId, Arg.Any<CancellationToken>()).Returns(block);
         _blockStore.MarkAnsweredAsync(block.Id, UserId, Arg.Any<DateTime>(), Arg.Any<CancellationToken>()).Returns(true);
-        var answer = custom ? new AstraQuestionAnswer("feeling", FreeText: distress) : new("feeling", ["distress"]);
+        var answer = custom ? new AiQuestionAnswer("feeling", FreeText: distress) : new("feeling", ["distress"]);
 
         var result = await CreateHandler().Handle(new(UserId, "My answer",
             BlockAnswer: new(block.Id, [], Answers: [answer]),
@@ -95,23 +95,23 @@ public partial class ProcessUserChatCommandHandlerTests
     public async Task BlockAnswer_ModerationChecksSelectedInputAndHistory(string form)
     {
         SetupUserAndPayGate();
-        _unitOfWork.PassThroughTransactions<Result<PreparedAstraBlockAnswer>>();
+        _unitOfWork.PassThroughTransactions<Result<PreparedAiBlockAnswer>>();
         const string selected = "Selected input";
         const string custom = "Custom answer";
         var definition = form switch
         {
-            "question" => new AstraBlockDefinition(form, "", [], [], Questions:
+            "question" => new AiBlockDefinition(form, "", [], [], Questions:
                 [new("feeling", "multipleChoice", "Feeling?", [new("fine", selected), new("other", "Unselected input")], AllowFreeText: true)]),
             "choice" => new(form, "Feeling?", [new("fine", selected), new("other", "Unselected input")], [], AllowFreeText: true),
             _ => new(form, "Choose", [], [new("fine", selected, ParseArguments("{\"title\":\"Walk\"}"))], true, Action: "create_habits")
         };
-        var block = IssuedAstraBlock.Create(UserId, definition);
+        var block = IssuedAiBlock.Create(UserId, definition);
         _blockStore.GetAsync(block.Id, UserId, Arg.Any<CancellationToken>()).Returns(block);
         string? checkedInput = null;
         _moderation.CheckTextAsync(Arg.Do<string>(value => checkedInput = value), Arg.Any<CancellationToken>())
             .Returns(new ModerationResult(true, false, ["violence"]));
         var answer = form == "question"
-            ? new AstraBlockAnswer(block.Id, [], Answers: [new("feeling", ["fine"], FreeText: custom)])
+            ? new AiBlockAnswer(block.Id, [], Answers: [new("feeling", ["fine"], FreeText: custom)])
             : new(block.Id, ["fine"], form == "choice" ? custom : null);
 
         var result = await CreateHandler().Handle(new(UserId, "Request envelope",
@@ -143,12 +143,12 @@ public partial class ProcessUserChatCommandHandlerTests
         string form, string historyRole, string locale)
     {
         SetupUserAndPayGate();
-        _unitOfWork.PassThroughTransactions<Result<PreparedAstraBlockAnswer>>();
+        _unitOfWork.PassThroughTransactions<Result<PreparedAiBlockAnswer>>();
         var definition = form == "question"
-            ? new AstraBlockDefinition(form, "", [], [], Questions:
+            ? new AiBlockDefinition(form, "", [], [], Questions:
                 [new("feeling", "singleChoice", "Feeling?", [new("fine", "Fine"), new("other", "Other")])])
             : new(form, "Feeling?", [new("fine", "Fine"), new("other", "Other")], []);
-        var block = IssuedAstraBlock.Create(UserId, definition);
+        var block = IssuedAiBlock.Create(UserId, definition);
         _blockStore.GetAsync(block.Id, UserId, Arg.Any<CancellationToken>()).Returns(block);
         _blockStore.MarkAnsweredAsync(block.Id, UserId, Arg.Any<DateTime>(), Arg.Any<CancellationToken>()).Returns(true);
         SetupAiResponse(new AiResponse { TextMessage = "Model reply" });
@@ -159,7 +159,7 @@ public partial class ProcessUserChatCommandHandlerTests
             return new ModerationResult(flagged, false, flagged ? ["violence"] : []);
         });
         var answer = form == "question"
-            ? new AstraBlockAnswer(block.Id, [], Answers: [new("feeling", ["fine"])])
+            ? new AiBlockAnswer(block.Id, [], Answers: [new("feeling", ["fine"])])
             : new(block.Id, ["fine"]);
 
         var result = await CreateHandler().Handle(new(UserId, "My answer",
@@ -183,8 +183,8 @@ public partial class ProcessUserChatCommandHandlerTests
     [InlineData("pt-BR", "choice", true, null)]
     [InlineData("en", "Question", true, null)]
     [InlineData("en", "question", false, null)]
-    [InlineData("pt-BR", "question", true, FeatureFlagKeys.AstraAskBlocksDisabled)]
-    [InlineData("en", "question", true, FeatureFlagKeys.AstraPartsDisabled)]
+    [InlineData("pt-BR", "question", true, FeatureFlagKeys.AiAskBlocksDisabled)]
+    [InlineData("en", "question", true, FeatureFlagKeys.AiPartsDisabled)]
     public async Task Question_UnsupportedClientsAndFlagsFallBackWithoutIssuing(string locale, string kind, bool parts, string? flag)
     {
         var user = User.Create("Person", "fallback@example.com").Value;
@@ -219,15 +219,15 @@ public partial class ProcessUserChatCommandHandlerTests
         var user = User.Create("Person", "questions@example.com").Value;
         user.SetLanguage(locale);
         SetupUserAndPayGate(user);
-        _unitOfWork.PassThroughTransactions<Result<PreparedAstraBlockAnswer>>();
+        _unitOfWork.PassThroughTransactions<Result<PreparedAiBlockAnswer>>();
         var arguments = JsonSerializer.Serialize(new
         {
             missing_input = "check_in",
             form = "question",
             questions = new[] { new { id = "energy", type = "scale", prompt, lowLabel = low, highLabel = high } }
         });
-        IssuedAstraBlock? issued = null;
-        _blockStore.AddAsync(Arg.Do<IssuedAstraBlock>(block => issued = block), Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
+        IssuedAiBlock? issued = null;
+        _blockStore.AddAsync(Arg.Do<IssuedAiBlock>(block => issued = block), Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
         var handler = CreateRecordAskHandler();
         SetupAiResponse(ToolResponse("query_habits", "checkin-read", """{"for_selection":false,"orbit_read_complete":false}"""));
         _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(),
@@ -243,7 +243,7 @@ public partial class ProcessUserChatCommandHandlerTests
         var stored = issued!;
         _blockStore.GetAsync(stored.Id, UserId, Arg.Any<CancellationToken>()).Returns(stored);
         _blockStore.MarkAnsweredAsync(stored.Id, UserId, Arg.Any<DateTime>(), Arg.Any<CancellationToken>()).Returns(true);
-        var answer = JsonSerializer.Deserialize<AstraBlockAnswer>(JsonSerializer.Serialize(new
+        var answer = JsonSerializer.Deserialize<AiBlockAnswer>(JsonSerializer.Serialize(new
         {
             blockId = stored.Id,
             selectedIds = Array.Empty<string>(),

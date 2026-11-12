@@ -22,7 +22,7 @@ public class SeededDataMigrationTests
     }
 
     [PostgresFact]
-    public async Task RecordAstraChatTokenUsage_Down_SumsAndRemovesExtraRows()
+    public async Task RecordAiChatTokenUsage_Down_SumsAndRemovesExtraRows()
     {
         await PostgresTestDatabase.WithDatabase(async db =>
         {

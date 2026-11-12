@@ -267,7 +267,7 @@ public class GetProfileQueryHandlerTests
             user.HasCompletedTour,
             user.HasCreatedFirstHabit,
             user.HasLoggedFirstHabit,
-            user.HasTriedAstra,
+            user.HasTriedAi,
             user.HasCompletedOnboardingChecklist,
             user.Language,
             Plan = "pro",
@@ -301,7 +301,7 @@ public class GetProfileQueryHandlerTests
             user.SocialOptIn,
             Uses24HourClock = true,
             PublicProfile = (Orbit.Application.Profile.Commands.PublicProfileSettings?)null,
-            ProactiveAstraEnabled = user.EffectiveProactivePushEnabled,
+            ProactiveAiEnabled = user.EffectiveProactivePushEnabled,
             user.MarketingEmailConsent,
             LastCompletionDate = (DateOnly?)null
         });
@@ -436,7 +436,7 @@ public class GetProfileQueryHandlerTests
     {
         var user = CreateTestUser();
         user.MarkFirstHabitCreated();
-        user.MarkAstraUsed();
+        user.MarkAiUsed();
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
         _payGate.GetAiMessageLimit(UserId, Arg.Any<CancellationToken>()).Returns(5);
         StubFreezeRepoEmpty();
@@ -446,7 +446,7 @@ public class GetProfileQueryHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.HasCreatedFirstHabit.Should().BeTrue();
         result.Value.HasLoggedFirstHabit.Should().BeFalse();
-        result.Value.HasTriedAstra.Should().BeTrue();
+        result.Value.HasTriedAi.Should().BeTrue();
         result.Value.HasCompletedOnboardingChecklist.Should().BeFalse();
     }
 

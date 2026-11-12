@@ -51,7 +51,7 @@ public class ConversationEndpointTests
         var turn = fixture.Capture(image: true);
         await fixture.Store.RecordAsync(turn);
         var flags = Substitute.For<IFeatureFlagService>();
-        flags.GetEnabledKeysForUserAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(new[] { FeatureFlagKeys.AstraConversationRecording });
+        flags.GetEnabledKeysForUserAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(new[] { FeatureFlagKeys.AiConversationRecording });
         var mediator = Substitute.For<IMediator>();
         mediator.Send(Arg.Any<GetLatestConversationQuery>(), Arg.Any<CancellationToken>()).Returns(call =>
             new GetLatestConversationQueryHandler(fixture.Store, flags).Handle(call.Arg<GetLatestConversationQuery>(), default));

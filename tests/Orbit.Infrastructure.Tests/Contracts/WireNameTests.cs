@@ -48,7 +48,7 @@ public class WireNameTests
         using var db = new OrbitDbContext(new DbContextOptionsBuilder<OrbitDbContext>()
             .UseNpgsql("Host=unused;Database=unused").Options);
 
-        var blocks = db.Model.GetEntityTypes().Single(entity => entity.ClrType.Name is "IssuedAstraBlock" or "IssuedAiBlock");
+        var blocks = db.Model.GetEntityTypes().Single(entity => entity.ClrType.Name == "IssuedAiBlock");
         blocks.GetTableName().Should().Be("IssuedAstraBlocks");
         var users = db.Model.FindEntityType(typeof(User))!;
         var table = StoreObjectIdentifier.Table("Users", users.GetSchema());
@@ -65,7 +65,7 @@ public class WireNameTests
     public void Routes_KeepTheProactivePathsAndTheProfilePath()
     {
         var controllers = typeof(Orbit.Api.Controllers.ChatController).Assembly.GetTypes();
-        var proactive = controllers.Single(type => type.Name is "ProactiveAstraController" or "ProactiveAiController");
+        var proactive = controllers.Single(type => type.Name == "ProactiveAiController");
         proactive.GetCustomAttribute<Microsoft.AspNetCore.Mvc.RouteAttribute>()!.Template.Should().Be("api/ai/proactive");
         proactive.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
             .SelectMany(method => method.GetCustomAttributes<Microsoft.AspNetCore.Mvc.Routing.HttpMethodAttribute>())

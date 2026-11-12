@@ -108,7 +108,7 @@ public sealed partial class ProactiveEngineService(
         var candidateCount = users.Count;
         var lastCandidateId = users[^1].Id;
         var flags = await featureFlags.GetEnabledKeysForUsersAsync(users, ct);
-        users = users.Where(user => !flags[user.Id].Contains(FeatureFlagKeys.AstraProactiveEngineDisabled)).ToList();
+        users = users.Where(user => !flags[user.Id].Contains(FeatureFlagKeys.AiProactiveEngineDisabled)).ToList();
         if (users.Count == 0) return new(users, flags, [], [], [], []) { CandidateCount = candidateCount, LastCandidateId = lastCandidateId };
         var localDates = new Dictionary<Guid, DateOnly>();
         foreach (var user in users)
@@ -208,7 +208,7 @@ db.ProactiveItems.Where(i => ids.Contains(i.UserId)
             using var aiUser = Orbit.Infrastructure.AI.AiCallContext.Begin(user.Id);
             var message = await messages.GenerateAsync(fact, user.Language ?? "en", accountTitles, ct);
             var shouldPush = !pushedToday && ProactiveRules.MayPush(fact.Trigger)
-                && user.ProactiveAstraEnabled && !ProactiveRules.IsQuiet(localHour);
+                && user.ProactiveAiEnabled && !ProactiveRules.IsQuiet(localHour);
             var item = NewItem(user, today, nowUtc, fact, message);
             if (shouldPush) item.Push(nowUtc);
             var notification = shouldPush ? Notification.Create(user.Id, "Orbit", item.Text, NotificationUrls.Chat) : null;

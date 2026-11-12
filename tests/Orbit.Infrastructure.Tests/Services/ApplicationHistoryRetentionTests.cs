@@ -237,7 +237,7 @@ public sealed class ApplicationHistoryRetentionTests
         AiBudgetCall => db.Set<AiBudgetCall>().AnyAsync(item => item.Id == row.Id),
         PendingAgentOperationState => db.Set<PendingAgentOperationState>().AnyAsync(item => item.Id == row.Id),
         UserSession => db.Set<UserSession>().AnyAsync(item => item.Id == row.Id),
-        IssuedAstraBlock => db.Set<IssuedAstraBlock>().AnyAsync(item => item.Id == row.Id),
+        IssuedAiBlock => db.Set<IssuedAiBlock>().AnyAsync(item => item.Id == row.Id),
         PendingClarification => db.Set<PendingClarification>().AnyAsync(item => item.Id == row.Id),
         AgentAuditLog => db.Set<AgentAuditLog>().AnyAsync(item => item.Id == row.Id),
         AiUsageDaily => db.Set<AiUsageDaily>().AnyAsync(item => item.Id == row.Id),
@@ -266,7 +266,7 @@ public sealed class ApplicationHistoryRetentionTests
                 ExpiresAtUtc = atUtc
             }),
             "Sessions" => UserSession.Create(userId, Guid.NewGuid().ToString(), atUtc).Value,
-            "IssuedAstraBlocks" => IssuedAstraBlock.Create(userId, new("choice", "When?", [new("a", "First"), new("b", "Second")], [])),
+            "IssuedAstraBlocks" => IssuedAiBlock.Create(userId, new("choice", "When?", [new("a", "First"), new("b", "Second")], [])),
             "PendingClarifications" => PendingClarification.Create(userId, "tool", "{}", "field", "Question?", "[]", atUtc),
             "AgentAuditLogs" => AgentAuditLog.Create(new(userId, "capability", "source", default, default, default, default, default)),
             "AiUsageDaily" => AiUsageDaily.Create(DateOnly.FromDateTime(atUtc), "model", "purpose", new(1, 0, 1, 1, 2, 0), userId),

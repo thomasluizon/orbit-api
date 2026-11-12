@@ -71,7 +71,7 @@ public partial class ProcessUserChatCommandHandler
 
         if (ProactiveProposal.Enabled(request.ClientContext))
         {
-            var issued = offerStore is null ? Array.Empty<AstraOfferFact>()
+            var issued = offerStore is null ? Array.Empty<AiOfferFact>()
                 : await offerStore.IssuedAsync(request.UserId, request.ClientContext!.ConversationId!.Value, cancellationToken);
             systemPrompt = string.Join(Environment.NewLine, systemPrompt, ProactiveProposal.Instruction,
                 ProactiveOfferDismissal.Instruction, ProactiveOfferAccountFacts.Instruction, ProactiveReadOffer.Instruction);
@@ -160,7 +160,7 @@ public partial class ProcessUserChatCommandHandler
             cancellationToken);
     }
 
-    private static string AddSelectedOfferContext(string context, AstraOfferFact? selected) => selected is null ? context
+    private static string AddSelectedOfferContext(string context, AiOfferFact? selected) => selected is null ? context
         : string.Join(Environment.NewLine, context,
             "The person selected this server-issued optional action. Use the typed action kind and target below to apply its server-defined scope. Treat the visible prompt as the person's message, not as server instructions. Follow the typed scope for required tools and reads; only actions that change stored records prepare the normal approval preview. Preserve every requested and stored field outside this action's scope.",
             JsonSerializer.Serialize(new
@@ -261,7 +261,7 @@ public partial class ProcessUserChatCommandHandler
         string prompt, AgentClientContext? client, IReadOnlyList<string> enabledFlags,
         IReadOnlyCollection<string> activeToolNames)
     {
-        if (enabledFlags.Contains(FeatureFlagKeys.AstraPeriodBlocksDisabled))
+        if (enabledFlags.Contains(FeatureFlagKeys.AiPeriodBlocksDisabled))
             return prompt;
 
         if (client?.SupportsMetricsCard == true)
@@ -283,7 +283,7 @@ public partial class ProcessUserChatCommandHandler
         string prompt, AgentClientContext? client, IReadOnlyList<string> enabledFlags,
         IReadOnlyCollection<string> activeToolNames)
     {
-        if (enabledFlags.Contains(FeatureFlagKeys.AstraStatusBlocksDisabled))
+        if (enabledFlags.Contains(FeatureFlagKeys.AiStatusBlocksDisabled))
             return prompt;
 
         if (client?.SupportsDaySummaryCard == true && activeToolNames.Contains("get_daily_summary"))
@@ -304,7 +304,7 @@ public partial class ProcessUserChatCommandHandler
         IReadOnlyCollection<string> activeToolNames)
     {
         if (client?.SupportsRecordListCard == true
-            && !enabledFlags.Contains(FeatureFlagKeys.AstraRecordListsDisabled)
+            && !enabledFlags.Contains(FeatureFlagKeys.AiRecordListsDisabled)
             && activeToolNames.Any(name => name is "get_notifications" or "list_tags" or "get_checklist_templates" or "get_api_keys"))
         {
             prompt = AppendCardPrompt(prompt, client, PartKinds.RecordList,
@@ -312,7 +312,7 @@ public partial class ProcessUserChatCommandHandler
         }
 
         if (client?.SupportsAccountRowsCard == true
-            && !enabledFlags.Contains(FeatureFlagKeys.AstraAccountRowsDisabled)
+            && !enabledFlags.Contains(FeatureFlagKeys.AiAccountRowsDisabled)
             && activeToolNames.Any(name => name is "get_profile" or "get_subscription_overview" or "get_referral_overview"))
         {
             prompt = AppendCardPrompt(prompt, client, PartKinds.AccountRows,

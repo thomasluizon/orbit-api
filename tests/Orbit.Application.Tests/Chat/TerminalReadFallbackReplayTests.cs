@@ -27,7 +27,7 @@ public partial class ProcessUserChatCommandHandlerTests
     {
         SetupExistingParents(language);
         _featureFlagService.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>())
-            .Returns([FeatureFlagKeys.AstraBlockFirst, FeatureFlagKeys.AstraEvalTrace]);
+            .Returns([FeatureFlagKeys.AiBlockFirst, FeatureFlagKeys.AiEvalTrace]);
         var promptBuilder = new SystemPromptBuilder();
         _promptBuilder.BuildStatic(Arg.Any<PromptBuildRequest>()).Returns(call => promptBuilder.BuildStatic(call.Arg<PromptBuildRequest>()));
         _promptBuilder.BuildAccountContext(Arg.Any<PromptBuildRequest>()).Returns(call => promptBuilder.BuildAccountContext(call.Arg<PromptBuildRequest>()));

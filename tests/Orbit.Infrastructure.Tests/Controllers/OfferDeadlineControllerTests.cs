@@ -174,7 +174,7 @@ public sealed partial class OfferDeadlineControllerTests
         scopes.CreateScope().Returns(scope);
         var flags = Substitute.For<IFeatureFlagService>();
         flags.GetEnabledKeysForUserAsync(user.Id, Arg.Any<CancellationToken>())
-            .Returns([FeatureFlagKeys.AstraBlockFirst, FeatureFlagKeys.AstraEvalTrace]);
+            .Returns([FeatureFlagKeys.AiBlockFirst, FeatureFlagKeys.AiEvalTrace]);
         var payGate = Substitute.For<IPayGateService>();
         payGate.TryConsumeAiMessage(user.Id, work, Arg.Any<CancellationToken>()).Returns(Result.Success());
         var messages = new List<string>();
@@ -194,7 +194,7 @@ public sealed partial class OfferDeadlineControllerTests
             new(dates, Substitute.For<IUserStreakService>(), payGate, work, scopes, executor,
                 clarifications, progress, Substitute.For<IGamificationService>(), mediator,
                 Substitute.For<IProductAnalytics>(), Substitute.For<IHabitScheduleLogReader>(),
-                Substitute.For<IIssuedAstraBlockStore>(), pending),
+                Substitute.For<IIssuedAiBlockStore>(), pending),
             new CaptureLogger<ProcessUserChatCommandHandler>(messages), Substitute.For<IAppConfigService>(),
             ModerationTestDouble.Clean(), offerStore: offers);
         mediator.Send(Arg.Any<ProcessUserChatCommand>(), Arg.Any<CancellationToken>())

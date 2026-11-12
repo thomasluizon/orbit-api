@@ -1,4 +1,4 @@
-# Astra text grounding
+# AI text grounding
 
 `ProcessUserChatCommandHandler` checks the final assistant message after removing card
 directives and checks follow-up text separately. Each unsupported claim produces a warning

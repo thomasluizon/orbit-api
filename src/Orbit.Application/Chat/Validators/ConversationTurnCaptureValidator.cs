@@ -26,7 +26,7 @@ public sealed class ConversationTurnCaptureValidator : AbstractValidator<Convers
         try
         {
             using var document = JsonDocument.Parse(json);
-            return document.RootElement.ValueKind == JsonValueKind.Object && (AstraPlan.Read(json)?.IsValid() ?? true);
+            return document.RootElement.ValueKind == JsonValueKind.Object && (AiPlan.Read(json)?.IsValid() ?? true);
         }
         catch (JsonException)
         {

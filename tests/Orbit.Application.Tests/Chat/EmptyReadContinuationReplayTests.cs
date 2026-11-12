@@ -34,11 +34,11 @@ public partial class ProcessUserChatCommandHandlerTests
         var user = User.Create("Reader", "reader@example.test").Value;
         user.SetLanguage(language);
         SetupUserAndPayGate(user);
-        _appConfig.GetAsync(AppConfigKeys.AstraGroundingEnforce, false, Arg.Any<CancellationToken>()).Returns(true);
+        _appConfig.GetAsync(AppConfigKeys.AiGroundingEnforce, false, Arg.Any<CancellationToken>()).Returns(true);
         _featureFlagService.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>())
             .Returns(mode == "disabled"
-                ? [FeatureFlagKeys.AstraConversationRecording, FeatureFlagKeys.AstraPartsDisabled]
-                : [FeatureFlagKeys.AstraConversationRecording]);
+                ? [FeatureFlagKeys.AiConversationRecording, FeatureFlagKeys.AiPartsDisabled]
+                : [FeatureFlagKeys.AiConversationRecording]);
         var habit = CreateHabit(language == "en" ? "Reading" : "Leitura");
         _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>()).Returns([habit]);

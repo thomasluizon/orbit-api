@@ -27,7 +27,7 @@ public partial class ProcessUserChatCommandHandler
         ToolExecutionAccumulator results, CancellationToken ct)
     {
         if (request.BlockAnswer is not null || !AskEnabled(request, context)
-            || request.ClientContext!.PartKinds?.Contains(AstraBlockKinds.PickList, StringComparer.Ordinal) != true
+            || request.ClientContext!.PartKinds?.Contains(AiBlockKinds.PickList, StringComparer.Ordinal) != true
             || calls.Count == 0 || calls.Count != response.ToolCalls!.Count
             || !calls.All(IsSelectionRead) || SelectionAction(request.Message) is not { } action)
             return false;
@@ -44,7 +44,7 @@ public partial class ProcessUserChatCommandHandler
         {
             input = new
             {
-                form = AstraBlockKinds.PickList,
+                form = AiBlockKinds.PickList,
                 missing_input = "bulk_selection",
                 title = LocaleHelper.IsPortuguese(context.Language) ? "Escolha os hábitos" : "Choose habits",
                 action,

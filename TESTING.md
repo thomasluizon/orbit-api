@@ -1,4 +1,4 @@
-# Astra verification
+# AI verification
 
 Local verification is offline. Fake completion clients and captured provider responses in
 `tests/Orbit.Application.Tests/Fixtures/` exercise the production request builder, typed

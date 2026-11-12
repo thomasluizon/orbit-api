@@ -16,7 +16,7 @@ public sealed class RestoreProactivePreferenceMigrationTests
     internal static void AssertRequiredPreference(IReadOnlyList<MigrationOperation> operations)
     {
         var column = operations.OfType<AlterColumnOperation>().Should().ContainSingle(operation =>
-            operation.Table == "Users" && operation.Name == nameof(User.ProactiveAstraEnabled)).Subject;
+            operation.Table == "Users" && operation.Name == "ProactiveAstraEnabled").Subject;
         column.ClrType.Should().Be(typeof(bool));
         column.ColumnType.Should().Be("boolean");
         column.IsNullable.Should().BeFalse();
@@ -73,7 +73,7 @@ public sealed class RestoreProactivePreferenceMigrationTests
         var unset = User.Create("Unset", "unset@example.com").Value;
         unset.Deactivate(DateTime.UtcNow.AddDays(7));
         var disabled = User.Create("Disabled", "disabled@example.com").Value;
-        disabled.SetProactiveAstraEnabled(false);
+        disabled.SetProactiveAiEnabled(false);
         var enabled = User.Create("Enabled", "enabled@example.com").Value;
         context.Users.AddRange(unset, disabled, enabled);
         await context.SaveChangesAsync();
@@ -87,9 +87,9 @@ public sealed class RestoreProactivePreferenceMigrationTests
         context.ChangeTracker.Clear();
 
         var users = await context.Users.IgnoreQueryFilters().ToDictionaryAsync(user => user.Id);
-        users[unset.Id].ProactiveAstraEnabled.Should().BeTrue();
-        users[disabled.Id].ProactiveAstraEnabled.Should().BeFalse();
-        users[enabled.Id].ProactiveAstraEnabled.Should().BeTrue();
+        users[unset.Id].ProactiveAiEnabled.Should().BeTrue();
+        users[disabled.Id].ProactiveAiEnabled.Should().BeFalse();
+        users[enabled.Id].ProactiveAiEnabled.Should().BeTrue();
         var nullWrite = () => context.Database.ExecuteSqlInterpolatedAsync(
             $"UPDATE \"Users\" SET \"ProactiveAstraEnabled\" = NULL WHERE \"Id\" = {enabled.Id}");
         await nullWrite.Should().ThrowAsync<SqliteException>().WithMessage("*NOT NULL constraint failed: Users.ProactiveAstraEnabled*");
@@ -98,7 +98,7 @@ public sealed class RestoreProactivePreferenceMigrationTests
         await context.Database.ExecuteSqlInterpolatedAsync(
             $"UPDATE \"Users\" SET \"Name\" = 'Updated' WHERE \"Id\" = {enabled.Id}");
         context.ChangeTracker.Clear();
-        (await context.Users.SingleAsync(user => user.Id == enabled.Id)).ProactiveAstraEnabled.Should().BeFalse();
+        (await context.Users.SingleAsync(user => user.Id == enabled.Id)).ProactiveAiEnabled.Should().BeFalse();
 
         await using var metadata = context.Database.GetDbConnection().CreateCommand();
         metadata.CommandText = "SELECT \"notnull\", dflt_value FROM pragma_table_info('Users') WHERE name = 'ProactiveAstraEnabled'";

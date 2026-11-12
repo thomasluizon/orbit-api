@@ -103,7 +103,7 @@ public sealed class ConversationOfferStoreTests
         await factory.Context.SaveChangesAsync();
         var conversation = Guid.NewGuid();
         var key = "reminder:habit";
-        var fact = new AstraOfferFact(key, "reminder", "typed evidence", new(key, "preparePreview", "Add a reminder", Prompt: "Prepare a reminder."), Guid.NewGuid(), "revision", new(2026, 10, 30));
+        var fact = new AiOfferFact(key, "reminder", "typed evidence", new(key, "preparePreview", "Add a reminder", Prompt: "Prepare a reminder."), Guid.NewGuid(), "revision", new(2026, 10, 30));
         var store = new ConversationOfferStore(factory.Context, encryption);
         await store.IssueAsync(user.Id, conversation, fact, default);
         await store.IssueAsync(user.Id, conversation, fact, default);

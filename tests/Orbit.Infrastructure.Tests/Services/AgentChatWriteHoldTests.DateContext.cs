@@ -78,7 +78,7 @@ public partial class AgentChatWriteHoldTests
             new ChatExecutionDependencies(dates, Substitute.For<IUserStreakService>(), payGate, work,
                 Substitute.For<IServiceScopeFactory>(), CreateExecutor(registry, previewer), Substitute.For<IPendingClarificationStore>(),
                 progress, Substitute.For<IGamificationService>(), mediator, Substitute.For<IProductAnalytics>(),
-                Substitute.For<IHabitScheduleLogReader>(), Substitute.For<IIssuedAstraBlockStore>(), _pendingOperationStore, previewer),
+                Substitute.For<IHabitScheduleLogReader>(), Substitute.For<IIssuedAiBlockStore>(), _pendingOperationStore, previewer),
             NullLogger<ProcessUserChatCommandHandler>.Instance, Substitute.For<IAppConfigService>(), ModerationTestDouble.Clean());
         var client = new AgentClientContext(ConversationId: Guid.NewGuid(), SupportsParts: true,
             SupportsPendingOperationChanges: true, Locale: language);

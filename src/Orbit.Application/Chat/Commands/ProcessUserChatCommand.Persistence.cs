@@ -15,7 +15,7 @@ public partial class ProcessUserChatCommandHandler
         /**
          * Every habit tool stages its mutation against the shared change tracker and this is the one
          * place those stagings commit, so this is where the chat path joins HabitCeilingLock. Skip,
-         * log, delete and schedule edits made through Astra are inputs a streak repair reads.
+         * log, delete and schedule edits made through AI are inputs a streak repair reads.
          */
         await HabitCeilingLock.ExecuteAsync(execution.UnitOfWork, userId, async transactionToken =>
         {
@@ -29,7 +29,7 @@ public partial class ProcessUserChatCommandHandler
             }
         }, cancellationToken);
 
-        await ProcessOnboardingChecklistSafeAsync(userId, OnboardingChecklistSignal.AstraUsed, cancellationToken);
+        await ProcessOnboardingChecklistSafeAsync(userId, OnboardingChecklistSignal.AiUsed, cancellationToken);
     }
 
     private async Task ProcessOnboardingChecklistSafeAsync(

@@ -101,7 +101,7 @@ compatibility field with no mutator (`src/Orbit.Domain/Entities/User.cs:21`);
 (`src/Orbit.Application/Profile/Queries/GetProfileQuery.cs:120`).
 `AiMemoryRemovalTests` verifies that the old `SetAiMemory` route and capability
 are absent. `SetAiSummary` (`User.cs:207`) controls summaries alone and
-`SetProactiveAstraEnabled` (`User.cs:209`) controls proactive suggestions alone.
+`SetProactiveAiEnabled` (`User.cs:209`) controls proactive suggestions alone.
 Neither is a chat retention control. Disabling the recording rollout flag stops
 new storage and history reads, preserves existing rows for export or deletion,
 and does not silently erase them. Privacy copy must describe these exact rules.

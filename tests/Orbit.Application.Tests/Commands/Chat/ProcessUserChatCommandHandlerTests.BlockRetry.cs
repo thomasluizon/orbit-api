@@ -15,13 +15,13 @@ namespace Orbit.Application.Tests.Commands.Chat;
 
 public partial class ProcessUserChatCommandHandlerTests
 {
-    private IssuedAstraBlock RetryChoice() => RetryBlock(new("choice", "When?",
+    private IssuedAiBlock RetryChoice() => RetryBlock(new("choice", "When?",
         [new("a", "Morning"), new("b", "Evening")], [], AllowFreeText: true));
 
-    private IssuedAstraBlock RetryBlock(AstraBlockDefinition definition)
+    private IssuedAiBlock RetryBlock(AiBlockDefinition definition)
     {
-        var block = IssuedAstraBlock.Create(UserId, definition);
-        _unitOfWork.PassThroughTransactions<Result<PreparedAstraBlockAnswer>>();
+        var block = IssuedAiBlock.Create(UserId, definition);
+        _unitOfWork.PassThroughTransactions<Result<PreparedAiBlockAnswer>>();
         _unitOfWork.PassThroughTransactions<ChatResponse?>();
         _blockStore.GetAsync(block.Id, UserId, Arg.Any<CancellationToken>()).Returns(block);
         _blockStore.MarkAnsweredAsync(block.Id, UserId, Arg.Any<DateTime>(), Arg.Any<CancellationToken>())
@@ -68,13 +68,13 @@ public partial class ProcessUserChatCommandHandlerTests
         return block;
     }
 
-    private static bool UnfinishedBlock(IssuedAstraBlock block, DateTime claim) =>
+    private static bool UnfinishedBlock(IssuedAiBlock block, DateTime claim) =>
         block.AnsweredAtUtc == claim && block.ResponseJson is null;
 
-    private static void SetBlock(IssuedAstraBlock block, string name, object? value) =>
-        typeof(IssuedAstraBlock).GetProperty(name)!.SetValue(block, value);
+    private static void SetBlock(IssuedAiBlock block, string name, object? value) =>
+        typeof(IssuedAiBlock).GetProperty(name)!.SetValue(block, value);
 
-    private static void ClearBlockAnswer(IssuedAstraBlock block)
+    private static void ClearBlockAnswer(IssuedAiBlock block)
     {
         SetBlock(block, nameof(block.AnsweredAtUtc), null);
         SetBlock(block, nameof(block.AnswerJson), null);
@@ -310,9 +310,9 @@ public partial class ProcessUserChatCommandHandlerTests
         replay.Value.Should().BeEquivalentTo(first.Value with { MessageAllowanceConsumed = supportsAllowance ? false : null });
         user.GetAiMessagesUsedToday(Today).Should().Be(1);
         (await handler.Handle(request with { BlockAnswer = new(block.Id, ["a"], "After dinner") }, default))
-            .ErrorCode.Should().Be(ErrorCodes.AstraBlockAnswered);
+            .ErrorCode.Should().Be(ErrorCodes.AiBlockAnswered);
         (await handler.Handle(request with { BlockAnswer = new(block.Id, ["b"], "Before dinner") }, default))
-            .ErrorCode.Should().Be(ErrorCodes.AstraBlockAnswered);
+            .ErrorCode.Should().Be(ErrorCodes.AiBlockAnswered);
         await _aiIntentService.Received(1).SendWithToolsAsync(Arg.Any<AiToolRequest>(),
             Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
     }
@@ -340,7 +340,7 @@ public partial class ProcessUserChatCommandHandlerTests
         System.Text.Json.Nodes.JsonNode.DeepEquals(System.Text.Json.Nodes.JsonNode.Parse(firstJson),
             System.Text.Json.Nodes.JsonNode.Parse(replayJson)).Should().BeTrue();
         user.GetAiMessagesUsedToday(Today).Should().Be(1);
-        await _blockStore.Received(1).AddAsync(Arg.Any<IssuedAstraBlock>(), Arg.Any<CancellationToken>());
+        await _blockStore.Received(1).AddAsync(Arg.Any<IssuedAiBlock>(), Arg.Any<CancellationToken>());
     }
 
     [Theory]
@@ -456,7 +456,7 @@ public partial class ProcessUserChatCommandHandlerTests
         var replay = await handler.Handle(request, default);
 
         first.IsSuccess.Should().BeTrue();
-        concurrent.ErrorCode.Should().Be(ErrorCodes.AstraBlockAnswered);
+        concurrent.ErrorCode.Should().Be(ErrorCodes.AiBlockAnswered);
         replay.Value.Should().BeEquivalentTo(first.Value);
         user.GetAiMessagesUsedToday(Today).Should().Be(1);
         work.Order.Where(item => item.StartsWith("lock:astra-blocks:", StringComparison.Ordinal))
@@ -472,12 +472,12 @@ public partial class ProcessUserChatCommandHandlerTests
         var block = RetryBlock(new("pickList", "Choose", [],
             [new("a", "Walk", ParseArguments("{\"title\":\"Walk\"}")),
                 new("b", "Read", ParseArguments("{\"title\":\"Read\"}"))], true, Action: "create_habits"));
-        _unitOfWork.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task<Result<PreparedAstraBlockAnswer>>>>(), Arg.Any<CancellationToken>())
+        _unitOfWork.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task<Result<PreparedAiBlockAnswer>>>>(), Arg.Any<CancellationToken>())
             .Returns(async call =>
             {
                 try
                 {
-                    return await call.Arg<Func<CancellationToken, Task<Result<PreparedAstraBlockAnswer>>>>()(default);
+                    return await call.Arg<Func<CancellationToken, Task<Result<PreparedAiBlockAnswer>>>>()(default);
                 }
                 catch
                 {
@@ -500,7 +500,7 @@ public partial class ProcessUserChatCommandHandlerTests
         var request = new ProcessUserChatCommand(UserId, "Walk", BlockAnswer: new(block.Id, ["a"]),
             ClientContext: new(SupportsParts: true));
 
-        (await handler.Handle(request, default)).ErrorCode.Should().Be(ErrorCodes.AstraBlockPreviewUnavailable);
+        (await handler.Handle(request, default)).ErrorCode.Should().Be(ErrorCodes.AiBlockPreviewUnavailable);
         block.AnsweredAtUtc.Should().BeNull();
         var first = await handler.Handle(request, default);
         var replay = await handler.Handle(request, default);
@@ -508,7 +508,7 @@ public partial class ProcessUserChatCommandHandlerTests
         replay.Value.Should().BeEquivalentTo(first.Value);
         replay.Value.PendingOperations.Should().ContainSingle().Which.Id.Should().Be(pending.Id);
         (await handler.Handle(request with { BlockAnswer = new(block.Id, ["b"]) }, default))
-            .ErrorCode.Should().Be(ErrorCodes.AstraBlockAnswered);
+            .ErrorCode.Should().Be(ErrorCodes.AiBlockAnswered);
 
         _pendingOperationStore.IsAwaitingConfirmation(UserId, pending.Id).Returns(false);
         var closed = await handler.Handle(request, default);

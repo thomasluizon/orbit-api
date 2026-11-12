@@ -96,7 +96,7 @@ public sealed class ConversationTurn : Entity
     }
 
     private static bool IsValidResponse(string role, string json, JsonValueKind kind) => role == "assistant"
-        && kind == JsonValueKind.Object && (AstraPlan.Read(json)?.IsValid() ?? true);
+        && kind == JsonValueKind.Object && (AiPlan.Read(json)?.IsValid() ?? true);
 
     private static bool IsValidImage(Guid userId, Guid? conversationId, string role, string? key, string? mime, string? sha256)
     {
@@ -119,15 +119,15 @@ public sealed class ConversationTurn : Entity
         previews[index] = new(pendingOperationId, outcome, arguments, revision);
         var json = JsonSerializer.Serialize(previews);
         PreviewOutcomesJson = json;
-        ResponseJson = AstraPlan.Write(ResponseJson, AstraPlan.Read(ResponseJson)?.PreviewOutcome(pendingOperationId, outcome));
+        ResponseJson = AiPlan.Write(ResponseJson, AiPlan.Read(ResponseJson)?.PreviewOutcome(pendingOperationId, outcome));
         ModelContextJson = null;
     }
 
-    public void UpdatePlan(AstraPlan plan)
+    public void UpdatePlan(AiPlan plan)
     {
-        if (Role != "assistant" || AstraPlan.Read(ResponseJson)?.Id != plan.Id)
+        if (Role != "assistant" || AiPlan.Read(ResponseJson)?.Id != plan.Id)
             throw new ArgumentException("Conversation plan is unavailable.", nameof(plan));
-        ResponseJson = AstraPlan.Write(ResponseJson, plan);
+        ResponseJson = AiPlan.Write(ResponseJson, plan);
         ModelContextJson = null;
     }
 }

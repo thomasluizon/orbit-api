@@ -11,7 +11,7 @@ public partial class ProcessUserChatCommandHandler
         ChatContext context, ToolExecutionAccumulator results) =>
         aiMessage?.Contains(HabitRankingCardBuilder.Directive, StringComparison.OrdinalIgnoreCase) == true
         && HabitRankingCardBuilder.IsSupported(request.ClientContext)
-        && !context.EnabledFeatureFlags.Contains(FeatureFlagKeys.AstraPeriodBlocksDisabled)
+        && !context.EnabledFeatureFlags.Contains(FeatureFlagKeys.AiPeriodBlocksDisabled)
             ? HabitRankingCardBuilder.Build(results.LastSuccessfulPayload<HabitRankingResponse>("get_habit_ranking")) : null;
 
     private static bool HasOnlySuccessfulRankingReads(ToolExecutionAccumulator results) =>
@@ -26,7 +26,7 @@ public partial class ProcessUserChatCommandHandler
         if (ranking is null)
             return cards;
         var supported = HabitRankingCardBuilder.IsSupported(request.ClientContext)
-            && !context.EnabledFeatureFlags.Contains(FeatureFlagKeys.AstraPeriodBlocksDisabled);
+            && !context.EnabledFeatureFlags.Contains(FeatureFlagKeys.AiPeriodBlocksDisabled);
         var card = HabitRankingCardBuilder.Build(ranking);
         var failed = card is null;
         AnalyticsCapture.SafeCaptureUserEvent(execution.ProductAnalytics, logger, request.UserId,

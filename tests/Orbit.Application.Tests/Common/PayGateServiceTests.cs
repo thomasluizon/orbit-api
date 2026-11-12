@@ -563,7 +563,7 @@ public class PayGateServiceTests
         user.StartTrial(DateTime.UtcNow.AddDays(-1));
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
 
-        var result = await _sut.CanManageProactiveAstra(UserId);
+        var result = await _sut.CanManageProactiveAi(UserId);
 
         result.IsSuccess.Should().BeFalse();
         result.ErrorCode.Should().Be(ErrorCodes.PayGate);

@@ -73,9 +73,9 @@ public interface IPayGateService
     Task<Result> CanManageAiSummary(Guid userId, CancellationToken ct = default);
 
     /// <summary>
-    /// Checks if the user can manage proactive Astra check-ins (Pro-only feature).
+    /// Checks if the user can manage proactive AI check-ins (Pro-only feature).
     /// </summary>
-    Task<Result> CanManageProactiveAstra(Guid userId, CancellationToken ct = default);
+    Task<Result> CanManageProactiveAi(Guid userId, CancellationToken ct = default);
 
     /// <summary>
     /// Checks if the user can enable or manage slip alerts (Pro-only feature).

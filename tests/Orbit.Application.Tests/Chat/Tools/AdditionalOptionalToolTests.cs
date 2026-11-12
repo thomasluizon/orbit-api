@@ -83,7 +83,7 @@ public sealed class AdditionalOptionalToolTests
     [InlineData(typeof(GetReferralOverviewTool))]
     [InlineData(typeof(CreateChecklistTemplateTool))]
     [InlineData(typeof(DeleteChecklistTemplateTool))]
-    [InlineData(typeof(SetProactiveAstraTool))]
+    [InlineData(typeof(SetProactiveAiTool))]
     [InlineData(typeof(SendSupportRequestTool))]
     public void ToolsWithoutOptionalFields_HaveNoNullVersusAbsentCases(Type type)
     {

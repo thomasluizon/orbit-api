@@ -51,7 +51,7 @@ public class CompoundHabitFieldsTests
     {
         var schema = JsonSerializer.SerializeToElement(new BulkCreateHabitsTool(Substitute.For<IMediator>()).GetParameterSchema());
         var root = schema.GetProperty("properties").GetProperty("habits").GetProperty("items").GetProperty("properties");
-        root.TryGetProperty(field, out _).Should().BeTrue($"the form field {field} needs an Astra creation path");
+        root.TryGetProperty(field, out _).Should().BeTrue($"the form field {field} needs an AI creation path");
         var child = root.GetProperty("sub_habits").GetProperty("items").GetProperty("properties");
         child.TryGetProperty(field, out _).Should().BeTrue($"children must support {field} too");
     }

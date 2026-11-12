@@ -545,7 +545,7 @@ public partial class AgentCatalogService
                 ControllerActionKeys: ["ProfileController.SetAiSummary"]),
 
             new AgentCapability(
-                AgentCapabilityIds.ProfileProactiveAstraWrite,
+                AgentCapabilityIds.ProfileProactiveAiWrite,
                 "Write Proactive Check-in Settings",
                 "Stores an explicit preference for proactive check-in pushes; in-app items remain available.",
                 ProfileDomain,
@@ -557,7 +557,7 @@ public partial class AgentCatalogService
                 PlanRequirement: "Pro",
                 ChatToolNames: ["set_proactive_astra"],
                 McpToolNames: ["set_proactive_astra"],
-                ControllerActionKeys: ["ProfileController.SetProactiveAstra"])
+                ControllerActionKeys: ["ProfileController.SetProactiveAi"])
         ];
     }
 
@@ -576,7 +576,7 @@ public partial class AgentCatalogService
                 IsPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
                 PlanRequirement: "Pro",
-                ControllerActionKeys: ["ProactiveAstraController.Current", "ProactiveAstraController.GetById"]),
+                ControllerActionKeys: ["ProactiveAiController.Current", "ProactiveAiController.GetById"]),
 
             new AgentCapability(
                 AgentCapabilityIds.ProactiveItemsWrite,
@@ -589,7 +589,7 @@ public partial class AgentCatalogService
                 IsPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
                 PlanRequirement: "Pro",
-                ControllerActionKeys: ["ProactiveAstraController.Opened", "ProactiveAstraController.Acted"])
+                ControllerActionKeys: ["ProactiveAiController.Opened", "ProactiveAiController.Acted"])
         ];
     }
 

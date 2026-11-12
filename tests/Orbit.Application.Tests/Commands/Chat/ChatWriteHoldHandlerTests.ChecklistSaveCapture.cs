@@ -52,7 +52,7 @@ public sealed partial class ChatWriteHoldHandlerTests
             append.Handle(call.Arg<AppendChecklistItemCommand>(), call.Arg<CancellationToken>()));
         if (composition)
             _featureFlagService.GetEnabledKeysForUserAsync(_userId, Arg.Any<CancellationToken>())
-                .Returns(new[] { FeatureFlagKeys.AstraBlockFirst });
+                .Returns(new[] { FeatureFlagKeys.AiBlockFirst });
         var capturedCall = capture.RootElement.GetProperty("toolCalls")[1];
         var arguments = capturedCall.GetProperty("arguments").GetRawText().Replace("[redacted]", habit.Id.ToString(), StringComparison.Ordinal);
         ScriptToolCall(arguments, capturedCall.GetProperty("name").GetString()!);

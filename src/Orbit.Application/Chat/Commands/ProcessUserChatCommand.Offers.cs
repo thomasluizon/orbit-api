@@ -53,7 +53,7 @@ public partial class ProcessUserChatCommandHandler
         return Result.Success(request with { Message = selected.Action.Prompt, SelectedOffer = selected });
     }
 
-    private async Task<bool> OfferSourceCurrentAsync(ProcessUserChatCommand request, AstraOfferFact selected, CancellationToken ct)
+    private async Task<bool> OfferSourceCurrentAsync(ProcessUserChatCommand request, AiOfferFact selected, CancellationToken ct)
     {
         if (selected.PendingOperationId is { } pendingId)
         {
@@ -72,7 +72,7 @@ public partial class ProcessUserChatCommandHandler
         return fresh.IsSuccess && fresh.Value.Read.Revision == selected.Revision;
     }
 
-    private static string? SelectedOfferScope(AstraOfferFact selected) => (selected.Action.Kind, selected.Family) switch
+    private static string? SelectedOfferScope(AiOfferFact selected) => (selected.Action.Kind, selected.Family) switch
     {
         (PreparePreview, "log") => "Prepare a log preview for the typed habit on its supplied local date.",
         (ContinueChat, "reviewHabit") => "Read the typed habit's current configuration and propose one useful adjustment.",
@@ -103,7 +103,7 @@ public partial class ProcessUserChatCommandHandler
         }
         catch (Exception exception) when (exception is not OperationCanceledException || !ct.IsCancellationRequested)
         {
-            logger.LogWarning(exception, "Optional Astra offer selection failed");
+            logger.LogWarning(exception, "Optional AI offer selection failed");
             return (cards, false);
         }
     }
@@ -161,7 +161,7 @@ public partial class ProcessUserChatCommandHandler
     /// A declared aim on a goal read keeps its action when the turn also holds another read. A typed
     /// offer from that other read, such as one small step on an empty day, does not replace it.
     /// </summary>
-    private static AstraOfferFact? DeclaredGoalAim(IEnumerable<AstraOfferFact> candidates, IReadOnlyList<QueryReadBlock> reads,
+    private static AiOfferFact? DeclaredGoalAim(IEnumerable<AiOfferFact> candidates, IReadOnlyList<QueryReadBlock> reads,
         ToolExecutionAccumulator results)
     {
         var goalReads = reads.Where(read => read.Block is GoalListCard
@@ -170,7 +170,7 @@ public partial class ProcessUserChatCommandHandler
             : candidates.FirstOrDefault(candidate => candidate.Family == "aim" && goalReads.Contains(candidate.QueryId));
     }
 
-    private static AstraOfferFact? PreferredTypedOffer(IEnumerable<AstraOfferFact> candidates) => candidates
+    private static AiOfferFact? PreferredTypedOffer(IEnumerable<AiOfferFact> candidates) => candidates
         .Where(candidate => candidate.Family is not ("aim" or "calendar" or "inspect"))
         .OrderBy(candidate => candidate.Family switch { "reminder" => 0, "restart" => 1, "skip" => 2, "log" => 3, _ => 4 })
         .FirstOrDefault();
@@ -202,7 +202,7 @@ public partial class ProcessUserChatCommandHandler
 
     private sealed record OfferSelection(string? CandidateId, string? Interpretation, IReadOnlyList<string>? DismissedOfferKeys);
 
-    private async Task<OfferSelection?> SelectOfferAsync(ProcessUserChatCommand request, AstraOfferFact[] candidates,
+    private async Task<OfferSelection?> SelectOfferAsync(ProcessUserChatCommand request, AiOfferFact[] candidates,
         CancellationToken ct)
     {
         if (candidates.Length == 1)

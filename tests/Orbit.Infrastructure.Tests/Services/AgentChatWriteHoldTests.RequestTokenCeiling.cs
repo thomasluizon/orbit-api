@@ -174,7 +174,7 @@ public partial class AgentChatWriteHoldTests
             new(dates, Substitute.For<IUserStreakService>(), quota, work, readServices.GetRequiredService<IServiceScopeFactory>(),
                 executor, Substitute.For<IPendingClarificationStore>(), progress,
                 Substitute.For<IGamificationService>(), mediator, Substitute.For<IProductAnalytics>(),
-                Substitute.For<IHabitScheduleLogReader>(), Substitute.For<IIssuedAstraBlockStore>(), _pendingOperationStore,
+                Substitute.For<IHabitScheduleLogReader>(), Substitute.For<IIssuedAiBlockStore>(), _pendingOperationStore,
                 PendingOperationPreviewer: previewer),
             NullLogger<ProcessUserChatCommandHandler>.Instance, Substitute.For<IAppConfigService>(), ModerationTestDouble.Clean());
 

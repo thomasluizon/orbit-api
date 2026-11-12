@@ -19,7 +19,7 @@ public partial class ProcessUserChatCommandHandlerTests
     {
         SetupUserAndPayGate();
         _featureFlagService.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>())
-            .Returns(exempt ? [FeatureFlagKeys.AstraEvalUnmetered] : []);
+            .Returns(exempt ? [FeatureFlagKeys.AiEvalUnmetered] : []);
         var tool = ReadTool("query_habits", new ToolResult(true));
         var handler = CreateHandler(tool);
         var response = ToolResponse(tool.Name, "read_1", "{}") with
@@ -46,7 +46,7 @@ public partial class ProcessUserChatCommandHandlerTests
     {
         SetupUserAndPayGate();
         _featureFlagService.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>())
-            .Returns([FeatureFlagKeys.AstraEvalUnmetered]);
+            .Returns([FeatureFlagKeys.AiEvalUnmetered]);
         var tool = RecoveryCreateHabitTool();
         var handler = CreateHandler(tool);
         var gateway = InstallCorrectionGateway(tool);

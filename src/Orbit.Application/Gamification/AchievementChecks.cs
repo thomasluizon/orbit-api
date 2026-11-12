@@ -45,7 +45,7 @@ public static class AchievementChecks
         HashSet<string> earned,
         List<(UserAchievement Entity, AchievementDefinition Definition)> newAchievements)
     {
-        if (user.HasCreatedFirstHabit && user.HasLoggedFirstHabit && user.HasTriedAstra)
+        if (user.HasCreatedFirstHabit && user.HasLoggedFirstHabit && user.HasTriedAi)
             TryGrant(AchievementDefinitions.OnboardingComplete, user, earned, newAchievements);
     }
 

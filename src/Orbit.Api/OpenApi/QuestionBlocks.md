@@ -83,7 +83,7 @@ question order and selected-option order do not affect identity. Changed typed
 values cannot replay a previous response. A replay on a client without support
 becomes text containing prompts, choices and numeric bounds.
 
-All four published OpenAPI artifacts include `AstraQuestionBlock`, its nested
-types, and `AstraBlockAnswer` with optional `answers`. The existing `block` object
+All four published OpenAPI artifacts include `AiQuestionBlock`, its nested
+types, and `AiBlockAnswer` with optional `answers`. The existing `block` object
 and multipart JSON strings retain their schemas. No migration, environment
 setting or version-floor change is required.

@@ -107,7 +107,7 @@ public partial class ProcessUserChatCommandHandlerTests
 
         response.IsSuccess.Should().BeTrue(response.Error);
         response.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>()
-            .Which.Block.Should().BeOfType<AstraChoiceBlock>();
+            .Which.Block.Should().BeOfType<AiChoiceBlock>();
         response.Value.AiMessage.Should().BeNullOrEmpty();
         response.Value.Actions.Should().BeEmpty();
         response.Value.PendingOperations.Should().BeNullOrEmpty();

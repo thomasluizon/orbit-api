@@ -88,7 +88,7 @@ public sealed partial class PlanCommittedOutcomeTests
         if (!withPlan) return;
         (await fixture.ReloadAsync()).Steps.Last().Status.Should().Be("done");
         fixture.Db.ChangeTracker.Clear();
-        AstraPlan.Read((await fixture.Db.ConversationTurns.SingleAsync(row => row.Role == "assistant")).ResponseJson)!
+        AiPlan.Read((await fixture.Db.ConversationTurns.SingleAsync(row => row.Role == "assistant")).ResponseJson)!
             .Steps.Last().Status.Should().Be("done");
     }
 
@@ -220,7 +220,7 @@ public sealed partial class PlanCommittedOutcomeTests
         fixture.SetRecording(true);
         (await fixture.ReloadAsync()).Steps.Last().Status.Should().Be(status);
         fixture.Db.ChangeTracker.Clear();
-        AstraPlan.Read((await fixture.Db.ConversationTurns.SingleAsync(row => row.Role == "assistant")).ResponseJson)!
+        AiPlan.Read((await fixture.Db.ConversationTurns.SingleAsync(row => row.Role == "assistant")).ResponseJson)!
             .Steps.Last().Status.Should().Be(status);
     }
 
@@ -323,10 +323,10 @@ public sealed partial class PlanCommittedOutcomeTests
                     new(_conversation.ConversationId, capture.CreatedAtUtc)).Id;
                 Pending.Revise(UserId, id, fingerprint, arguments.GetRawText(), fingerprint, preview.PreviewFingerprint!).Should().BeTrue();
             }
-            var plan = AstraPlan.Create("Reading", [new("1", "Prepare a preview", "done", operationId, "execution"),
+            var plan = AiPlan.Create("Reading", [new("1", "Prepare a preview", "done", operationId, "execution"),
                 new("2", "Save your goal", "pending", operationId, "approval", PendingOperationId: id)]).Value;
             await _conversation.Store.RecordAsync(capture with
-            { ResponseJson = JsonSerializer.Serialize(new ChatResponse(null, [], Plan: recordPlan ? plan : null), AstraPlan.JsonOptions) });
+            { ResponseJson = JsonSerializer.Serialize(new ChatResponse(null, [], Plan: recordPlan ? plan : null), AiPlan.JsonOptions) });
             return id;
         }
 
@@ -345,24 +345,24 @@ public sealed partial class PlanCommittedOutcomeTests
         }
 
         internal void FaultPlans(string status, Guid id) => _plans.ChangeAsync(UserId, id, status, Arg.Any<CancellationToken>())
-            .Returns(Task.FromException<AstraPlan?>(new InvalidOperationException("plan storage unavailable")));
+            .Returns(Task.FromException<AiPlan?>(new InvalidOperationException("plan storage unavailable")));
         internal void CancelDuringPlanUpdate(Guid id, CancellationTokenSource cancellation) =>
             _plans.ChangeAsync(UserId, id, Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(call =>
             {
                 cancellation.Cancel();
-                return Task.FromCanceled<AstraPlan?>(cancellation.Token);
+                return Task.FromCanceled<AiPlan?>(cancellation.Token);
             });
         internal void SetRecording(bool enabled)
         {
             _conversation.Flags.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>(), Arg.Any<bool>())
-                .Returns(enabled ? [Orbit.Application.Common.FeatureFlagKeys.AstraConversationRecording] : []);
-            _conversation.Flags.ResolveForUser(UserId).Returns([new(Orbit.Application.Common.FeatureFlagKeys.AstraConversationRecording, enabled, null)]);
+                .Returns(enabled ? [Orbit.Application.Common.FeatureFlagKeys.AiConversationRecording] : []);
+            _conversation.Flags.ResolveForUser(UserId).Returns([new(Orbit.Application.Common.FeatureFlagKeys.AiConversationRecording, enabled, null)]);
         }
         internal void AssertError(Guid id) => _logs.Should().Contain(entry => entry.Level == LogLevel.Error && entry.Text.Contains(id.ToString()));
         internal async Task<StoredConversationHistory> HistoryAsync() =>
             (await _conversation.Store.LoadHistoryAsync(UserId, _conversation.ConversationId)).Value;
         internal Task<ConversationPage?> PageAsync() => _conversation.Store.GetLatestAsync(UserId, _conversation.ConversationId, null, 10);
-        internal async Task<AstraPlan> ReloadAsync() => (await _conversation.Store.GetLatestAsync(UserId,
+        internal async Task<AiPlan> ReloadAsync() => (await _conversation.Store.GetLatestAsync(UserId,
             _conversation.ConversationId, null, 10))!.Turns.Single(turn => turn.Role == "assistant").Plan!;
         public void Dispose() => _conversation.Dispose();
     }

@@ -44,7 +44,7 @@ public partial class ProcessUserChatCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue(result.Error);
         var choice = result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>()
-            .Which.Block.Should().BeOfType<AstraChoiceBlock>().Subject;
+            .Which.Block.Should().BeOfType<AiChoiceBlock>().Subject;
         var args = call.Args;
         var nested = args.GetProperty("form").GetString() == "question";
         var prompt = args.TryGetProperty("question", out var heading) && heading.ValueKind == JsonValueKind.String
@@ -55,7 +55,7 @@ public partial class ProcessUserChatCommandHandlerTests
             ? args.GetProperty("questions")[0].GetProperty("options") : args.GetProperty("options"))
             .EnumerateArray().Select(option => option.GetProperty("label").GetString()));
         result.Value.PendingOperations.Should().BeNullOrEmpty();
-        await _blockStore.Received(1).AddAsync(Arg.Any<IssuedAstraBlock>(), Arg.Any<CancellationToken>());
+        await _blockStore.Received(1).AddAsync(Arg.Any<IssuedAiBlock>(), Arg.Any<CancellationToken>());
         await AssertOnlyAskSelectionRead();
         await _aiIntentService.DidNotReceiveWithAnyArgs().ContinueWithToolResultsAsync(default!, default!, default, default);
     }
@@ -97,7 +97,7 @@ public partial class ProcessUserChatCommandHandlerTests
             Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
         result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>()
             .Which.Kind.Should().Be("choice");
-        await _blockStore.Received(1).AddAsync(Arg.Any<IssuedAstraBlock>(), Arg.Any<CancellationToken>());
+        await _blockStore.Received(1).AddAsync(Arg.Any<IssuedAiBlock>(), Arg.Any<CancellationToken>());
         result.Value.PendingOperations.Should().BeNullOrEmpty();
         await AssertOnlyAskSelectionRead();
     }
@@ -173,7 +173,7 @@ public partial class ProcessUserChatCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         var block = result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>()
-            .Which.Block.Should().BeOfType<AstraQuestionBlock>().Subject;
+            .Which.Block.Should().BeOfType<AiQuestionBlock>().Subject;
         block.Questions.Should().HaveCount(field == "multiple" ? 2 : 1);
         if (field == "longLabel") block.Questions[0].Options![0].Label.Should().HaveLength(21);
         if (field == "recommended") block.Questions[0].Options![0].Recommended.Should().BeTrue();

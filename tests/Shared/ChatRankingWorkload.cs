@@ -98,7 +98,7 @@ internal sealed class ChatRankingWorkload(ITestOutputHelper output, IEncryptionS
             NullLogger<AgentOperationExecutor>.Instance, blocks);
         var flags = Substitute.For<IFeatureFlagService>();
         flags.GetEnabledKeysForUserAsync(user.Id, Arg.Any<CancellationToken>())
-            .Returns(new[] { FeatureFlagKeys.AstraEvalTrace });
+            .Returns(new[] { FeatureFlagKeys.AiEvalTrace });
         var quota = Substitute.For<IPayGateService>();
         quota.TryConsumeAiMessage(user.Id, Arg.Any<IUnitOfWork>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success());
@@ -137,7 +137,7 @@ internal sealed class ChatRankingWorkload(ITestOutputHelper output, IEncryptionS
             new(dates, Substitute.For<IUserStreakService>(), quota, work, services.GetRequiredService<IServiceScopeFactory>(),
                 executor, Substitute.For<IPendingClarificationStore>(), Substitute.For<IGoalProgressReadSyncer>(),
                 Substitute.For<IGamificationService>(), mediator, Substitute.For<IProductAnalytics>(),
-                new HabitScheduleLogReader(db), Substitute.For<IIssuedAstraBlockStore>(),
+                new HabitScheduleLogReader(db), Substitute.For<IIssuedAiBlockStore>(),
                 Substitute.For<IPendingAgentOperationStore>()),
             NullLogger<ProcessUserChatCommandHandler>.Instance, Substitute.For<IAppConfigService>(),
             Orbit.Infrastructure.Tests.ModerationTestDouble.Clean(), readBlocks: blocks);

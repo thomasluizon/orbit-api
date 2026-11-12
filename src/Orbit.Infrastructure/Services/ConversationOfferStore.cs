@@ -9,18 +9,18 @@ namespace Orbit.Infrastructure.Services;
 
 public sealed class ConversationOfferStore(OrbitDbContext db, IEncryptionService encryption) : IConversationOfferStore
 {
-    public async Task<IReadOnlyList<AstraOfferFact>> IssuedAsync(Guid userId, Guid conversationId, CancellationToken ct) =>
+    public async Task<IReadOnlyList<AiOfferFact>> IssuedAsync(Guid userId, Guid conversationId, CancellationToken ct) =>
         (await db.ConversationOffers.AsNoTracking().Where(offer => offer.UserId == userId
             && offer.ConversationId == conversationId && !offer.Dismissed)
             .OrderBy(offer => offer.Id).Take(100).Select(offer => offer.DefinitionJson).ToListAsync(ct))
-            .Select(json => JsonSerializer.Deserialize<AstraOfferFact>(json)).OfType<AstraOfferFact>().ToArray();
+            .Select(json => JsonSerializer.Deserialize<AiOfferFact>(json)).OfType<AiOfferFact>().ToArray();
 
-    public async Task<AstraOfferFact?> FindIssuedAsync(Guid userId, Guid conversationId, string key, CancellationToken ct)
+    public async Task<AiOfferFact?> FindIssuedAsync(Guid userId, Guid conversationId, string key, CancellationToken ct)
     {
         var json = await db.ConversationOffers.AsNoTracking().Where(offer => offer.UserId == userId
             && offer.ConversationId == conversationId && offer.OfferKey == key && !offer.Dismissed)
             .Select(offer => offer.DefinitionJson).SingleOrDefaultAsync(ct);
-        return json is null ? null : JsonSerializer.Deserialize<AstraOfferFact>(json);
+        return json is null ? null : JsonSerializer.Deserialize<AiOfferFact>(json);
     }
 
     public async Task<IReadOnlySet<string>> DismissedAsync(Guid userId, Guid conversationId, CancellationToken ct) =>
@@ -28,7 +28,7 @@ public sealed class ConversationOfferStore(OrbitDbContext db, IEncryptionService
             && offer.ConversationId == conversationId && offer.Dismissed)
             .Select(offer => offer.OfferKey).ToListAsync(ct)).ToHashSet(StringComparer.Ordinal);
 
-    public async Task IssueAsync(Guid userId, Guid conversationId, AstraOfferFact fact, CancellationToken ct)
+    public async Task IssueAsync(Guid userId, Guid conversationId, AiOfferFact fact, CancellationToken ct)
     {
         var created = ConversationOffer.Create(userId, conversationId, fact.Action.OfferKey, fact);
         if (created.IsFailure) throw new ArgumentException(created.Error);

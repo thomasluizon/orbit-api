@@ -191,7 +191,7 @@ public sealed class AskTool(
         foreach (var draft in drafts)
             foreach (var source in forms)
             {
-                if (source!["properties"]!["form"]!["enum"]![0]!.GetValue<string>() == AstraBlockKinds.PickList) continue;
+                if (source!["properties"]!["form"]!["enum"]![0]!.GetValue<string>() == AiBlockKinds.PickList) continue;
                 var form = source!.DeepClone();
                 var fields = form["properties"]!.AsObject();
                 var reason = fields["missing_input"]!;
@@ -295,7 +295,7 @@ public sealed class AskTool(
         if (!validation.IsValid)
             return new ToolResult(false, Error: string.Join(" ", validation.Errors.Select(error => error.ErrorMessage)));
         var definition = AskToolArgumentsValidator.ToDefinition(input);
-        if (definition.Form == AstraBlockKinds.PickList)
+        if (definition.Form == AiBlockKinds.PickList)
         {
             if (definition.Action == "create_habits")
             {
@@ -351,7 +351,7 @@ public sealed class AskTool(
         return JsonSerializer.SerializeToElement(fields);
     }
 
-    public static JsonElement BuildBulkArguments(string action, IReadOnlyList<AstraBlockItem> items) =>
+    public static JsonElement BuildBulkArguments(string action, IReadOnlyList<AiBlockItem> items) =>
         JsonSerializer.SerializeToElement(new Dictionary<string, object>
         {
             [action == "create_habits" ? "habits" : "revised_items"] = items.Select(item => item.Arguments).ToArray()

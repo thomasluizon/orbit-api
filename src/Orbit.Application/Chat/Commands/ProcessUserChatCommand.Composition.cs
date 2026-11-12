@@ -15,7 +15,7 @@ public partial class ProcessUserChatCommandHandler
 {
     private static bool UsesComposition(ProcessUserChatCommand request, ChatContext context) =>
         request.ClientContext?.SupportsParts == true
-        && (context.EnabledFeatureFlags.Contains(FeatureFlagKeys.AstraBlockFirst) || ProactiveProposal.Enabled(request.ClientContext));
+        && (context.EnabledFeatureFlags.Contains(FeatureFlagKeys.AiBlockFirst) || ProactiveProposal.Enabled(request.ClientContext));
 
     private static bool CanCompleteComposition(ProcessUserChatCommand request, ChatContext context, ToolExecutionAccumulator results) =>
         UsesComposition(request, context) && request.BlockAnswer is null && results.OperationResults.Count > 0
@@ -295,7 +295,7 @@ public partial class ProcessUserChatCommandHandler
         var card = HabitRankingCardBuilder.Build(ranking);
         built.BuildFailure |= card is null;
         if (card is not null && HabitRankingCardBuilder.IsSupported(request.ClientContext)
-            && !context.EnabledFeatureFlags.Contains(FeatureFlagKeys.AstraPeriodBlocksDisabled))
+            && !context.EnabledFeatureFlags.Contains(FeatureFlagKeys.AiPeriodBlocksDisabled))
         {
             built.Parts.Add(new ChatBlockPart(PartKinds.HabitRanking, card));
         }

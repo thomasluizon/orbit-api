@@ -95,10 +95,10 @@ public partial class ProcessUserChatCommandHandlerTests
                 SupportsHabitListCard: true, PartKinds: ["habitList", "habitSuggestions", "pickList"], Locale: "pt-BR")), default);
 
         result.IsSuccess.Should().BeTrue(result.Error);
-        await _blockStore.Received(1).AddAsync(Arg.Any<IssuedAstraBlock>(), Arg.Any<CancellationToken>());
+        await _blockStore.Received(1).AddAsync(Arg.Any<IssuedAiBlock>(), Arg.Any<CancellationToken>());
         var part = result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>().Subject;
         part.Kind.Should().Be("pickList");
-        var block = part.Block.Should().BeOfType<AstraPickListBlock>().Subject;
+        var block = part.Block.Should().BeOfType<AiPickListBlock>().Subject;
         var ask = calls[2].Args;
         block.Title.Should().Be(ask.GetProperty("title").GetString());
         block.Action.Should().Be(ask.GetProperty("action").GetString());

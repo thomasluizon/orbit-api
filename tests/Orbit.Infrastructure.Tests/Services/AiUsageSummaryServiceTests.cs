@@ -140,7 +140,7 @@ public class AiUsageSummaryServiceTests
         var line = AiUsageSummaryService.BuildQuotaSummaryLine(Date, users, freeLimit: 5, proLimit: 50);
 
         line.Should().Be(
-            "Astra quota 2026-06-29: free_cap_hits=1; pro_cap_hits=1; " +
+            "AI quota 2026-06-29: free_cap_hits=1; pro_cap_hits=1; " +
             "mean_messages_per_active_user=16.75; p95_messages_per_active_user=50");
     }
 
@@ -149,7 +149,7 @@ public class AiUsageSummaryServiceTests
     {
         var line = AiUsageSummaryService.BuildQuotaSummaryLine(Date, [], freeLimit: 5, proLimit: 50);
 
-        line.Should().Be("Astra quota 2026-06-29: no active users");
+        line.Should().Be("AI quota 2026-06-29: no active users");
     }
 
     private static AiUsageDaily Row(string purpose, string model, long calls, decimal costUsd) =>

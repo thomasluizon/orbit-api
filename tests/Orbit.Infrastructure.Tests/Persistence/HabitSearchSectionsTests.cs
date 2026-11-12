@@ -133,7 +133,7 @@ public class HabitSearchSectionsTests
     }
 
     [Fact]
-    public async Task Search_McpAndAstraUseTheSameSqlOrderingAndPaging()
+    public async Task Search_McpAndAiUseTheSameSqlOrderingAndPaging()
     {
         var counter = new CountingDbCommandInterceptor();
         using var factory = new SqliteOrbitDbContextFactory(counter);
@@ -160,10 +160,10 @@ public class HabitSearchSectionsTests
             Today.ToString("yyyy-MM-dd"), search: "Search", page: 2, pageSize: 1)).AsText();
         mcpText.Should().Contain(newer.Title).And.NotContain(older.Title).And.NotContain(open.Title);
         var mcpSql = counter.Commands.Single(command => command.Sql.Contains("LIMIT") && command.Sql.Contains("MAX(")).Sql;
-        var astra = new QueryHabitsTool(new GenericRepository<Habit>(db), new GenericRepository<User>(db),
+        var assistant = new QueryHabitsTool(new GenericRepository<Habit>(db), new GenericRepository<User>(db),
             dates, new HabitScheduleLogReader(db));
         counter.Reset();
-        var chat = await astra.ExecuteAsync(JsonSerializer.SerializeToElement(new
+        var chat = await assistant.ExecuteAsync(JsonSerializer.SerializeToElement(new
         {
             search = "Search",
             date = Today.ToString("yyyy-MM-dd"),
@@ -173,8 +173,8 @@ public class HabitSearchSectionsTests
         chat.Payload.Should().BeOfType<HabitListCard>().Which.Items.Should().ContainSingle()
             .Which.Id.Should().Be(newer.Id.ToString());
         chat.EntityName.Should().Contain(newer.Title).And.NotContain(open.Title);
-        var astraSql = counter.Commands.Single(command => command.Sql.Contains("LIMIT") && command.Sql.Contains("MAX(")).Sql;
-        astraSql[astraSql.IndexOf("ORDER BY", StringComparison.Ordinal)..].Should()
+        var aiSql = counter.Commands.Single(command => command.Sql.Contains("LIMIT") && command.Sql.Contains("MAX(")).Sql;
+        aiSql[aiSql.IndexOf("ORDER BY", StringComparison.Ordinal)..].Should()
             .Be(mcpSql[mcpSql.IndexOf("ORDER BY", StringComparison.Ordinal)..]);
     }
 

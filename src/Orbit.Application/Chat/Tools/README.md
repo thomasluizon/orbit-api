@@ -237,7 +237,7 @@ unsupported block, including replayed answers. Other period metrics retain their
 existing negotiation. Deploy the API before the paired consumer in
 thomasluizon/orbit-tickets#1763 accepts these metric and unit values and advertises
 the capability.
-`AstraPeriodBlocksDisabled` suppresses them. They have no legacy directive or fleet
+`AiPeriodBlocksDisabled` suppresses them. They have no legacy directive or fleet
 floor requirement. Without advertisement, tools can still ground ordinary text.
 Successful focused analytics survive an unavailable AI continuation: advertised
 blocks or deterministic text retain each query's exact windows, named counts and

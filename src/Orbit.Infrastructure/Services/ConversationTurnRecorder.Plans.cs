@@ -11,23 +11,23 @@ public sealed partial class ConversationTurnRecorder
 {
     private async Task ReconcilePlansAsync(Guid userId, IReadOnlyList<ConversationTurn> page, CancellationToken cancellationToken)
     {
-        var ids = page.Where(row => AstraPlan.Read(row.ResponseJson)?.Steps.Any(step =>
+        var ids = page.Where(row => AiPlan.Read(row.ResponseJson)?.Steps.Any(step =>
             step.PendingOperationId.HasValue && step.Status is "pending" or "running") == true).Select(row => row.Id).ToArray();
         if (ids.Length == 0) return;
         try
         {
             if (!(await flags.GetEnabledKeysForUserAsync(userId, cancellationToken, forceRefresh: true))
-                .Contains(FeatureFlagKeys.AstraConversationRecording)) return;
+                .Contains(FeatureFlagKeys.AiConversationRecording)) return;
             var updates = await work.ExecuteInTransactionAsync(async ct =>
             {
-                var repaired = new Dictionary<Guid, AstraPlan>();
+                var repaired = new Dictionary<Guid, AiPlan>();
                 await work.AcquireUserRowLockAsync(userId, ct);
-                if (!(await flags.GetEnabledKeysForUserAsync(userId, ct, forceRefresh: true)).Contains(FeatureFlagKeys.AstraConversationRecording)) return repaired;
+                if (!(await flags.GetEnabledKeysForUserAsync(userId, ct, forceRefresh: true)).Contains(FeatureFlagKeys.AiConversationRecording)) return repaired;
                 foreach (var entry in db.ChangeTracker.Entries<ConversationTurn>().Where(entry => ids.Contains(entry.Entity.Id)
                     && entry.State != EntityState.Added).ToArray()) entry.State = EntityState.Detached;
                 var rows = await db.ConversationTurns.Where(row => row.UserId == userId && ids.Contains(row.Id)).ToListAsync(ct);
-                var plans = rows.ToDictionary(row => row.Id, row => AstraPlan.Read(row.ResponseJson));
-                var pendingIds = plans.Values.OfType<AstraPlan>().SelectMany(plan => plan.Steps)
+                var plans = rows.ToDictionary(row => row.Id, row => AiPlan.Read(row.ResponseJson));
+                var pendingIds = plans.Values.OfType<AiPlan>().SelectMany(plan => plan.Steps)
                     .Where(step => step.PendingOperationId.HasValue).Select(step => step.PendingOperationId!.Value).Distinct().ToArray();
                 var pending = await db.PendingAgentOperations.AsNoTracking().Where(item => item.UserId == userId && pendingIds.Contains(item.Id))
                     .ToDictionaryAsync(item => item.Id, ct);

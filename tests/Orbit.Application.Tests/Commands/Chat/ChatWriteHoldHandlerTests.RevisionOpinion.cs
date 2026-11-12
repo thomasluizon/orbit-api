@@ -87,7 +87,7 @@ public sealed partial class ChatWriteHoldHandlerTests
         _user.SetLanguage(language);
         if (composition)
             _featureFlagService.GetEnabledKeysForUserAsync(_userId, Arg.Any<CancellationToken>())
-                .Returns([FeatureFlagKeys.AstraBlockFirst]);
+                .Returns([FeatureFlagKeys.AiBlockFirst]);
         using var fixture = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(
             AppContext.BaseDirectory, "Fixtures", "PendingRevisions", language + ".json")));
         var capture = fixture.RootElement;
@@ -169,7 +169,7 @@ public sealed partial class ChatWriteHoldHandlerTests
         _user.SetLanguage(profileLanguage);
         if (composition)
             _featureFlagService.GetEnabledKeysForUserAsync(_userId, Arg.Any<CancellationToken>())
-                .Returns([FeatureFlagKeys.AstraBlockFirst]);
+                .Returns([FeatureFlagKeys.AiBlockFirst]);
         using var fixture = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(
             AppContext.BaseDirectory, "Fixtures", "PendingRevisions", language + ".json")));
         var capture = fixture.RootElement;
@@ -226,7 +226,7 @@ public sealed partial class ChatWriteHoldHandlerTests
         _user.SetLanguage("en");
         if (composition)
             _featureFlagService.GetEnabledKeysForUserAsync(_userId, Arg.Any<CancellationToken>())
-                .Returns([FeatureFlagKeys.AstraBlockFirst]);
+                .Returns([FeatureFlagKeys.AiBlockFirst]);
         ScriptToolCall(JsonSerializer.Serialize(new { title = language == "en" ? "Read 10 pages" : "Read 20 pages", frequency_unit = "Day", due_time = "21:00" }));
         var first = await CreateHandler().Handle(new(_userId, "Create a daily reading habit",
             ClientContext: new(Locale: "en", SupportsParts: true, SupportsPendingOperationChanges: true)), default);

@@ -51,7 +51,7 @@ public static class CrisisSupportGuard
 
     public static bool IsEnabled(CrisisLocales locales, IReadOnlyList<string> enabledFlags) =>
         locales != CrisisLocales.None
-        && !enabledFlags.Contains(FeatureFlagKeys.AstraCrisisResourcesDisabled, StringComparer.OrdinalIgnoreCase);
+        && !enabledFlags.Contains(FeatureFlagKeys.AiCrisisResourcesDisabled, StringComparer.OrdinalIgnoreCase);
 
     public static string LocaleLabel(CrisisLocales locales) => locales switch
     {

@@ -150,8 +150,8 @@ public static partial class ErrorCopy
         (DomainErrors.TemplateItemsRequired.Code, "Add at least one item to the checklist.", "Adicione pelo menos um item à lista."),
     ];
 
-    /// <summary>Astra, the daily summary and every other model-backed surface.</summary>
-    private static readonly (string Code, string En, string PtBr)[] Astra =
+    /// <summary>AI, the daily summary and every other model-backed surface.</summary>
+    private static readonly (string Code, string En, string PtBr)[] Ai =
     [
         ("chat.bulk.iconsAlreadyPresent", "All your habits already have an icon.", "Todos os seus hábitos já têm ícone."),
         ("chat.bulk.noChanges", "No habits need changes.", "Nenhum hábito precisa de alterações."),
@@ -395,7 +395,7 @@ public static partial class ErrorCopy
         foreach (var group in new[]
                  {
                      AccountAndAccess, StepUpAndApiKeys, Habits, Goals, TagsFactsAndTemplates,
-                     Astra, Billing, Streaks, Social, Calendar, Notifications, Media,
+                     Ai, Billing, Streaks, Social, Calendar, Notifications, Media,
                      SyncAndSupport, Profile, Validation, ValidationFields, ReadFallback,
                  })
         {
@@ -409,25 +409,25 @@ public static partial class ErrorCopy
             (DomainErrors.WnsEndpointInvalid.Code, ErrorCodes.PushEndpointInvalid),
             (DomainErrors.PushApnsTopicInvalid.Code, ErrorCodes.PushEndpointInvalid),
             (DomainErrors.PushDeviceIdInvalid.Code, ErrorCodes.PushEndpointInvalid),
-            (ErrorCodes.AstraBlockNotFound, ErrorCodes.ClarificationNotFound),
-            (ErrorCodes.AstraBlockInvalidated, ErrorCodes.ClarificationNotFound),
-            (ErrorCodes.AstraBlockExpired, ErrorCodes.ClarificationNotFound),
-            (ErrorCodes.AstraBlockAnswered, ErrorCodes.ClarificationAlreadyResolved),
-            (ErrorCodes.AstraBlockIdRequired, ErrorCodes.ClarificationValueNotJsonObject),
-            (ErrorCodes.AstraBlockSelectionRequired, ErrorCodes.ClarificationValueEmpty),
-            (ErrorCodes.AstraBlockInvalidSelection, ErrorCodes.ClarificationValueNotOffered),
-            (ErrorCodes.AstraBlockUnknownSelection, ErrorCodes.ClarificationValueNotOffered),
-            (ErrorCodes.AstraBlockSingleSelection, ErrorCodes.ClarificationValueNotOffered),
-            (ErrorCodes.AstraBlockEmptySelection, ErrorCodes.ClarificationValueNotOffered),
-            (ErrorCodes.AstraBlockFreeTextDisabled, ErrorCodes.ClarificationValueNotOffered),
-            (ErrorCodes.AstraBlockEmptyAnswer, ErrorCodes.ClarificationValueEmpty),
-            (ErrorCodes.AstraBlockPreviewUnavailable, ErrorCodes.InternalServerError),
-            (ErrorCodes.AstraBlockInvalidJson, ErrorCodes.ClarificationValueNotJsonObject),
-            (ErrorCodes.AstraBlockInvalidDefinition, ErrorCodes.ValidationError),
+            (ErrorCodes.AiBlockNotFound, ErrorCodes.ClarificationNotFound),
+            (ErrorCodes.AiBlockInvalidated, ErrorCodes.ClarificationNotFound),
+            (ErrorCodes.AiBlockExpired, ErrorCodes.ClarificationNotFound),
+            (ErrorCodes.AiBlockAnswered, ErrorCodes.ClarificationAlreadyResolved),
+            (ErrorCodes.AiBlockIdRequired, ErrorCodes.ClarificationValueNotJsonObject),
+            (ErrorCodes.AiBlockSelectionRequired, ErrorCodes.ClarificationValueEmpty),
+            (ErrorCodes.AiBlockInvalidSelection, ErrorCodes.ClarificationValueNotOffered),
+            (ErrorCodes.AiBlockUnknownSelection, ErrorCodes.ClarificationValueNotOffered),
+            (ErrorCodes.AiBlockSingleSelection, ErrorCodes.ClarificationValueNotOffered),
+            (ErrorCodes.AiBlockEmptySelection, ErrorCodes.ClarificationValueNotOffered),
+            (ErrorCodes.AiBlockFreeTextDisabled, ErrorCodes.ClarificationValueNotOffered),
+            (ErrorCodes.AiBlockEmptyAnswer, ErrorCodes.ClarificationValueEmpty),
+            (ErrorCodes.AiBlockPreviewUnavailable, ErrorCodes.InternalServerError),
+            (ErrorCodes.AiBlockInvalidJson, ErrorCodes.ClarificationValueNotJsonObject),
+            (ErrorCodes.AiBlockInvalidDefinition, ErrorCodes.ValidationError),
         })
             catalog[code] = catalog[sourceCode];
         var answerLengthCopy = catalog[ErrorCodes.ClarificationValueTooLong];
-        catalog[ErrorCodes.AstraBlockFreeTextTooLong] = (
+        catalog[ErrorCodes.AiBlockFreeTextTooLong] = (
             string.Format(System.Globalization.CultureInfo.InvariantCulture, answerLengthCopy.En, 500),
             string.Format(System.Globalization.CultureInfo.InvariantCulture, answerLengthCopy.PtBr, 500));
         return catalog;

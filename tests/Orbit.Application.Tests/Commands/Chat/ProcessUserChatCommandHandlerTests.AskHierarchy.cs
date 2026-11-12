@@ -93,10 +93,10 @@ public partial class ProcessUserChatCommandHandlerTests
             await _operationExecutor.DidNotReceive().ExecuteAsync(Arg.Is<AgentExecuteOperationRequest>(request => request.OperationId != query.Name), Arg.Any<CancellationToken>());
         }
         var choice = result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>()
-            .Which.Block.Should().BeOfType<AstraChoiceBlock>().Subject;
+            .Which.Block.Should().BeOfType<AiChoiceBlock>().Subject;
         choice.Question.Should().Be(question);
         choice.Options.Select(option => option.Id).Should().Equal(walks.Select(walk => walk.Id.ToString()));
-        await _blockStore.Received(1).AddAsync(Arg.Any<IssuedAstraBlock>(), Arg.Any<CancellationToken>());
+        await _blockStore.Received(1).AddAsync(Arg.Any<IssuedAiBlock>(), Arg.Any<CancellationToken>());
         await _aiIntentService.DidNotReceiveWithAnyArgs().ContinueWithToolResultsAsync(default!, default!, default, default);
         await _mediator.DidNotReceiveWithAnyArgs().Send(default(DeleteHabitCommand)!, default);
         habits.Should().OnlyContain(habit => !habit.IsDeleted);

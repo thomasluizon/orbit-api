@@ -41,9 +41,9 @@ public class BlockAnswerWriteRetryTests
         var db = factory.Context;
         var user = User.Create("Alex", "retry@example.com").Value;
         db.Users.Add(user);
-        var block = IssuedAstraBlock.Create(user.Id, new("choice", "When?",
+        var block = IssuedAiBlock.Create(user.Id, new("choice", "When?",
             [new("a", "Morning"), new("b", "Evening")], []));
-        db.IssuedAstraBlocks.Add(block);
+        db.IssuedAiBlocks.Add(block);
         await db.SaveChangesAsync();
         var work = new UnitOfWork(db, new DatabaseConnectionSettings());
         var executor = Substitute.For<IAgentOperationExecutor>();
@@ -89,7 +89,7 @@ public class BlockAnswerWriteRetryTests
             new(ai, new AiToolRegistry([tool]), Substitute.For<ISystemPromptBuilder>(), catalog),
             new(dates, Substitute.For<IUserStreakService>(), quota, work, Substitute.For<IServiceScopeFactory>(), executor,
                 Substitute.For<IPendingClarificationStore>(), Substitute.For<IGoalProgressReadSyncer>(), Substitute.For<IGamificationService>(),
-                Substitute.For<IMediator>(), analytics, Substitute.For<IHabitScheduleLogReader>(), new IssuedAstraBlockStore(db), pending),
+                Substitute.For<IMediator>(), analytics, Substitute.For<IHabitScheduleLogReader>(), new IssuedAiBlockStore(db), pending),
             NullLogger<ProcessUserChatCommandHandler>.Instance, Substitute.For<IAppConfigService>(), Orbit.Infrastructure.Tests.ModerationTestDouble.Clean());
         var request = new ProcessUserChatCommand(user.Id, "Evening", BlockAnswer: new(block.Id, ["b"]));
 
