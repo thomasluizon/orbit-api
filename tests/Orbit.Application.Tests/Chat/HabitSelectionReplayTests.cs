@@ -414,6 +414,109 @@ public partial class ProcessUserChatCommandHandlerTests
         result.Value.AiMessage.Should().NotContain("Which habit").And.NotContain("Qual hábito");
     }
 
+    private async Task<(ProcessUserChatCommand Request, Result<ChatResponse> Result, List<AgentExecuteOperationRequest> Held, Habit Parent, Habit[] Children)>
+        RunSameTitleTurnAsync(string message, string search, Func<Habit[], AiToolCall[]> writes, string language = "en")
+    {
+        var user = User.Create("Reader", "reader@example.test").Value;
+        user.SetLanguage(language);
+        SetupUserAndPayGate(user);
+        var (parent, children) = SetupSameTitleChildren("Water - 710ml", 6);
+        var query = new QueryHabitsTool(_habitRepo, _userRepo, _userDateService, _scheduleLogReader);
+        var delete = new BulkDeleteHabitsTool(_mediator, _habitRepo);
+        var update = new BulkUpdateHabitsTool(_mediator);
+        var handler = CreateHandler(query, delete, update);
+        var held = HoldSelectionReplayWrites(query, delete, update);
+        SetupAiResponse(new AiResponse
+        {
+            ConversationContext = TestConversationContext,
+            ToolCalls = [new(query.Name, "lookup", JsonSerializer.SerializeToElement(new
+            {
+                search, for_selection = false, orbit_read_complete = false
+            }))]
+        });
+        _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
+                Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AiResponse { ConversationContext = TestConversationContext, ToolCalls = writes(children) }),
+                Result.Success(new AiResponse { TextMessage = "Review the changes." }));
+        var request = new ProcessUserChatCommand(UserId, message,
+            ClientContext: new(SupportsParts: true, PartKinds: ["habitList", "choice"], SupportsHabitListCard: true,
+                SupportsDatedHabitListCard: true));
+        return (request, await handler.Handle(request, default), held, parent, children);
+    }
+
+    private static AiToolCall DeleteCall(IEnumerable<Habit> habits) => new("bulk_delete_habits", "delete",
+        JsonSerializer.SerializeToElement(new { habit_ids = habits.Select(habit => habit.Id) }));
+
+    private static AiToolCall RenameCall(IEnumerable<Habit> habits) => new("bulk_update_habits", "rename",
+        JsonSerializer.SerializeToElement(new
+        {
+            filter = new { habit_ids = habits.Select(habit => habit.Id) },
+            updates = new { title = "Water - 1.18L" }
+        }));
+
+    [Fact]
+    public async Task SelectionReplay_SearchThatMatchesParentAndChildrenStillSettlesTheSplit()
+    {
+        var run = await RunSameTitleTurnAsync("eu tenho 7 habitos chamados Water deleta dois desses, e os outros 4 coloca Water - 1.18L",
+            "Water", children => [DeleteCall(children[4..]), RenameCall(children[..4])], "pt-BR");
+
+        run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
+        run.Held.Select(request => request.OperationId).Should().BeEquivalentTo(["bulk_delete_habits", "bulk_update_habits"],
+            "the reply was: " + run.Result.Value.AiMessage);
+        run.Result.Value.PendingOperations.Should().HaveCount(2);
+        run.Result.Value.AiMessage.Should().NotContain("Qual hábito");
+    }
+
+    [Theory]
+    [InlineData("delete the last 2 Water - 710ml habits", true)]
+    [InlineData("apague os 2 últimos hábitos Water - 710ml", true)]
+    [InlineData("delete two of the Water - 710ml habits", false)]
+    public async Task SelectionReplay_OneActionOnAnOrderedSubsetRunsOnlyWhenTheMessageNamesTheOrder(string message, bool allowed)
+    {
+        var run = await RunSameTitleTurnAsync(message, "Water 710ml", children => [DeleteCall(children[4..])]);
+
+        run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
+        run.Held.Select(request => request.OperationId).Should().Equal(allowed ? ["bulk_delete_habits"] : []);
+        if (!allowed)
+            run.Result.Value.AiMessage.Should().Be("Which habit would you like to use for “Water - 710ml”?");
+    }
+
+    [Theory]
+    [InlineData("rename all the Water - 710ml habits to Water - 1.18L", true)]
+    [InlineData("renomeie todos os hábitos chamados Water - 710ml para Water - 1.18L", true)]
+    [InlineData("rename the Water - 710ml habit to Water - 1.18L", false)]
+    public async Task SelectionReplay_WholeSetActionRunsOnlyWhenTheMessageNamesTheSet(string message, bool allowed)
+    {
+        var run = await RunSameTitleTurnAsync(message, "Water 710ml", children => [RenameCall(children)]);
+
+        run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
+        run.Held.Select(request => request.OperationId).Should().Equal(allowed ? ["bulk_update_habits"] : []);
+        run.Result.Value.PendingOperations.Should().HaveCount(allowed ? 1 : 0);
+    }
+
+    [Fact]
+    public async Task SelectionReplay_TypedFullRepeatWithNoCardReachesThePreview()
+    {
+        var run = await RunSameTitleTurnAsync(
+            "ja respondi isos, eu falei pra manter os 4 primeiros, isso significa q é pra excluir os 2 ultimos",
+            "Water 710ml", children => [DeleteCall(children[4..]), RenameCall(children[..4])], "pt-BR");
+
+        run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
+        run.Held.Select(request => request.OperationId).Should().BeEquivalentTo(["bulk_delete_habits", "bulk_update_habits"]);
+        run.Result.Value.Parts?.OfType<ChatBlockPart>().Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task SelectionReplay_SingularAmbiguousRequestStillAsksOnceAndQuotesTheStoredTitle()
+    {
+        var run = await RunSameTitleTurnAsync("troque o título do hábito Water 710ml para Water - 1.18L", "Water 710ml",
+            children => [RenameCall(children[..1])], "pt-BR");
+
+        run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
+        run.Held.Should().BeEmpty();
+        run.Result.Value.AiMessage.Should().Be("Qual hábito você quer usar para “Water - 710ml”?");
+    }
+
     private void SetupSelectionHabits(params Habit[] habits) => _habitRepo.FindAsync(
         Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
         Arg.Any<CancellationToken>()).Returns(call => habits.Where(call.ArgAt<Expression<Func<Habit, bool>>>(0).Compile()).ToArray());
