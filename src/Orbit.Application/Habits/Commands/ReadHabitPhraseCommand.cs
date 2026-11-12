@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
+using Orbit.Application.Habits.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -27,16 +28,14 @@ public partial class ReadHabitPhraseCommandHandler(
     : IRequestHandler<ReadHabitPhraseCommand, Result<HabitPhraseReading>>
 {
     private const string EventName = "phrase_read";
-    private static readonly TimeSpan CacheTtl = TimeSpan.FromHours(1);
     private static readonly AppError CapReached = new("PHRASE_READ_CAP_REACHED", "The daily phrase read cap is reached.");
 
     public async Task<Result<HabitPhraseReading>> Handle(
         ReadHabitPhraseCommand request, CancellationToken cancellationToken)
     {
         var language = string.IsNullOrWhiteSpace(request.Language) ? "en" : request.Language;
-        var cacheKey = SuggestHabitSetupCommandHandler.BuildCacheKey(request.UserId, request.Phrase, language);
 
-        if (cache.TryGetValue(cacheKey, out HabitSetupSuggestion? cached) && cached is not null)
+        if (HabitSetupSuggestionCache.TryGet(cache, request.UserId, request.Phrase, language, out var cached))
             return Finish(request.UserId, "cache", HabitPhraseReading.From(cached));
 
         var enabledFlags = await featureFlags.GetEnabledKeysForUserAsync(request.UserId, cancellationToken);
@@ -58,7 +57,7 @@ public partial class ReadHabitPhraseCommandHandler(
             return Finish(request.UserId, "failed", HabitPhraseReading.Unread);
         }
 
-        cache.Set(cacheKey, suggestion.Value, CacheTtl);
+        HabitSetupSuggestionCache.Set(cache, request.UserId, request.Phrase, language, suggestion.Value);
         return Finish(request.UserId, "ai", HabitPhraseReading.From(suggestion.Value));
     }
 
@@ -86,15 +85,8 @@ public partial class ReadHabitPhraseCommandHandler(
         if (logger.IsEnabled(LogLevel.Debug))
             LogPhraseRead(logger, userId, outcome);
 
-        try
-        {
-            analytics.CaptureUserEvent(userId, EventName, null,
-                new Dictionary<string, object> { ["outcome"] = outcome });
-        }
-        catch (Exception exception)
-        {
-            LogAnalyticsFailed(logger, exception);
-        }
+        AnalyticsCapture.SafeCaptureUserEvent(analytics, logger, userId, null, EventName,
+            new Dictionary<string, object> { ["outcome"] = outcome });
 
         return Result.Success(reading);
     }
@@ -104,7 +96,4 @@ public partial class ReadHabitPhraseCommandHandler(
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Phrase read for user {UserId} returned no result: {ErrorCode}")]
     private static partial void LogReadFailed(ILogger logger, Guid userId, string? errorCode);
-
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Phrase read analytics capture failed")]
-    private static partial void LogAnalyticsFailed(ILogger logger, Exception exception);
 }

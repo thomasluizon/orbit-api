@@ -131,12 +131,21 @@ public class ReadHabitPhraseCommandHandlerTests
     [Fact]
     public async Task Handle_ASuggestSetupReadIsAFreeCacheHit()
     {
-        _cache.Set(SuggestHabitSetupCommandHandler.BuildCacheKey(UserId, "Tomar Remédio", "pt-BR"), Suggestion());
+        var payGate = Substitute.For<IPayGateService>();
+        payGate.TryConsumeAiMessage(UserId, _unitOfWork, Arg.Any<CancellationToken>()).Returns(Result.Success());
+        var paidSuggestions = Substitute.For<IHabitSuggestionService>();
+        paidSuggestions.SuggestSetupAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(Suggestion()));
+        var suggestSetup = new SuggestHabitSetupCommandHandler(payGate, paidSuggestions, _unitOfWork, _cache);
+        (await suggestSetup.Handle(new SuggestHabitSetupCommand(UserId, "Tomar Remédio", "pt-BR"), CancellationToken.None))
+            .IsSuccess.Should().BeTrue();
 
         var result = await _handler.Handle(Command("  tomar remédio "), CancellationToken.None);
 
         result.Value.Read.Should().BeTrue();
         ProviderCalls().Should().Be(0);
+        _user.PhraseReadsToday.Should().Be(0);
+        ExpectOutcome("cache");
     }
 
     [Fact]

@@ -1,8 +1,7 @@
-using System.Security.Cryptography;
-using System.Text;
 using MediatR;
 using Microsoft.Extensions.Caching.Memory;
 using Orbit.Application.Common;
+using Orbit.Application.Habits.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
@@ -21,15 +20,12 @@ public partial class SuggestHabitSetupCommandHandler(
     IMemoryCache cache)
     : IRequestHandler<SuggestHabitSetupCommand, Result<HabitSetupSuggestion>>
 {
-    private static readonly TimeSpan CacheTtl = TimeSpan.FromHours(1);
-
     public async Task<Result<HabitSetupSuggestion>> Handle(
         SuggestHabitSetupCommand request, CancellationToken cancellationToken)
     {
         var language = string.IsNullOrWhiteSpace(request.Language) ? "en" : request.Language;
-        var cacheKey = BuildCacheKey(request.UserId, request.Title, language);
 
-        if (cache.TryGetValue(cacheKey, out HabitSetupSuggestion? cached) && cached is not null)
+        if (HabitSetupSuggestionCache.TryGet(cache, request.UserId, request.Title, language, out var cached))
             return Result.Success(cached);
 
         var reservation = await payGate.TryConsumeAiMessage(
@@ -44,15 +40,8 @@ public partial class SuggestHabitSetupCommandHandler(
         if (suggestionResult.IsFailure)
             return suggestionResult;
 
-        cache.Set(cacheKey, suggestionResult.Value, CacheTtl);
+        HabitSetupSuggestionCache.Set(cache, request.UserId, request.Title, language, suggestionResult.Value);
 
         return suggestionResult;
-    }
-
-    internal static string BuildCacheKey(Guid userId, string title, string language)
-    {
-        var normalizedTitle = title.Trim().ToLowerInvariant();
-        var titleHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(normalizedTitle)));
-        return $"suggest-setup:{userId}:{titleHash}:{language.ToLowerInvariant()}";
     }
 }
