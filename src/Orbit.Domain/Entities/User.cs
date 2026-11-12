@@ -20,13 +20,13 @@ public partial class User : Entity
     public string? TimeZone { get; private set; }
     public bool AiMemoryEnabled { get; private set; } = true;
     public bool AiSummaryEnabled { get; private set; } = true;
-    public bool ProactiveAstraEnabled { get; private set; } = true;
-    public bool EffectiveProactivePushEnabled => HasProAccess && ProactiveAstraEnabled;
+    public bool ProactiveAiEnabled { get; private set; } = true;
+    public bool EffectiveProactivePushEnabled => HasProAccess && ProactiveAiEnabled;
     public bool HasCompletedOnboarding { get; private set; } = false;
     public bool HasCompletedTour { get; private set; } = false;
     public bool HasCreatedFirstHabit { get; private set; } = false;
     public bool HasLoggedFirstHabit { get; private set; } = false;
-    public bool HasTriedAstra { get; private set; } = false;
+    public bool HasTriedAi { get; private set; } = false;
     public bool HasCompletedOnboardingChecklist { get; private set; } = false;
     public string? Language { get; private set; }
     public UserPlan SubscriptionPlan { get; private set; } = UserPlan.Free;
@@ -41,6 +41,9 @@ public partial class User : Entity
     public DateTime? TrialEndsAt { get; private set; }
     public bool IsLifetimePro { get; private set; } = false;
     public int AiMessagesUsedToday { get; private set; } = 0;
+    public int PhraseReadsToday { get; private set; }
+    public DateOnly? PhraseReadsLocalDate { get; private set; }
+    public bool MascotMotionEnabled { get; private set; } = true;
     public DateOnly? AiMessagesLocalDate { get; private set; }
     public int AiMessagesUsedThisWeek { get; private set; }
     public DateOnly? AiMessagesWeekStart { get; private set; }
@@ -210,7 +213,7 @@ public partial class User : Entity
 
     public void SetAiSummary(bool enabled) => AiSummaryEnabled = enabled;
 
-    public void SetProactiveAstraEnabled(bool enabled) => ProactiveAstraEnabled = enabled;
+    public void SetProactiveAiEnabled(bool enabled) => ProactiveAiEnabled = enabled;
 
     public void SetLanguage(string? language)
     {
@@ -270,7 +273,7 @@ public partial class User : Entity
 
     public void MarkFirstHabitLogged() => HasLoggedFirstHabit = true;
 
-    public void MarkAstraUsed() => HasTriedAstra = true;
+    public void MarkAiUsed() => HasTriedAi = true;
 
     public void CompleteOnboardingChecklist() => HasCompletedOnboardingChecklist = true;
 
@@ -625,6 +628,30 @@ public partial class User : Entity
         return Result.Success();
     }
 
+    /// <summary>
+    /// Reserves one provider-backed phrase read for the account day. The count starts again when the
+    /// account day changes. Returns false, and leaves the count as it was, when the cap is reached.
+    /// </summary>
+    public bool TryReservePhraseRead(DateOnly userToday, int dailyCap)
+    {
+        if (dailyCap < 1)
+            return false;
+
+        if (!PhraseReadsLocalDate.HasValue || PhraseReadsLocalDate.Value != userToday)
+        {
+            PhraseReadsToday = 0;
+            PhraseReadsLocalDate = userToday;
+        }
+
+        if (PhraseReadsToday >= dailyCap)
+            return false;
+
+        PhraseReadsToday++;
+        return true;
+    }
+
+    public void SetMascotMotion(bool enabled) => MascotMotionEnabled = enabled;
+
     public void SetClockFormat(bool uses24HourClock)
     {
         Uses24HourClockPreference = uses24HourClock;
@@ -800,7 +827,7 @@ public partial class User : Entity
         HasCompletedTour = false;
         HasCreatedFirstHabit = false;
         HasLoggedFirstHabit = false;
-        HasTriedAstra = false;
+        HasTriedAi = false;
         HasCompletedOnboardingChecklist = false;
         TotalXp = 0;
         Level = 1;

@@ -29,27 +29,27 @@ public class ProfileToolsTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task SetProactiveAstra_RoutesBooleanToExecutor(bool enabled)
+    public async Task SetProactiveAi_RoutesBooleanToExecutor(bool enabled)
     {
         StubExecutor(AgentOperationStatus.Succeeded);
         string result = string.Empty;
 
         var request = await CapturedRequestAsync(async () =>
-            result = (await _tools.SetProactiveAstra(_user, enabled)).AsText());
+            result = (await _tools.SetProactiveAi(_user, enabled)).AsText());
 
         request.OperationId.Should().Be("set_proactive_astra");
         request.Arguments.GetProperty("enabled").GetBoolean().Should().Be(enabled);
         request.Surface.Should().Be(AgentExecutionSurface.Mcp);
-        result.Should().Be(enabled ? "Proactive Astra enabled" : "Proactive Astra disabled");
+        result.Should().Be(enabled ? "Proactive check-ins enabled" : "Proactive check-ins disabled");
         _mediator.ReceivedCalls().Should().BeEmpty();
     }
 
     [Fact]
-    public async Task SetProactiveAstra_Denied_ReturnsExecutorFailure()
+    public async Task SetProactiveAi_Denied_ReturnsExecutorFailure()
     {
         StubExecutor(AgentOperationStatus.Denied, policyReason: "pro_required");
 
-        var result = (await _tools.SetProactiveAstra(_user, false)).AsText();
+        var result = (await _tools.SetProactiveAi(_user, false)).AsText();
 
         result.Should().Be("Error: pro_required");
     }

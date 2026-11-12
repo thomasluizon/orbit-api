@@ -85,8 +85,7 @@ form.addEventListener('submit', (event) => {
     }
 
     private static string BrandText(string value) => WebUtility.HtmlEncode(value)
-        .Replace("Orbit", "<span translate=\"no\">Orbit</span>", StringComparison.Ordinal)
-        .Replace("Astra", "<span translate=\"no\">Astra</span>", StringComparison.Ordinal);
+        .Replace("Orbit", "<span translate=\"no\">Orbit</span>", StringComparison.Ordinal);
 
     private static string PermissionLabel(string scope, OAuthConsentStrings copy) => scope switch
     {

@@ -134,7 +134,7 @@ public sealed partial class ChatWriteHoldHandlerTests
         _user.SetLanguage(language);
         if (composition)
             _featureFlagService.GetEnabledKeysForUserAsync(_userId, Arg.Any<CancellationToken>())
-                .Returns(new[] { FeatureFlagKeys.AstraBlockFirst });
+                .Returns(new[] { FeatureFlagKeys.AiBlockFirst });
         ScriptToolCall("""{"title":"Read","frequency_unit":"Day","due_time":"09:00"}""");
         var first = await CreateHandler().Handle(new(_userId, "Create a reading habit"), default);
         var pending = first.Value.PendingOperations.Should().ContainSingle().Which;

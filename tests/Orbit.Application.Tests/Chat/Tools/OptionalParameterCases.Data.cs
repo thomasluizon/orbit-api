@@ -64,7 +64,7 @@ public static partial class OptionalParameterCases
                 "include_sub_habits", "include_metrics", "offset", "limit"
             ],
             [(typeof(SendSupportRequestTool), "")] = [],
-            [(typeof(SetProactiveAstraTool), "")] = [],
+            [(typeof(SetProactiveAiTool), "")] = [],
             [(typeof(UpdateChecklistTemplateTool), "")] = ["name", "items"],
             [(typeof(UpdateHabitTool), "")] =
             [

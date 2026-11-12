@@ -86,7 +86,7 @@ public partial class ProcessUserChatCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue(result.Error);
         var block = result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>()
-            .Which.Block.Should().BeOfType<AstraChoiceBlock>().Subject;
+            .Which.Block.Should().BeOfType<AiChoiceBlock>().Subject;
         block.Options.Select(option => option.Id).Should().Equal(first.Id.ToString(), second.Id.ToString());
         block.Options.Select(option => option.Description).Should().OnlyContain(detail => detail ==
             (language == "en" ? "Looks the same" : "Parece igual"));
@@ -183,7 +183,7 @@ public partial class ProcessUserChatCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue(result.Error);
         result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>()
-            .Which.Block.Should().BeOfType<AstraChoiceBlock>().Which.Options.Should().OnlyContain(option =>
+            .Which.Block.Should().BeOfType<AiChoiceBlock>().Which.Options.Should().OnlyContain(option =>
                 option.Description == (language == "en" ? "Looks the same" : "Parece igual"));
         round.Should().Be(2);
         AssertStoredComposition(result.Value, client, language);
@@ -241,7 +241,7 @@ public partial class ProcessUserChatCommandHandlerTests
         var block = result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>().Subject;
         block.Kind.Should().Be(choice ? "choice" : "habitList");
         if (choice)
-            block.Block.Should().BeOfType<AstraChoiceBlock>().Which.Options.Select(option => option.Id)
+            block.Block.Should().BeOfType<AiChoiceBlock>().Which.Options.Select(option => option.Id)
                 .Should().Equal(habits.Select(habit => habit.Id.ToString()));
         else
             block.Block.Should().BeOfType<HabitListCard>().Which.Items.Select(item => item.Id)

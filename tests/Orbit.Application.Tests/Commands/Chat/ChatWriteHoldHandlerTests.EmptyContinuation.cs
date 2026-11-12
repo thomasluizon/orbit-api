@@ -102,7 +102,7 @@ public sealed partial class ChatWriteHoldHandlerTests
         var account = parents.Concat(extraParents).ToArray();
         UseParentHabits(account);
         _featureFlagService.GetEnabledKeysForUserAsync(_userId, Arg.Any<CancellationToken>())
-            .Returns(new[] { FeatureFlagKeys.AstraBlockFirst });
+            .Returns(new[] { FeatureFlagKeys.AiBlockFirst });
         var vitamin = language == "en" ? "take vitamin D" : "tomar vitamina D";
         var statin = language == "en" ? "take rosuvastatin" : "tomar rosuvastatina";
         ScriptToolCall(writeFirst ? JsonSerializer.Serialize(new

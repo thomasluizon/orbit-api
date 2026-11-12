@@ -1,8 +1,20 @@
 # Selecting an OpenAPI artifact
 
-The additive Astra turn plan, progress events and approval outcomes for
-thomasluizon/orbit-tickets#1976 are documented in [AstraPlans.md](AstraPlans.md).
+The additive AI turn plan, progress events and approval outcomes for
+thomasluizon/orbit-tickets#1976 are documented in [AiPlans.md](AiPlans.md).
 Deploy this API before the paired shared schemas and plan renderer.
+
+`POST /api/habits/read-phrase` reads a free-form habit phrase and costs the person no
+AI message. The body holds `phrase` and `language`. The response holds every field of the
+`suggest-setup` response plus the boolean `read`. When `read` is false, every value is null
+or empty, and the client asks the remaining questions itself. A reached daily cap, the
+`phrase_reader_ai_disabled` kill switch, a provider failure and a refused spend backstop
+all return HTTP 200 with `read: false`. The endpoint never returns the cap and never
+answers a cap with HTTP 429. `POST /api/habits/suggest-setup` is unchanged and still spends
+one message. `PUT /api/profile/mascot-motion` takes `{ "enabled": true }`. `GET /api/profile`
+appends the optional `mascotMotionEnabled`, true by default, and `GET /api/config` serves the
+flag `orbit_guided_flows` in `features`. Deploy this API and its migration before any client
+that reads the new field or calls the new endpoints. Tracks thomasluizon/orbit-tickets#2118.
 
 AI provider credit exhaustion returns HTTP 424 with the existing error body shape:
 `{"error":"...","errorCode":"AI_PROVIDER_QUOTA_EXHAUSTED"}`. This additive code
@@ -31,7 +43,7 @@ today when no range is supplied. A positive log on that day resolves the skip.
 Skip receipts without a log are included by the existing schedule read model.
 Search pages put other results before completed OneTime tasks, then order those
 tasks by descending completion date, with missing dates last. Position, creation instant and habit ID
-break ties. The shared query orders in SQL before paging; MCP and Astra reuse it.
+break ties. The shared query orders in SQL before paging; MCP and the AI chat reuse it.
 Deploy this API to production before the search sections and completion labels
 in thomasluizon/orbit-tickets#1924 (orbit-ui-mobile#2271). Tracks
 thomasluizon/orbit-tickets#1933.
@@ -50,7 +62,7 @@ coordinator set its account allowlist through SSM parameter
 `/orbit/staging/api/StagingEval__AccountIds` or
 `/orbit/production/api/StagingEval__AccountIds` before the paired eval harness uses it.
 
-The negotiated Astra `question` block and structured next-turn answers are
+The negotiated AI `question` block and structured next-turn answers are
 documented in [QuestionBlocks.md](QuestionBlocks.md). Publish the API contract
 before the renderer in thomasluizon/orbit-tickets#1828 advertises support.
 

@@ -355,7 +355,7 @@ public partial class ProcessUserChatCommandHandlerTests
     public async Task RecoveryCapability_ExistingTokenCeilingPreventsCorrectionDispatch(bool ceilingReachedByCandidate)
     {
         SetupUserAndPayGate();
-        _featureFlagService.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>()).Returns([FeatureFlagKeys.AstraEvalTrace]);
+        _featureFlagService.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>()).Returns([FeatureFlagKeys.AiEvalTrace]);
         var tool = RecoveryCreateHabitTool();
         var handler = CreateHandler(tool);
         var gateway = InstallCorrectionGateway(tool);

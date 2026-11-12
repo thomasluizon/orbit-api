@@ -66,6 +66,6 @@ public partial class ProcessUserChatCommandHandler
         && HasPreviewRecoveryBudget(context, tokens + 1);
 
     private static bool HasPreviewRecoveryBudget(ChatContext context, long tokens) =>
-        context.EnabledFeatureFlags.Contains(FeatureFlagKeys.AstraEvalUnmetered, StringComparer.Ordinal)
+        context.EnabledFeatureFlags.Contains(FeatureFlagKeys.AiEvalUnmetered, StringComparer.Ordinal)
         || tokens <= AppConstants.MaxAiRequestTotalTokens;
 }

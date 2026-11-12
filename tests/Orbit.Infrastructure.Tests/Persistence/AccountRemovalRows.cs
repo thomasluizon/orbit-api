@@ -17,7 +17,7 @@ internal static class AccountRemovalRows
         db.ConversationOffers.Add(ConversationOffer.Create(userId, Guid.NewGuid(), "owned-offer").Value);
         db.DesktopHandoffs.Add(DesktopHandoff.Create(userId, userId.ToString("N") + userId.ToString("N"), "state", new string('b', 43),
             "S256", "orbit://auth", "orbit://auth", DateTime.UtcNow).Value);
-        db.IssuedAstraBlocks.Add(IssuedAstraBlock.Create(userId, new("choice", "When?",
+        db.IssuedAiBlocks.Add(IssuedAiBlock.Create(userId, new("choice", "When?",
             [new("a", "Morning"), new("b", "Evening")], [])));
         db.ApiKeys.Add(ApiKey.Create(userId, "Connector", oauthFamilyId: Guid.NewGuid(), oauthClientId: "client").Value.Entity);
     }
@@ -36,7 +36,7 @@ internal static class AccountRemovalRows
         }
         (await db.ConversationOffers.CountAsync(row => row.UserId == userId)).Should().Be(dataCount);
         (await db.DesktopHandoffs.CountAsync(row => row.UserId == userId)).Should().Be(dataCount);
-        (await db.IssuedAstraBlocks.CountAsync(row => row.UserId == userId)).Should().Be(dataCount);
+        (await db.IssuedAiBlocks.CountAsync(row => row.UserId == userId)).Should().Be(dataCount);
         (await db.ApiKeys.CountAsync(row => row.UserId == userId && row.OAuthFamilyId != null && row.OAuthClientId != null)).Should().Be(dataCount);
     }
 }

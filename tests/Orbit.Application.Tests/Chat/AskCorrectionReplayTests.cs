@@ -28,14 +28,14 @@ public partial class ProcessUserChatCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue(result.Error);
         var choice = result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>()
-            .Which.Block.Should().BeOfType<AstraChoiceBlock>().Subject;
+            .Which.Block.Should().BeOfType<AiChoiceBlock>().Subject;
         choice.Question.Should().Be("Which habit would you like to change, and what would you like to change?");
         choice.AllowFreeText.Should().BeTrue();
         choice.Options.Select(option => option.Label).Should().Equal("Water", "Walk");
         result.Value.PendingOperations.Should().BeNullOrEmpty();
         result.Value.Actions.Should().BeEmpty();
         await AssertOnlyAskSelectionRead();
-        await _blockStore.Received(1).AddAsync(Arg.Any<IssuedAstraBlock>(), Arg.Any<CancellationToken>());
+        await _blockStore.Received(1).AddAsync(Arg.Any<IssuedAiBlock>(), Arg.Any<CancellationToken>());
         await _aiIntentService.Received(1).ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
             Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
     }

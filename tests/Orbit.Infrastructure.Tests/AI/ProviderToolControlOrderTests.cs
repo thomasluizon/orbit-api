@@ -97,7 +97,7 @@ public sealed partial class ProviderToolControlOrderTests(ITestOutputHelper outp
             new object?[] { new HashSet<Guid>(), new HashSet<Guid>(), new HashSet<Guid>(), null });
         var context = Activator.CreateInstance(handlerType.GetNestedType("ChatContext", BindingFlags.NonPublic)!,
             new object?[] { Array.Empty<Habit>(), new List<Habit>(), new List<Habit>(), false, null, null, true,
-                Array.Empty<Goal>(), Array.Empty<Tag>(), Array.Empty<string>(), new[] { FeatureFlagKeys.AstraBlockFirst },
+                Array.Empty<Goal>(), Array.Empty<Tag>(), Array.Empty<string>(), new[] { FeatureFlagKeys.AiBlockFirst },
                 DateOnly.MinValue, todayFacts, 0L });
         var offers = client == "offers";
         var request = new ProcessUserChatCommand(Guid.Empty, "", ClientContext: new AgentClientContext(

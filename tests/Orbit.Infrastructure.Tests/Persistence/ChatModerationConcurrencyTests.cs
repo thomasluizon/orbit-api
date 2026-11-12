@@ -79,7 +79,7 @@ public class ChatModerationConcurrencyTests
                 Substitute.For<IAgentOperationExecutor>(), Substitute.For<IPendingClarificationStore>(),
                 Substitute.For<IGoalProgressReadSyncer>(), Substitute.For<IGamificationService>(), Substitute.For<IMediator>(),
                 Substitute.For<IProductAnalytics>(), Substitute.For<IHabitScheduleLogReader>(),
-                Substitute.For<IIssuedAstraBlockStore>(), Substitute.For<IPendingAgentOperationStore>()),
+                Substitute.For<IIssuedAiBlockStore>(), Substitute.For<IPendingAgentOperationStore>()),
             NullLogger<ProcessUserChatCommandHandler>.Instance, Substitute.For<IAppConfigService>(), moderation);
         pending.Enabled = true;
 

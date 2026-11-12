@@ -33,7 +33,7 @@ public class McpGatewayErrorTests
             nameof(NotificationTools.SubscribePush), nameof(NotificationTools.UnsubscribePush), nameof(NotificationTools.TestPush),
             nameof(NotificationTools.DeleteNotification)]),
         (typeof(ProfileTools), [nameof(ProfileTools.SetName), nameof(ProfileTools.SetTimezone), nameof(ProfileTools.SetLanguage),
-            nameof(ProfileTools.SetAiSummary), nameof(ProfileTools.SetProactiveAstra), nameof(ProfileTools.SetWeekStartDay),
+            nameof(ProfileTools.SetAiSummary), nameof(ProfileTools.SetProactiveAi), nameof(ProfileTools.SetWeekStartDay),
             nameof(ProfileTools.SetClockFormat)]),
         (typeof(SubscriptionTools), [nameof(SubscriptionTools.ManageSubscription)]),
         (typeof(SupportTools), [nameof(SupportTools.SendSupportRequest)]),

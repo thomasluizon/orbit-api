@@ -37,7 +37,7 @@ public partial class AiInputBudgetTests
         var transport = new LiveSequenceTransport(account);
         var provider = BuildService(transport);
         var handler = BuildHandler(provider, RegisteredTools(), user, account.Habits, account.Today,
-            enabledFlags: client == "legacy" ? [] : [FeatureFlagKeys.AstraBlockFirst], account: account);
+            enabledFlags: client == "legacy" ? [] : [FeatureFlagKeys.AiBlockFirst], account: account);
         var context = client == "legacy" ? null : new AgentClientContext(Platform: "web", SupportsParts: true,
             PartKinds: ["choice", "pickList", "question", "habitList", "goalList", "metrics", "periodInsight", "daySummary",
                 "streak", "calendar", "recordList", "accountRows", "habitMonth", "periodTotal", "periodComparison",
@@ -117,7 +117,7 @@ public partial class AiInputBudgetTests
         bodies[2].Should().Contain("morning glass").And.Contain("afternoon glass");
         if (client == "offers")
         {
-            await account.Offers.Received().IssueAsync(user.Id, context!.ConversationId!.Value, Arg.Any<AstraOfferFact>(), Arg.Any<CancellationToken>());
+            await account.Offers.Received().IssueAsync(user.Id, context!.ConversationId!.Value, Arg.Any<AiOfferFact>(), Arg.Any<CancellationToken>());
             account.IssuedCount.Should().BeGreaterThan(0, "the production offer planner must run between requests");
         }
     }
@@ -136,7 +136,7 @@ public partial class AiInputBudgetTests
         private IReadOnlyList<Tag> Tags { get; }
         public IConversationOfferStore Offers { get; } = Substitute.For<IConversationOfferStore>();
         public int Turn { get; set; }
-        private readonly List<AstraOfferFact> _issued = [];
+        private readonly List<AiOfferFact> _issued = [];
         public int IssuedCount => _issued.Count;
         public JsonElement CreationArguments { get; private set; }
         private readonly User _user;
@@ -178,8 +178,8 @@ public partial class AiInputBudgetTests
             Habits = habits;
             Offers.IssuedAsync(user.Id, Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(_ => _issued.ToArray());
             Offers.DismissedAsync(user.Id, Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(new HashSet<string>());
-            Offers.IssueAsync(user.Id, Arg.Any<Guid>(), Arg.Any<AstraOfferFact>(), Arg.Any<CancellationToken>())
-                .Returns(call => { _issued.Add(call.Arg<AstraOfferFact>()); return Task.CompletedTask; });
+            Offers.IssueAsync(user.Id, Arg.Any<Guid>(), Arg.Any<AiOfferFact>(), Arg.Any<CancellationToken>())
+                .Returns(call => { _issued.Add(call.Arg<AiOfferFact>()); return Task.CompletedTask; });
         }
 
         private T[] Rows<T>(IReadOnlyList<T> rows) => rows.Skip(Turn).Concat(rows.Take(Turn)).ToArray();

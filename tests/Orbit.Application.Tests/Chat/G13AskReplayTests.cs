@@ -127,7 +127,7 @@ public partial class ProcessUserChatCommandHandlerTests
         var result = await handler.Handle(new(UserId, "Continue.", ClientContext: client), default);
 
         result.IsSuccess.Should().BeTrue(result.Error);
-        result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>().Which.Block.Should().BeOfType<AstraChoiceBlock>();
+        result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>().Which.Block.Should().BeOfType<AiChoiceBlock>();
         await AssertOnlyAskSelectionRead();
         await _aiIntentService.Received(1).ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
             Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());

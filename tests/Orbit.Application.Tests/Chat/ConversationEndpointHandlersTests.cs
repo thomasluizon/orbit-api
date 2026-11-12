@@ -20,7 +20,7 @@ public class ConversationEndpointHandlersTests
         var conversation = Guid.NewGuid();
         var store = Substitute.For<IConversationTurnRecorder>();
         var flags = Substitute.For<IFeatureFlagService>();
-        flags.GetEnabledKeysForUserAsync(user, Arg.Any<CancellationToken>()).Returns(enabled ? new[] { FeatureFlagKeys.AstraConversationRecording } : []);
+        flags.GetEnabledKeysForUserAsync(user, Arg.Any<CancellationToken>()).Returns(enabled ? new[] { FeatureFlagKeys.AiConversationRecording } : []);
         store.GetLatestAsync(user, conversation, 9, 4, Arg.Any<CancellationToken>()).Returns(new ConversationPage(conversation, [], null));
         var result = await new GetLatestConversationQueryHandler(store, flags).Handle(new(user, conversation, 9, 4), default);
         result.IsSuccess.Should().Be(enabled);

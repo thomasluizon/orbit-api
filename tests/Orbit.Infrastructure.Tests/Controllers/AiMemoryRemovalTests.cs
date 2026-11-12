@@ -23,7 +23,7 @@ public class AiMemoryRemovalTests
         catalog.GetCapabilities().Select(capability => capability.Id)
             .Should().NotContain(["user-facts.read", "user-facts.delete", "profile.ai-memory.write"])
             .And.Contain([AgentCapabilityIds.ProfileReadBasic, AgentCapabilityIds.ProfileAiSummaryWrite,
-                AgentCapabilityIds.ProfileProactiveAstraWrite]);
+                AgentCapabilityIds.ProfileProactiveAiWrite]);
         foreach (var operation in new[] { "get_user_facts", "delete_user_facts", "delete_user_fact", "set_ai_memory" })
             catalog.GetOperation(operation).Should().BeNull();
         typeof(IPayGateService).GetMethods().Select(method => method.Name)

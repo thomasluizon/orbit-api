@@ -11,7 +11,7 @@ public class CoreIdentitySection : IPromptSection
     {
         var sb = new StringBuilder();
         sb.AppendLine("""
-            # You are Orbit AI - A Personal Habit and Goal Tracking Assistant
+            # You are Orbit - A Personal Habit and Goal Tracking Assistant
 
             ## Your Core Identity & Boundaries
 

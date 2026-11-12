@@ -144,7 +144,7 @@ public partial class AgentChatWriteHoldTests
             .Returns(call => call.Arg<Func<CancellationToken, Task>>()(call.Arg<CancellationToken>()));
         var flags = Substitute.For<IFeatureFlagService>();
         flags.GetEnabledKeysForUserAsync(_userId, Arg.Any<CancellationToken>())
-            .Returns(supportsParts ? new[] { FeatureFlagKeys.AstraBlockFirst } : Array.Empty<string>());
+            .Returns(supportsParts ? new[] { FeatureFlagKeys.AiBlockFirst } : Array.Empty<string>());
         var syncer = Substitute.For<IGoalProgressReadSyncer>();
         syncer.ComputeFreshValuesAsync(_userId, Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
             .Returns(new Dictionary<Guid, int>());
@@ -167,7 +167,7 @@ public partial class AgentChatWriteHoldTests
             new(dates, Substitute.For<IUserStreakService>(), quota, work, scopes, executor,
                 Substitute.For<IPendingClarificationStore>(), syncer, Substitute.For<IGamificationService>(),
                 Substitute.For<IMediator>(), Substitute.For<IProductAnalytics>(), logs,
-                Substitute.For<IIssuedAstraBlockStore>(), _pendingOperationStore),
+                Substitute.For<IIssuedAiBlockStore>(), _pendingOperationStore),
             NullLogger<ProcessUserChatCommandHandler>.Instance, Substitute.For<IAppConfigService>(), ModerationTestDouble.Clean());
 
         var response = await handler.Handle(new(_userId, message,

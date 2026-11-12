@@ -83,7 +83,7 @@ public class AudioTranscriptionBudgetTests
         }).Build();
         var flags = Substitute.For<IFeatureFlagService>();
         flags.GetEnabledKeysForUserAsync(userId, Arg.Any<CancellationToken>())
-            .Returns(listed ? [] : [FeatureFlagKeys.AstraEvalUnmetered]);
+            .Returns(listed ? [] : [FeatureFlagKeys.AiEvalUnmetered]);
         return new AudioTranscriptionService(Options.Create(new AiSettings
         {
             ApiKey = "production-test-key",

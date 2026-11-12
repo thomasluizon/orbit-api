@@ -290,7 +290,7 @@ public class SystemPromptBuilderTests
 
         staticPrompt.Should().Contain("Tone and Encouragement");
 
-        var identityIndex = staticPrompt.IndexOf("Orbit AI", StringComparison.Ordinal);
+        var identityIndex = staticPrompt.IndexOf("# You are Orbit - A Personal Habit", StringComparison.Ordinal);
         var toneIndex = staticPrompt.IndexOf("Tone and Encouragement", StringComparison.Ordinal);
         var rulesIndex = staticPrompt.IndexOf("Core Rules", StringComparison.Ordinal);
 

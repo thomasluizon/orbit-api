@@ -19,7 +19,7 @@ export const entities = {
   ChecklistTemplate: { model: "ChecklistTemplate", tools: { create: ["create_checklist_template"], read: ["get_checklist_templates", "get_template_page"], update: ["update_checklist_template"], delete: ["delete_checklist_template"] } },
   Notification: { model: "Notification", tools: { read: ["get_notifications", "get_notification_page"], update: ["update_notifications", "mark_notification_read", "mark_all_notifications_read"], delete: ["delete_notifications", "delete_notification"], bulk: ["update_notifications", "delete_notifications", "mark_all_notifications_read"] }, aliases: { IsRead: ["action"] } },
   PushSubscription: { model: "PushSubscription", tools: { create: ["update_notifications", "subscribe_push"], delete: ["update_notifications", "unsubscribe_push"] } },
-  Profile: { model: "User", editableMethods: { Name: "SetName", MarketingEmailConsent: "SetMarketingConsent" }, tools: { read: ["get_profile"], update: ["update_profile_preferences", "set_name", "set_timezone", "set_language", "set_week_start_day", "set_clock_format", "set_ai_summary", "set_proactive_astra"], delete: ["manage_account"] }, aliases: { TimeZone: ["timezone"], Uses24HourClockPreference: ["uses_24_hour_clock", "uses24HourClock"], AiSummaryEnabled: ["enabled"], ProactiveAstraEnabled: ["enabled"], HasCompletedOnboarding: ["action"], HasCompletedTour: ["action"] } },
+  Profile: { model: "User", editableMethods: { Name: "SetName", MarketingEmailConsent: "SetMarketingConsent" }, tools: { read: ["get_profile"], update: ["update_profile_preferences", "set_name", "set_timezone", "set_language", "set_week_start_day", "set_clock_format", "set_ai_summary", "set_proactive_astra"], delete: ["manage_account"] }, aliases: { TimeZone: ["timezone"], Uses24HourClockPreference: ["uses_24_hour_clock", "uses24HourClock"], AiSummaryEnabled: ["enabled"], ProactiveAiEnabled: ["enabled"], HasCompletedOnboarding: ["action"], HasCompletedTour: ["action"] } },
   Subscription: { model: "User", select: /^(Plan|Trial|BonusPro|IsLifetimePro|Subscription|Stripe|Play|AiMessages)/, tools: { read: ["get_subscription_overview", "get_subscription_status"], create: ["manage_subscription"], update: ["manage_subscription"] }, aliases: { SubscriptionInterval: ["interval"] } },
   Referral: { model: "Referral", tools: { read: ["get_referral_overview", "get_referral_stats", "get_referral_code"], create: ["get_referral_code"] } },
   ApiKey: { model: "ApiKey", tools: { create: ["manage_api_keys"], read: ["get_api_keys", "get_api_key_page"], delete: ["manage_api_keys"] } },
@@ -41,7 +41,7 @@ export const aliases = {
 }
 
 export const parameterRestrictions = {
-  AiSummaryEnabled: ["set_ai_summary"], ProactiveAstraEnabled: ["set_proactive_astra"],
+  AiSummaryEnabled: ["set_ai_summary"], ProactiveAiEnabled: ["set_proactive_astra"],
   HasCompletedOnboarding: ["update_profile_preferences"], HasCompletedTour: ["update_profile_preferences"],
   IsRead: ["update_notifications", "mark_notification_read", "mark_all_notifications_read"],
 }
@@ -203,6 +203,9 @@ export const readChains = {
 }
 
 export const deliberateFields = {
+  "Profile.PhraseReadsToday": "The server counts provider-backed phrase reads against a hidden daily cap; AI tools cannot edit or read this bookkeeping.",
+  "Profile.PhraseReadsLocalDate": "The server records the account day of the phrase read count; AI tools cannot edit or read this bookkeeping.",
+  "Profile.MascotMotionEnabled": "The mascot motion switch belongs to the app's Preferences screen and its own endpoint; the AI has no motion to change.",
   "Habit.LongestRecordedStreak": "The persisted achievement maximum is derived from completion history and cannot be edited through AI tools.",
   "SubHabit.LongestRecordedStreak": "The persisted achievement maximum is derived from completion history and cannot be edited through AI tools.",
   "Profile.GoogleAccessTokenExpiresAtUtc": "OAuth token expiry is managed by the provider refresh flow, not AI tools.",

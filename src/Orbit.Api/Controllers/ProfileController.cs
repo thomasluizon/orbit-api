@@ -25,10 +25,11 @@ public partial class ProfileController(
     public record SetTimezoneRequest(string TimeZone);
     public record SetNameRequest(string Name);
     public record SetAiSummaryRequest([property: JsonRequired] bool Enabled);
-    public record SetProactiveAstraEnabledRequest([property: JsonRequired] bool Enabled);
+    public record SetProactiveAiEnabledRequest([property: JsonRequired] bool Enabled);
     public record SetLanguageRequest(string Language);
     public record SetWeekStartDayRequest([property: JsonRequired] int WeekStartDay);
     public record SetClockFormatRequest([property: JsonRequired] bool Uses24HourClock);
+    public record SetMascotMotionRequest([property: JsonRequired] bool Enabled);
     public record SetThemePreferenceRequest(string? ThemePreference);
     public record UpdateMarketingConsentRequest([property: JsonRequired] bool Enabled);
     public record ApplyOnboardingRequest(
@@ -106,15 +107,15 @@ public partial class ProfileController(
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<IActionResult> SetProactiveAstra(
-        [FromBody] SetProactiveAstraEnabledRequest request,
+    public async Task<IActionResult> SetProactiveAi(
+        [FromBody] SetProactiveAiEnabledRequest request,
         CancellationToken cancellationToken)
     {
-        var command = new SetProactiveAstraEnabledCommand(HttpContext.GetUserId(), request.Enabled);
+        var command = new SetProactiveAiEnabledCommand(HttpContext.GetUserId(), request.Enabled);
         var result = await mediator.Send(command, cancellationToken);
 
         if (result.IsSuccess && logger.IsEnabled(LogLevel.Information))
-            logger.LogProactiveAstraToggled(ToggleLabel(request.Enabled), HttpContext.GetUserId());
+            logger.LogProactiveAiToggled(ToggleLabel(request.Enabled), HttpContext.GetUserId());
 
         return result.ToPayGateAwareResult(() => NoContent());
     }
@@ -167,6 +168,19 @@ public partial class ProfileController(
         if (result.IsSuccess && logger.IsEnabled(LogLevel.Information))
             logger.LogClockFormatChanged(request.Uses24HourClock ? "24-hour" : "12-hour", HttpContext.GetUserId());
 
+        return result.ToPayGateAwareResult(() => NoContent());
+    }
+
+    [HttpPut("mascot-motion")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> SetMascotMotion(
+        [FromBody] SetMascotMotionRequest request,
+        CancellationToken cancellationToken)
+    {
+        var command = new SetMascotMotionCommand(HttpContext.GetUserId(), request.Enabled);
+        var result = await mediator.Send(command, cancellationToken);
         return result.ToPayGateAwareResult(() => NoContent());
     }
 
@@ -329,6 +343,6 @@ internal static partial class ProfileControllerLogging
     [LoggerMessage(EventId = 15, Level = LogLevel.Information, Message = "Clock format changed to {Format} for user {UserId}")]
     internal static partial void LogClockFormatChanged(this ILogger logger, string format, Guid userId);
 
-    [LoggerMessage(EventId = 13, Level = LogLevel.Information, Message = "Proactive Astra check-ins {State} for user {UserId}")]
-    internal static partial void LogProactiveAstraToggled(this ILogger logger, string state, Guid userId);
+    [LoggerMessage(EventId = 13, Level = LogLevel.Information, Message = "Proactive check-ins {State} for user {UserId}")]
+    internal static partial void LogProactiveAiToggled(this ILogger logger, string state, Guid userId);
 }

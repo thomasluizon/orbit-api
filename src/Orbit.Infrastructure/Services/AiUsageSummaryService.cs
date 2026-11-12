@@ -166,8 +166,8 @@ public partial class AiUsageSummaryService(
 
     internal static string BuildQuotaSummaryLine(DateOnly date, AiUsageSummaryReader.QuotaSummary quota) =>
         quota.ActiveUsers == 0
-            ? string.Create(CultureInfo.InvariantCulture, $"Astra quota {date:yyyy-MM-dd}: no active users")
-            : string.Create(CultureInfo.InvariantCulture, $"Astra quota {date:yyyy-MM-dd}: free_cap_hits={quota.FreeCapHits}; pro_cap_hits={quota.ProCapHits}; mean_messages_per_active_user={quota.Mean:F2}; p95_messages_per_active_user={quota.P95}");
+            ? string.Create(CultureInfo.InvariantCulture, $"AI quota {date:yyyy-MM-dd}: no active users")
+            : string.Create(CultureInfo.InvariantCulture, $"AI quota {date:yyyy-MM-dd}: free_cap_hits={quota.FreeCapHits}; pro_cap_hits={quota.ProCapHits}; mean_messages_per_active_user={quota.Mean:F2}; p95_messages_per_active_user={quota.P95}");
 
     internal static string BuildQuotaSummaryLine(
         DateOnly date,
@@ -176,7 +176,7 @@ public partial class AiUsageSummaryService(
         int proLimit)
     {
         if (activeUsers.Count == 0)
-            return string.Create(CultureInfo.InvariantCulture, $"Astra quota {date:yyyy-MM-dd}: no active users");
+            return string.Create(CultureInfo.InvariantCulture, $"AI quota {date:yyyy-MM-dd}: no active users");
 
         var messageCounts = activeUsers
             .Select(user => user.GetAiMessagesUsedToday(date))
@@ -187,7 +187,7 @@ public partial class AiUsageSummaryService(
         var freeCapHits = activeUsers.Count(user => !user.HasProAccess && user.GetAiMessagesUsedToday(date) >= freeLimit);
         var proCapHits = activeUsers.Count(user => user.HasProAccess && user.GetAiMessagesUsedForQuota(date) >= proLimit);
 
-        return string.Create(CultureInfo.InvariantCulture, $"Astra quota {date:yyyy-MM-dd}: free_cap_hits={freeCapHits}; pro_cap_hits={proCapHits}; ") +
+        return string.Create(CultureInfo.InvariantCulture, $"AI quota {date:yyyy-MM-dd}: free_cap_hits={freeCapHits}; pro_cap_hits={proCapHits}; ") +
             $"mean_messages_per_active_user={mean.ToString("F2", CultureInfo.InvariantCulture)}; " +
             $"p95_messages_per_active_user={messageCounts[p95Index]}";
     }

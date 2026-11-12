@@ -123,8 +123,8 @@ public class ProfileTools(IMediator mediator, McpExecutorBridge executorBridge)
         }
     }
 
-    [McpServerTool(Name = "set_proactive_astra"), Description("Enable or disable proactive Astra push check-ins. Requires Pro; in-app items remain available.")]
-    public async Task<CallToolResult> SetProactiveAstra(
+    [McpServerTool(Name = "set_proactive_astra"), Description("Enable or disable proactive push check-ins. Requires Pro; in-app items remain available.")]
+    public async Task<CallToolResult> SetProactiveAi(
         ClaimsPrincipal user,
         [Description("True to enable, false to disable")] bool enabled,
         CancellationToken cancellationToken = default)
@@ -134,7 +134,7 @@ public class ProfileTools(IMediator mediator, McpExecutorBridge executorBridge)
             var result = await executorBridge.ExecuteAsync(user, "set_proactive_astra", new { enabled }, confirmationToken: null, cancellationToken);
             if (!result.Succeeded)
                 return McpToolHelpers.Error(result.Message);
-            return enabled ? McpToolHelpers.Text("Proactive Astra enabled") : McpToolHelpers.Text("Proactive Astra disabled");
+            return enabled ? McpToolHelpers.Text("Proactive check-ins enabled") : McpToolHelpers.Text("Proactive check-ins disabled");
         }
         catch (ArgumentException ex)
         {

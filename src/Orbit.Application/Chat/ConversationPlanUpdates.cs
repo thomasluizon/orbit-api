@@ -8,7 +8,7 @@ public static class ConversationPlanUpdates
 {
     public const string ExecutionAuditSource = "pending_operation_execution";
 
-    public static async Task<AstraPlan?> AfterCommitAsync(IConversationPlanStore? plans, Guid userId, Guid pendingOperationId,
+    public static async Task<AiPlan?> AfterCommitAsync(IConversationPlanStore? plans, Guid userId, Guid pendingOperationId,
         string status, ILogger logger, CancellationToken cancellationToken)
     {
         if (plans is null) return null;

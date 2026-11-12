@@ -56,7 +56,7 @@ public partial class ProcessUserChatCommandHandlerTests
         var result = await CreateRecordAskHandler().Handle(new(UserId, "Help me plan.", ClientContext: client), default);
 
         result.IsSuccess.Should().BeTrue(result.Error);
-        result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>().Which.Block.Should().BeOfType<AstraChoiceBlock>();
+        result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>().Which.Block.Should().BeOfType<AiChoiceBlock>();
         await AssertOnlyAskSelectionRead();
         await _aiIntentService.DidNotReceiveWithAnyArgs().ContinueWithToolResultsAsync(default!, default!, default, default);
         result.Value.PendingOperations.Should().BeNullOrEmpty();
@@ -76,7 +76,7 @@ public partial class ProcessUserChatCommandHandlerTests
             ClientContext: new(SupportsParts: true, PartKinds: ["pickList"])), default);
 
         result.IsSuccess.Should().BeTrue(result.Error);
-        result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>().Which.Block.Should().BeOfType<AstraPickListBlock>();
+        result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>().Which.Block.Should().BeOfType<AiPickListBlock>();
         result.Value.PendingOperations.Should().BeNullOrEmpty();
         await AssertOnlyAskSelectionRead();
         _mediator.ReceivedCalls().Should().OnlyContain(call => call.GetArguments()[0] is CheckChatCommandQuery);

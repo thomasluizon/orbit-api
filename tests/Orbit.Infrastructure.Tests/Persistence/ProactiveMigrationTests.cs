@@ -76,10 +76,10 @@ public sealed class ProactiveMigrationTests
     {
         using var factory = new SqliteOrbitDbContextFactory();
         var user = User.Create("Person", "person@example.com").Value;
-        if (choice.HasValue) user.SetProactiveAstraEnabled(choice.Value);
+        if (choice.HasValue) user.SetProactiveAiEnabled(choice.Value);
         factory.Context.Users.Add(user);
         await factory.Context.SaveChangesAsync();
         factory.Context.ChangeTracker.Clear();
-        (await factory.Context.Users.SingleAsync()).ProactiveAstraEnabled.Should().Be(choice ?? true);
+        (await factory.Context.Users.SingleAsync()).ProactiveAiEnabled.Should().Be(choice ?? true);
     }
 }

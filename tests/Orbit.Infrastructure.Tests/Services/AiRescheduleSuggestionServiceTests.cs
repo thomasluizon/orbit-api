@@ -162,6 +162,16 @@ public class AiRescheduleSuggestionServiceTests
     }
 
     [Fact]
+    public void BuildPrompt_NamesOrbitAsThePersona()
+    {
+        var habit = CreateRecurring("Evening run", FrequencyUnit.Day, dueDate: Today.AddDays(-5));
+
+        var prompt = InvokeBuildPrompt(habit, Today, "en");
+
+        prompt.Should().Contain("You are Orbit, helping someone restart a habit").And.NotContain("Astra");
+    }
+
+    [Fact]
     public void BuildPrompt_Portuguese_RequestsPortugueseRationale()
     {
         var habit = CreateOneTimeTask("Renovar passaporte", Today.AddDays(-3));

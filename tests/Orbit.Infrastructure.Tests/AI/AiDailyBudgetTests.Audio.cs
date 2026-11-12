@@ -22,7 +22,7 @@ public partial class AiDailyBudgetTests
         using var scope = fixture.CreateScope();
         var flags = scope.ServiceProvider.GetRequiredService<IFeatureFlagService>();
         (await flags.GetEnabledKeysForUserAsync(fixture.User.Id))
-            .Should().Contain(FeatureFlagKeys.AstraEvalUnmetered);
+            .Should().Contain(FeatureFlagKeys.AiEvalUnmetered);
         EvalAccountAccess.Contains(fixture.AccountConfiguration[EvalAccountAccess.AccountIdsKey], fixture.User.Id)
             .Should().BeFalse();
         await fixture.Budget.ReserveAsync(fixture.User.Id, exhausted ? 500_000 : 499_800, default);

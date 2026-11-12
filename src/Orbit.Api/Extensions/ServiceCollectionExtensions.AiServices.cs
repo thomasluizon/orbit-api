@@ -43,7 +43,7 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddSingleton<IAppSurfaceCatalog, AppSurfaceCatalog>();
         builder.Services.AddScoped<IPendingAgentOperationStore, PendingAgentOperationStore>();
         builder.Services.AddScoped<IPendingClarificationStore, PendingClarificationStore>();
-        builder.Services.AddScoped<IIssuedAstraBlockStore, IssuedAstraBlockStore>();
+        builder.Services.AddScoped<IIssuedAiBlockStore, IssuedAiBlockStore>();
         builder.Services.AddScoped<IConversationOfferStore, ConversationOfferStore>();
         builder.Services.AddScoped<IAiTool, AskTool>();
         builder.Services.AddScoped<IAiTool, RevisePendingChangesTool>();
@@ -95,7 +95,7 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<IAiTool, GetProfileTool>();
         builder.Services.AddScoped<IAiTool, UpdateProfilePreferencesTool>();
         builder.Services.AddScoped<IAiTool, SetAiSummaryTool>();
-        builder.Services.AddScoped<IAiTool, SetProactiveAstraTool>();
+        builder.Services.AddScoped<IAiTool, SetProactiveAiTool>();
         builder.Services.AddScoped<IAiTool, GetNotificationsTool>();
         builder.Services.AddScoped<IAiTool, UpdateNotificationsTool>();
         builder.Services.AddScoped<IAiTool, DeleteNotificationsTool>();
@@ -222,7 +222,7 @@ public static partial class ServiceCollectionExtensions
                 sp.GetRequiredService<MediatR.IMediator>(),
                 sp.GetRequiredService<IProductAnalytics>(),
                 sp.GetRequiredService<IHabitScheduleLogReader>(),
-                sp.GetRequiredService<IIssuedAstraBlockStore>(),
+                sp.GetRequiredService<IIssuedAiBlockStore>(),
                 sp.GetRequiredService<IPendingAgentOperationStore>(),
                 sp.GetRequiredService<IPendingOperationChangePreviewer>(),
                 ChatTurnLimits.BlockAnswerTimeout(

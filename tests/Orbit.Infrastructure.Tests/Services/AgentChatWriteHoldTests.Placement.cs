@@ -170,7 +170,7 @@ public partial class AgentChatWriteHoldTests
                 Substitute.For<IUnitOfWork>(), Substitute.For<IServiceScopeFactory>(), executor,
                 Substitute.For<IPendingClarificationStore>(), syncer, Substitute.For<IGamificationService>(), mediator,
                 Substitute.For<IProductAnalytics>(), Substitute.For<IHabitScheduleLogReader>(),
-                Substitute.For<IIssuedAstraBlockStore>(), _pendingOperationStore, previewer),
+                Substitute.For<IIssuedAiBlockStore>(), _pendingOperationStore, previewer),
             NullLogger<ProcessUserChatCommandHandler>.Instance, Substitute.For<IAppConfigService>(), ModerationTestDouble.Clean());
 
         var response = await handler.Handle(new(_userId, message, ClientContext: new AgentClientContext(SupportsParts: true, SupportsPendingOperationPlacement: true)), default);

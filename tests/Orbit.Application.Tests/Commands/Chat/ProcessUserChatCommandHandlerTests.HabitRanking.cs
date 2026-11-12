@@ -51,7 +51,7 @@ public partial class ProcessUserChatCommandHandlerTests
         var tool = new GetHabitRankingTool(_mediator);
         _mediator.Send(Arg.Any<GetHabitRankingQuery>(), Arg.Any<CancellationToken>()).Returns(Result.Success(response));
         if (disabled)
-            _featureFlagService.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>()).Returns([FeatureFlagKeys.AstraPeriodBlocksDisabled]);
+            _featureFlagService.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>()).Returns([FeatureFlagKeys.AiPeriodBlocksDisabled]);
         SetupAiResponse(new AiResponse
         {
             ToolCalls = [new AiToolCall(tool.Name, "ranking", ParseArguments("""{"date_from":"2026-04-03","date_to_exclusive":"2026-04-04","refresh":null}"""))],

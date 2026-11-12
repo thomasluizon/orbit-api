@@ -232,7 +232,7 @@ public partial class AiIntentServiceStreamingTests
         user.SetTimeZone("America/Sao_Paulo");
         db.SaveChanges();
         var flags = Substitute.For<IFeatureFlagService>();
-        flags.GetEnabledKeysForUserAsync(user.Id, Arg.Any<CancellationToken>(), Arg.Any<bool>()).Returns(enabled ? new[] { FeatureFlagKeys.AstraConversationRecording } : []);
+        flags.GetEnabledKeysForUserAsync(user.Id, Arg.Any<CancellationToken>(), Arg.Any<bool>()).Returns(enabled ? new[] { FeatureFlagKeys.AiConversationRecording } : []);
         flags.ResolveForUser(user.Id).Returns(db.AppFeatureFlags.Select(flag => new ResolvedFeatureFlag(flag.Key, true, flag.PlanRequirement)).ToArray());
         var dates = Substitute.For<IUserDateService>();
         dates.GetUserTodayAsync(user.Id, Arg.Any<CancellationToken>()).Returns(new DateOnly(2026, 11, 1));
@@ -268,7 +268,7 @@ public partial class AiIntentServiceStreamingTests
             new(model, registry, prompts, catalog),
             new(dates, Substitute.For<IUserStreakService>(), payGate, work, services.GetRequiredService<IServiceScopeFactory>(), executor,
                 Substitute.For<IPendingClarificationStore>(), progress, Substitute.For<IGamificationService>(), mediator,
-                Substitute.For<IProductAnalytics>(), Substitute.For<IHabitScheduleLogReader>(), Substitute.For<IIssuedAstraBlockStore>(), pending, previewer),
+                Substitute.For<IProductAnalytics>(), Substitute.For<IHabitScheduleLogReader>(), Substitute.For<IIssuedAiBlockStore>(), pending, previewer),
             NullLogger<ProcessUserChatCommandHandler>.Instance, Substitute.For<IAppConfigService>(), ModerationTestDouble.Clean(), fixture.Store, blocks);
     }
 }

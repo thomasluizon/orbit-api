@@ -212,7 +212,7 @@ public class ExportUserDataQueryHandlerTests
     public async Task Handle_ExportsItemsWithoutFactsAndPreservesStoredSetting()
     {
         var user = CreateTestUser();
-        user.SetProactiveAstraEnabled(false);
+        user.SetProactiveAiEnabled(false);
         ArrangeUser(user);
         var item = ProactiveItem.Create(UserId, Orbit.Domain.Enums.ProactiveTrigger.EveningCheckin, Today,
             "{\"privateFact\":\"omit me\"}", "Text.", "Action", "Prompt", DateTime.UtcNow);
@@ -220,8 +220,20 @@ public class ExportUserDataQueryHandlerTests
             .Returns(new List<ProactiveItem> { item });
         var result = await _handler.Handle(new(UserId), default);
         result.Value.ProactiveItems.Should().ContainSingle(i => i.Id == item.Id);
-        result.Value.Settings.StoredProactiveAstraEnabled.Should().BeFalse();
+        result.Value.Settings.StoredProactiveAiEnabled.Should().BeFalse();
         System.Text.Json.JsonSerializer.Serialize(result.Value.ProactiveItems).Should().NotContain("privateFact").And.NotContain("FactsJson");
+    }
+
+    [Fact]
+    public async Task Handle_ExportsTheMascotMotionPreference()
+    {
+        var user = CreateTestUser();
+        user.SetMascotMotion(false);
+        ArrangeUser(user);
+
+        var result = await _handler.Handle(new(UserId), default);
+
+        result.Value.Settings.MascotMotionEnabled.Should().BeFalse();
     }
 
     [Fact]
@@ -248,9 +260,9 @@ public class ExportUserDataQueryHandlerTests
         result.Value.Account.Name.Should().Be("Test User");
         result.Value.Account.Email.Should().Be("test@example.com");
         result.Value.Account.Plan.Should().Be("free");
-        result.Value.Settings.ProactiveAstraEnabled.Should().Be(user.EffectiveProactivePushEnabled);
-        result.Value.Settings.StoredProactiveAstraEnabled.Should().BeTrue();
-        result.Value.Settings.ProactiveAstraEnabled.Should().BeFalse();
+        result.Value.Settings.ProactiveAiEnabled.Should().Be(user.EffectiveProactivePushEnabled);
+        result.Value.Settings.StoredProactiveAiEnabled.Should().BeTrue();
+        result.Value.Settings.ProactiveAiEnabled.Should().BeFalse();
         result.Value.Settings.Uses24HourClock.Should().BeNull();
         result.Value.Habits.Should().BeEmpty();
         result.Value.Goals.Should().BeEmpty();

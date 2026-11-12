@@ -1,4 +1,4 @@
-# Astra cache evidence for ticket 1916
+# AI cache evidence for ticket 1916
 
 ## Reproduction
 

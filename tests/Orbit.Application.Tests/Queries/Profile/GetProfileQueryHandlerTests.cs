@@ -267,7 +267,7 @@ public class GetProfileQueryHandlerTests
             user.HasCompletedTour,
             user.HasCreatedFirstHabit,
             user.HasLoggedFirstHabit,
-            user.HasTriedAstra,
+            user.HasTriedAi,
             user.HasCompletedOnboardingChecklist,
             user.Language,
             Plan = "pro",
@@ -301,7 +301,7 @@ public class GetProfileQueryHandlerTests
             user.SocialOptIn,
             Uses24HourClock = true,
             PublicProfile = (Orbit.Application.Profile.Commands.PublicProfileSettings?)null,
-            ProactiveAstraEnabled = user.EffectiveProactivePushEnabled,
+            ProactiveAiEnabled = user.EffectiveProactivePushEnabled,
             user.MarketingEmailConsent,
             LastCompletionDate = (DateOnly?)null
         });
@@ -436,7 +436,7 @@ public class GetProfileQueryHandlerTests
     {
         var user = CreateTestUser();
         user.MarkFirstHabitCreated();
-        user.MarkAstraUsed();
+        user.MarkAiUsed();
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
         _payGate.GetAiMessageLimit(UserId, Arg.Any<CancellationToken>()).Returns(5);
         StubFreezeRepoEmpty();
@@ -446,7 +446,7 @@ public class GetProfileQueryHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.HasCreatedFirstHabit.Should().BeTrue();
         result.Value.HasLoggedFirstHabit.Should().BeFalse();
-        result.Value.HasTriedAstra.Should().BeTrue();
+        result.Value.HasTriedAi.Should().BeTrue();
         result.Value.HasCompletedOnboardingChecklist.Should().BeFalse();
     }
 
@@ -630,6 +630,26 @@ public class GetProfileQueryHandlerTests
         var result = await _handler.Handle(new GetProfileQuery(UserId), CancellationToken.None);
 
         result.Value.Uses24HourClock.Should().Be(uses24HourClock);
+    }
+
+    [Theory]
+    [InlineData(null, true)]
+    [InlineData(false, false)]
+    [InlineData(true, true)]
+    public async Task Handle_ReturnsTheMascotMotionPreference_DefaultingToOn(bool? stored, bool expected)
+    {
+        var user = CreateTestUser();
+        if (stored.HasValue) user.SetMascotMotion(stored.Value);
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        _payGate.GetAiMessageLimit(UserId, Arg.Any<CancellationToken>()).Returns(20);
+        _streakFreezeRepo.FindAsync(
+            Arg.Any<Expression<Func<StreakFreeze, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<StreakFreeze>().AsReadOnly());
+
+        var result = await _handler.Handle(new GetProfileQuery(UserId), CancellationToken.None);
+
+        result.Value.MascotMotionEnabled.Should().Be(expected);
     }
 
     [Fact]

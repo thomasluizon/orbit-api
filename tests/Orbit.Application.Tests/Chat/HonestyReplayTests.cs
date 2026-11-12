@@ -32,7 +32,7 @@ public partial class ProcessUserChatCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue(result.Error);
         var choice = result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>()
-            .Which.Block.Should().BeOfType<AstraChoiceBlock>().Subject;
+            .Which.Block.Should().BeOfType<AiChoiceBlock>().Subject;
         choice.Question.Should().Be("Which habit would you like to change, and what would you like to change?");
         choice.AllowFreeText.Should().BeTrue();
         choice.Options.Select(option => option.Label).Should().Equal("Water", "Walk");
@@ -68,11 +68,11 @@ public partial class ProcessUserChatCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         var choice = result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>()
-            .Which.Block.Should().BeOfType<AstraChoiceBlock>().Subject;
+            .Which.Block.Should().BeOfType<AiChoiceBlock>().Subject;
         choice.Question.Should().Be(question);
         choice.AllowFreeText.Should().BeFalse();
         choice.Options.Select(option => option.Label).Should().Equal("Water", "Walk");
-        await _blockStore.Received(1).AddAsync(Arg.Is<IssuedAstraBlock>(block => block.ReadDefinition().Title == question
+        await _blockStore.Received(1).AddAsync(Arg.Is<IssuedAiBlock>(block => block.ReadDefinition().Title == question
             && !block.ReadDefinition().AllowFreeText), Arg.Any<CancellationToken>());
         result.Value.PendingOperations.Should().BeNullOrEmpty();
         await AssertOnlyAskSelectionRead();
@@ -103,7 +103,7 @@ public partial class ProcessUserChatCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         var choice = result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>()
-            .Which.Block.Should().BeOfType<AstraChoiceBlock>().Subject;
+            .Which.Block.Should().BeOfType<AiChoiceBlock>().Subject;
         choice.Question.Should().Be(question);
         choice.AllowFreeText.Should().BeTrue();
         result.Value.PendingOperations.Should().BeNullOrEmpty();
@@ -201,7 +201,7 @@ public partial class ProcessUserChatCommandHandlerTests
                 && results[0].Name == "query_habits" && results[0].Success),
             Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
         result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>().Which.Block
-            .Should().BeOfType<AstraChoiceBlock>().Which.Question.Should().Be("When?");
+            .Should().BeOfType<AiChoiceBlock>().Which.Question.Should().Be("When?");
         result.Value.PendingOperations.Should().BeNullOrEmpty();
     }
 

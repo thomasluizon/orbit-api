@@ -32,7 +32,7 @@ public sealed partial class ChatWriteHoldHandlerTests
         _user.SetLanguage(language);
         if (composition)
             _featureFlagService.GetEnabledKeysForUserAsync(_userId, Arg.Any<CancellationToken>())
-                .Returns([FeatureFlagKeys.AstraBlockFirst]);
+                .Returns([FeatureFlagKeys.AiBlockFirst]);
         var keep = RestartHabit(language == "en" ? "Read" : "Ler", Today);
         var move = RestartHabit(language == "en" ? "Walk" : "Caminhar", Today.AddDays(-2));
         var later = RestartHabit(language == "en" ? "Stretch" : "Alongar", Today.AddDays(-1));

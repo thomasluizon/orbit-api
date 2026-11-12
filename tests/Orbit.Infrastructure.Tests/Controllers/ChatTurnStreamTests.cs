@@ -250,14 +250,14 @@ public sealed class ChatTurnStreamTests(Xunit.Abstractions.ITestOutputHelper out
                 call.Arg<ProcessUserChatCommand>().StreamSink.Should().BeNull();
                 return Result.Success(new ChatResponse("Answer accepted", []));
             });
-        var answer = JsonSerializer.Serialize(new AstraBlockAnswer(Guid.NewGuid(), ["choice"]));
+        var answer = JsonSerializer.Serialize(new AiBlockAnswer(Guid.NewGuid(), ["choice"]));
         var first = CreateController(services, userId, "answer");
         await first.ProcessChatStream("Answer", null, null, default, blockAnswer: answer);
         var replay = CreateController(services, userId, "answer");
         await replay.ProcessChatStream("Answer", null, null, default, blockAnswer: answer);
         Events(replay).Last().GetRawText().Should().Be(Events(first).Last().GetRawText());
         var conflict = await CreateController(services, userId, "answer").ProcessChatStream("Answer", null, null,
-            default, blockAnswer: JsonSerializer.Serialize(new AstraBlockAnswer(Guid.NewGuid(), ["other"])));
+            default, blockAnswer: JsonSerializer.Serialize(new AiBlockAnswer(Guid.NewGuid(), ["other"])));
         conflict.Should().BeOfType<ConflictObjectResult>();
         await mediator.Received(1).Send(Arg.Any<ProcessUserChatCommand>(), Arg.Any<CancellationToken>());
     }

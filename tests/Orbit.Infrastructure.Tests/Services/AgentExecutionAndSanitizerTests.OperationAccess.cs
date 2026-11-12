@@ -123,7 +123,7 @@ public partial class AgentExecutionAndSanitizerTests
             new(dates, Substitute.For<IUserStreakService>(), quota, work, services.GetRequiredService<IServiceScopeFactory>(), executor,
                 Substitute.For<IPendingClarificationStore>(), Substitute.For<IGoalProgressReadSyncer>(), Substitute.For<IGamificationService>(),
                 mediator, Substitute.For<IProductAnalytics>(), Substitute.For<IHabitScheduleLogReader>(),
-                Substitute.For<IIssuedAstraBlockStore>(), Substitute.For<IPendingAgentOperationStore>()),
+                Substitute.For<IIssuedAiBlockStore>(), Substitute.For<IPendingAgentOperationStore>()),
             NullLogger<ProcessUserChatCommandHandler>.Instance, Substitute.For<IAppConfigService>(), ModerationTestDouble.Clean());
 
         var response = await handler.Handle(new(UserId, "Run the requested operation"), default);

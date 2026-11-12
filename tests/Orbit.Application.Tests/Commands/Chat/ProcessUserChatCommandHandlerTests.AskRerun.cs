@@ -33,7 +33,7 @@ public partial class ProcessUserChatCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue(result.Error);
         var choice = result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>()
-            .Which.Block.Should().BeOfType<AstraChoiceBlock>().Subject;
+            .Which.Block.Should().BeOfType<AiChoiceBlock>().Subject;
         var question = call.Args.GetProperty("questions")[0];
         choice.Question.Should().Be(question.GetProperty("prompt").GetString());
         choice.Question.Should().NotBe(call.Args.GetProperty("title").GetString());
@@ -43,7 +43,7 @@ public partial class ProcessUserChatCommandHandlerTests
         choice.Options.Select(option => option.Label).Should().Equal(question.GetProperty("options")
             .EnumerateArray().Select(option => option.GetProperty("label").GetString()));
         result.Value.PendingOperations.Should().BeNullOrEmpty();
-        await _blockStore.Received(1).AddAsync(Arg.Is<IssuedAstraBlock>(block => block.ReadDefinition().Form == "choice"),
+        await _blockStore.Received(1).AddAsync(Arg.Is<IssuedAiBlock>(block => block.ReadDefinition().Form == "choice"),
             Arg.Any<CancellationToken>());
         await _aiIntentService.DidNotReceiveWithAnyArgs().ContinueWithToolResultsAsync(default!, default!, default, default);
     }

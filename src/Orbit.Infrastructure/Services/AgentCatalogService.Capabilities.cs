@@ -241,6 +241,7 @@ public partial class AgentCatalogService
                 [
                     "HabitsController.CreateHabit",
                     "HabitsController.SuggestSetup",
+                    "HabitsController.ReadPhrase",
                     "OnboardingController.SuggestSetup",
                     "HabitsController.LogHabit",
                     "HabitsController.CorrectDose",
@@ -518,6 +519,7 @@ public partial class AgentCatalogService
                     "ProfileController.SetWeekStartDay",
                     "ProfileController.SetClockFormat",
                     "ProfileController.SetThemePreference",
+                    "ProfileController.SetMascotMotion",
                     "ProfileController.CompleteOnboarding",
                     "ProfileController.ApplyOnboarding",
                     "ProfileController.DismissImportPrompt",
@@ -543,9 +545,9 @@ public partial class AgentCatalogService
                 ControllerActionKeys: ["ProfileController.SetAiSummary"]),
 
             new AgentCapability(
-                AgentCapabilityIds.ProfileProactiveAstraWrite,
-                "Write Proactive Astra Settings",
-                "Stores an explicit preference for proactive Astra pushes; in-app items remain available.",
+                AgentCapabilityIds.ProfileProactiveAiWrite,
+                "Write Proactive Check-in Settings",
+                "Stores an explicit preference for proactive check-in pushes; in-app items remain available.",
                 ProfileDomain,
                 AgentScopes.WriteAiSettings,
                 AgentRiskClass.Low,
@@ -555,7 +557,7 @@ public partial class AgentCatalogService
                 PlanRequirement: "Pro",
                 ChatToolNames: ["set_proactive_astra"],
                 McpToolNames: ["set_proactive_astra"],
-                ControllerActionKeys: ["ProfileController.SetProactiveAstra"])
+                ControllerActionKeys: ["ProfileController.SetProactiveAi"])
         ];
     }
 
@@ -565,7 +567,7 @@ public partial class AgentCatalogService
         [
             new AgentCapability(
                 AgentCapabilityIds.ProactiveItemsRead,
-                "Read Proactive Astra Item",
+                "Read Proactive Check-in Item",
                 "Returns the current item and records its first display, or reads an owned item's lifecycle status without recording outcomes.",
                 "proactive",
                 AgentScopes.ReadNotifications,
@@ -574,11 +576,11 @@ public partial class AgentCatalogService
                 IsPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
                 PlanRequirement: "Pro",
-                ControllerActionKeys: ["ProactiveAstraController.Current", "ProactiveAstraController.GetById"]),
+                ControllerActionKeys: ["ProactiveAiController.Current", "ProactiveAiController.GetById"]),
 
             new AgentCapability(
                 AgentCapabilityIds.ProactiveItemsWrite,
-                "Record Proactive Astra Outcome",
+                "Record Proactive Check-in Outcome",
                 "Records the first opening or action for a proactive item owned by the person.",
                 "proactive",
                 AgentScopes.WriteNotifications,
@@ -587,7 +589,7 @@ public partial class AgentCatalogService
                 IsPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
                 PlanRequirement: "Pro",
-                ControllerActionKeys: ["ProactiveAstraController.Opened", "ProactiveAstraController.Acted"])
+                ControllerActionKeys: ["ProactiveAiController.Opened", "ProactiveAiController.Acted"])
         ];
     }
 

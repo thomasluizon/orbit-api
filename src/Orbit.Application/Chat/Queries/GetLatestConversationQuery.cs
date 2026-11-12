@@ -13,7 +13,7 @@ public sealed class GetLatestConversationQueryHandler(IConversationTurnRecorder 
 {
     public async Task<Result<ConversationPage>> Handle(GetLatestConversationQuery request, CancellationToken cancellationToken)
     {
-        if (!(await flags.GetEnabledKeysForUserAsync(request.UserId, cancellationToken)).Contains(FeatureFlagKeys.AstraConversationRecording))
+        if (!(await flags.GetEnabledKeysForUserAsync(request.UserId, cancellationToken)).Contains(FeatureFlagKeys.AiConversationRecording))
             return Result.Failure<ConversationPage>(ConversationErrors.NotFound);
         var conversation = await store.GetLatestAsync(request.UserId, request.ConversationId, request.BeforeOrder, request.PageSize, cancellationToken);
         return conversation is null ? Result.Failure<ConversationPage>(ConversationErrors.NotFound) : Result.Success(conversation);

@@ -28,7 +28,7 @@ public class CoreIdentitySectionTests
         var ctx = new PromptContext(new List<Habit>(), false, null, null, null, null);
         var result = new CoreIdentitySection().Build(ctx);
 
-        result.Should().Contain("Orbit AI");
+        result.Should().Contain("# You are Orbit - A Personal Habit").And.NotContain("Astra").And.NotContain("Orbit AI");
         result.Should().Contain("Habit and Goal Tracking Assistant");
     }
 

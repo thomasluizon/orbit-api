@@ -64,10 +64,10 @@ public partial class ProcessUserChatCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue(result.Error);
         result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>()
-            .Which.Block.Should().BeOfType<AstraPickListBlock>().Which.Action.Should().Be("create_habits");
+            .Which.Block.Should().BeOfType<AiPickListBlock>().Which.Action.Should().Be("create_habits");
         result.Value.PendingOperations.Should().BeNullOrEmpty();
         result.Value.Actions.Should().BeEmpty();
-        await _blockStore.Received(1).AddAsync(Arg.Is<IssuedAstraBlock>(stored =>
+        await _blockStore.Received(1).AddAsync(Arg.Is<IssuedAiBlock>(stored =>
             stored.ReadDefinition().Items.Single().Arguments.GetProperty("title").GetString() == title
             && stored.ReadDefinition().Items.Single().Arguments.GetProperty("due_time").GetString() == "07:00"
             && stored.ReadDefinition().Items.Single().Arguments.GetProperty("sub_habits")[0].GetProperty("title").GetString() == title + " 2"
@@ -133,7 +133,7 @@ public partial class ProcessUserChatCommandHandlerTests
         result.IsSuccess.Should().BeTrue(result.Error);
         var part = result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>().Subject;
         part.Kind.Should().Be("pickList");
-        var block = part.Block.Should().BeOfType<AstraPickListBlock>().Subject;
+        var block = part.Block.Should().BeOfType<AiPickListBlock>().Subject;
         block.Title.Should().Be(arguments["title"]!.GetValue<string>());
         block.Action.Should().Be("log_habits");
         block.Items.Select(item => item.Id).Should().Equal(habits.Select(habit => habit.Id.ToString()));
@@ -142,7 +142,7 @@ public partial class ProcessUserChatCommandHandlerTests
         result.Value.AiMessage.Should().BeNullOrEmpty();
         result.Value.PendingOperations.Should().BeNullOrEmpty();
         result.Value.Actions.Should().BeEmpty();
-        await _blockStore.Received(1).AddAsync(Arg.Is<IssuedAstraBlock>(stored => stored.Id == block.BlockId
+        await _blockStore.Received(1).AddAsync(Arg.Is<IssuedAiBlock>(stored => stored.Id == block.BlockId
             && stored.ReadDefinition().Intro == null
             && stored.ReadDefinition().Items.All(item => item.Arguments.GetProperty("date").GetString() == "2026-10-28")),
             Arg.Any<CancellationToken>());

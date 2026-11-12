@@ -91,7 +91,8 @@ public class ExportUserDataQueryHandler(
                 user.AiSummaryEnabled,
                 user.EffectiveProactivePushEnabled,
                 user.Uses24HourClockPreference,
-                user.ProactiveAstraEnabled),
+                user.ProactiveAiEnabled,
+                MascotMotionEnabled: user.MascotMotionEnabled),
             new ExportedSubscription(
                 user.Plan.ToString(),
                 user.IsLifetimePro,

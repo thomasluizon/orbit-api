@@ -86,7 +86,7 @@ public partial class ProcessUserChatCommandHandlerTests
             new CreateChecklistTemplateTool(_mediator), new UpdateChecklistTemplateTool(_mediator),
             new RevisePendingChangesTool(Substitute.For<IServiceProvider>())
         };
-        _offers.IssuedAsync(UserId, Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Array.Empty<AstraOfferFact>());
+        _offers.IssuedAsync(UserId, Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Array.Empty<AiOfferFact>());
         SetupAiResponse(new AiResponse { TextMessage = "Ready." });
         var result = await CreateHandler(tools).Handle(new(UserId, "Prepare the requested draft.",
             ClientContext: OfferClient("en") with { SupportsProactiveOffers = supports }), default);

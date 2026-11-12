@@ -12,7 +12,7 @@ public sealed class GetConversationImageQueryHandler(IConversationTurnRecorder s
 {
     public async Task<Result<StoredConversationImage>> Handle(GetConversationImageQuery request, CancellationToken cancellationToken)
     {
-        if (!(await flags.GetEnabledKeysForUserAsync(request.UserId, cancellationToken)).Contains(FeatureFlagKeys.AstraConversationRecording))
+        if (!(await flags.GetEnabledKeysForUserAsync(request.UserId, cancellationToken)).Contains(FeatureFlagKeys.AiConversationRecording))
             return Result.Failure<StoredConversationImage>(ConversationErrors.NotFound);
         var image = await store.ReadImageAsync(request.UserId, request.ConversationId, request.TurnId, cancellationToken);
         return image is null ? Result.Failure<StoredConversationImage>(ConversationErrors.NotFound) : Result.Success(image);

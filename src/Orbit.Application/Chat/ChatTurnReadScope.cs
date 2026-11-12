@@ -3,7 +3,7 @@ using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Chat;
 
-/// <summary>Shares immutable read inputs across the isolated scopes of one Astra turn.</summary>
+/// <summary>Shares immutable read inputs across the isolated scopes of one AI turn.</summary>
 public sealed class ChatTurnReadScope : IDisposable
 {
     private static readonly AsyncLocal<ChatTurnReadScope?> Ambient = new();

@@ -107,7 +107,7 @@ public partial class ProcessUserChatCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.Plan.Should().BeNull();
         events.Should().NotContain(item => item.Type == "plan" || item.Type == "plan_step");
-        JsonDocument.Parse(JsonSerializer.Serialize(result.Value, AstraPlan.JsonOptions)).RootElement.TryGetProperty("plan", out _).Should().BeFalse();
+        JsonDocument.Parse(JsonSerializer.Serialize(result.Value, AiPlan.JsonOptions)).RootElement.TryGetProperty("plan", out _).Should().BeFalse();
     }
 
     [Fact]
@@ -139,14 +139,14 @@ public partial class ProcessUserChatCommandHandlerTests
     [Fact]
     public void Plan_OldClientIgnoresBlockAndAcceptsOldPayload()
     {
-        var plan = AstraPlan.Create("Your progress", [new("1", "Read habits", "done", "read_one", "execution"),
+        var plan = AiPlan.Create("Your progress", [new("1", "Read habits", "done", "read_one", "execution"),
             new("2", "Read goals", "done", "read_two", "execution")]).Value;
         var response = new ChatResponse("Done", [], Plan: plan);
-        var payload = JsonSerializer.Serialize(response, AstraPlan.JsonOptions);
-        var client = JsonSerializer.Deserialize<OldPlanClientResponse>(payload, AstraPlan.JsonOptions);
+        var payload = JsonSerializer.Serialize(response, AiPlan.JsonOptions);
+        var client = JsonSerializer.Deserialize<OldPlanClientResponse>(payload, AiPlan.JsonOptions);
         client!.AiMessage.Should().Be("Done");
-        JsonSerializer.Deserialize<ChatResponse>("{\"aiMessage\":\"Done\",\"actions\":[]}", AstraPlan.JsonOptions)!.Plan.Should().BeNull();
-        JsonSerializer.Deserialize<OldPlanClientEvent>(new ChatStreamEvent("plan", Plan: plan).ToJson(), AstraPlan.JsonOptions)!.Type.Should().Be("plan");
+        JsonSerializer.Deserialize<ChatResponse>("{\"aiMessage\":\"Done\",\"actions\":[]}", AiPlan.JsonOptions)!.Plan.Should().BeNull();
+        JsonSerializer.Deserialize<OldPlanClientEvent>(new ChatStreamEvent("plan", Plan: plan).ToJson(), AiPlan.JsonOptions)!.Type.Should().Be("plan");
     }
 
     private sealed record OldPlanClientResponse(string? AiMessage);

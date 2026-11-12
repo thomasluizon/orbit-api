@@ -63,18 +63,18 @@ public class AgentCatalogServiceTests
     }
 
     [Fact]
-    public void ProactiveAstraTool_UsesExistingProCapabilityAndAiSettingsScope()
+    public void ProactiveAiTool_UsesExistingProCapabilityAndAiSettingsScope()
     {
         var tool = (IAiTool)RuntimeHelpers.GetUninitializedObject(
-            typeof(Orbit.Application.Chat.Tools.Implementations.SetProactiveAstraTool));
+            typeof(Orbit.Application.Chat.Tools.Implementations.SetProactiveAiTool));
         var catalog = new AgentCatalogService([tool]);
 
         var capability = catalog.GetCapabilityByChatTool("set_proactive_astra");
         capability.Should().NotBeNull();
-        capability!.Id.Should().Be(AgentCapabilityIds.ProfileProactiveAstraWrite);
+        capability!.Id.Should().Be(AgentCapabilityIds.ProfileProactiveAiWrite);
         capability.PlanRequirement.Should().Be("Pro");
         capability.Scope.Should().Be(AgentScopes.WriteAiSettings);
-        capability.ControllerActionKeys.Should().Contain("ProfileController.SetProactiveAstra");
+        capability.ControllerActionKeys.Should().Contain("ProfileController.SetProactiveAi");
         var operation = catalog.GetOperation("set_proactive_astra");
         operation.Should().NotBeNull();
         operation!.CapabilityId.Should().Be(capability.Id);
@@ -328,10 +328,10 @@ public class AgentCatalogServiceTests
     }
 
     [Theory]
-    [InlineData(AgentCapabilityIds.ProactiveItemsRead, AgentScopes.ReadNotifications, false, "ProactiveAstraController.Current")]
-    [InlineData(AgentCapabilityIds.ProactiveItemsRead, AgentScopes.ReadNotifications, false, "ProactiveAstraController.GetById")]
-    [InlineData(AgentCapabilityIds.ProactiveItemsWrite, AgentScopes.WriteNotifications, true, "ProactiveAstraController.Opened")]
-    [InlineData(AgentCapabilityIds.ProactiveItemsWrite, AgentScopes.WriteNotifications, true, "ProactiveAstraController.Acted")]
+    [InlineData(AgentCapabilityIds.ProactiveItemsRead, AgentScopes.ReadNotifications, false, "ProactiveAiController.Current")]
+    [InlineData(AgentCapabilityIds.ProactiveItemsRead, AgentScopes.ReadNotifications, false, "ProactiveAiController.GetById")]
+    [InlineData(AgentCapabilityIds.ProactiveItemsWrite, AgentScopes.WriteNotifications, true, "ProactiveAiController.Opened")]
+    [InlineData(AgentCapabilityIds.ProactiveItemsWrite, AgentScopes.WriteNotifications, true, "ProactiveAiController.Acted")]
     public void ProactiveItems_AreCatalogedAsProClientCapabilities(string capabilityId, string scope, bool isMutation, string action)
     {
         var capability = _catalogService.GetCapability(capabilityId);

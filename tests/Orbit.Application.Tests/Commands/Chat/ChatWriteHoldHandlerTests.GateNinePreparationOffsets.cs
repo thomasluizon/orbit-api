@@ -166,7 +166,7 @@ public sealed partial class ChatWriteHoldHandlerTests
         ParentAccount(language);
         UseParentHabits([]);
         _userDateService.GetUserTodayAsync(_userId, Arg.Any<CancellationToken>()).Returns(new DateOnly(2026, 10, 29));
-        _featureFlagService.GetEnabledKeysForUserAsync(_userId, Arg.Any<CancellationToken>()).Returns([FeatureFlagKeys.AstraBlockFirst]);
+        _featureFlagService.GetEnabledKeysForUserAsync(_userId, Arg.Any<CancellationToken>()).Returns([FeatureFlagKeys.AiBlockFirst]);
         _promptBuilder.BuildStatic(Arg.Any<PromptBuildRequest>()).Returns(call => new SystemPromptBuilder().BuildStatic(call.Arg<PromptBuildRequest>()));
     }
 

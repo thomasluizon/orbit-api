@@ -19,7 +19,7 @@ public class ProcessUserChatCommandValidator : AbstractValidator<ProcessUserChat
             .WithCopy(ErrorCodes.MessageTooLong, AppConstants.MaxChatMessageLength);
 
         When(x => x.BlockAnswer is not null, () =>
-            RuleFor(x => x.BlockAnswer!).SetValidator(new AstraBlockAnswerValidator()));
+            RuleFor(x => x.BlockAnswer!).SetValidator(new AiBlockAnswerValidator()));
 
         RuleFor(x => x.ClientContext)
             .Must(context => context?.ConversationId is null || context.ConversationId != Guid.Empty)

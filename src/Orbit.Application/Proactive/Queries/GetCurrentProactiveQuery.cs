@@ -44,7 +44,7 @@ public sealed class GetCurrentProactiveQueryHandler(IProactiveEngine engine, IAg
     {
         if (request.ClientContext?.SupportsParts != true) return null;
         var flags = await featureFlags.GetEnabledKeysForUserAsync(request.UserId, ct);
-        if (flags.Contains(FeatureFlagKeys.AstraPartsDisabled)) return null;
+        if (flags.Contains(FeatureFlagKeys.AiPartsDisabled)) return null;
         var (kind, tool, arguments) = ReadFor(item, facts);
         if (!ProcessUserChatCommandHandler.ReadKindEnabled(kind, request.ClientContext, flags)) return null;
         var response = await operations.ExecuteAsync(new(request.UserId, tool, arguments,

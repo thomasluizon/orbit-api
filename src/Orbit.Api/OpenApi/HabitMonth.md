@@ -89,7 +89,7 @@ The API prompt forbids a vague availability warning: identify the actual unavail
 action and the returned reason, or omit it. The sentence reported by the owner is
 not an API literal; its consumer rendering belongs to the paired UI change.
 
-## Cases for the existing Astra eval
+## Cases for the existing AI eval
 
 The live corpus is owned by #26 in `orbit-ui-mobile/evals/astra`. This API-only
 change supplies the cases for the coordinator and paired UI ticket to add there;

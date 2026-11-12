@@ -14,14 +14,14 @@ public partial class ProcessUserChatCommandHandler
 {
     private static readonly JsonSerializerOptions AskArgumentJsonOptions = new(JsonSerializerDefaults.Web);
 
-    private static bool IsAskKind(string kind) => kind is AstraBlockKinds.Choice or AstraBlockKinds.PickList or AstraBlockKinds.Question;
+    private static bool IsAskKind(string kind) => kind is AiBlockKinds.Choice or AiBlockKinds.PickList or AiBlockKinds.Question;
 
     private static bool AskEnabled(ProcessUserChatCommand request, ChatContext context) =>
         request.AuthMethod == AgentAuthMethod.Jwt
             && request.ClientContext?.SupportsParts == true
             && request.ClientContext.PartKinds?.Any(IsAskKind) == true
-            && !context.EnabledFeatureFlags.Contains(FeatureFlagKeys.AstraAskBlocksDisabled)
-            && !context.EnabledFeatureFlags.Contains(FeatureFlagKeys.AstraPartsDisabled)
+            && !context.EnabledFeatureFlags.Contains(FeatureFlagKeys.AiAskBlocksDisabled)
+            && !context.EnabledFeatureFlags.Contains(FeatureFlagKeys.AiPartsDisabled)
             && !HasSupportedOfferDefault(request, context);
 
     /// <summary>
@@ -69,7 +69,7 @@ public partial class ProcessUserChatCommandHandler
         if (tool is null)
             return Failed("The ask tool is unavailable.");
         var result = await tool.ExecuteAsync(call.Args, request.UserId, ct);
-        if (!result.Success || result.Payload is not AstraBlockDefinition definition)
+        if (!result.Success || result.Payload is not AiBlockDefinition definition)
             return Failed(result.Error ?? "Invalid ask arguments.");
         if (!results.HasSuccessfulAccountRead && !HasBoundMissingField(call.Args, results))
             return Failed(AskTool.AccountReadInstruction);
@@ -85,16 +85,16 @@ public partial class ProcessUserChatCommandHandler
             var draft = results.MissingHabitDrafts[JsonArgumentParser.GetOptionalString(call.Args, "draft_call_id")!];
             definition = definition with { DraftClarification = new(draft.CallId, draft.MissingField, draft.ClarificationId) };
         }
-        var block = IssuedAstraBlock.Create(request.UserId, definition);
+        var block = IssuedAiBlock.Create(request.UserId, definition);
         await execution.BlockStore.AddAsync(block, ct);
         object payload = definition.Form switch
         {
-            AstraBlockKinds.Question => new AstraQuestionBlock(block.Id, definition.Questions!, block.ExpiresAtUtc,
+            AiBlockKinds.Question => new AiQuestionBlock(block.Id, definition.Questions!, block.ExpiresAtUtc,
                 string.IsNullOrWhiteSpace(definition.Title) ? null : definition.Title, definition.Intro, definition.Progress),
-            AstraBlockKinds.Choice => new AstraChoiceBlock(block.Id, definition.Title, definition.Options, definition.MultiSelect,
+            AiBlockKinds.Choice => new AiChoiceBlock(block.Id, definition.Title, definition.Options, definition.MultiSelect,
                 definition.AllowFreeText, block.ExpiresAtUtc),
-            _ => new AstraPickListBlock(block.Id, definition.Title,
-                definition.Items.Select(item => new AstraPickListItem(item.Id, item.Label, item.Detail)).ToArray(),
+            _ => new AiPickListBlock(block.Id, definition.Title,
+                definition.Items.Select(item => new AiPickListItem(item.Id, item.Label, item.Detail)).ToArray(),
                 definition.Action!, block.ExpiresAtUtc)
         };
         results.AskBlock = new ChatBlockPart(definition.Form, payload);
@@ -103,7 +103,7 @@ public partial class ProcessUserChatCommandHandler
             user?.Plan.ToString() ?? "Free", "astra_block_issued", new Dictionary<string, object>
             {
                 ["form"] = definition.Form,
-                ["count"] = definition.Questions?.Count ?? (definition.Form == AstraBlockKinds.Choice ? definition.Options.Count : definition.Items.Count)
+                ["count"] = definition.Questions?.Count ?? (definition.Form == AiBlockKinds.Choice ? definition.Options.Count : definition.Items.Count)
             });
         return new ToolCallOutcome(new AiToolCallResult(call.Name, call.Id, true, block.Id.ToString(), null, null),
             null, null, null, null);
@@ -112,8 +112,8 @@ public partial class ProcessUserChatCommandHandler
     private static string? AskAvailabilityError(JsonElement args, ProcessUserChatCommand request,
         IReadOnlyList<string> flags, ToolExecutionAccumulator results)
     {
-        if (request.AuthMethod != AgentAuthMethod.Jwt || flags.Contains(FeatureFlagKeys.AstraAskBlocksDisabled)
-            || flags.Contains(FeatureFlagKeys.AstraPartsDisabled)
+        if (request.AuthMethod != AgentAuthMethod.Jwt || flags.Contains(FeatureFlagKeys.AiAskBlocksDisabled)
+            || flags.Contains(FeatureFlagKeys.AiPartsDisabled)
             || request.ClientContext?.SupportsParts != true || results.AskBlock is not null)
             return "Interactive questions are unavailable.";
         if (results.AskAttempts >= 2)
@@ -125,7 +125,7 @@ public partial class ProcessUserChatCommandHandler
         return null;
     }
 
-    private static void RetireDraftClarification(AstraBlockDefinition definition, ToolExecutionAccumulator results)
+    private static void RetireDraftClarification(AiBlockDefinition definition, ToolExecutionAccumulator results)
     {
         if (definition.DraftClarification is { } draft)
             results.ActionResults.RemoveAll(action => action.ClarificationRequest?.OperationId == draft.ClarificationId);
@@ -135,7 +135,7 @@ public partial class ProcessUserChatCommandHandler
         args.ValueKind == JsonValueKind.Object && args.TryGetProperty("form", out var form)
         && form.ValueKind == JsonValueKind.String && client.PartKinds is { } kinds
         && (kinds.Contains(form.GetString()!, StringComparer.Ordinal)
-            || form.GetString() == AstraBlockKinds.Question && kinds.Contains(AstraBlockKinds.Choice));
+            || form.GetString() == AiBlockKinds.Question && kinds.Contains(AiBlockKinds.Choice));
 
     private static bool HasBoundMissingField(JsonElement args, ToolExecutionAccumulator results)
     {
@@ -144,8 +144,8 @@ public partial class ProcessUserChatCommandHandler
             || !results.MissingHabitDrafts.TryGetValue(draftId, out var draft)
             || JsonArgumentParser.GetOptionalString(args, "missing_field") != draft.MissingField)
             return false;
-        return JsonArgumentParser.GetOptionalString(args, "form") == AstraBlockKinds.Choice
-            || JsonArgumentParser.GetOptionalString(args, "form") == AstraBlockKinds.Question
+        return JsonArgumentParser.GetOptionalString(args, "form") == AiBlockKinds.Choice
+            || JsonArgumentParser.GetOptionalString(args, "form") == AiBlockKinds.Question
                 && args.TryGetProperty("questions", out var questions) && questions.ValueKind == JsonValueKind.Array
                 && questions.GetArrayLength() == 1 && JsonArgumentParser.GetOptionalString(questions[0], "id") == draft.MissingField;
     }
@@ -171,13 +171,13 @@ public partial class ProcessUserChatCommandHandler
         };
     }
 
-    private static string? AskMissingInputError(JsonElement args, AstraBlockDefinition definition, ToolExecutionAccumulator results)
+    private static string? AskMissingInputError(JsonElement args, AiBlockDefinition definition, ToolExecutionAccumulator results)
     {
         var missingInput = JsonArgumentParser.GetOptionalString(args, "missing_input");
         if (missingInput is not ("habit_setup" or "preference" or "check_in" or "record_selection" or "bulk_selection"))
             return "Set missing_input to habit_setup, preference, check_in, record_selection or bulk_selection to identify input only the person can supply.";
         var selectsRecords = missingInput is "record_selection" or "bulk_selection"
-            || definition is { Form: AstraBlockKinds.PickList, Action: "log_habits" or "skip_habits" };
+            || definition is { Form: AiBlockKinds.PickList, Action: "log_habits" or "skip_habits" };
         if (selectsRecords && !results.HasSuccessfulSelectionRead)
             return "Read the account records with query_habits(for_selection=true, orbit_read_complete=false) before asking the person to choose them. Resolve an earlier reminder from conversation history; when its read answers the request, return that result without ask.";
         return missingInput != "habit_setup" && !results.HasSuccessfulAccountRead ? AskTool.AccountReadInstruction : null;
@@ -243,10 +243,10 @@ public partial class ProcessUserChatCommandHandler
         return ordered.Select(NormalizeExecutionArguments).ToList();
     }
 
-    private static AstraBlockDefinition GroundDuplicateRecordOptions(AstraBlockDefinition definition,
+    private static AiBlockDefinition GroundDuplicateRecordOptions(AiBlockDefinition definition,
         ToolExecutionAccumulator results, string? language)
     {
-        if (definition.Form != AstraBlockKinds.Choice)
+        if (definition.Form != AiBlockKinds.Choice)
             return definition;
         var options = definition.Options.ToArray();
         var records = options.Where(option => results.ReadHabitItems.ContainsKey(option.Id))
@@ -293,11 +293,11 @@ public partial class ProcessUserChatCommandHandler
         {
             return false;
         }
-        IReadOnlyList<AstraBlockOption> options = input switch
+        IReadOnlyList<AiBlockOption> options = input switch
         {
-            { Form: AstraBlockKinds.Choice, Options: { Count: > 0 } choices } => choices,
-            { Form: AstraBlockKinds.Question, Questions: [var question] } when question is { Type: "singleChoice", Options: { Count: > 0 } choices }
-                && choices.All(option => option is not null) => choices.Select(option => new AstraBlockOption(option.Id, option.Label)).ToArray(),
+            { Form: AiBlockKinds.Choice, Options: { Count: > 0 } choices } => choices,
+            { Form: AiBlockKinds.Question, Questions: [var question] } when question is { Type: "singleChoice", Options: { Count: > 0 } choices }
+                && choices.All(option => option is not null) => choices.Select(option => new AiBlockOption(option.Id, option.Label)).ToArray(),
             _ => []
         };
         if (options.Count == 0) return false;

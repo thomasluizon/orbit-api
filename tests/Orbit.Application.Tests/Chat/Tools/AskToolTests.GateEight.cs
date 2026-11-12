@@ -42,6 +42,6 @@ public partial class AskToolTests
         if (error is not null)
             result.Error.Should().Contain(error);
         else
-            result.Payload.Should().BeOfType<AstraBlockDefinition>();
+            result.Payload.Should().BeOfType<AiBlockDefinition>();
     }
 }

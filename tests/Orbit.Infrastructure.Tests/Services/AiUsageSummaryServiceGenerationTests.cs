@@ -41,7 +41,7 @@ public class AiUsageSummaryServiceGenerationTests
 
         harness.SingleSummaryLine().Should().Be(
             $"AI cost {Yesterday:yyyy-MM-dd}: no usage recorded; " +
-            $"Astra quota {Yesterday:yyyy-MM-dd}: no active users");
+            $"AI quota {Yesterday:yyyy-MM-dd}: no active users");
     }
 
     [Fact]

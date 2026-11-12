@@ -71,7 +71,7 @@ public class AiControllerTests
             : await _controller.ExecutePendingOperation(id, new AiController.ExecutePendingOperationRequest("token"), default);
         var body = JsonSerializer.SerializeToElement(result.Should().BeOfType<ConflictObjectResult>().Subject.Value);
         body.GetProperty("error").GetString().Should().Be("pending_operation_schema_changed");
-        body.GetProperty("message").GetString().Should().Contain("propose the change again");
+        body.GetProperty("message").GetString().Should().Contain("Ask for the change again");
         _pendingOperationStore.DidNotReceiveWithAnyArgs().Confirm(default, default);
         await _operationExecutor.DidNotReceiveWithAnyArgs().ExecuteAsync(default!, default);
     }

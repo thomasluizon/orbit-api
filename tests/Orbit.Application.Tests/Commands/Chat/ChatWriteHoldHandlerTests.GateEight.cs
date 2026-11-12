@@ -26,7 +26,7 @@ public sealed partial class ChatWriteHoldHandlerTests
         UseParentHabits([]);
         _userDateService.GetUserTodayAsync(_userId, Arg.Any<CancellationToken>()).Returns(GateSevenToday);
         _featureFlagService.GetEnabledKeysForUserAsync(_userId, Arg.Any<CancellationToken>())
-            .Returns([Orbit.Application.Common.FeatureFlagKeys.AstraBlockFirst]);
+            .Returns([Orbit.Application.Common.FeatureFlagKeys.AiBlockFirst]);
         var calls = GateEightCapture($"composition-avoid-form-{language}-r{repeat}")
             .GetProperty("toolCalls").EnumerateArray().Select((call, index) => new AiToolCall(
                 call.GetProperty("name").GetString()!, "gate_eight_" + index,

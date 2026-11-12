@@ -7,14 +7,14 @@ public sealed record ReadBlockMetadata(
     string Completeness, string RefreshToken, string? NextCursor = null,
     int? TotalCount = null, string? Recovery = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
-    AstraNextAction? NextAction = null);
+    AiNextAction? NextAction = null);
 
-public sealed record AstraNextAction(string OfferKey, string Kind, string Label,
+public sealed record AiNextAction(string OfferKey, string Kind, string Label,
     string? Surface = null, string? Prompt = null, Guid? EntityId = null,
     DateOnly? Date = null);
 
-public sealed record AstraOfferFact(string Id, string Family, string Evidence,
-    AstraNextAction Action, Guid QueryId, string Revision, DateOnly LocalDate)
+public sealed record AiOfferFact(string Id, string Family, string Evidence,
+    AiNextAction Action, Guid QueryId, string Revision, DateOnly LocalDate)
 {
     public ReadBlockMetadata? Source { get; init; }
     public string? SourceKind { get; init; }

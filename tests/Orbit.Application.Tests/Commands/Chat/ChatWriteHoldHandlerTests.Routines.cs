@@ -30,7 +30,7 @@ public sealed partial class ChatWriteHoldHandlerTests
         _user.SetLanguage(language);
         _mediator.Send(Arg.Any<CheckChatCommandQuery>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
         _featureFlagService.GetEnabledKeysForUserAsync(_userId, Arg.Any<CancellationToken>())
-            .Returns(new[] { FeatureFlagKeys.AstraBlockFirst });
+            .Returns(new[] { FeatureFlagKeys.AiBlockFirst });
         var title = language == "pt-BR" ? "Rotina tranquila da noite" : "Calm evening routine";
         var read = language == "pt-BR" ? "Ler 20 minutos" : "Read 20 minutes";
         var stretch = language == "pt-BR" ? "Alongar" : "Stretch";

@@ -128,7 +128,7 @@ public sealed record OAuthPageStrings(
         ReadRoutine: portuguese ? "Ver sua rotina e progresso" : "View your routine and progress",
         EditRoutine: portuguese ? "Criar e editar sua rotina" : "Create and edit your routine",
         DeleteRoutine: portuguese ? "Excluir hábitos, metas e tags" : "Delete habits, goals and tags",
-        Chat: portuguese ? "Conversar com a Astra" : "Talk to Astra",
+        Chat: portuguese ? "Falar com o Orbit" : "Talk to Orbit",
         ReadAccount: portuguese ? "Ver dados da sua conta" : "View your account details",
         Preferences: portuguese ? "Ajustar preferências e avisos" : "Adjust settings and notifications",
         Calendar: portuguese ? "Ver e sincronizar calendários" : "View and sync calendars",

@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using MediatR;
 using Orbit.Application.ApiKeys.Services;
 using Orbit.Application.Common;
@@ -22,7 +23,7 @@ public record ProfileResponse(
     bool HasCompletedTour,
     bool HasCreatedFirstHabit,
     bool HasLoggedFirstHabit,
-    bool HasTriedAstra,
+    [property: JsonPropertyName("hasTriedAstra")] bool HasTriedAi,
     bool HasCompletedOnboardingChecklist,
     string? Language,
     string Plan,
@@ -59,13 +60,14 @@ public record ProfileResponse(
     bool SocialOptIn,
     bool Uses24HourClock = true,
     PublicProfileSettings? PublicProfile = null,
-    bool ProactiveAstraEnabled = false,
+    [property: JsonPropertyName("proactiveAstraEnabled")] bool ProactiveAiEnabled = false,
     bool? MarketingEmailConsent = null,
     DateOnly? LastCompletionDate = null,
     int? ActiveApiKeyCount = null,
     string? BillingProvider = null,
     string? AiMessagesPeriod = null,
-    DateTime? AiMessagesResetsAt = null);
+    DateTime? AiMessagesResetsAt = null,
+    bool MascotMotionEnabled = true);
 
 public record GetProfileQuery(Guid UserId) : IRequest<Result<ProfileResponse>>;
 
@@ -123,7 +125,7 @@ public class GetProfileQueryHandler(
             user.HasCompletedTour,
             user.HasCreatedFirstHabit,
             user.HasLoggedFirstHabit,
-            user.HasTriedAstra,
+            user.HasTriedAi,
             user.HasCompletedOnboardingChecklist,
             user.Language,
             user.HasProAccess ? "pro" : "free",
@@ -165,6 +167,7 @@ public class GetProfileQueryHandler(
             activeApiKeyCount,
             user.SubscriptionSource.ToBillingProvider(),
             AiAllowancePeriod.ActiveFor(today, user.HasProAccess, user.WeekStartDay, user.AiMessagesWeekStart).Name,
-            AiAllowanceReset.GetResetsAtUtc(user, today)));
+            AiAllowanceReset.GetResetsAtUtc(user, today),
+            user.MascotMotionEnabled));
     }
 }

@@ -771,14 +771,14 @@ public class UserTests
         var user = CreateValidUser();
         user.MarkFirstHabitCreated();
         user.MarkFirstHabitLogged();
-        user.MarkAstraUsed();
+        user.MarkAiUsed();
         user.CompleteOnboardingChecklist();
 
         user.ResetAccount();
 
         user.HasCreatedFirstHabit.Should().BeFalse();
         user.HasLoggedFirstHabit.Should().BeFalse();
-        user.HasTriedAstra.Should().BeFalse();
+        user.HasTriedAi.Should().BeFalse();
         user.HasCompletedOnboardingChecklist.Should().BeFalse();
     }
 
@@ -1143,7 +1143,7 @@ public class UserTests
 
         user.HasCreatedFirstHabit.Should().BeFalse();
         user.HasLoggedFirstHabit.Should().BeFalse();
-        user.HasTriedAstra.Should().BeFalse();
+        user.HasTriedAi.Should().BeFalse();
         user.HasCompletedOnboardingChecklist.Should().BeFalse();
     }
 
@@ -1157,7 +1157,7 @@ public class UserTests
 
         user.HasCreatedFirstHabit.Should().BeTrue();
         user.HasLoggedFirstHabit.Should().BeFalse();
-        user.HasTriedAstra.Should().BeFalse();
+        user.HasTriedAi.Should().BeFalse();
     }
 
     [Fact]
@@ -1170,18 +1170,18 @@ public class UserTests
 
         user.HasLoggedFirstHabit.Should().BeTrue();
         user.HasCreatedFirstHabit.Should().BeFalse();
-        user.HasTriedAstra.Should().BeFalse();
+        user.HasTriedAi.Should().BeFalse();
     }
 
     [Fact]
-    public void MarkAstraUsed_SetsFlagAndIsIdempotent()
+    public void MarkAiUsed_SetsFlagAndIsIdempotent()
     {
         var user = CreateValidUser();
 
-        user.MarkAstraUsed();
-        user.MarkAstraUsed();
+        user.MarkAiUsed();
+        user.MarkAiUsed();
 
-        user.HasTriedAstra.Should().BeTrue();
+        user.HasTriedAi.Should().BeTrue();
         user.HasCreatedFirstHabit.Should().BeFalse();
         user.HasLoggedFirstHabit.Should().BeFalse();
     }

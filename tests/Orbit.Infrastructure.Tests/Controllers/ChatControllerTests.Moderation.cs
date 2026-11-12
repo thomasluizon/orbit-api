@@ -212,7 +212,7 @@ public partial class ChatControllerTests
                 Substitute.For<IAgentOperationExecutor>(), Substitute.For<IPendingClarificationStore>(),
                 Substitute.For<IGoalProgressReadSyncer>(), Substitute.For<IGamificationService>(), _mediator,
                 Substitute.For<IProductAnalytics>(), Substitute.For<IHabitScheduleLogReader>(),
-                Substitute.For<IIssuedAstraBlockStore>(), Substitute.For<IPendingAgentOperationStore>()),
+                Substitute.For<IIssuedAiBlockStore>(), Substitute.For<IPendingAgentOperationStore>()),
             NullLogger<ProcessUserChatCommandHandler>.Instance, Substitute.For<IAppConfigService>(), moderation);
         _mediator.Send(Arg.Any<ProcessUserChatCommand>(), Arg.Any<CancellationToken>())
             .Returns(call => handler.Handle(call.Arg<ProcessUserChatCommand>(), call.Arg<CancellationToken>()));

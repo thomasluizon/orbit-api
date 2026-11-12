@@ -62,7 +62,7 @@ public sealed class AiRequestCostEstimatorTests(ITestOutputHelper output)
             instructions = text,
             input = new object[]
             {
-                new { role = "system", content = "Astra" },
+                new { role = "system", content = "Orbit" },
                 new { role = "system", content = text },
                 new { role = "user", content = text },
                 new { type = "function_call_output", call_id = "read", output = text }

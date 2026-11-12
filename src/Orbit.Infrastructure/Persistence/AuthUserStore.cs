@@ -17,7 +17,7 @@ public sealed class AuthUserStore(OrbitDbContext context) : IAuthUserStore
                 "Id", "Name", "Email", "AiMemoryEnabled",
                 "AiSummaryEnabled", "ProactiveAstraEnabled", "HasCompletedOnboarding", "HasCompletedTour",
                 "HasCreatedFirstHabit", "HasLoggedFirstHabit", "HasTriedAstra", "HasCompletedOnboardingChecklist",
-                "Plan", "IsLifetimePro", "AiMessagesUsedToday", "AiMessagesUsedThisWeek", "AiMessagesWeekStart", "CreatedAtUtc",
+                "Plan", "IsLifetimePro", "AiMessagesUsedToday", "AiMessagesUsedThisWeek", "AiMessagesWeekStart", "PhraseReadsToday", "CreatedAtUtc",
                 "HasImportedCalendar", "HasSeenImportPrompt", "GoogleCalendarAutoSyncEnabled", "IsDeactivated",
                 "WeekStartDay", "ReminderPreferencesVersion", "SocialOptIn", "IsAdmin",
                 "TotalXp", "Level", "AdRewardBonusMessages", "AdRewardsClaimedToday",
@@ -26,9 +26,9 @@ public sealed class AuthUserStore(OrbitDbContext context) : IAuthUserStore
                 "Language", "TrialEndsAt", "SignupLanguage", "SignupReferralCode")
             VALUES (
                 {candidate.Id}, {candidate.Name}, {candidate.Email}, {candidate.AiMemoryEnabled},
-                {candidate.AiSummaryEnabled}, {candidate.ProactiveAstraEnabled}, {candidate.HasCompletedOnboarding}, {candidate.HasCompletedTour},
-                {candidate.HasCreatedFirstHabit}, {candidate.HasLoggedFirstHabit}, {candidate.HasTriedAstra}, {candidate.HasCompletedOnboardingChecklist},
-                {(int)candidate.SubscriptionPlan}, {candidate.IsLifetimePro}, {candidate.AiMessagesUsedToday}, {candidate.AiMessagesUsedThisWeek}, {candidate.AiMessagesWeekStart}, {candidate.CreatedAtUtc},
+                {candidate.AiSummaryEnabled}, {candidate.ProactiveAiEnabled}, {candidate.HasCompletedOnboarding}, {candidate.HasCompletedTour},
+                {candidate.HasCreatedFirstHabit}, {candidate.HasLoggedFirstHabit}, {candidate.HasTriedAi}, {candidate.HasCompletedOnboardingChecklist},
+                {(int)candidate.SubscriptionPlan}, {candidate.IsLifetimePro}, {candidate.AiMessagesUsedToday}, {candidate.AiMessagesUsedThisWeek}, {candidate.AiMessagesWeekStart}, {candidate.PhraseReadsToday}, {candidate.CreatedAtUtc},
                 {candidate.HasImportedCalendar}, {candidate.HasSeenImportPrompt}, {candidate.GoogleCalendarAutoSyncEnabled}, {candidate.IsDeactivated},
                 {candidate.WeekStartDay}, {candidate.ReminderPreferencesVersion}, {candidate.SocialOptIn}, {candidate.IsAdmin},
                 {candidate.TotalXp}, {candidate.Level}, {candidate.AdRewardBonusMessages}, {candidate.AdRewardsClaimedToday},

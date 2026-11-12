@@ -53,6 +53,29 @@ public class HabitsControllerTests
     }
 
     [Fact]
+    public async Task ReadPhrase_ForwardsThePhraseForTheAuthenticatedAccount()
+    {
+        var reading = Orbit.Domain.Models.HabitPhraseReading.Unread;
+        _mediator.Send(Arg.Any<ReadHabitPhraseCommand>(), Arg.Any<CancellationToken>()).Returns(Result.Success(reading));
+
+        var result = await _controller.ReadPhrase(new("tomar remédio", "pt-BR"), CancellationToken.None);
+
+        result.Should().BeOfType<OkObjectResult>().Which.Value.Should().Be(reading);
+        await _mediator.Received(1).Send(Arg.Is<ReadHabitPhraseCommand>(command => command.UserId == UserId
+            && command.Phrase == "tomar remédio" && command.Language == "pt-BR"), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public void ReadPhrase_RequiresASignedInAccount()
+    {
+        typeof(HabitsController).GetCustomAttributes(typeof(Microsoft.AspNetCore.Authorization.AuthorizeAttribute), true)
+            .Should().NotBeEmpty("the class-level attribute answers 401 when no token arrives");
+        typeof(HabitsController).GetMethod(nameof(HabitsController.ReadPhrase))!
+            .GetCustomAttributes(typeof(Microsoft.AspNetCore.Authorization.AllowAnonymousAttribute), true)
+            .Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task CreateAndUpdate_ForwardExplicitStartDate()
     {
         var start = new DateOnly(2026, 10, 26);

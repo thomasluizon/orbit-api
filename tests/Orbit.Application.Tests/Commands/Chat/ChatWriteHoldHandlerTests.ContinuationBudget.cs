@@ -410,7 +410,7 @@ public sealed partial class ChatWriteHoldHandlerTests
             .Returns(call => Result.Success<IReadOnlyDictionary<Guid, string>>(call.ArgAt<IReadOnlyList<HabitEmojiInferenceInput>>(1)
                 .ToDictionary(input => input.HabitId, _ => "📚")));
         _featureFlagService.GetEnabledKeysForUserAsync(_userId, Arg.Any<CancellationToken>())
-            .Returns(new[] { FeatureFlagKeys.AstraEvalTrace });
+            .Returns(new[] { FeatureFlagKeys.AiEvalTrace });
         ScriptToolCall("""{"filter":{"all":true},"emoji_mode":"infer"}""", "bulk_update_habit_emojis");
         return habits;
     }

@@ -24,7 +24,7 @@ The backend for **Orbit** -- an AI-powered habit tracker. Provides a REST API fo
 | Testing | [xUnit](https://xunit.net) + FluentAssertions |
 | Containerization | Docker (multi-stage build) |
 
-Astra's gated server conversation storage, private image continuity and account
+The AI's gated server conversation storage, private image continuity and account
 retention contract are documented in
 [ServerConversations.md](src/Orbit.Api/OpenApi/ServerConversations.md).
 
@@ -84,7 +84,7 @@ Settings are bound from `appsettings.json`, with secrets overridden in `appsetti
 |---------|---------|
 | `ConnectionStrings:DefaultConnection` / `SessionConnection` | PostgreSQL (direct + session pooler) |
 | `AI:ApiKey` / `AI:Model` / `AI:SubTaskModel` / `AI:BaseUrl` | OpenAI credentials and models (`BaseUrl` defaults to `https://api.openai.com/v1`) |
-| `AI:EvalApiKey` / `AI:EvalDailyBudgetUsd` / `StagingEval:AccountIds` | Separate OpenAI key required for evaluation accounts, with a shared UTC daily spend ceiling; [setup and cost logs](infra/README.md#astra-cost-controls-and-evaluation-credentials) |
+| `AI:EvalApiKey` / `AI:EvalDailyBudgetUsd` / `StagingEval:AccountIds` | Separate OpenAI key required for evaluation accounts, with a shared UTC daily spend ceiling; [setup and cost logs](infra/README.md#ai-cost-controls-and-evaluation-credentials) |
 | `Jwt:SecretKey` / `Issuer` / `Audience` | JWT signing and claims |
 | `Storage:S3:Bucket` / `Region` / `PublicBaseUrl` / `AccessKeyId` / `SecretAccessKey` | Required S3 upload, read, and erasure configuration |
 | `Ses:AccessKeyId` / `SecretAccessKey` / `FromEmail` | Transactional email |
@@ -167,13 +167,13 @@ dotnet test
 
 Tests use xUnit with FluentAssertions. Unit tests only — there is no integration or E2E suite.
 
-Astra's launch gate and offline replay procedure are documented in [TESTING.md](TESTING.md).
+The AI's launch gate and offline replay procedure are documented in [TESTING.md](TESTING.md).
 
 ## Deployment
 
-Astra composition is opt-in and independent of model configuration. See its
+AI composition is opt-in and independent of model configuration. See its
 [producer contract](src/Orbit.Api/OpenApi/AnswerComposition.md) and
-[activation runbook](infra/README.md#astra-answer-composition-activation).
+[activation runbook](infra/README.md#ai-answer-composition-activation).
 Capability fallbacks use localized facts without repeated title headings; feature help stays
 within its documented tool result. These corrections do not require global composition activation.
 

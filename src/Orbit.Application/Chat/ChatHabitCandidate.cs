@@ -14,7 +14,7 @@ public sealed record ChatHabitCandidate(
     bool CompletedToday,
     string? Emoji)
 {
-    public const string QueryTag = "astra-habit-candidates";
+    public const string QueryTag = "ai-habit-candidates";
 
     public static IQueryable<ChatHabitCandidate> Select(IQueryable<Habit> query, DateOnly today, bool includeChecklists) =>
         query.TagWith(QueryTag).Select(habit => new ChatHabitCandidate(

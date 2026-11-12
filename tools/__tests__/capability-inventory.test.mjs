@@ -304,7 +304,7 @@ test("helpers inside a nested object never flatten their fields onto its parent"
   for (const tools of Object.values(inventory.registries)) for (const value of tools) assert.equal(new Set(value.parameters.map(row => row.name)).size, value.parameters.length, value.name)
 })
 
-test("every habit, goal, checklist and tag form field has a registered Astra path", () => {
+test("every habit, goal, checklist and tag form field has a registered AI path", () => {
   const missing = inventory.formFields.flatMap(form => form.fields.filter(field => field.status !== "covered").map(field => `${form.form}.${field.name}`))
   assert.deepEqual(missing, [])
 })
@@ -318,7 +318,7 @@ test("repeat reminder form coverage follows the shared create schema", () => {
   })
 })
 
-test("adding a form field without an Astra parameter exposes the gap", () => {
+test("adding a form field without an AI parameter exposes the gap", () => {
   mutate("src/Orbit.Api/Controllers/HabitsControllerRequests.cs", text => text.replace("string Title,", "string Title, string UnreachableFormField,"), build => {
     const form = build().formFields.find(form => form.form === "CreateHabitRequest")
     assert.equal(form.fields.find(field => field.name === "UnreachableFormField").status, "absent")

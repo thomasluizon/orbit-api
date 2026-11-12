@@ -42,7 +42,7 @@ public partial class ProcessUserChatCommandHandler
             continued.ErrorCode ?? ErrorMessages.AiUnavailable.Code, continued.Error));
     }
 
-    [LoggerMessage(EventId = 32, Level = LogLevel.Warning, Message = "Astra round {Iteration} held only {ToolName}; the turn continues: {CanContinue}")]
+    [LoggerMessage(EventId = 32, Level = LogLevel.Warning, Message = "AI round {Iteration} held only {ToolName}; the turn continues: {CanContinue}")]
     private static partial void LogPlanOnlyRound(ILogger logger, int iteration, string toolName, bool canContinue);
 
     private static void TracePlanCalls(AiResponse response, IReadOnlyList<AiToolCallResult> plans, ToolExecutionAccumulator results)
@@ -64,15 +64,15 @@ public partial class ProcessUserChatCommandHandler
             {
                 try
                 {
-                    var draft = call.Args.Deserialize<AstraPlanDraft>(AstraPlan.JsonOptions);
-                    if (draft is not null && new AstraPlanDraftValidator().Validate(draft).IsValid
+                    var draft = call.Args.Deserialize<AiPlanDraft>(AiPlan.JsonOptions);
+                    if (draft is not null && new AiPlanDraftValidator().Validate(draft).IsValid
                         && draft.Steps.All(step => ai.ToolRegistry.GetTool(step.Tool) is not null)
                         && draft.Steps.Count(step => step.Phase == "execution") >= 1
                         && (draft.Steps.Count(step => step.Phase == "execution") >= 2 || draft.Steps.Any(step => step.Phase == "approval"))
                         && draft.Steps.Where(step => step.Phase == "approval").All(step => ai.ToolRegistry.GetTool(step.Tool)?.IsReadOnly == false))
                     {
-                        var created = AstraPlan.Create(draft.Title, draft.Steps.Select((step, index) =>
-                            new AstraPlanStep((index + 1).ToString(System.Globalization.CultureInfo.InvariantCulture), step.Text, "pending", step.Tool, step.Phase)).ToArray());
+                        var created = AiPlan.Create(draft.Title, draft.Steps.Select((step, index) =>
+                            new AiPlanStep((index + 1).ToString(System.Globalization.CultureInfo.InvariantCulture), step.Text, "pending", step.Tool, step.Phase)).ToArray());
                         if (created.IsSuccess)
                         {
                             recording.Plan = created.Value;

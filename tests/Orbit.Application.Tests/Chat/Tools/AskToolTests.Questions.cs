@@ -33,7 +33,7 @@ public partial class AskToolTests
             """);
         var result = await _tool.ExecuteAsync(args.RootElement, UserId, default);
         result.Success.Should().BeTrue();
-        result.Payload.Should().BeOfType<AstraBlockDefinition>().Which.Questions!.Single().AllowFreeText.Should().BeFalse();
+        result.Payload.Should().BeOfType<AiBlockDefinition>().Which.Questions!.Single().AllowFreeText.Should().BeFalse();
     }
 
     [Theory]
@@ -61,7 +61,7 @@ public partial class AskToolTests
         var result = await _tool.ExecuteAsync(args, UserId, default);
 
         result.Success.Should().BeTrue(locale);
-        var definition = result.Payload.Should().BeOfType<AstraBlockDefinition>().Subject;
+        var definition = result.Payload.Should().BeOfType<AiBlockDefinition>().Subject;
         definition.Intro.Should().Be(prompt);
         var json = JsonSerializer.SerializeToElement(definition, new JsonSerializerOptions(JsonSerializerDefaults.Web));
         json.GetProperty("questions").GetArrayLength().Should().Be(5);

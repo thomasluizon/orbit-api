@@ -4,5 +4,5 @@ public enum OnboardingChecklistSignal
 {
     HabitCreated,
     HabitLogged,
-    AstraUsed
+    AiUsed
 }

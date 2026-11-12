@@ -33,8 +33,8 @@ public partial class ProcessUserChatCommandHandlerTests
         user.SetLanguage(language);
         SetupUserAndPayGate(user);
         _featureFlagService.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>())
-            .Returns([FeatureFlagKeys.AstraBlockFirst, FeatureFlagKeys.AstraEvalTrace,
-                FeatureFlagKeys.AstraConversationRecording]);
+            .Returns([FeatureFlagKeys.AiBlockFirst, FeatureFlagKeys.AiEvalTrace,
+                FeatureFlagKeys.AiConversationRecording]);
         var clock = new ChatTimingClock();
         _turnClock = clock;
         var completion = CreateTimedCompletion(clock);
@@ -110,7 +110,7 @@ public partial class ProcessUserChatCommandHandlerTests
         user.SetLanguage(language);
         SetupUserAndPayGate(user);
         _featureFlagService.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>())
-            .Returns(disabled ? [FeatureFlagKeys.AstraBlockFirst, FeatureFlagKeys.AstraPartsDisabled] : [FeatureFlagKeys.AstraBlockFirst]);
+            .Returns(disabled ? [FeatureFlagKeys.AiBlockFirst, FeatureFlagKeys.AiPartsDisabled] : [FeatureFlagKeys.AiBlockFirst]);
         var ranking = await ProduceRankingAsync();
         var tool = ReadTool("get_habit_ranking", new ToolResult(true, Payload: ranking));
         SetupAiResponse(ToolResponse(tool.Name, "ranking", "{\"orbit_read_complete\":true}"));

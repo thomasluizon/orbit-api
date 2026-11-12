@@ -72,12 +72,12 @@ public sealed class SubHabitPlanAccessTests : IDisposable
     [InlineData("bulk", true)]
     [InlineData("duplicate", false)]
     [InlineData("duplicate", true)]
-    [InlineData("astra", false)]
-    [InlineData("astra", true)]
-    [InlineData("astra-dedicated", false)]
-    [InlineData("astra-dedicated", true)]
-    [InlineData("astra-existing-parent-bulk", false)]
-    [InlineData("astra-existing-parent-bulk", true)]
+    [InlineData("ai", false)]
+    [InlineData("ai", true)]
+    [InlineData("ai-dedicated", false)]
+    [InlineData("ai-dedicated", true)]
+    [InlineData("ai-existing-parent-bulk", false)]
+    [InlineData("ai-existing-parent-bulk", true)]
     public async Task CreateSubHabits_AllPathsPersistChildren_ForBothPlans(string path, bool pro)
     {
         if (pro)
@@ -134,16 +134,16 @@ public sealed class SubHabitPlanAccessTests : IDisposable
                 _added.Should().OnlyContain(habit => habit.Id != original.Id && habit.Id != originalChild.Id);
                 originalChild.SlipAlertEnabled.Should().BeTrue();
                 break;
-            case "astra-dedicated":
-            case "astra-existing-parent-bulk":
+            case "ai-dedicated":
+            case "ai-existing-parent-bulk":
                 var parent = AddExisting("Parent");
                 var mediator = Substitute.For<IMediator>();
                 mediator.Send(Arg.Any<CreateSubHabitCommand>(), Arg.Any<CancellationToken>())
                     .Returns(call => CreateDedicatedHandler().Handle(call.Arg<CreateSubHabitCommand>(), call.Arg<CancellationToken>()));
-                IAiTool tool = path == "astra-dedicated"
+                IAiTool tool = path == "ai-dedicated"
                     ? new CreateSubHabitTool(mediator)
                     : new BulkCreateHabitsTool(mediator);
-                var arguments = path == "astra-dedicated"
+                var arguments = path == "ai-dedicated"
                     ? JsonSerializer.SerializeToElement(new { parent_habit_id = parent.Id, title = "Child" })
                     : JsonSerializer.SerializeToElement(new { parent_habit_id = parent.Id, habits = new[] { new { title = "Child" } } });
                 var modelArguments = arguments.EnumerateObject().ToDictionary(field => field.Name, field => field.Value.Clone());
@@ -158,13 +158,13 @@ public sealed class SubHabitPlanAccessTests : IDisposable
                 _added.Should().ContainSingle();
                 parentId = parent.Id;
                 break;
-            case "astra":
+            case "ai":
                 using (var args = JsonDocument.Parse("""{"title":"Parent","frequency_unit":"Day","sub_habits":[{"title":"Child","is_bad_habit":true},{"title":"Second child"}]}"""))
                 {
-                    var astra = await new CreateHabitTool(_dates, Orbit.Tests.Shared.HabitToolCommandMediator.Create(_habits, _tags, _goals, _dates, _payGate, _unitOfWork))
+                    var assistant = await new CreateHabitTool(_dates, Orbit.Tests.Shared.HabitToolCommandMediator.Create(_habits, _tags, _goals, _dates, _payGate, _unitOfWork))
                         .ExecuteAsync(args.RootElement, _user.Id, CancellationToken.None);
-                    astra.Success.Should().BeTrue("{0}", astra.Error);
-                    parentId = Guid.Parse(astra.EntityId!);
+                    assistant.Success.Should().BeTrue("{0}", assistant.Error);
+                    parentId = Guid.Parse(assistant.EntityId!);
                 }
                 _added.Should().HaveCount(3);
                 break;
@@ -177,7 +177,7 @@ public sealed class SubHabitPlanAccessTests : IDisposable
             .OnlyContain(habit => habit.ParentHabitId == parentId);
         _added.Should().OnlyContain(habit => habit.UserId == _user.Id);
         _added.Should().OnlyContain(habit => !habit.SlipAlertEnabled);
-        await _unitOfWork.Received(path == "astra" ? 3 : 1).SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(path == "ai" ? 3 : 1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     [Theory]
@@ -185,10 +185,10 @@ public sealed class SubHabitPlanAccessTests : IDisposable
     [InlineData("dedicated", true)]
     [InlineData("inline", false)]
     [InlineData("inline", true)]
-    [InlineData("astra-explicit", false)]
-    [InlineData("astra-explicit", true)]
-    [InlineData("astra-default", false)]
-    [InlineData("astra-default", true)]
+    [InlineData("ai-explicit", false)]
+    [InlineData("ai-explicit", true)]
+    [InlineData("ai-default", false)]
+    [InlineData("ai-default", true)]
     public async Task CreateWithSlipAlerts_RequiresProBeforeAnyPersistence(string path, bool pro)
     {
         if (pro)
@@ -220,16 +220,16 @@ public sealed class SubHabitPlanAccessTests : IDisposable
                 success = inline.IsSuccess;
                 errorCode = inline.ErrorCode;
                 break;
-            case "astra-explicit":
-            case "astra-default":
-                using (var args = JsonDocument.Parse(path == "astra-explicit"
+            case "ai-explicit":
+            case "ai-default":
+                using (var args = JsonDocument.Parse(path == "ai-explicit"
                     ? """{"title":"Bad parent","frequency_unit":"Day","is_bad_habit":true,"slip_alert_enabled":true,"sub_habits":[{"title":"Child"}]}"""
                     : """{"title":"Bad parent","frequency_unit":"Day","is_bad_habit":true,"sub_habits":[{"title":"Child"}]}"""))
                 {
-                    var astra = await new CreateHabitTool(_dates, Orbit.Tests.Shared.HabitToolCommandMediator.Create(_habits, _tags, _goals, _dates, _payGate, _unitOfWork))
+                    var assistant = await new CreateHabitTool(_dates, Orbit.Tests.Shared.HabitToolCommandMediator.Create(_habits, _tags, _goals, _dates, _payGate, _unitOfWork))
                         .ExecuteAsync(args.RootElement, _user.Id, CancellationToken.None);
-                    success = astra.Success;
-                    errorCode = astra.ErrorCode;
+                    success = assistant.Success;
+                    errorCode = assistant.ErrorCode;
                 }
                 break;
             default:
@@ -249,7 +249,7 @@ public sealed class SubHabitPlanAccessTests : IDisposable
         _added.Where(habit => habit.IsBadHabit).Should().ContainSingle()
             .Which.SlipAlertEnabled.Should().BeTrue();
         _added.Where(habit => !habit.IsBadHabit).Should().OnlyContain(habit => !habit.SlipAlertEnabled);
-        await _unitOfWork.Received(path.StartsWith("astra-", StringComparison.Ordinal) ? 2 : 1).SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(path.StartsWith("ai-", StringComparison.Ordinal) ? 2 : 1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     [Theory]

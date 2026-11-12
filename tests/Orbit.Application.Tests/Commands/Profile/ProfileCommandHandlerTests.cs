@@ -33,7 +33,7 @@ public class ProfileCommandHandlerTests
         _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Today);
         _payGate.CanManageAiSummary(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(Result.Success()));
-        _payGate.CanManageProactiveAstra(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+        _payGate.CanManageProactiveAi(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(Result.Success()));
         _unitOfWork.ExecuteInTransactionAsync(
                 Arg.Any<Func<CancellationToken, Task>>(),
@@ -160,37 +160,37 @@ public class ProfileCommandHandlerTests
     }
 
     [Fact]
-    public async Task SetProactiveAstraEnabled_Pro_UpdatesAndSaves()
+    public async Task SetProactiveAiEnabled_Pro_UpdatesAndSaves()
     {
         var user = CreateTestUser();
         SetupUserFound(user);
 
-        var handler = new SetProactiveAstraEnabledCommandHandler(_userRepo, _payGate, _unitOfWork);
-        var command = new SetProactiveAstraEnabledCommand(UserId, true);
+        var handler = new SetProactiveAiEnabledCommandHandler(_userRepo, _payGate, _unitOfWork);
+        var command = new SetProactiveAiEnabledCommand(UserId, true);
 
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        user.ProactiveAstraEnabled.Should().BeTrue();
+        user.ProactiveAiEnabled.Should().BeTrue();
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task SetProactiveAstraEnabled_Free_PayGateFails()
+    public async Task SetProactiveAiEnabled_Free_PayGateFails()
     {
-        _payGate.CanManageProactiveAstra(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(Result.PayGateFailure("Proactive Astra check-ins are a Pro feature. Upgrade to unlock!")));
+        _payGate.CanManageProactiveAi(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(Result.PayGateFailure("Proactive check-ins are a Pro feature.")));
         var user = CreateTestUser();
         SetupUserFound(user);
 
-        var handler = new SetProactiveAstraEnabledCommandHandler(_userRepo, _payGate, _unitOfWork);
-        var command = new SetProactiveAstraEnabledCommand(UserId, true);
+        var handler = new SetProactiveAiEnabledCommandHandler(_userRepo, _payGate, _unitOfWork);
+        var command = new SetProactiveAiEnabledCommand(UserId, true);
 
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
         result.ErrorCode.Should().Be(Result.PayGateErrorCode);
-        user.ProactiveAstraEnabled.Should().BeTrue();
+        user.ProactiveAiEnabled.Should().BeTrue();
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 

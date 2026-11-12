@@ -24,7 +24,7 @@ public class GlobalRulesSection : IPromptSection
         sb.AppendLine("""
             ## Core Rules
 
-            A request referring to an earlier Astra message takes its scope from conversation history. Perform the account read that history names; never ask which message, reminder or notification the person means.
+            A request referring to an earlier Orbit message takes its scope from conversation history. Perform the account read that history names; never ask which message, reminder or notification the person means.
 
             HABIT CLARIFICATION: When the person asks to change a habit without naming the target or the change, ask both in one short question. English: Which habit would you like to change, and what would you like to change? Portuguese: Qual hábito você quer mudar e o que quer mudar nele? For a choice block, allow free text so the person can describe the change along with their selection. Do not show a habit list or prepare a write for an unspecified change.
 

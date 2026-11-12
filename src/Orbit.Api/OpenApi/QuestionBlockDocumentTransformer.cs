@@ -9,11 +9,11 @@ public sealed class QuestionBlockDocumentTransformer : IOpenApiDocumentTransform
     public async Task TransformAsync(OpenApiDocument document, OpenApiDocumentTransformerContext context,
         CancellationToken cancellationToken)
     {
-        foreach (var type in new[] { typeof(AstraQuestionBlock), typeof(AstraBlockAnswer), typeof(AstraQuestion),
-                     typeof(AstraQuestionAnswer), typeof(AstraQuestionOption), typeof(AstraQuestionProgress) })
+        foreach (var type in new[] { typeof(AiQuestionBlock), typeof(AiBlockAnswer), typeof(AiQuestion),
+                     typeof(AiQuestionAnswer), typeof(AiQuestionOption), typeof(AiQuestionProgress) })
         {
             var schema = await context.GetOrCreateSchemaAsync(type, cancellationToken: cancellationToken);
-            document.AddComponent(type.Name, schema);
+            document.AddComponent(PublishedSchemaNames.ComponentName(type), schema);
         }
     }
 }

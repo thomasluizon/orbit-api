@@ -24,7 +24,7 @@ public partial class ProcessUserChatCommandHandlerTests
     public async Task Handle_PartsClient_GroundsTextAndPreservesOrderedBlocks(bool enforce, int streak)
     {
         SetupUserAndPayGate();
-        _appConfig.GetAsync(AppConfigKeys.AstraGroundingEnforce, false, Arg.Any<CancellationToken>()).Returns(enforce);
+        _appConfig.GetAsync(AppConfigKeys.AiGroundingEnforce, false, Arg.Any<CancellationToken>()).Returns(enforce);
         var tool = FakeTool("log_habit");
         tool.IsReadOnly.Returns(false);
         tool.ExecuteAsync(Arg.Any<JsonElement>(), UserId, Arg.Any<CancellationToken>())
@@ -68,7 +68,7 @@ public partial class ProcessUserChatCommandHandlerTests
     public async Task Handle_GroundingMode_ControlsBatchAndStreamText(bool enforce)
     {
         SetupUserAndPayGate();
-        _appConfig.GetAsync(AppConfigKeys.AstraGroundingEnforce, false, Arg.Any<CancellationToken>()).Returns(enforce);
+        _appConfig.GetAsync(AppConfigKeys.AiGroundingEnforce, false, Arg.Any<CancellationToken>()).Returns(enforce);
         const string invented = "You are on a 12-day streak.";
         var events = new List<ChatStreamEvent>();
         var receivedModelSink = false;
@@ -120,7 +120,7 @@ public partial class ProcessUserChatCommandHandlerTests
     public async Task Handle_EnforcedToolTurn_PreservesActionsAndExposesFacts(string message, bool grounded)
     {
         SetupUserAndPayGate();
-        _appConfig.GetAsync(AppConfigKeys.AstraGroundingEnforce, false, Arg.Any<CancellationToken>()).Returns(true);
+        _appConfig.GetAsync(AppConfigKeys.AiGroundingEnforce, false, Arg.Any<CancellationToken>()).Returns(true);
         var tool = FakeTool("log_habit");
         tool.IsReadOnly.Returns(false);
         tool.ExecuteAsync(Arg.Any<JsonElement>(), UserId, Arg.Any<CancellationToken>())
@@ -175,7 +175,7 @@ public partial class ProcessUserChatCommandHandlerTests
     public async Task Handle_UngroundedFollowUps_AreSuppressedWhileCleanMessageRemains()
     {
         SetupUserAndPayGate();
-        _appConfig.GetAsync(AppConfigKeys.AstraGroundingEnforce, false, Arg.Any<CancellationToken>()).Returns(true);
+        _appConfig.GetAsync(AppConfigKeys.AiGroundingEnforce, false, Arg.Any<CancellationToken>()).Returns(true);
         SetupAiResponse(new AiResponse
         {
             TextMessage = "How can I help?\n[[orbit:followups]]\nShow my 12-day streak\nWhat is next?"
@@ -194,7 +194,7 @@ public partial class ProcessUserChatCommandHandlerTests
     public async Task Handle_UserStatedTimesDurationsAndCounts_DoNotTriggerGrounding(string request, string reply)
     {
         SetupUserAndPayGate();
-        _appConfig.GetAsync(AppConfigKeys.AstraGroundingEnforce, false, Arg.Any<CancellationToken>()).Returns(true);
+        _appConfig.GetAsync(AppConfigKeys.AiGroundingEnforce, false, Arg.Any<CancellationToken>()).Returns(true);
         SetupAiResponse(new AiResponse { TextMessage = reply });
 
         var result = await CreateHandler().Handle(new ProcessUserChatCommand(UserId, request), default);

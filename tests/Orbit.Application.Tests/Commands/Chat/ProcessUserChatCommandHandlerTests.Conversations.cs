@@ -82,8 +82,8 @@ public partial class ProcessUserChatCommandHandlerTests
     {
         SetupUserAndPayGate();
         EnableRecording();
-        _unitOfWork.PassThroughTransactions<Result<PreparedAstraBlockAnswer>>();
-        var block = IssuedAstraBlock.Create(UserId, new("choice", "When?",
+        _unitOfWork.PassThroughTransactions<Result<PreparedAiBlockAnswer>>();
+        var block = IssuedAiBlock.Create(UserId, new("choice", "When?",
             [new("a", "Morning"), new("b", "Evening")], []));
         _blockStore.GetAsync(block.Id, UserId, Arg.Any<CancellationToken>()).Returns(block);
         _moderation.CheckTextAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
@@ -129,5 +129,5 @@ public partial class ProcessUserChatCommandHandlerTests
     }
 
     private void EnableRecording() => _featureFlagService.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>())
-        .Returns(new[] { FeatureFlagKeys.AstraConversationRecording });
+        .Returns(new[] { FeatureFlagKeys.AiConversationRecording });
 }

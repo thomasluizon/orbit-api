@@ -31,9 +31,9 @@ public partial class ProcessUserChatCommandHandlerTests
         string language, bool composition, bool streamed, string capability)
     {
         SetupUserAndPayGate();
-        var flags = new List<string> { FeatureFlagKeys.AstraConversationRecording };
-        if (composition) flags.Add(FeatureFlagKeys.AstraBlockFirst);
-        if (capability == "disabled") flags.Add(FeatureFlagKeys.AstraPartsDisabled);
+        var flags = new List<string> { FeatureFlagKeys.AiConversationRecording };
+        if (composition) flags.Add(FeatureFlagKeys.AiBlockFirst);
+        if (capability == "disabled") flags.Add(FeatureFlagKeys.AiPartsDisabled);
         _featureFlagService.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>()).Returns(flags);
         var plan = CapturedCompositionPlan("composition-suggestions-duplicate-" + language + "-r1");
         var instruction = plan.ToolCalls!.Single().Args.GetProperty("instruction").GetString()!;

@@ -1,4 +1,4 @@
-# Astra question blocks
+# AI question blocks
 
 Tracks thomasluizon/orbit-tickets#1827. Deploy the API before the renderer in
 thomasluizon/orbit-tickets#1828 advertises `question` in `clientContext.partKinds`.
@@ -84,6 +84,8 @@ values cannot replay a previous response. A replay on a client without support
 becomes text containing prompts, choices and numeric bounds.
 
 All four published OpenAPI artifacts include `AstraQuestionBlock`, its nested
-types, and `AstraBlockAnswer` with optional `answers`. The existing `block` object
+types, and `AstraBlockAnswer` with optional `answers`. These component names are
+wire names: `PublishedSchemaNames` keeps them for the C# `AiQuestionBlock` and
+`AiBlockAnswer` types. The existing `block` object
 and multipart JSON strings retain their schemas. No migration, environment
 setting or version-floor change is required.

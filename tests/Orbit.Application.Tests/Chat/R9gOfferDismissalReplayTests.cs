@@ -25,11 +25,11 @@ public partial class ProcessUserChatCommandHandlerTests
         UseProductionReadExecutor(query);
         SetupOfferSelection(query.Name, "smallStep");
         var dismissed = new HashSet<string>(StringComparer.Ordinal);
-        var issued = new List<AstraOfferFact>();
+        var issued = new List<AiOfferFact>();
         _offers.DismissedAsync(UserId, Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(_ => dismissed);
         _offers.IssuedAsync(UserId, Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(_ => issued);
-        _offers.IssueAsync(UserId, Arg.Any<Guid>(), Arg.Any<AstraOfferFact>(), Arg.Any<CancellationToken>())
-            .Returns(call => { issued.Add(call.Arg<AstraOfferFact>()); return Task.CompletedTask; });
+        _offers.IssueAsync(UserId, Arg.Any<Guid>(), Arg.Any<AiOfferFact>(), Arg.Any<CancellationToken>())
+            .Returns(call => { issued.Add(call.Arg<AiOfferFact>()); return Task.CompletedTask; });
         _offers.DismissAsync(UserId, Arg.Any<Guid>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(call => { dismissed.UnionWith(call.Arg<IReadOnlyList<string>>()); return Task.CompletedTask; });
         var client = OfferClient(locale);

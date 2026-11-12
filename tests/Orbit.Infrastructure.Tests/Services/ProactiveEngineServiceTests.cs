@@ -86,7 +86,7 @@ public sealed class ProactiveEngineServiceTests
             : leaves.Select(x => x.Title).Concat(["Breakfast", "Wash"]));
         var expectedText = AiProactiveCheckinMessageService.Template(facts, "en").Text;
         item.Text.Should().Be(expectedText);
-        await h.Push.Received(hour == 19 ? 1 : 0).SendToUserAsync(h.User.Id, "Astra", expectedText, "/chat", Arg.Any<CancellationToken>());
+        await h.Push.Received(hour == 19 ? 1 : 0).SendToUserAsync(h.User.Id, "Orbit", expectedText, "/chat", Arg.Any<CancellationToken>());
     }
 
     [Theory]
@@ -139,7 +139,7 @@ public sealed class ProactiveEngineServiceTests
         ended.ActedAtUtc.Should().NotBeNull();
         ended.OpenedAtUtc.Should().Be(opened);
         h.Db.Notifications.Should().ContainSingle();
-        await h.Push.Received(1).SendToUserAsync(h.User.Id, "Astra", Arg.Any<string>(), "/chat", Arg.Any<CancellationToken>());
+        await h.Push.Received(1).SendToUserAsync(h.User.Id, "Orbit", Arg.Any<string>(), "/chat", Arg.Any<CancellationToken>());
         h.Analytics.Received(1).CaptureUserEvent(h.User.Id, "astra_proactive_item_ended", Arg.Any<string>(),
             Arg.Is<IReadOnlyDictionary<string, object>?>(p => p != null && (string)p["outcome"] == "acted"));
     }
@@ -365,7 +365,7 @@ public sealed class ProactiveEngineServiceTests
         item.Should().NotBeNull();
         if (disabled)
         {
-            h.Db.AppFeatureFlags.Add(AppFeatureFlag.Create(FeatureFlagKeys.AstraProactiveEngineDisabled, true));
+            h.Db.AppFeatureFlags.Add(AppFeatureFlag.Create(FeatureFlagKeys.AiProactiveEngineDisabled, true));
             await h.Db.SaveChangesAsync();
             h.Flags.Invalidate();
         }
@@ -457,7 +457,7 @@ public sealed class ProactiveEngineServiceTests
         var items = await h.Db.ProactiveItems.ToListAsync();
         items.Single(i => i.Trigger == ProactiveTrigger.BusyCalendarDay).PushedAtUtc.Should().NotBeNull();
         items.Single(i => i.Trigger == ProactiveTrigger.EveningCheckin).PushedAtUtc.Should().BeNull();
-        await h.Push.Received(1).SendToUserAsync(h.User.Id, "Astra", Arg.Any<string>(), "/chat", Arg.Any<CancellationToken>());
+        await h.Push.Received(1).SendToUserAsync(h.User.Id, "Orbit", Arg.Any<string>(), "/chat", Arg.Any<CancellationToken>());
         await h.Calendar.Received(1).FetchAsync(Arg.Any<string>(), Arg.Any<IReadOnlyCollection<string>?>(), null, Arg.Any<CancellationToken>());
         h.Db.Notifications.Count().Should().Be(1);
     }
@@ -663,12 +663,12 @@ public sealed class ProactiveEngineServiceTests
     public async Task StoredSetting_ControlsPushButNotItems(bool? choice, bool pushes)
     {
         using var h = new Harness(19);
-        if (choice.HasValue) h.User.SetProactiveAstraEnabled(choice.Value);
+        if (choice.HasValue) h.User.SetProactiveAiEnabled(choice.Value);
         h.SeedTrigger(ProactiveTrigger.EveningCheckin);
         await h.Run();
         h.Db.ProactiveItems.Count().Should().Be(1);
         h.Db.ProactiveItems.Single().PushedAtUtc.HasValue.Should().Be(pushes);
-        h.Db.Users.Single().ProactiveAstraEnabled.Should().Be(choice ?? true);
+        h.Db.Users.Single().ProactiveAiEnabled.Should().Be(choice ?? true);
     }
 
     [Theory]
@@ -715,17 +715,17 @@ public sealed class ProactiveEngineServiceTests
         h.SeedTrigger(ProactiveTrigger.EveningCheckin);
         var other = AddEligibleAccount(h);
         h.Db.Habits.Add(HabitFor(other.Id));
-        h.Db.AppFeatureFlags.Add(AppFeatureFlag.Create(FeatureFlagKeys.AstraProactiveEngineDisabled, globallyDisabled));
-        h.Db.AppFeatureFlagAccounts.Add(AppFeatureFlagAccount.Create(FeatureFlagKeys.AstraProactiveEngineDisabled, h.User.Id));
+        h.Db.AppFeatureFlags.Add(AppFeatureFlag.Create(FeatureFlagKeys.AiProactiveEngineDisabled, globallyDisabled));
+        h.Db.AppFeatureFlagAccounts.Add(AppFeatureFlagAccount.Create(FeatureFlagKeys.AiProactiveEngineDisabled, h.User.Id));
         await h.Run();
 
         (await h.Flags.ResolveForUserAsync(h.User.Id)).Should().Contain(f =>
-            f.Key == FeatureFlagKeys.AstraProactiveEngineDisabled && f.Enabled);
+            f.Key == FeatureFlagKeys.AiProactiveEngineDisabled && f.Enabled);
         var expected = globallyDisabled ? Array.Empty<Guid>() : [other.Id];
         h.Db.ProactiveItems.Select(i => i.UserId).Should().BeEquivalentTo(expected);
         h.Db.Notifications.Select(n => n.UserId).Should().BeEquivalentTo(expected);
         await h.Push.DidNotReceive().SendToUserAsync(h.User.Id, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
-        await h.Push.Received(globallyDisabled ? 0 : 1).SendToUserAsync(other.Id, "Astra", Arg.Any<string>(), "/chat", Arg.Any<CancellationToken>());
+        await h.Push.Received(globallyDisabled ? 0 : 1).SendToUserAsync(other.Id, "Orbit", Arg.Any<string>(), "/chat", Arg.Any<CancellationToken>());
         (await h.Engine.GetCurrentAsync(h.User.Id, default)).Should().BeNull();
     }
 
@@ -741,8 +741,8 @@ public sealed class ProactiveEngineServiceTests
         var otherItem = await h.Engine.GetCurrentAsync(other.Id, default);
         targetedItem.Should().NotBeNull();
         otherItem.Should().NotBeNull();
-        h.Db.AppFeatureFlags.Add(AppFeatureFlag.Create(FeatureFlagKeys.AstraProactiveEngineDisabled, false));
-        h.Db.AppFeatureFlagAccounts.Add(AppFeatureFlagAccount.Create(FeatureFlagKeys.AstraProactiveEngineDisabled, h.User.Id));
+        h.Db.AppFeatureFlags.Add(AppFeatureFlag.Create(FeatureFlagKeys.AiProactiveEngineDisabled, false));
+        h.Db.AppFeatureFlagAccounts.Add(AppFeatureFlagAccount.Create(FeatureFlagKeys.AiProactiveEngineDisabled, h.User.Id));
         await h.Db.SaveChangesAsync();
         h.Db.ChangeTracker.Clear();
         h.Flags.Invalidate();
@@ -773,7 +773,7 @@ public sealed class ProactiveEngineServiceTests
         h.Db.ProactiveCalendarDays.Select(d => d.UserId).Should().BeEquivalentTo(expected);
         await h.Calendar.Received(expected.Length).FetchAsync(Arg.Any<string>(), Arg.Any<IReadOnlyCollection<string>?>(), null, Arg.Any<CancellationToken>());
         foreach (var id in expected)
-            await h.Push.Received(1).SendToUserAsync(id, "Astra", Arg.Any<string>(), "/chat", Arg.Any<CancellationToken>());
+            await h.Push.Received(1).SendToUserAsync(id, "Orbit", Arg.Any<string>(), "/chat", Arg.Any<CancellationToken>());
         foreach (var id in expected)
         {
             var current = await h.Engine.GetCurrentAsync(id, default);
@@ -794,15 +794,15 @@ public sealed class ProactiveEngineServiceTests
         h.SeedTrigger(ProactiveTrigger.BusyCalendarDay);
         var other = AddEligibleAccount(h);
         other.SetGoogleTokens("other-access", "other-refresh");
-        h.Db.AppFeatureFlags.Add(AppFeatureFlag.Create(FeatureFlagKeys.AstraProactiveEngineDisabled, false));
-        h.Db.AppFeatureFlagAccounts.Add(AppFeatureFlagAccount.Create(FeatureFlagKeys.AstraProactiveEngineDisabled, h.User.Id));
+        h.Db.AppFeatureFlags.Add(AppFeatureFlag.Create(FeatureFlagKeys.AiProactiveEngineDisabled, false));
+        h.Db.AppFeatureFlagAccounts.Add(AppFeatureFlagAccount.Create(FeatureFlagKeys.AiProactiveEngineDisabled, h.User.Id));
         await h.Run();
 
         h.Db.ProactiveItems.Should().ContainSingle().Which.UserId.Should().Be(other.Id);
         h.Db.Notifications.Should().ContainSingle().Which.UserId.Should().Be(other.Id);
         h.Db.ProactiveCalendarDays.Should().ContainSingle().Which.UserId.Should().Be(other.Id);
         await h.Push.DidNotReceive().SendToUserAsync(h.User.Id, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
-        await h.Push.Received(1).SendToUserAsync(other.Id, "Astra", Arg.Any<string>(), "/chat", Arg.Any<CancellationToken>());
+        await h.Push.Received(1).SendToUserAsync(other.Id, "Orbit", Arg.Any<string>(), "/chat", Arg.Any<CancellationToken>());
         await h.Calendar.Received(1).FetchAsync(Arg.Any<string>(), Arg.Any<IReadOnlyCollection<string>?>(), null, Arg.Any<CancellationToken>());
     }
 
@@ -914,7 +914,7 @@ public sealed class ProactiveEngineServiceTests
         using var h = new Harness(19, interceptor);
         h.Db.Users.Remove(h.User);
         if (accountTargets)
-            h.Db.AppFeatureFlags.Add(AppFeatureFlag.Create(FeatureFlagKeys.AstraProactiveEngineDisabled, false));
+            h.Db.AppFeatureFlags.Add(AppFeatureFlag.Create(FeatureFlagKeys.AiProactiveEngineDisabled, false));
         for (var i = 0; i < count; i++)
         {
             var user = User.Create("Person", $"person{i}@example.com").Value;
@@ -923,7 +923,7 @@ public sealed class ProactiveEngineServiceTests
             h.Db.Users.Add(user);
             h.Db.Habits.Add(HabitFor(user.Id));
             if (accountTargets && i % 2 == 0)
-                h.Db.AppFeatureFlagAccounts.Add(AppFeatureFlagAccount.Create(FeatureFlagKeys.AstraProactiveEngineDisabled, user.Id));
+                h.Db.AppFeatureFlagAccounts.Add(AppFeatureFlagAccount.Create(FeatureFlagKeys.AiProactiveEngineDisabled, user.Id));
         }
         await h.Db.SaveChangesAsync();
         h.Db.ChangeTracker.Clear();

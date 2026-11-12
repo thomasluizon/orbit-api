@@ -29,10 +29,10 @@ public partial class ProcessUserChatCommandHandlerTests
         SetupAiResponse(new AiResponse { TextMessage = "Allowed" });
         using var work = new CancellationSensitiveUnitOfWork(_unitOfWork);
         _payGate.TryConsumeAiMessage(UserId, work, Arg.Any<CancellationToken>()).Returns(Result.Success());
-        AstraBlockAnswer? answer = null;
+        AiBlockAnswer? answer = null;
         if (blockAnswer)
         {
-            var block = IssuedAstraBlock.Create(UserId, new("choice", "When?", [new("a", "Morning"), new("b", "Evening")], []));
+            var block = IssuedAiBlock.Create(UserId, new("choice", "When?", [new("a", "Morning"), new("b", "Evening")], []));
             answer = new(block.Id, ["b"]);
             _blockStore.GetAsync(block.Id, UserId, Arg.Any<CancellationToken>()).Returns(block);
             _blockStore.MarkAnsweredAsync(block.Id, UserId, Arg.Any<DateTime>(), Arg.Any<CancellationToken>()).Returns(true);

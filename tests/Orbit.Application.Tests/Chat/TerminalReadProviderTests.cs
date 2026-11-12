@@ -36,7 +36,7 @@ public partial class ProcessUserChatCommandHandlerTests
         user.SetLanguage(language);
         SetupUserAndPayGate(user);
         _featureFlagService.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>())
-            .Returns([FeatureFlagKeys.AstraBlockFirst, FeatureFlagKeys.AstraEvalTrace]);
+            .Returns([FeatureFlagKeys.AiBlockFirst, FeatureFlagKeys.AiEvalTrace]);
         var ranking = await ProduceRankingAsync();
         _mediator.Send(Arg.Any<GetHabitRankingQuery>(), Arg.Any<CancellationToken>()).Returns(Result.Success(ranking));
         var tool = new GetHabitRankingTool(_mediator);

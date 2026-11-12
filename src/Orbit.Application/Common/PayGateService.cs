@@ -38,7 +38,7 @@ public class PayGateService(
         var proLimit = await appConfig.GetAsync(AppConfigKeys.ProAiMessagesPerWeek, AppConstants.DefaultProAiMessages, ct);
         var userToday = await userDateService.GetUserTodayAsync(userId, ct);
         var unmetered = (await featureFlags.GetEnabledKeysForUserAsync(userId, ct))
-            .Contains(FeatureFlagKeys.AstraEvalUnmetered, StringComparer.Ordinal);
+            .Contains(FeatureFlagKeys.AiEvalUnmetered, StringComparer.Ordinal);
 
         var consumption = await ConcurrencyRetry.ExecuteAsync(
             userRepository,
@@ -138,8 +138,8 @@ public class PayGateService(
     public Task<Result> CanManageAiSummary(Guid userId, CancellationToken ct = default) =>
         RequireProAccess(userId, "AI summaries are a Pro feature. Upgrade to unlock!", ct);
 
-    public Task<Result> CanManageProactiveAstra(Guid userId, CancellationToken ct = default) =>
-        RequireProAccess(userId, "Proactive Astra check-ins are a Pro feature. Upgrade to unlock!", ct);
+    public Task<Result> CanManageProactiveAi(Guid userId, CancellationToken ct = default) =>
+        RequireProAccess(userId, "Proactive check-ins are a Pro feature.", ct);
 
     public Task<Result> CanUseSlipAlerts(Guid userId, CancellationToken ct = default) =>
         RequireProAccess(userId, "Slip alerts are a Pro feature. Upgrade to unlock!", ct);

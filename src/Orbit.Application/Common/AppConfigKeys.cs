@@ -15,6 +15,7 @@ public static class AppConfigKeys
     public const string FreeMaxHabits = "FreeMaxHabits";
     public const string FreeAiMessagesPerDay = "FreeAiMessagesPerDay";
     public const string ProAiMessagesPerWeek = "ProAiMessagesPerWeek";
+    public const string PhraseReadsPerDay = "PhraseReadsPerDay";
     public const string FreeAiCallsPerDay = "FreeAiCallsPerDay";
     public const string ProAiCallsPerWeek = "ProAiCallsPerWeek";
     public const string FreeAiMicroDollarsPerDay = "FreeAiMicroDollarsPerDay";
@@ -29,5 +30,5 @@ public static class AppConfigKeys
     public const string RetrospectiveProOnly = "RetrospectiveProOnly";
     public const string MinSupportedVersion = "MinSupportedVersion";
     public const string RequireApiKeyCreationStepUp = "RequireApiKeyCreationStepUp";
-    public const string AstraGroundingEnforce = "AstraGroundingEnforce";
+    public const string AiGroundingEnforce = "AstraGroundingEnforce";
 }

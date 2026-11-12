@@ -31,7 +31,7 @@ public partial class ProcessUserChatCommandHandler
     {
         public DateTime CreatedAtUtc { get; } = DateTime.UtcNow;
         public string? UserContent { get; set; }
-        public AstraChoiceSelection? ChoiceSelection { get; set; }
+        public AiChoiceSelection? ChoiceSelection { get; set; }
         public HabitSetupAnswerContext? HabitDraft { get; set; }
         public bool Enabled { get; set; }
         public bool UsedModel { get; set; }
@@ -42,7 +42,7 @@ public partial class ProcessUserChatCommandHandler
         public bool ServerEnabled { get; set; }
         public bool ConversationPrepared { get; set; }
         public Guid? ConversationId { get; set; }
-        public AstraPlan? Plan { get; set; }
+        public AiPlan? Plan { get; set; }
     }
 
     private async Task<Result<ProcessUserChatCommand>> PrepareConversationAsync(ProcessUserChatCommand request,
@@ -51,7 +51,7 @@ public partial class ProcessUserChatCommandHandler
         if (recording.ConversationPrepared) return Result.Success(request);
         var enabled = enabledFlags ?? await ResolveTurnFeatureFlagsAsync(request.UserId, ct);
         recording.ConversationPrepared = true;
-        if (!enabled.Contains(FeatureFlagKeys.AstraConversationRecording))
+        if (!enabled.Contains(FeatureFlagKeys.AiConversationRecording))
             return Result.Success(request);
         if (conversationRecorder is null)
             throw new InvalidOperationException("Conversation storage is unavailable.");
@@ -91,6 +91,6 @@ public partial class ProcessUserChatCommandHandler
             response is { IsSuccess: true } ? JsonSerializer.Serialize(response.Value, ChatStreamEvent.SerializerOptions) : null,
             recording.ConversationId, recording.ExistingConversation, recording.ToolResults, request.ImageData, request.ImageMimeType), ct);
         return recorded || !(await data.FeatureFlagService.GetEnabledKeysForUserAsync(request.UserId, ct, forceRefresh: true))
-            .Contains(FeatureFlagKeys.AstraConversationRecording);
+            .Contains(FeatureFlagKeys.AiConversationRecording);
     }
 }

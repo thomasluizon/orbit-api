@@ -120,12 +120,12 @@ production state locally. It runs the image in the 512 MiB, half-CPU container
 with the recorded HTTP load. Then, about once a minute, it runs
 [`api-memory-soak-client.mjs`](../.github/scripts/api-memory-soak-client.mjs). Each
 round reads Today, a habit, its metrics, the profile and the month. It also asks
-for the daily summary, creates and deletes a habit, and sends two Astra turns.
+for the daily summary, creates and deletes a habit, and sends two AI turns.
 The fake answer is not a usable summary, so each summary request logs
 `AI returned an unusable daily summary` three times and then answers 400.
 [`api-memory-fake-openai.mjs`](../.github/scripts/api-memory-fake-openai.mjs)
 answers the moderation and Responses calls over TLS like OpenAI. Thus each
-Astra turn passes moderation, and the cost estimator counts its tokens. The same
+AI turn passes moderation, and the cost estimator counts its tokens. The same
 TLS sink receives the Sentry and PostHog traffic.
 
 Every 5 minutes, the soak adds up the resident memory of `/proc/1/smaps` by mapping
@@ -237,7 +237,7 @@ run it natively on Apple silicon.
 
 `Orbit.Memory.Tests` runs the in-process recorded load in a fresh test host. The
 workload holds 150 slow event subscriptions for 50 accounts. Across 20 rounds, it
-reads Today and the daily summary, and runs four bulk actions, an Astra ranking
+reads Today and the daily summary, and runs four bulk actions, an AI ranking
 turn, a tokenizer count and an export of 10,000 conversation rows. Every round after
 the first must stay below the same anonymous plus shmem line. The first token count
 must retain less than 12 MiB of managed memory.

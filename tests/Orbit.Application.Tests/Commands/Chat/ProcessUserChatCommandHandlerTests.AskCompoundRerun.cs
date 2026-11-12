@@ -108,8 +108,8 @@ public partial class ProcessUserChatCommandHandlerTests
             .Which.EntityId.Should().Be(water.Id);
         held.Should().ContainSingle().Which.OperationId.Should().Be("update_habit");
         result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>()
-            .Which.Block.Should().BeOfType<AstraChoiceBlock>();
-        await _blockStore.Received(1).AddAsync(Arg.Any<IssuedAstraBlock>(), Arg.Any<CancellationToken>());
+            .Which.Block.Should().BeOfType<AiChoiceBlock>();
+        await _blockStore.Received(1).AddAsync(Arg.Any<IssuedAiBlock>(), Arg.Any<CancellationToken>());
         await _aiIntentService.DidNotReceiveWithAnyArgs().ContinueWithToolResultsAsync(default!, default!, default, default);
         water.Title.Should().Be("Water");
     }

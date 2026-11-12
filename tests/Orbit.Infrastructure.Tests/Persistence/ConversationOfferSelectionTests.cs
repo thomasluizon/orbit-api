@@ -42,7 +42,7 @@ public sealed class ConversationOfferSelectionTests
         var facts = Enumerable.Range(0, 200).Select(index =>
         {
             var key = "smallStep:" + index;
-            return new AstraOfferFact(key, "smallStep", "Empty day", new(key, "continueChat", "Choose one small step",
+            return new AiOfferFact(key, "smallStep", "Empty day", new(key, "continueChat", "Choose one small step",
                 Prompt: "Help me choose one small step I can take today."), source.QueryId, source.Revision, today)
             { Source = source, SourceKind = "habitList" };
         }).ToArray();
@@ -99,7 +99,7 @@ public sealed class ConversationOfferSelectionTests
             new(dates, Substitute.For<IUserStreakService>(), payGate, work, Substitute.For<IServiceScopeFactory>(),
                 Substitute.For<IAgentOperationExecutor>(), Substitute.For<IPendingClarificationStore>(), progress,
                 Substitute.For<IGamificationService>(), mediator, Substitute.For<IProductAnalytics>(),
-                Substitute.For<IHabitScheduleLogReader>(), Substitute.For<IIssuedAstraBlockStore>(), Substitute.For<IPendingAgentOperationStore>()),
+                Substitute.For<IHabitScheduleLogReader>(), Substitute.For<IIssuedAiBlockStore>(), Substitute.For<IPendingAgentOperationStore>()),
             NullLogger<ProcessUserChatCommandHandler>.Instance, Substitute.For<IAppConfigService>(), moderation, offerStore: store);
     }
 }

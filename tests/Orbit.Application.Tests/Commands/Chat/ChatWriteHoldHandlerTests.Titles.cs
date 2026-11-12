@@ -20,7 +20,7 @@ public sealed partial class ChatWriteHoldHandlerTests
     {
         ParentAccount(language == "en" ? "pt-BR" : "en");
         _featureFlagService.GetEnabledKeysForUserAsync(_userId, Arg.Any<CancellationToken>())
-            .Returns([FeatureFlagKeys.AstraBlockFirst]);
+            .Returns([FeatureFlagKeys.AiBlockFirst]);
         var builder = new SystemPromptBuilder();
         _promptBuilder.BuildStatic(Arg.Any<PromptBuildRequest>()).Returns(call => builder.BuildStatic(call.Arg<PromptBuildRequest>()));
         _promptBuilder.BuildAccountContext(Arg.Any<PromptBuildRequest>()).Returns(call => builder.BuildAccountContext(call.Arg<PromptBuildRequest>()));

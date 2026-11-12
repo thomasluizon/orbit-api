@@ -29,7 +29,7 @@ public partial class ProcessUserChatCommandHandlerTests
     {
         SetupUserAndPayGate();
         EnableComposition();
-        _unitOfWork.PassThroughTransactions<Result<PreparedAstraBlockAnswer>>();
+        _unitOfWork.PassThroughTransactions<Result<PreparedAiBlockAnswer>>();
         var habits = new[] { CreateHabit("Caminhada"), CreateHabit("Caminhada") };
         var parents = new[] { CreateHabit("Morning routine"), CreateHabit("Evening routine") };
         if (differentDetails)
@@ -56,8 +56,8 @@ public partial class ProcessUserChatCommandHandlerTests
                 question,
                 options = habits.Select(habit => new { id = habit.Id.ToString(), label = habit.Title }).ToArray()
             };
-        IssuedAstraBlock? issued = null;
-        _blockStore.AddAsync(Arg.Do<IssuedAstraBlock>(value => issued = value), Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
+        IssuedAiBlock? issued = null;
+        _blockStore.AddAsync(Arg.Do<IssuedAiBlock>(value => issued = value), Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
         SetupAiResponse(new AiResponse
         {
             ConversationContext = TestConversationContext,
@@ -71,7 +71,7 @@ public partial class ProcessUserChatCommandHandlerTests
 
         response.IsSuccess.Should().BeTrue(response.Error);
         var choice = response.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>()
-            .Which.Block.Should().BeOfType<AstraChoiceBlock>().Subject;
+            .Which.Block.Should().BeOfType<AiChoiceBlock>().Subject;
         choice.Options.Select(option => option.Label).Should().Equal("Caminhada", "Caminhada");
         issued.Should().NotBeNull();
         var block = issued!;
@@ -117,13 +117,13 @@ public partial class ProcessUserChatCommandHandlerTests
     {
         SetupUserAndPayGate();
         EnableComposition();
-        _unitOfWork.PassThroughTransactions<Result<PreparedAstraBlockAnswer>>();
+        _unitOfWork.PassThroughTransactions<Result<PreparedAiBlockAnswer>>();
         var habits = new[] { CreateHabit("Caminhada"), CreateHabit("Caminhada") };
         SetupSelectionHabits(habits);
         foreach (var habit in habits)
             _habitRepo.GetByIdAsync(habit.Id, Arg.Any<CancellationToken>()).Returns(habit);
-        var block = IssuedAstraBlock.Create(UserId, new("choice", "Which habit?",
-            habits.Select(habit => new AstraBlockOption(habit.Id.ToString(), habit.Title, "Looks the same")).ToArray(), []));
+        var block = IssuedAiBlock.Create(UserId, new("choice", "Which habit?",
+            habits.Select(habit => new AiBlockOption(habit.Id.ToString(), habit.Title, "Looks the same")).ToArray(), []));
         _blockStore.GetAsync(block.Id, UserId, Arg.Any<CancellationToken>()).Returns(block);
         _blockStore.MarkAnsweredAsync(block.Id, UserId, Arg.Any<DateTime>(), Arg.Any<CancellationToken>())
             .Returns(call => { block.MarkAnswered(call.ArgAt<DateTime>(2)); return true; });

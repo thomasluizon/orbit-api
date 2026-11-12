@@ -42,7 +42,7 @@ public class ReadFallbackTextTests
             var history = new RecordListCard("habitHistory", 6, [new("id", "2026-10-20", LogDate: From, Value: 2.5m)],
                 Read: new(Guid.NewGuid(), "get_habit_history", JsonSerializer.SerializeToElement(new { date_from = "2026-10-20", date_to = "2026-10-26" }), "revision", "complete", "token"));
             yield return [language, history, pt ? "Histórico do hábito" : "Habit history", pt ? "2,5" : "2.5", "habitHistory"];
-            yield return [language, new AccountRowsCard("profile", [new("astraAllowance", "6/10", "count"), new("trialEnd", "2026-10-26T02:00:00Z", "date"), new("aiSummary", "true", "boolean")]), pt ? "Mensagens da Astra" : "Astra messages", "6/10", "astraAllowance"];
+            yield return [language, new AccountRowsCard("profile", [new("astraAllowance", "6/10", "count"), new("trialEnd", "2026-10-26T02:00:00Z", "date"), new("aiSummary", "true", "boolean")]), pt ? "Mensagens de IA" : "AI messages", "6/10", "astraAllowance"];
         }
     }
 

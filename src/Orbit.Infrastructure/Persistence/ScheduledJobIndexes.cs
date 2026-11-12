@@ -35,7 +35,7 @@ internal static class ScheduledJobIndexes
         modelBuilder.Entity<PendingAgentOperationState>().HasIndex(row => row.ExpiresAtUtc);
         modelBuilder.Entity<UserSession>().HasIndex(row => row.ExpiresAtUtc);
         modelBuilder.Entity<UserSession>().HasIndex(row => row.RevokedAtUtc);
-        modelBuilder.Entity<IssuedAstraBlock>().HasIndex(row => row.ExpiresAtUtc);
+        modelBuilder.Entity<IssuedAiBlock>().HasIndex(row => row.ExpiresAtUtc);
         modelBuilder.Entity<PendingClarification>().HasIndex(row => row.ExpiresAtUtc);
         modelBuilder.Entity<AgentAuditLog>().HasIndex(row => row.CreatedAtUtc);
         modelBuilder.Entity<DesktopHandoff>().HasIndex(row => row.ExpiresAtUtc);

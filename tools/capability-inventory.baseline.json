@@ -9720,7 +9720,7 @@
       }
     },
     {
-      "capability": "AgentCapabilityIds.ProfileProactiveAstraWrite",
+      "capability": "AgentCapabilityIds.ProfileProactiveAiWrite",
       "surfaces": {
         "chat": {
           "verdict": "covered",
@@ -30967,7 +30967,7 @@
           }
         },
         {
-          "name": "HasTriedAstra",
+          "name": "HasTriedAi",
           "type": "bool",
           "surfaces": {
             "chat": {
@@ -32053,6 +32053,104 @@
           }
         },
         {
+          "name": "MascotMotionEnabled",
+          "type": "bool",
+          "surfaces": {
+            "chat": {
+              "verdict": "deliberate",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "deliberate",
+                  "reason": "The mascot motion switch belongs to the app's Preferences screen and its own endpoint; the AI has no motion to change."
+                },
+                "read": {
+                  "status": "covered",
+                  "reason": "The mascot motion switch belongs to the app's Preferences screen and its own endpoint; the AI has no motion to change.",
+                  "direct": [
+                    {
+                      "tool": "get_profile",
+                      "status": "covered"
+                    }
+                  ]
+                },
+                "update": {
+                  "status": "deliberate",
+                  "reason": "The mascot motion switch belongs to the app's Preferences screen and its own endpoint; the AI has no motion to change."
+                },
+                "delete": {
+                  "status": "covered",
+                  "reason": "The mascot motion switch belongs to the app's Preferences screen and its own endpoint; the AI has no motion to change.",
+                  "direct": [
+                    {
+                      "tool": "manage_account",
+                      "status": "entity-operation"
+                    }
+                  ]
+                },
+                "bulk": {
+                  "status": "deliberate",
+                  "reason": "The mascot motion switch belongs to the app's Preferences screen and its own endpoint; the AI has no motion to change."
+                },
+                "filterKeyedBulk": {
+                  "status": "deliberate",
+                  "reason": "The mascot motion switch belongs to the app's Preferences screen and its own endpoint; the AI has no motion to change."
+                }
+              }
+            },
+            "mcp": {
+              "verdict": "deliberate",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "deliberate",
+                  "reason": "The mascot motion switch belongs to the app's Preferences screen and its own endpoint; the AI has no motion to change."
+                },
+                "read": {
+                  "status": "covered",
+                  "reason": "The mascot motion switch belongs to the app's Preferences screen and its own endpoint; the AI has no motion to change.",
+                  "viaOperations": [
+                    {
+                      "tool": "get_profile",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
+                },
+                "update": {
+                  "status": "deliberate",
+                  "reason": "The mascot motion switch belongs to the app's Preferences screen and its own endpoint; the AI has no motion to change."
+                },
+                "delete": {
+                  "status": "covered",
+                  "reason": "The mascot motion switch belongs to the app's Preferences screen and its own endpoint; the AI has no motion to change.",
+                  "direct": [
+                    {
+                      "tool": "manage_account",
+                      "status": "entity-operation"
+                    }
+                  ],
+                  "viaOperations": [
+                    {
+                      "tool": "manage_account",
+                      "status": "entity-operation",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
+                },
+                "bulk": {
+                  "status": "deliberate",
+                  "reason": "The mascot motion switch belongs to the app's Preferences screen and its own endpoint; the AI has no motion to change."
+                },
+                "filterKeyedBulk": {
+                  "status": "deliberate",
+                  "reason": "The mascot motion switch belongs to the app's Preferences screen and its own endpoint; the AI has no motion to change."
+                }
+              }
+            }
+          }
+        },
+        {
           "name": "Name",
           "type": "string",
           "surfaces": {
@@ -32161,6 +32259,176 @@
                 },
                 "filterKeyedBulk": {
                   "status": "absent"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "PhraseReadsLocalDate",
+          "type": "DateOnly?",
+          "surfaces": {
+            "chat": {
+              "verdict": "deliberate",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "deliberate",
+                  "reason": "The server records the account day of the phrase read count; AI tools cannot edit or read this bookkeeping."
+                },
+                "read": {
+                  "status": "deliberate",
+                  "reason": "The server records the account day of the phrase read count; AI tools cannot edit or read this bookkeeping."
+                },
+                "update": {
+                  "status": "deliberate",
+                  "reason": "The server records the account day of the phrase read count; AI tools cannot edit or read this bookkeeping."
+                },
+                "delete": {
+                  "status": "covered",
+                  "reason": "The server records the account day of the phrase read count; AI tools cannot edit or read this bookkeeping.",
+                  "direct": [
+                    {
+                      "tool": "manage_account",
+                      "status": "entity-operation"
+                    }
+                  ]
+                },
+                "bulk": {
+                  "status": "deliberate",
+                  "reason": "The server records the account day of the phrase read count; AI tools cannot edit or read this bookkeeping."
+                },
+                "filterKeyedBulk": {
+                  "status": "deliberate",
+                  "reason": "The server records the account day of the phrase read count; AI tools cannot edit or read this bookkeeping."
+                }
+              }
+            },
+            "mcp": {
+              "verdict": "deliberate",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "deliberate",
+                  "reason": "The server records the account day of the phrase read count; AI tools cannot edit or read this bookkeeping."
+                },
+                "read": {
+                  "status": "deliberate",
+                  "reason": "The server records the account day of the phrase read count; AI tools cannot edit or read this bookkeeping."
+                },
+                "update": {
+                  "status": "deliberate",
+                  "reason": "The server records the account day of the phrase read count; AI tools cannot edit or read this bookkeeping."
+                },
+                "delete": {
+                  "status": "covered",
+                  "reason": "The server records the account day of the phrase read count; AI tools cannot edit or read this bookkeeping.",
+                  "direct": [
+                    {
+                      "tool": "manage_account",
+                      "status": "entity-operation"
+                    }
+                  ],
+                  "viaOperations": [
+                    {
+                      "tool": "manage_account",
+                      "status": "entity-operation",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
+                },
+                "bulk": {
+                  "status": "deliberate",
+                  "reason": "The server records the account day of the phrase read count; AI tools cannot edit or read this bookkeeping."
+                },
+                "filterKeyedBulk": {
+                  "status": "deliberate",
+                  "reason": "The server records the account day of the phrase read count; AI tools cannot edit or read this bookkeeping."
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "PhraseReadsToday",
+          "type": "int",
+          "surfaces": {
+            "chat": {
+              "verdict": "deliberate",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "deliberate",
+                  "reason": "The server counts provider-backed phrase reads against a hidden daily cap; AI tools cannot edit or read this bookkeeping."
+                },
+                "read": {
+                  "status": "deliberate",
+                  "reason": "The server counts provider-backed phrase reads against a hidden daily cap; AI tools cannot edit or read this bookkeeping."
+                },
+                "update": {
+                  "status": "deliberate",
+                  "reason": "The server counts provider-backed phrase reads against a hidden daily cap; AI tools cannot edit or read this bookkeeping."
+                },
+                "delete": {
+                  "status": "covered",
+                  "reason": "The server counts provider-backed phrase reads against a hidden daily cap; AI tools cannot edit or read this bookkeeping.",
+                  "direct": [
+                    {
+                      "tool": "manage_account",
+                      "status": "entity-operation"
+                    }
+                  ]
+                },
+                "bulk": {
+                  "status": "deliberate",
+                  "reason": "The server counts provider-backed phrase reads against a hidden daily cap; AI tools cannot edit or read this bookkeeping."
+                },
+                "filterKeyedBulk": {
+                  "status": "deliberate",
+                  "reason": "The server counts provider-backed phrase reads against a hidden daily cap; AI tools cannot edit or read this bookkeeping."
+                }
+              }
+            },
+            "mcp": {
+              "verdict": "deliberate",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "deliberate",
+                  "reason": "The server counts provider-backed phrase reads against a hidden daily cap; AI tools cannot edit or read this bookkeeping."
+                },
+                "read": {
+                  "status": "deliberate",
+                  "reason": "The server counts provider-backed phrase reads against a hidden daily cap; AI tools cannot edit or read this bookkeeping."
+                },
+                "update": {
+                  "status": "deliberate",
+                  "reason": "The server counts provider-backed phrase reads against a hidden daily cap; AI tools cannot edit or read this bookkeeping."
+                },
+                "delete": {
+                  "status": "covered",
+                  "reason": "The server counts provider-backed phrase reads against a hidden daily cap; AI tools cannot edit or read this bookkeeping.",
+                  "direct": [
+                    {
+                      "tool": "manage_account",
+                      "status": "entity-operation"
+                    }
+                  ],
+                  "viaOperations": [
+                    {
+                      "tool": "manage_account",
+                      "status": "entity-operation",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
+                },
+                "bulk": {
+                  "status": "deliberate",
+                  "reason": "The server counts provider-backed phrase reads against a hidden daily cap; AI tools cannot edit or read this bookkeeping."
+                },
+                "filterKeyedBulk": {
+                  "status": "deliberate",
+                  "reason": "The server counts provider-backed phrase reads against a hidden daily cap; AI tools cannot edit or read this bookkeeping."
                 }
               }
             }
@@ -32678,7 +32946,7 @@
           }
         },
         {
-          "name": "ProactiveAstraEnabled",
+          "name": "ProactiveAiEnabled",
           "type": "bool",
           "surfaces": {
             "chat": {
@@ -49278,7 +49546,7 @@
     },
     {
       "ticket": "thomasluizon/orbit-tickets#396",
-      "observation": "set_proactive_astra is registered on both surfaces; readback is checked separately in Profile.ProactiveAstraEnabled."
+      "observation": "set_proactive_astra is registered on both surfaces; readback is checked separately in Profile.ProactiveAiEnabled."
     },
     {
       "ticket": "thomasluizon/orbit-tickets#513",

@@ -417,7 +417,7 @@ public class PendingAgentOperationStore(
             .Select(entry => entry.Entity).ToArray();
         var groups = changed.GroupBy(state => new { state.UserId, state.ConversationId })
             .Where(group => flags?.ResolveForUser(group.Key.UserId)
-                .Any(flag => flag.Key == FeatureFlagKeys.AstraConversationRecording && flag.Enabled) == true).ToArray();
+                .Any(flag => flag.Key == FeatureFlagKeys.AiConversationRecording && flag.Enabled) == true).ToArray();
         if (groups.Length == 0)
         {
             dbContext.SaveChanges();
@@ -443,10 +443,10 @@ public class PendingAgentOperationStore(
                     var values = JsonSerializer.Deserialize<List<ConversationPreviewOutcome>>(row.PreviewOutcomesJson) ?? [];
                     if (!values.Any(value => previews.ContainsKey(value.PendingOperationId))) continue;
                     var updated = values.Select(value => previews.GetValueOrDefault(value.PendingOperationId, value)).ToArray();
-                    var plan = AstraPlan.Read(row.ResponseJson);
+                    var plan = AiPlan.Read(row.ResponseJson);
                     foreach (var preview in updated)
                         plan = plan?.PreviewOutcome(preview.PendingOperationId, preview.Outcome);
-                    patches.Add(new(row.Id, JsonSerializer.Serialize(updated), AstraPlan.Write(row.ResponseJson, plan)));
+                    patches.Add(new(row.Id, JsonSerializer.Serialize(updated), AiPlan.Write(row.ResponseJson, plan)));
                 }
             }
             if (dbContext.Database.IsRelational())

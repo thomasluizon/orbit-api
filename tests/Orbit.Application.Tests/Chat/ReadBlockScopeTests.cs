@@ -716,7 +716,7 @@ public sealed class ReadBlockScopeTests
         initial.Operation.ReadBlock.Should().NotBeNull();
         mediator.ClearReceivedCalls();
         _flags.GetEnabledKeysForUserAsync(_userId, Arg.Any<CancellationToken>()).Returns(disabled
-            ? [Orbit.Application.Common.FeatureFlagKeys.AstraStatusBlocksDisabled] : Array.Empty<string>());
+            ? [Orbit.Application.Common.FeatureFlagKeys.AiStatusBlocksDisabled] : Array.Empty<string>());
         var refresh = new RefreshReadBlockQueryHandler(_tokens, executor, _blocks, _flags);
 
         var result = await refresh.Handle(new(_userId, initial.Operation.ReadBlock!.Read.RefreshToken,

@@ -40,7 +40,7 @@ public sealed class CreateHabitToolPersistenceTests
         var handler = CreateHandler(db, user, arguments);
 
         var result = await handler.Handle(new(user.Id,
-            "astra crie um habito de varrer a garagem às 5as, sem horário definido mas antes das 15h, marque o de hoje como concluído"), default);
+            "orbit crie um habito de varrer a garagem às 5as, sem horário definido mas antes das 15h, marque o de hoje como concluído"), default);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Operations.Should().ContainSingle().Which.Status.Should().Be(AgentOperationStatus.Succeeded,
@@ -168,7 +168,7 @@ public sealed class CreateHabitToolPersistenceTests
             new(ai, registry, Substitute.For<ISystemPromptBuilder>(), catalog),
             new(dates, Substitute.For<IUserStreakService>(), quota, work, Substitute.For<IServiceScopeFactory>(), executor,
                 Substitute.For<IPendingClarificationStore>(), syncer, Substitute.For<IGamificationService>(),
-                Substitute.For<IMediator>(), Substitute.For<IProductAnalytics>(), logs, new IssuedAstraBlockStore(db), pending),
+                Substitute.For<IMediator>(), Substitute.For<IProductAnalytics>(), logs, new IssuedAiBlockStore(db), pending),
             NullLogger<ProcessUserChatCommandHandler>.Instance, Substitute.For<IAppConfigService>(), moderation);
     }
 }

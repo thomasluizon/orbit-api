@@ -18,7 +18,7 @@ public class FoundingAchievementReaderTests
         var user = User.Create("Founding User", "founding@example.com").Value;
         user.MarkFirstHabitCreated();
         user.MarkFirstHabitLogged();
-        user.MarkAstraUsed();
+        user.MarkAiUsed();
         user.CompleteOnboardingChecklist();
         context.Users.Add(user);
 

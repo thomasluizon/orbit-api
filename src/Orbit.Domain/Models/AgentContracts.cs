@@ -145,7 +145,7 @@ public record PendingAgentOperation(
     IReadOnlyList<PendingOperationItem>? Items = null,
     string? PreviewFingerprint = null,
     string? ActionKey = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] AstraNextAction? NextAction = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] AiNextAction? NextAction = null);
 
 public record PendingOperationItem(
     string ItemId,
@@ -272,7 +272,7 @@ public record AgentExecuteOperationResponse(
     AgentOperationResult Operation,
     PendingAgentOperation? PendingOperation = null,
     AgentPolicyDenial? PolicyDenial = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] AstraPlan? Plan = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] AiPlan? Plan = null);
 
 public record AgentPolicyDenial(
     string OperationId,
@@ -282,7 +282,7 @@ public record AgentPolicyDenial(
     string Reason,
     Guid? PendingOperationId = null);
 
-public static class AstraBlockKinds
+public static class AiBlockKinds
 {
     public const string Choice = "choice";
     public const string PickList = "pickList";
@@ -392,7 +392,7 @@ public static class AgentCapabilityIds
     public const string ProfilePreferencesWrite = "profile.preferences.write";
     public const string ProfileAiSettingsWrite = "profile.ai-settings.write";
     public const string ProfileAiSummaryWrite = "profile.ai-summary.write";
-    public const string ProfileProactiveAstraWrite = "profile.proactive-astra.write";
+    public const string ProfileProactiveAiWrite = "profile.proactive-astra.write";
     public const string ProactiveItemsRead = "proactive.items.read";
     public const string ProactiveItemsWrite = "proactive.items.write";
     public const string NotificationsRead = "notifications.read";

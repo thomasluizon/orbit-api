@@ -138,39 +138,39 @@ public static partial class ErrorCopy
         (ErrorCodes.DuplicateTagName, "A tag already uses that name. Pick another one.", "Já existe uma etiqueta com esse nome. Escolha outro."),
         (ErrorCodes.MaxTagsPerHabit, "Select up to {0} tags for this habit.", "Escolha até {0} tags para este hábito."),
         (ErrorCodes.TemplateNotFound, "That checklist is not here any more.", "Essa lista não está mais aqui."),
-        (ErrorCodes.SuggestionNotFound, "That suggestion expired. Ask Astra again.", "Essa sugestão expirou. Pergunte à Astra de novo."),
+        (ErrorCodes.SuggestionNotFound, "That suggestion expired. Ask again.", "Essa sugestão expirou. Pergunte de novo."),
         (DomainErrors.TagNameRequired.Code, "Enter a tag name.", "Digite um nome para a etiqueta."),
         (DomainErrors.TagNameTooLong.Code, "A tag name fits 50 characters. Shorten it.", "Um nome de etiqueta cabe em 50 caracteres. Encurte."),
         (DomainErrors.TagColorRequired.Code, "Pick a colour for the tag.", "Escolha uma cor para a etiqueta."),
-        (DomainErrors.FactTextRequired.Code, "Write the note you want Astra to remember.", "Escreva a anotação que você quer que a Astra lembre."),
-        (DomainErrors.FactTextTooLong.Code, "A note for Astra fits 500 characters. Shorten it.", "Uma anotação para a Astra cabe em 500 caracteres. Encurte."),
+        (DomainErrors.FactTextRequired.Code, "Write the note you want Orbit to remember.", "Escreva a anotação que você quer que o Orbit lembre."),
+        (DomainErrors.FactTextTooLong.Code, "A note fits 500 characters. Shorten it.", "Uma anotação cabe em 500 caracteres. Encurte."),
         (DomainErrors.FactTextSuspicious.Code, "We cannot save that note. Rewrite it in plain words and try again.", "Não podemos salvar essa anotação. Reescreva com palavras simples e tente de novo."),
         (DomainErrors.TemplateNameRequired.Code, "Enter a checklist name.", "Digite um nome para a lista."),
         (DomainErrors.TemplateNameTooLong.Code, "A checklist name fits 100 characters. Shorten it.", "Um nome de lista cabe em 100 caracteres. Encurte."),
         (DomainErrors.TemplateItemsRequired.Code, "Add at least one item to the checklist.", "Adicione pelo menos um item à lista."),
     ];
 
-    /// <summary>Astra, the daily summary and every other model-backed surface.</summary>
-    private static readonly (string Code, string En, string PtBr)[] Astra =
+    /// <summary>AI, the daily summary and every other model-backed surface.</summary>
+    private static readonly (string Code, string En, string PtBr)[] Ai =
     [
         ("chat.bulk.iconsAlreadyPresent", "All your habits already have an icon.", "Todos os seus hábitos já têm ícone."),
         ("chat.bulk.noChanges", "No habits need changes.", "Nenhum hábito precisa de alterações."),
-        (ErrorCodes.AiUnavailable, "Astra is not answering right now. Try again in a moment.", "A Astra não está respondendo agora. Tente de novo em instantes."),
+        (ErrorCodes.AiUnavailable, "The AI is not answering right now. Try again in a moment.", "A IA não está respondendo agora. Tente de novo em instantes."),
         (ErrorCodes.ContentModerationRefused, "I can't help with that, but I can help with your habits and goals.", "Não posso ajudar com isso, mas posso ajudar com seus hábitos e metas."),
-        (ErrorCodes.AiEmptyResponse, "Astra did not return an answer. Ask again.", "A Astra não devolveu uma resposta. Pergunte de novo."),
+        (ErrorCodes.AiEmptyResponse, "No answer came back. Ask again.", "Não veio resposta. Pergunte de novo."),
         (ErrorCodes.AiNoActiveConversation, "That conversation is no longer open. Start a new one.", "Essa conversa não está mais aberta. Comece outra."),
         (ErrorCodes.AiSummaryDisabled, "The daily summary is turned off. Turn it on in settings.", "O resumo diário está desativado. Ative nas configurações."),
-        (ErrorCodes.ChatHistoryTooLarge, "This conversation is too long for Astra to carry. Start a new one.", "Esta conversa está longa demais para a Astra. Comece outra."),
+        (ErrorCodes.ChatHistoryTooLarge, "This conversation is too long to carry. Start a new one.", "Esta conversa está longa demais. Comece outra."),
         (ErrorCodes.MessageTooLong, "Your message fits between 1 and {0} characters.", "Sua mensagem cabe entre 1 e {0} caracteres."),
         (ErrorCodes.InvalidChatHistory, "We could not read that conversation. Start a new one.", "Não conseguimos ler essa conversa. Comece outra."),
         (ErrorCodes.InvalidClientContext, "We could not read what the app sent. Try again.", "Não conseguimos ler o que o aplicativo enviou. Tente de novo."),
-        (ErrorCodes.ClarificationNotFound, "That question expired. Ask Astra again.", "Essa pergunta expirou. Pergunte à Astra de novo."),
+        (ErrorCodes.ClarificationNotFound, "That question expired. Ask again.", "Essa pergunta expirou. Pergunte de novo."),
         (ErrorCodes.ClarificationAlreadyResolved, "You already answered that question.", "Você já respondeu essa pergunta."),
         (ErrorCodes.ClarificationValueEmpty, "Write an answer before sending it.", "Escreva uma resposta antes de enviar."),
         (ErrorCodes.ClarificationValueTooLong, "That answer fits {0} characters. Shorten it.", "Essa resposta cabe em {0} caracteres. Encurte."),
         (ErrorCodes.ClarificationValueNotJsonObject, "We could not read that answer. Pick one of the offered options.", "Não conseguimos ler essa resposta. Escolha uma das opções oferecidas."),
-        (ErrorCodes.ClarificationValueNotOffered, "Pick one of the options Astra offered.", "Escolha uma das opções que a Astra ofereceu."),
-        (ErrorCodes.PendingOperationNotFound, "That pending action expired. Ask Astra again.", "Essa ação pendente expirou. Peça à Astra de novo."),
+        (ErrorCodes.ClarificationValueNotOffered, "Pick one of the options on offer.", "Escolha uma das opções oferecidas."),
+        (ErrorCodes.PendingOperationNotFound, "That pending action expired. Ask again.", "Essa ação pendente expirou. Peça de novo."),
         (ErrorCodes.NoHabitsForPeriod, "You have no habits in this period yet.", "Você ainda não tem hábitos neste período."),
         (ErrorCodes.InvalidPeriod, "Pick a period: week, month, quarter, semester or year.", "Escolha um período: semana, mês, trimestre, semestre ou ano."),
         (ErrorCodes.InvalidClosedMonthParameters, "Pick a year and a month together, and only with the month period.", "Escolha um ano e um mês juntos, e só com o período de mês."),
@@ -257,7 +257,7 @@ public static partial class ErrorCopy
     /// <summary>Push delivery registration.</summary>
     private static readonly (string Code, string En, string PtBr)[] Notifications =
     [
-        (ErrorCodes.ProactiveItemNotFound, "That Astra item is not here any more.", "Esse item da Astra não está mais aqui."),
+        (ErrorCodes.ProactiveItemNotFound, "That item is not here any more.", "Esse item não está mais aqui."),
         (ErrorCodes.NotificationNotFound, "That notification is not here any more.", "Essa notificação não está mais aqui."),
         (ErrorCodes.NoPushSubscriptions, "No device on this account is set up for notifications. Turn them on in settings.", "Nenhum aparelho desta conta está configurado para notificações. Ative nas configurações."),
         (ErrorCodes.PushEndpointInvalid, "This device could not register for notifications. Turn them off and on again in settings.", "Este aparelho não conseguiu registrar as notificações. Desative e ative de novo nas configurações."),
@@ -395,7 +395,7 @@ public static partial class ErrorCopy
         foreach (var group in new[]
                  {
                      AccountAndAccess, StepUpAndApiKeys, Habits, Goals, TagsFactsAndTemplates,
-                     Astra, Billing, Streaks, Social, Calendar, Notifications, Media,
+                     Ai, Billing, Streaks, Social, Calendar, Notifications, Media,
                      SyncAndSupport, Profile, Validation, ValidationFields, ReadFallback,
                  })
         {
@@ -409,25 +409,25 @@ public static partial class ErrorCopy
             (DomainErrors.WnsEndpointInvalid.Code, ErrorCodes.PushEndpointInvalid),
             (DomainErrors.PushApnsTopicInvalid.Code, ErrorCodes.PushEndpointInvalid),
             (DomainErrors.PushDeviceIdInvalid.Code, ErrorCodes.PushEndpointInvalid),
-            (ErrorCodes.AstraBlockNotFound, ErrorCodes.ClarificationNotFound),
-            (ErrorCodes.AstraBlockInvalidated, ErrorCodes.ClarificationNotFound),
-            (ErrorCodes.AstraBlockExpired, ErrorCodes.ClarificationNotFound),
-            (ErrorCodes.AstraBlockAnswered, ErrorCodes.ClarificationAlreadyResolved),
-            (ErrorCodes.AstraBlockIdRequired, ErrorCodes.ClarificationValueNotJsonObject),
-            (ErrorCodes.AstraBlockSelectionRequired, ErrorCodes.ClarificationValueEmpty),
-            (ErrorCodes.AstraBlockInvalidSelection, ErrorCodes.ClarificationValueNotOffered),
-            (ErrorCodes.AstraBlockUnknownSelection, ErrorCodes.ClarificationValueNotOffered),
-            (ErrorCodes.AstraBlockSingleSelection, ErrorCodes.ClarificationValueNotOffered),
-            (ErrorCodes.AstraBlockEmptySelection, ErrorCodes.ClarificationValueNotOffered),
-            (ErrorCodes.AstraBlockFreeTextDisabled, ErrorCodes.ClarificationValueNotOffered),
-            (ErrorCodes.AstraBlockEmptyAnswer, ErrorCodes.ClarificationValueEmpty),
-            (ErrorCodes.AstraBlockPreviewUnavailable, ErrorCodes.InternalServerError),
-            (ErrorCodes.AstraBlockInvalidJson, ErrorCodes.ClarificationValueNotJsonObject),
-            (ErrorCodes.AstraBlockInvalidDefinition, ErrorCodes.ValidationError),
+            (ErrorCodes.AiBlockNotFound, ErrorCodes.ClarificationNotFound),
+            (ErrorCodes.AiBlockInvalidated, ErrorCodes.ClarificationNotFound),
+            (ErrorCodes.AiBlockExpired, ErrorCodes.ClarificationNotFound),
+            (ErrorCodes.AiBlockAnswered, ErrorCodes.ClarificationAlreadyResolved),
+            (ErrorCodes.AiBlockIdRequired, ErrorCodes.ClarificationValueNotJsonObject),
+            (ErrorCodes.AiBlockSelectionRequired, ErrorCodes.ClarificationValueEmpty),
+            (ErrorCodes.AiBlockInvalidSelection, ErrorCodes.ClarificationValueNotOffered),
+            (ErrorCodes.AiBlockUnknownSelection, ErrorCodes.ClarificationValueNotOffered),
+            (ErrorCodes.AiBlockSingleSelection, ErrorCodes.ClarificationValueNotOffered),
+            (ErrorCodes.AiBlockEmptySelection, ErrorCodes.ClarificationValueNotOffered),
+            (ErrorCodes.AiBlockFreeTextDisabled, ErrorCodes.ClarificationValueNotOffered),
+            (ErrorCodes.AiBlockEmptyAnswer, ErrorCodes.ClarificationValueEmpty),
+            (ErrorCodes.AiBlockPreviewUnavailable, ErrorCodes.InternalServerError),
+            (ErrorCodes.AiBlockInvalidJson, ErrorCodes.ClarificationValueNotJsonObject),
+            (ErrorCodes.AiBlockInvalidDefinition, ErrorCodes.ValidationError),
         })
             catalog[code] = catalog[sourceCode];
         var answerLengthCopy = catalog[ErrorCodes.ClarificationValueTooLong];
-        catalog[ErrorCodes.AstraBlockFreeTextTooLong] = (
+        catalog[ErrorCodes.AiBlockFreeTextTooLong] = (
             string.Format(System.Globalization.CultureInfo.InvariantCulture, answerLengthCopy.En, 500),
             string.Format(System.Globalization.CultureInfo.InvariantCulture, answerLengthCopy.PtBr, 500));
         return catalog;

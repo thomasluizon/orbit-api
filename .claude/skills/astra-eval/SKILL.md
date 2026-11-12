@@ -1,9 +1,9 @@
 ---
 name: astra-eval
-description: Verify Astra through offline provider-response replays, or run the coordinator-authorized launch gate after the cost change is released.
+description: Verify the AI chat through offline provider-response replays, or run the coordinator-authorized launch gate after the cost change is released.
 ---
 
-# Astra evaluation
+# AI evaluation
 
 Read [TESTING.md](../../../TESTING.md) for the request-cost model, verification commands
 and launch-gate procedure. Ordinary fixes use captured responses offline at zero provider

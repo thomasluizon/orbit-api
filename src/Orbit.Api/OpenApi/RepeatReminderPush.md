@@ -23,7 +23,7 @@ message with its default tap action, carrying the same route and habit ID.
 It has no Done button. A missing channel falls back to Expo's notification
 channel. This fallback requires no capability flag or minimum-version change.
 
-Ordinary reminders, Astra, slip alerts and non-FCM transports retain their
+Ordinary reminders, AI check-ins, slip alerts and non-FCM transports retain their
 payloads. No endpoint, request or response schema changes.
 
 Deploy the API to staging through the Release API workflow before validating

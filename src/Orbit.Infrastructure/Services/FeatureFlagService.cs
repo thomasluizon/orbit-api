@@ -106,7 +106,7 @@ public class FeatureFlagService(OrbitDbContext dbContext, IMemoryCache cache, IH
     private List<ResolvedFeatureFlag> Resolve(User user, IEnumerable<FlagSnapshot> flags) => flags
         .OrderBy(flag => flag.Key, StringComparer.OrdinalIgnoreCase)
         .Select(flag => new ResolvedFeatureFlag(flag.Key,
-            (flag.Key != FeatureFlagKeys.AstraEvalUnmetered || environment.IsStaging()
+            (flag.Key != FeatureFlagKeys.AiEvalUnmetered || environment.IsStaging()
                 || (environment.IsProduction() && EvalAccountAccess.Contains(configuration[EvalAccountAccess.AccountIdsKey], user.Id)))
             && (flag.Enabled || flag.Accounts.Contains(user.Id)) && UserHasFeaturePlan(user, flag.PlanRequirement),
             flag.PlanRequirement))

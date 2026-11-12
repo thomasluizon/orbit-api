@@ -31,7 +31,7 @@ public class ConversationRecordingStreamTests
         users.GetByIdAsync(user.Id, Arg.Any<CancellationToken>()).Returns(user);
         var flags = Substitute.For<IFeatureFlagService>();
         flags.GetEnabledKeysForUserAsync(user.Id, Arg.Any<CancellationToken>())
-            .Returns(new[] { FeatureFlagKeys.AstraConversationRecording });
+            .Returns(new[] { FeatureFlagKeys.AiConversationRecording });
         var habits = Substitute.For<IGenericRepository<Habit>>();
         habits.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>>(), Arg.Any<CancellationToken>())
             .Returns(Array.Empty<Habit>());
@@ -65,7 +65,7 @@ public class ConversationRecordingStreamTests
             new ChatExecutionDependencies(dateService, Substitute.For<IUserStreakService>(), payGate, work,
                 Substitute.For<IServiceScopeFactory>(), Substitute.For<IAgentOperationExecutor>(), Substitute.For<IPendingClarificationStore>(),
                 progress, Substitute.For<IGamificationService>(), mediator, Substitute.For<IProductAnalytics>(),
-                Substitute.For<IHabitScheduleLogReader>(), Substitute.For<IIssuedAstraBlockStore>(), Substitute.For<IPendingAgentOperationStore>()),
+                Substitute.For<IHabitScheduleLogReader>(), Substitute.For<IIssuedAiBlockStore>(), Substitute.For<IPendingAgentOperationStore>()),
             NullLogger<ProcessUserChatCommandHandler>.Instance, Substitute.For<IAppConfigService>(), ModerationTestDouble.Clean(), recorder);
         mediator.Send(Arg.Any<ProcessUserChatCommand>(), Arg.Any<CancellationToken>())
             .Returns(call => handler.Handle(call.Arg<ProcessUserChatCommand>(), call.Arg<CancellationToken>()));

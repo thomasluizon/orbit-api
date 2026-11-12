@@ -198,7 +198,7 @@ public partial class AiInputBudgetTests(ITestOutputHelper output)
         templates.FindAsync(Arg.Any<Expression<Func<ChecklistTemplate, bool>>>(), Arg.Any<CancellationToken>()).Returns(Array.Empty<ChecklistTemplate>());
         var flags = Substitute.For<IFeatureFlagService>();
         flags.GetEnabledKeysForUserAsync(user.Id, Arg.Any<CancellationToken>())
-            .Returns(enabledFlags ?? (recordingEnabled ? [FeatureFlagKeys.AstraConversationRecording] : Array.Empty<string>()));
+            .Returns(enabledFlags ?? (recordingEnabled ? [FeatureFlagKeys.AiConversationRecording] : Array.Empty<string>()));
         var dates = Substitute.For<IUserDateService>();
         dates.GetUserTodayAsync(user.Id, Arg.Any<CancellationToken>()).Returns(date);
         dates.GetUserWeekStartDayAsync(user.Id, Arg.Any<CancellationToken>()).Returns(1);
@@ -223,7 +223,7 @@ public partial class AiInputBudgetTests(ITestOutputHelper output)
                 readServices.GetRequiredService<IServiceScopeFactory>(), executor,
                 Substitute.For<IPendingClarificationStore>(), progress, Substitute.For<IGamificationService>(),
                 Substitute.For<IMediator>(), analytics ?? Substitute.For<IProductAnalytics>(), logs,
-                Substitute.For<IIssuedAstraBlockStore>(), pending, PendingOperationPreviewer: previewer),
+                Substitute.For<IIssuedAiBlockStore>(), pending, PendingOperationPreviewer: previewer),
             NullLogger<ProcessUserChatCommandHandler>.Instance, Substitute.For<IAppConfigService>(), ModerationTestDouble.Clean(), recorder,
             timeProvider: account?.Clock, offerStore: account?.Offers);
     }

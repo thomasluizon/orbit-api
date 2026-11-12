@@ -93,7 +93,7 @@ public partial class ProcessUserChatCommandHandlerTests
             card.Read.NextAction.Date.Should().Be(Today);
             card.Read.NextAction.Label.Should().Be(locale == "en" ? "Log this habit" : "Registrar hábito");
             await _offers.Received(1).IssueAsync(UserId, client.ConversationId!.Value,
-                Arg.Is<AstraOfferFact>(fact => fact.QueryId == card.Read.QueryId && fact.Revision == card.Read.Revision), Arg.Any<CancellationToken>());
+                Arg.Is<AiOfferFact>(fact => fact.QueryId == card.Read.QueryId && fact.Revision == card.Read.Revision), Arg.Any<CancellationToken>());
         }
         else
         {
@@ -123,7 +123,7 @@ public partial class ProcessUserChatCommandHandlerTests
         result.IsSuccess.Should().BeTrue(result.Error);
         var card = result.Value.Parts!.OfType<ChatBlockPart>().Single().Block.Should().BeOfType<HabitListCard>().Subject;
         card.Read!.NextAction!.OfferKey.Should().StartWith("smallStep:");
-        await _offers.Received(1).IssueAsync(UserId, Arg.Any<Guid>(), Arg.Is<AstraOfferFact>(fact => fact.Family == "smallStep"), Arg.Any<CancellationToken>());
+        await _offers.Received(1).IssueAsync(UserId, Arg.Any<Guid>(), Arg.Is<AiOfferFact>(fact => fact.Family == "smallStep"), Arg.Any<CancellationToken>());
         await _aiIntentService.Received(1).SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>>(), Arg.Any<CancellationToken>());
     }
 
@@ -182,9 +182,9 @@ public partial class ProcessUserChatCommandHandlerTests
         var handler = CreateHandler(tool);
         UseProductionReadExecutor(tool);
         SetupOfferSelection(tool.Name, "smallStep");
-        AstraOfferFact? issued = null;
-        _offers.IssueAsync(UserId, Arg.Any<Guid>(), Arg.Any<AstraOfferFact>(), Arg.Any<CancellationToken>())
-            .Returns(call => { issued = call.Arg<AstraOfferFact>(); return Task.CompletedTask; });
+        AiOfferFact? issued = null;
+        _offers.IssueAsync(UserId, Arg.Any<Guid>(), Arg.Any<AiOfferFact>(), Arg.Any<CancellationToken>())
+            .Returns(call => { issued = call.Arg<AiOfferFact>(); return Task.CompletedTask; });
         var client = OfferClient("en");
         (await handler.Handle(new(UserId, "Show the requested records.", ClientContext: client), default)).IsSuccess.Should().BeTrue();
         issued.Should().NotBeNull();
@@ -215,9 +215,9 @@ public partial class ProcessUserChatCommandHandlerTests
         var handler = CreateHandler(tool);
         UseProductionReadExecutor(tool);
         SetupOfferSelection(tool.Name, "log");
-        AstraOfferFact? issued = null;
-        _offers.IssueAsync(UserId, Arg.Any<Guid>(), Arg.Any<AstraOfferFact>(), Arg.Any<CancellationToken>())
-            .Returns(call => { issued = call.Arg<AstraOfferFact>(); return Task.CompletedTask; });
+        AiOfferFact? issued = null;
+        _offers.IssueAsync(UserId, Arg.Any<Guid>(), Arg.Any<AiOfferFact>(), Arg.Any<CancellationToken>())
+            .Returns(call => { issued = call.Arg<AiOfferFact>(); return Task.CompletedTask; });
         var client = OfferClient(locale);
         var initial = await handler.Handle(new(UserId, "Show the requested records.", ClientContext: client), default);
         initial.IsSuccess.Should().BeTrue();
@@ -269,7 +269,7 @@ public partial class ProcessUserChatCommandHandlerTests
         var source = new ReadBlockMetadata(Guid.NewGuid(), queryFamily, JsonSerializer.SerializeToElement(new { }),
             "revision", "complete", "token");
         var key = family + ":" + target;
-        var fact = new AstraOfferFact(key, family, "Typed source", new(key, kind, "Action",
+        var fact = new AiOfferFact(key, family, "Typed source", new(key, kind, "Action",
             Prompt: "Help me choose one small step I can take today.", EntityId: target, Date: Today.AddDays(-1)),
             source.QueryId, source.Revision, Today)
         { Source = source };
@@ -310,7 +310,7 @@ public partial class ProcessUserChatCommandHandlerTests
 
     private void SetupOfferSelection(string tool, string family, string mode = "valid", string? secondTool = null, string? readArguments = null)
     {
-        _offers.IssuedAsync(UserId, Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Array.Empty<AstraOfferFact>());
+        _offers.IssuedAsync(UserId, Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Array.Empty<AiOfferFact>());
 
         _aiIntentService.SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>>(), Arg.Any<CancellationToken>())
             .Returns(call =>

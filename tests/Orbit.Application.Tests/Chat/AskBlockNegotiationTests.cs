@@ -9,9 +9,9 @@ public class AskBlockNegotiationTests
 {
     private static readonly AgentClientContext ChoiceClient = new(SupportsParts: true, PartKinds: ["choice", "question"]);
 
-    private static AstraBlockDefinition SingleChoice(string prompt, string title = "Walk details") =>
-        new(AstraBlockKinds.Question, title, [], [],
-            Questions: [new AstraQuestion("walk", "singleChoice", prompt, [new("morning", "Morning walk"), new("evening", "Evening walk")])]);
+    private static AiBlockDefinition SingleChoice(string prompt, string title = "Walk details") =>
+        new(AiBlockKinds.Question, title, [], [],
+            Questions: [new AiQuestion("walk", "singleChoice", prompt, [new("morning", "Morning walk"), new("evening", "Evening walk")])]);
 
     [Fact]
     public void Definition_UsesTheModelQuestionBeforeTheFieldPrompt()
@@ -19,7 +19,7 @@ public class AskBlockNegotiationTests
         var negotiated = AskBlockNegotiation.Definition(SingleChoice("Pick one"), ChoiceClient,
             JsonSerializer.SerializeToElement(new { question = "Which Walk would you like to skip?" }));
 
-        negotiated.Form.Should().Be(AstraBlockKinds.Choice);
+        negotiated.Form.Should().Be(AiBlockKinds.Choice);
         negotiated.Title.Should().Be("Which Walk would you like to skip?");
         negotiated.Options.Select(option => option.Id).Should().Equal("morning", "evening");
     }
@@ -34,7 +34,7 @@ public class AskBlockNegotiationTests
         var negotiated = AskBlockNegotiation.Definition(SingleChoice("Which Walk?"), ChoiceClient,
             JsonDocument.Parse(arguments).RootElement.Clone());
 
-        negotiated.Form.Should().Be(AstraBlockKinds.Choice);
+        negotiated.Form.Should().Be(AiBlockKinds.Choice);
         negotiated.Title.Should().Be("Which Walk?");
     }
 
@@ -43,7 +43,7 @@ public class AskBlockNegotiationTests
     {
         var negotiated = AskBlockNegotiation.Definition(SingleChoice(" "), ChoiceClient, default);
 
-        negotiated.Form.Should().Be(AstraBlockKinds.Choice);
+        negotiated.Form.Should().Be(AiBlockKinds.Choice);
         negotiated.Title.Should().Be("Walk details");
     }
 

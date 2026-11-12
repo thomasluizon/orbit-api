@@ -35,7 +35,7 @@ public sealed partial class AiSlipAlertMessageService(
 
             Format:
             - Return EXACTLY two lines. The first line is the notification title, the second line is the body.
-            - Title must use sentence case: capitalise only the first word, proper nouns and product names (Astra, Orbit); never use title case
+            - Title must use sentence case: capitalise only the first word, proper nouns and product names (Orbit); never use title case
             - Title: at most 8 words.
             - Body: one or two short, natural sentences, specific to the positive goal and to the pattern above.
             - Never say or imply that it is now the usual time. The notification always arrives before it, and when there is no time pattern there is no usual time to name.

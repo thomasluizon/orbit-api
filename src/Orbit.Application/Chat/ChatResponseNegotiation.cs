@@ -51,7 +51,7 @@ internal static class ChatResponseNegotiation
     {
         language = ChatLocale.Resolve(client, language);
         response = ForAllowance(response, client, response.MessageAllowanceConsumed ?? false);
-        var supportsParts = client?.SupportsParts == true && !flags.Contains(FeatureFlagKeys.AstraPartsDisabled);
+        var supportsParts = client?.SupportsParts == true && !flags.Contains(FeatureFlagKeys.AiPartsDisabled);
         if (response.Parts is null) return ForPendingPreview(response, supportsParts, language);
         var negotiated = new List<ChatResponsePart>();
         var downgraded = false;
@@ -75,7 +75,7 @@ internal static class ChatResponseNegotiation
             }
         }
         var text = string.Join("\n\n", negotiated.OfType<ChatTextPart>().Select(part => part.Text));
-        var followUps = client?.SupportsFollowUps == true && !flags.Contains(FeatureFlagKeys.AstraFollowUpsDisabled);
+        var followUps = client?.SupportsFollowUps == true && !flags.Contains(FeatureFlagKeys.AiFollowUpsDisabled);
         return ForPendingPreview(response with
         {
             Parts = supportsParts ? negotiated : null,
@@ -87,12 +87,12 @@ internal static class ChatResponseNegotiation
 
     private static bool Supported(string kind, object? value, AgentClientContext? client, IReadOnlyList<string> flags) =>
         value is not null && client?.PartKinds?.Contains(kind, StringComparer.Ordinal) == true
-        && ProcessUserChatCommandHandler.ReadSubtypeEnabled(value, client, flags.Contains(FeatureFlagKeys.AstraBlockFirst))
+        && ProcessUserChatCommandHandler.ReadSubtypeEnabled(value, client, flags.Contains(FeatureFlagKeys.AiBlockFirst))
         && (kind switch
         {
-            "choice" or "pickList" or "question" => !flags.Contains(FeatureFlagKeys.AstraAskBlocksDisabled),
+            "choice" or "pickList" or "question" => !flags.Contains(FeatureFlagKeys.AiAskBlocksDisabled),
             "oneSmallStep" => true,
-            "habitRanking" => !flags.Contains(FeatureFlagKeys.AstraPeriodBlocksDisabled),
+            "habitRanking" => !flags.Contains(FeatureFlagKeys.AiPeriodBlocksDisabled),
             _ => ProcessUserChatCommandHandler.ReadKindEnabled(kind, client, flags)
         });
 
@@ -116,9 +116,9 @@ internal static class ChatResponseNegotiation
             "periodTotal" => typeof(PeriodTotalCard),
             "periodComparison" => typeof(PeriodComparisonCard),
             "habitRanking" => typeof(HabitRankingCard),
-            "choice" => typeof(AstraChoiceBlock),
-            "pickList" => typeof(AstraPickListBlock),
-            "question" => typeof(AstraQuestionBlock),
+            "choice" => typeof(AiChoiceBlock),
+            "pickList" => typeof(AiPickListBlock),
+            "question" => typeof(AiQuestionBlock),
             _ => null
         };
         try
@@ -138,9 +138,9 @@ internal static class ChatResponseNegotiation
             HabitRankingCard card => HabitRankingCardBuilder.Readable(card.Ranking, language),
             HabitSuggestionsCard card => HabitSuggestionsPresentation.Readable(card),
             OneSmallStepCard card => OneSmallStepCard.Readable(card),
-            AstraChoiceBlock block => block.Question,
-            AstraPickListBlock block => block.Title,
-            AstraQuestionBlock block => string.Join("\n\n", new[] { block.Title, block.Intro }
+            AiChoiceBlock block => block.Question,
+            AiPickListBlock block => block.Title,
+            AiQuestionBlock block => string.Join("\n\n", new[] { block.Title, block.Intro }
                 .Where(text => !string.IsNullOrWhiteSpace(text)).Concat(block.Questions.Select(question =>
                     question.Prompt + (question.Options is { Count: > 0 } options
                         ? "\n" + string.Join("\n", options.Select(option => "- " + option.Label))

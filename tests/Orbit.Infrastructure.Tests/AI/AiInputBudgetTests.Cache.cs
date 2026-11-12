@@ -213,7 +213,7 @@ public partial class AiInputBudgetTests
         service.SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
             .Returns(call => { captured = call.Arg<AiToolRequest>(); return Result.Success(new AiResponse { TextMessage = "Captured" }); });
         var handler = BuildHandler(service, RegisteredTools(), user, habits ?? [], new DateOnly(2026, 1, 1),
-            enabledFlags: client == "legacy" ? [] : [FeatureFlagKeys.AstraBlockFirst]);
+            enabledFlags: client == "legacy" ? [] : [FeatureFlagKeys.AiBlockFirst]);
         var context = client == "legacy" ? null : new AgentClientContext(SupportsParts: true,
             PartKinds: reverseKinds ? ["periodTotal", "periodComparison", "habitList", "question", "pickList", "choice"]
                 : ["choice", "pickList", "question", "habitList", "periodComparison", "periodTotal"], SupportsHabitListCard: true,

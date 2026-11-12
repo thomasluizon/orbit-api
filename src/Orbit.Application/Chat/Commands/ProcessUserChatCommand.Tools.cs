@@ -26,7 +26,7 @@ public partial class ProcessUserChatCommandHandler
         var iteration = 0;
         long totalReportedTokens = initialResponse.ReportedTokenCount;
         long totalBudgetTokens = initialResponse.RequestBudgetTokenCount ?? initialResponse.ReportedTokenCount;
-        var unmetered = context.EnabledFeatureFlags.Contains(FeatureFlagKeys.AstraEvalUnmetered, StringComparer.Ordinal);
+        var unmetered = context.EnabledFeatureFlags.Contains(FeatureFlagKeys.AiEvalUnmetered, StringComparer.Ordinal);
         var tokenBudgetExceeded = !unmetered && totalBudgetTokens > AppConstants.MaxAiRequestTotalTokens;
         var hadToolFailure = false;
         var hasUnexecutedCalls = aiResponse.HasToolCalls;
@@ -412,7 +412,7 @@ public partial class ProcessUserChatCommandHandler
     private static bool HasCorrectionAllowance(ProcessUserChatCommand request, ChatContext context, ToolExecutionAccumulator results,
         int iteration, long totalBudgetTokens) =>
         iteration < ChatTurnLimits.MaxToolIterations
-        && (context.EnabledFeatureFlags.Contains(FeatureFlagKeys.AstraEvalUnmetered, StringComparer.Ordinal)
+        && (context.EnabledFeatureFlags.Contains(FeatureFlagKeys.AiEvalUnmetered, StringComparer.Ordinal)
             || totalBudgetTokens < AppConstants.MaxAiRequestTotalTokens)
         && request.BlockAnswer is null && request.ConfirmationToken is null
         && RejectedCallCorrection.CanRecover(results.CorrectionOccurrences);
@@ -631,7 +631,7 @@ public partial class ProcessUserChatCommandHandler
     {
         var failed = outcomes.Count(outcome => !outcome.ToolResult.Success);
         logger.Log(failed > 0 ? LogLevel.Warning : LogLevel.Debug,
-            "Astra round ran {ReadCount} reads and {WriteCount} writes; failed calls {FailedCount}; deferred reads {DeferredCount}",
+            "AI round ran {ReadCount} reads and {WriteCount} writes; failed calls {FailedCount}; deferred reads {DeferredCount}",
             reads, writes, failed, deferred);
     }
 

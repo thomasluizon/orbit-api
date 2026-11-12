@@ -13,7 +13,7 @@ internal static partial class SentenceCaseAssertions
         {
             sentenceStart |= title[previousEnd..match.Index].IndexOfAny(['.', '!', '?']) >= 0;
             var word = match.Value;
-            var expected = word is "Orbit" or "Astra" or "Wrapped" or "Google" or "Calendar"
+            var expected = word is "Orbit" or "Wrapped" or "Google" or "Calendar"
                 ? word
                 : sentenceStart
                     ? char.ToUpperInvariant(word[0]) + word[1..].ToLowerInvariant()
@@ -37,7 +37,6 @@ public class SentenceCaseAssertionsTests
     [InlineData("Your Wrapped is ready")]
     [InlineData("Google Calendar disconnected")]
     [InlineData("Orbit test")]
-    [InlineData("Astra is here")]
     public void AssertTitle_SentenceCaseWithProperNames_Passes(string title)
     {
         SentenceCaseAssertions.AssertTitle(title);

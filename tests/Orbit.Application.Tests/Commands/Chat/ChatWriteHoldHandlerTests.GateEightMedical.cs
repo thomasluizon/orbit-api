@@ -27,7 +27,7 @@ public sealed partial class ChatWriteHoldHandlerTests
         UseParentHabits([]);
         _userDateService.GetUserTodayAsync(_userId, Arg.Any<CancellationToken>()).Returns(GateSevenToday);
         _featureFlagService.GetEnabledKeysForUserAsync(_userId, Arg.Any<CancellationToken>())
-            .Returns([FeatureFlagKeys.AstraBlockFirst]);
+            .Returns([FeatureFlagKeys.AiBlockFirst]);
         _promptBuilder.BuildStatic(Arg.Any<PromptBuildRequest>())
             .Returns(call => new SystemPromptBuilder().BuildStatic(call.Arg<PromptBuildRequest>()));
         var captured = GateEightCapture($"composition-medical-batch-{language}-r{repeat}")

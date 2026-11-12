@@ -123,6 +123,15 @@ public class EmailCopyTests
         }
     }
 
+    [Theory]
+    [InlineData(false, "Tell Orbit what you did, in your own words, and it records the rest.")]
+    [InlineData(true, "Conte ao Orbit o que você fez, com suas palavras, e ele registra o resto.")]
+    public void TheWelcomeEmailNamesOrbit(bool isPtBr, string expected)
+    {
+        EmailCopy.Welcome(isPtBr, "Alex").Feature2.Should().Be(expected);
+        EveryString(isPtBr).Select(s => s.Value).Should().NotContain(value => value.Contains("Astra", StringComparison.Ordinal));
+    }
+
     [Fact]
     public void BrandNamesAreNeverTranslated()
     {

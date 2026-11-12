@@ -31,6 +31,6 @@ internal readonly record struct AiEvalAccount
         return Resolve(id, await flags.GetEnabledKeysForUserAsync(id, cancellationToken), configuration);
     }
     internal static AiEvalAccount Resolve(Guid? userId, IReadOnlyList<string> enabledFlags, IConfiguration? configuration) =>
-        userId is { } id ? new AiEvalAccount(id, enabledFlags.Contains(FeatureFlagKeys.AstraEvalUnmetered, StringComparer.Ordinal),
+        userId is { } id ? new AiEvalAccount(id, enabledFlags.Contains(FeatureFlagKeys.AiEvalUnmetered, StringComparer.Ordinal),
             EvalAccountAccess.Contains(configuration?[EvalAccountAccess.AccountIdsKey], id)) : default;
 }
