@@ -350,6 +350,70 @@ public partial class ProcessUserChatCommandHandlerTests
             Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
     }
 
+    private (Habit Parent, Habit[] Children) SetupSameTitleChildren(string title, int count)
+    {
+        var parent = CreateHabit("Water");
+        var children = Enumerable.Range(0, count).Select(_ => CreateHabit(title)).ToArray();
+        foreach (var child in children) child.SetParentHabitId(parent.Id);
+        SetupSelectionHabits([parent, .. children]);
+        return (parent, children);
+    }
+
+    [Theory]
+    [InlineData(true, "en")]
+    [InlineData(false, "en")]
+    [InlineData(true, "pt-BR")]
+    [InlineData(false, "pt-BR")]
+    public async Task SelectionReplay_SameTitleChildrenSplitIntoDeleteAndRenameReachOnePreview(bool forSelection, string language)
+    {
+        var user = User.Create("Reader", "reader@example.test").Value;
+        user.SetLanguage(language);
+        SetupUserAndPayGate(user);
+        var (_, children) = SetupSameTitleChildren("Water - 710ml", 6);
+        var query = new QueryHabitsTool(_habitRepo, _userRepo, _userDateService, _scheduleLogReader);
+        var delete = new BulkDeleteHabitsTool(_mediator, _habitRepo);
+        var update = new BulkUpdateHabitsTool(_mediator);
+        var handler = CreateHandler(query, delete, update);
+        var held = HoldSelectionReplayWrites(query, delete, update);
+        SetupAiResponse(new AiResponse
+        {
+            ConversationContext = TestConversationContext,
+            ToolCalls = [new(query.Name, "lookup", JsonSerializer.SerializeToElement(new
+            {
+                search = "Water 710ml", for_selection = forSelection, orbit_read_complete = false
+            }))]
+        });
+        _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
+                Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AiResponse
+            {
+                ConversationContext = TestConversationContext,
+                ToolCalls =
+                [
+                    new(delete.Name, "delete", JsonSerializer.SerializeToElement(new { habit_ids = children[4..].Select(child => child.Id) })),
+                    new(update.Name, "rename", JsonSerializer.SerializeToElement(new
+                    {
+                        filter = new { habit_ids = children[..4].Select(child => child.Id) },
+                        updates = new { title = "Water - 1.18L" }
+                    }))
+                ]
+            }), Result.Success(new AiResponse { TextMessage = "Review the changes." }));
+
+        var result = await handler.Handle(new(UserId,
+            "eu tenho 7 habitos chamados Water - 710ml deleta dois desses, e os outros 4 coloca Water - 1.18L",
+            ClientContext: new(SupportsParts: true, PartKinds: ["habitList", "choice"], SupportsHabitListCard: true,
+                SupportsDatedHabitListCard: true)), default);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        held.Select(request => request.OperationId).Should().BeEquivalentTo([delete.Name, update.Name],
+            "the reply was: " + result.Value.AiMessage);
+        result.Value.PendingOperations.Should().HaveCount(2);
+        result.Value.PendingOperations!.SelectMany(operation => operation.Items!).Select(item => item.EntityId)
+            .Should().BeEquivalentTo(children.Select(child => child.Id));
+        result.Value.Parts?.OfType<ChatBlockPart>().Should().BeEmpty();
+        result.Value.AiMessage.Should().NotContain("Which habit").And.NotContain("Qual hábito");
+    }
+
     private void SetupSelectionHabits(params Habit[] habits) => _habitRepo.FindAsync(
         Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
         Arg.Any<CancellationToken>()).Returns(call => habits.Where(call.ArgAt<Expression<Func<Habit, bool>>>(0).Compile()).ToArray());

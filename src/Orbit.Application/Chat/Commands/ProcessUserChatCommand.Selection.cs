@@ -39,21 +39,39 @@ public partial class ProcessUserChatCommandHandler
 
     private static ToolCallOutcome SelectionRequiredOutcome(AiToolCall call) => new(
         new AiToolCallResult(call.Name, call.Id, false, null, null,
-            "Selection is unanswered. Call ask with the returned candidates and prepare no write until the person answers."),
+            "Selection is unanswered. Call ask with the returned candidates and prepare no write until the person answers. A request that names the whole set or members by order needs no question, and writes that together cover every candidate exactly once in one round are accepted."),
         null, null, null, null);
 
     private static void RejectUnansweredSelections(IReadOnlyList<AiToolCall> calls,
         Dictionary<string, AiToolCall?> resolvedCalls, ToolExecutionAccumulator results,
-        Dictionary<string, ToolCallOutcome> outcomes)
+        Dictionary<string, ToolCallOutcome> outcomes, SelectionScope scope)
     {
+        var settled = new List<HabitSelectionCandidates>();
+        var held = new List<HabitSelectionCandidates>();
         foreach (var call in calls)
         {
-            if (resolvedCalls[call.Id] is not { } resolved || SelectionForWrite(resolved, results) is not { } unanswered)
+            if (resolvedCalls[call.Id] is not { } resolved)
                 continue;
+            var verdict = SelectionForWrite(resolved, results, scope);
+            settled.AddRange(verdict.Settled);
+            if (verdict.Unanswered is not { } unanswered)
+                continue;
+            held.Add(unanswered);
             results.PendingSelection = unanswered;
             outcomes[call.Id] = SelectionRequiredOutcome(call);
             resolvedCalls[call.Id] = null;
         }
+        SettleSelections(results, settled.Where(selection => !held.Contains(selection, ReferenceEqualityComparer.Instance)));
+    }
+
+    private static void SettleSelections(ToolExecutionAccumulator results, IEnumerable<HabitSelectionCandidates> settled)
+    {
+        var done = settled.ToArray();
+        if (done.Length == 0)
+            return;
+        results.SelectionCandidates.RemoveAll(selection => done.Contains(selection, ReferenceEqualityComparer.Instance));
+        if (results.PendingSelection is { } pending && done.Contains(pending, ReferenceEqualityComparer.Instance))
+            results.PendingSelection = results.SelectionCandidates.FirstOrDefault(selection => selection.RequiresAnswer);
     }
 
     private static void RejectUnreadDuplicateTargets(IReadOnlyList<AiToolCall> calls,
@@ -90,13 +108,55 @@ public partial class ProcessUserChatCommandHandler
         return BulkNoChangesOutcome.Supports(call.Name) ? EffectiveWriteTargetIds(call, results) : [];
     }
 
-    private static HabitSelectionCandidates? SelectionForWrite(AiToolCall call, ToolExecutionAccumulator results)
+    /// <summary>
+    /// The writes of a turn and the request message. A selection that a write touches is settled, and the write may
+    /// run, when the person answered it, when the message names the whole set or members by order, or when the
+    /// turn's writes split one group of same-titled records between them without a gap or an overlap.
+    /// </summary>
+    private sealed record SelectionScope(string Message, IReadOnlyList<AiToolCall> TurnWrites);
+
+    private sealed record SelectionVerdict(HabitSelectionCandidates? Unanswered, IReadOnlyList<HabitSelectionCandidates> Settled);
+
+    private static SelectionScope SelectionScopeOf(ProcessUserChatCommand request,
+        Dictionary<string, AiToolCall?> resolvedCalls, ToolExecutionAccumulator results) =>
+        new(request.Message, [.. resolvedCalls.Values.OfType<AiToolCall>(), .. results.PreviousWriteCalls]);
+
+    private static SelectionVerdict SelectionForWrite(AiToolCall call, ToolExecutionAccumulator results, SelectionScope scope)
     {
-        var ids = EffectiveWriteTargetIds(call, results).Select(id => id.ToString()).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        if (results.PendingSelection is { } pending && pending.Candidates.Any(candidate => ids.Contains(candidate.Id)))
-            return pending;
-        return results.SelectionCandidates.FirstOrDefault(selection =>
-            selection.Candidates.Any(candidate => ids.Contains(candidate.Id)));
+        var targets = EffectiveWriteTargetIds(call, results).ToHashSet();
+        var unanswered = targets.Where(id => !results.AnsweredTargetIds.Contains(id))
+            .Select(id => id.ToString()).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var settled = new List<HabitSelectionCandidates>();
+        var selections = new[] { results.PendingSelection }.Concat(results.SelectionCandidates).OfType<HabitSelectionCandidates>()
+            .Distinct(ReferenceEqualityComparer.Instance).Cast<HabitSelectionCandidates>();
+        foreach (var selection in selections)
+        {
+            var ids = targets.Select(id => id.ToString()).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            if (!selection.Candidates.Any(candidate => ids.Contains(candidate.Id)))
+                continue;
+            var touched = selection.Candidates.Where(candidate => unanswered.Contains(candidate.Id))
+                .GroupBy(candidate => HabitNameMatcher.Normalize(candidate.Title)).Select(group => group.Key).ToHashSet();
+            var groups = selection.Candidates.GroupBy(candidate => HabitNameMatcher.Normalize(candidate.Title))
+                .Where(group => touched.Contains(group.Key));
+            if (groups.All(group => GroupIsSettled(group.Select(candidate => candidate.Id).ToArray(), scope, results)))
+                settled.Add(selection);
+            else
+                return new SelectionVerdict(selection, settled);
+        }
+        return new SelectionVerdict(null, settled);
+    }
+
+    private static bool GroupIsSettled(IReadOnlyList<string> members, SelectionScope scope, ToolExecutionAccumulator results)
+    {
+        if (HabitSetRequestScope.NamesMembersByOrder(scope.Message))
+            return true;
+        var writes = scope.TurnWrites
+            .Select(write => EffectiveWriteTargetIds(write, results).Select(id => id.ToString()).ToHashSet(StringComparer.OrdinalIgnoreCase))
+            .Where(targets => members.Any(targets.Contains)).ToArray();
+        var hits = members.Select(member => writes.Count(targets => targets.Contains(member))).ToArray();
+        if (HabitSetRequestScope.NamesWholeSet(scope.Message) && hits.All(count => count >= 1))
+            return true;
+        return writes.Length >= 2 && hits.All(count => count == 1);
     }
 
     private static IEnumerable<Guid> EffectiveWriteTargetIds(AiToolCall call, ToolExecutionAccumulator results)
@@ -116,10 +176,19 @@ public partial class ProcessUserChatCommandHandler
 
     private static ResponseCards SelectionQuestion(HabitSelectionCandidates selection, string? language, bool parts)
     {
-        var text = string.IsNullOrWhiteSpace(selection.Reference)
+        var reference = SharedTitle(selection) ?? selection.Reference;
+        var text = string.IsNullOrWhiteSpace(reference)
             ? ErrorCopy.Resolve("chat.answer.selectHabit", LocaleHelper.IsPortuguese(language))
             : string.Format(System.Globalization.CultureInfo.InvariantCulture,
-                ErrorCopy.Resolve("chat.answer.selectHabitReference", LocaleHelper.IsPortuguese(language)), selection.Reference);
+                ErrorCopy.Resolve("chat.answer.selectHabitReference", LocaleHelper.IsPortuguese(language)), reference);
         return new ResponseCards(text, Parts: parts ? [new ChatTextPart(text)] : null) { ServerComposedText = true };
     }
+
+    /// <summary>
+    /// The stored title that every candidate shares. The question quotes it instead of the raw search text, so a
+    /// title with punctuation reads as the person sees it in the list.
+    /// </summary>
+    private static string? SharedTitle(HabitSelectionCandidates selection) =>
+        selection.Candidates.Count > 0 && selection.Candidates.Select(candidate => HabitNameMatcher.Normalize(candidate.Title))
+            .Distinct(StringComparer.Ordinal).Count() == 1 ? selection.Candidates[0].Title : null;
 }

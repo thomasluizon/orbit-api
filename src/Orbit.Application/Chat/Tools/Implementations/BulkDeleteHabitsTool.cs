@@ -8,8 +8,10 @@ namespace Orbit.Application.Chat.Tools.Implementations;
 
 public sealed class BulkDeleteHabitsTool(
     IMediator mediator,
-    IGenericRepository<Habit> habitRepository) : IAiTool, IArgumentCheckTool
+    IGenericRepository<Habit> habitRepository) : IAiTool, IArgumentCheckTool, ITransactionalAiTool
 {
+    public bool SupportsAtomicExecution(JsonElement arguments) => true;
+
     public string Name => "bulk_delete_habits";
 
     public string Description =>
