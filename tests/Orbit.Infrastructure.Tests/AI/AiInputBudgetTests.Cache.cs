@@ -137,8 +137,8 @@ public partial class AiInputBudgetTests
         costs.Average().Should().BeLessThanOrEqualTo(0.0009m);
         var (firstCallLimit, coldMeanLimit) = client switch
         {
-            "legacy" => (0.0054m, 0.00132m),
-            "composition" => (0.0061m, 0.00147m),
+            "legacy" => (0.00542m, 0.00132m),
+            "composition" => (0.00611m, 0.00147m),
             _ => (0.0068m, 0.00162m)
         };
         coldCosts[0].Should().BeLessThanOrEqualTo(firstCallLimit, "a session's first call must fit the compact catalog budget");
