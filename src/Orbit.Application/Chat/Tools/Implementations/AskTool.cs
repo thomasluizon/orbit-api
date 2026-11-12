@@ -123,7 +123,7 @@ public sealed class AskTool(
                                     {
                                         type = "array",
                                         maxItems = AiBlockOption.MaxTargetIds,
-                                        description = "Habit IDs that this option stands for, read earlier in this turn. Set it when an option names a group of habits by position, such as the first four. The server keeps it and never shows it. Null means absent.",
+                                        description = "Habit IDs read this turn that the option stands for. Server-only. Null means absent.",
                                         items = new { type = "string" }
                                     }
                                 },

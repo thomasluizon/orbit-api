@@ -176,7 +176,7 @@ public partial class ProcessUserChatCommandHandler
 
     private static ResponseCards SelectionQuestion(HabitSelectionCandidates selection, string? language, bool parts)
     {
-        var reference = SharedTitle(selection) ?? selection.Reference;
+        var reference = string.IsNullOrWhiteSpace(selection.Reference) ? null : SharedTitle(selection) ?? selection.Reference;
         var text = string.IsNullOrWhiteSpace(reference)
             ? ErrorCopy.Resolve("chat.answer.selectHabit", LocaleHelper.IsPortuguese(language))
             : string.Format(System.Globalization.CultureInfo.InvariantCulture,
@@ -185,8 +185,8 @@ public partial class ProcessUserChatCommandHandler
     }
 
     /// <summary>
-    /// The stored title that every candidate shares. The question quotes it instead of the raw search text, so a
-    /// title with punctuation reads as the person sees it in the list.
+    /// The stored title that every candidate shares. A question about a search quotes it instead of the raw search
+    /// text, so a title with punctuation reads as the person sees it in the list.
     /// </summary>
     private static string? SharedTitle(HabitSelectionCandidates selection) =>
         selection.Candidates.Count > 0 && selection.Candidates.Select(candidate => HabitNameMatcher.Normalize(candidate.Title))
