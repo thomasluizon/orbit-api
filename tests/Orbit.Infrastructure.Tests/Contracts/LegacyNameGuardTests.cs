@@ -34,6 +34,8 @@ public class LegacyNameGuardTests
         (@"""setProactiveAstra""", WireName),
         (@"\$""proactiveAstra\.\{enabled\}""", WireName),
         (@"""astraAllowance""", WireName),
+        (@"(?<=[""/`])(SetProactiveAstraEnabledRequest|Astra(BlockAnswer|NextAction|PlanStep|Plan|QuestionAnswer|QuestionBlock|QuestionOption|QuestionProgress|Question))(?=[""`])", WireName),
+        (@"""ProactiveAstra""", WireName),
         (@"""chat\.read\.astraAllowance""", WireName),
         (@"""ProactiveAstraEnabled""", TableOrColumn),
         (@"""HasTriedAstra""", TableOrColumn),

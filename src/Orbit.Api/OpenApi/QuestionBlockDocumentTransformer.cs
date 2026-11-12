@@ -13,7 +13,7 @@ public sealed class QuestionBlockDocumentTransformer : IOpenApiDocumentTransform
                      typeof(AiQuestionAnswer), typeof(AiQuestionOption), typeof(AiQuestionProgress) })
         {
             var schema = await context.GetOrCreateSchemaAsync(type, cancellationToken: cancellationToken);
-            document.AddComponent(type.Name, schema);
+            document.AddComponent(PublishedSchemaNames.ComponentName(type), schema);
         }
     }
 }

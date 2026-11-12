@@ -406,6 +406,7 @@ public static partial class ServiceCollectionExtensions
 
     private static void ConfigureOrbitOpenApi(Microsoft.AspNetCore.OpenApi.OpenApiOptions options, OpenApiArtifact artifact)
     {
+        options.CreateSchemaReferenceId = PublishedSchemaNames.ReferenceId;
         options.AddDocumentTransformer<BearerSecuritySchemeTransformer>();
         options.AddDocumentTransformer<QuestionBlockDocumentTransformer>();
         var group = "v" + artifact.HttpVersion.Split('.')[0];

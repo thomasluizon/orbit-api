@@ -18,12 +18,12 @@ public class QuestionBlockContractTests
         var path = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../..", "src/Orbit.Api", file));
         using var document = JsonDocument.Parse(File.ReadAllText(path));
         var schemas = document.RootElement.GetProperty("components").GetProperty("schemas");
-        schemas.TryGetProperty("AiQuestionBlock", out var block).Should().BeTrue();
+        schemas.TryGetProperty("AstraQuestionBlock", out var block).Should().BeTrue();
         block.GetProperty("properties").TryGetProperty("questions", out _).Should().BeTrue();
         block.GetProperty("required").EnumerateArray().Select(value => value.GetString()).Should().NotContain("title");
-        schemas.GetProperty("AiBlockAnswer").GetProperty("properties").TryGetProperty("answers", out _).Should().BeTrue();
-        schemas.GetProperty("AiQuestionAnswer").GetProperty("properties").TryGetProperty("boolean", out _).Should().BeTrue();
-        schemas.GetProperty("AiQuestion").GetProperty("properties").GetProperty("type").GetProperty("enum")
+        schemas.GetProperty("AstraBlockAnswer").GetProperty("properties").TryGetProperty("answers", out _).Should().BeTrue();
+        schemas.GetProperty("AstraQuestionAnswer").GetProperty("properties").TryGetProperty("boolean", out _).Should().BeTrue();
+        schemas.GetProperty("AstraQuestion").GetProperty("properties").GetProperty("type").GetProperty("enum")
             .EnumerateArray().Select(value => value.GetString()).Should().Equal("singleChoice", "multipleChoice", "scale", "slider", "yesNo");
     }
 }

@@ -119,6 +119,37 @@ public class WireNameTests
         mcp.Should().BeEquivalentTo(expectedMcp).And.HaveCount(94).And.Contain("set_proactive_astra");
     }
 
+    /// <summary>
+    /// A component schema name and a tag name are wire names: each <c>$ref</c> and each generated client reads them.
+    /// The fixture lists every published name; a pull request that publishes a new one adds it there.
+    /// </summary>
+    [Theory]
+    [InlineData("openapi.json")]
+    [InlineData("openapi_v2.json")]
+    [InlineData("openapi_v1-r2.json")]
+    [InlineData("openapi_v2-r2.json")]
+    public void OpenApiDocuments_KeepEveryPublishedSchemaAndTagName(string file)
+    {
+        using var snapshot = JsonDocument.Parse(File.ReadAllText(
+            Path.Combine(AppContext.BaseDirectory, "Fixtures", "Contracts", "openapi-names.json")));
+        var pinned = snapshot.RootElement.GetProperty(file);
+        using var document = JsonDocument.Parse(File.ReadAllText(Path.GetFullPath(
+            Path.Combine(AppContext.BaseDirectory, "../../../../..", "src/Orbit.Api", file))));
+
+        var schemas = document.RootElement.GetProperty("components").GetProperty("schemas")
+            .EnumerateObject().Select(schema => schema.Name).ToArray();
+        var tags = document.RootElement.GetProperty("tags").EnumerateArray()
+            .Select(tag => tag.GetProperty("name").GetString()!).ToArray();
+
+        schemas.Should().Contain(Strings(pinned.GetProperty("schemas")),
+            "an internal rename must keep each published component schema name");
+        tags.Should().Contain(Strings(pinned.GetProperty("tags")),
+            "an internal rename must keep each published tag name");
+    }
+
+    private static string[] Strings(JsonElement array) =>
+        array.EnumerateArray().Select(value => value.GetString()!).ToArray();
+
     private static string[] ConstantValues(Type type, string prefix) =>
         type.GetFields(BindingFlags.Public | BindingFlags.Static)
             .Where(field => field.IsLiteral && field.FieldType == typeof(string))

@@ -13370,7 +13370,7 @@
     "/api/ai/proactive/current": {
       "get": {
         "tags": [
-          "ProactiveAi"
+          "ProactiveAstra"
         ],
         "parameters": [
           {
@@ -13459,7 +13459,7 @@
     "/api/ai/proactive/{id}": {
       "get": {
         "tags": [
-          "ProactiveAi"
+          "ProactiveAstra"
         ],
         "parameters": [
           {
@@ -13530,7 +13530,7 @@
     "/api/ai/proactive/{id}/opened": {
       "post": {
         "tags": [
-          "ProactiveAi"
+          "ProactiveAstra"
         ],
         "parameters": [
           {
@@ -13601,7 +13601,7 @@
     "/api/ai/proactive/{id}/acted": {
       "post": {
         "tags": [
-          "ProactiveAi"
+          "ProactiveAstra"
         ],
         "parameters": [
           {
@@ -14013,17 +14013,17 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SetProactiveAiEnabledRequest"
+                "$ref": "#/components/schemas/SetProactiveAstraEnabledRequest"
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/SetProactiveAiEnabledRequest"
+                "$ref": "#/components/schemas/SetProactiveAstraEnabledRequest"
               }
             },
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/SetProactiveAiEnabledRequest"
+                "$ref": "#/components/schemas/SetProactiveAstraEnabledRequest"
               }
             }
           },
@@ -17888,7 +17888,7 @@
                 "type": "null"
               },
               {
-                "$ref": "#/components/schemas/AiPlan"
+                "$ref": "#/components/schemas/AstraPlan"
               }
             ]
           }
@@ -18160,529 +18160,6 @@
       },
       "AiActionType": {
         "type": "integer"
-      },
-      "AiBlockAnswer": {
-        "required": [
-          "blockId",
-          "selectedIds"
-        ],
-        "type": "object",
-        "properties": {
-          "blockId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "selectedIds": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "freeText": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "answers": {
-            "type": [
-              "null",
-              "array"
-            ],
-            "items": {
-              "required": [
-                "questionId"
-              ],
-              "type": "object",
-              "properties": {
-                "questionId": {
-                  "type": "string"
-                },
-                "selectedIds": {
-                  "type": [
-                    "null",
-                    "array"
-                  ],
-                  "items": {
-                    "type": "string"
-                  }
-                },
-                "number": {
-                  "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
-                  "type": [
-                    "null",
-                    "number",
-                    "string"
-                  ],
-                  "format": "double"
-                },
-                "boolean": {
-                  "type": [
-                    "null",
-                    "boolean"
-                  ]
-                },
-                "freeText": {
-                  "type": [
-                    "null",
-                    "string"
-                  ]
-                }
-              }
-            }
-          }
-        }
-      },
-      "AiNextAction": {
-        "required": [
-          "offerKey",
-          "kind",
-          "label"
-        ],
-        "type": "object",
-        "properties": {
-          "offerKey": {
-            "type": "string"
-          },
-          "kind": {
-            "type": "string"
-          },
-          "label": {
-            "type": "string"
-          },
-          "surface": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "prompt": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "entityId": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "uuid"
-          },
-          "date": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "date"
-          }
-        }
-      },
-      "AiPlan": {
-        "required": [
-          "id",
-          "title",
-          "steps"
-        ],
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "title": {
-            "type": "string"
-          },
-          "steps": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AiPlanStep"
-            }
-          }
-        }
-      },
-      "AiPlanStep": {
-        "required": [
-          "id",
-          "text",
-          "status",
-          "tool",
-          "phase"
-        ],
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "text": {
-            "type": "string"
-          },
-          "status": {
-            "type": "string"
-          },
-          "tool": {
-            "type": "string"
-          },
-          "phase": {
-            "type": "string"
-          },
-          "toolCallId": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "pendingOperationId": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "uuid"
-          }
-        }
-      },
-      "AiQuestion": {
-        "required": [
-          "id",
-          "type",
-          "prompt"
-        ],
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "type": {
-            "enum": [
-              "singleChoice",
-              "multipleChoice",
-              "scale",
-              "slider",
-              "yesNo"
-            ],
-            "type": "string"
-          },
-          "prompt": {
-            "type": "string"
-          },
-          "options": {
-            "type": [
-              "null",
-              "array"
-            ],
-            "items": {
-              "required": [
-                "id",
-                "label"
-              ],
-              "type": "object",
-              "properties": {
-                "id": {
-                  "type": "string"
-                },
-                "label": {
-                  "type": "string"
-                },
-                "recommended": {
-                  "type": "boolean",
-                  "default": false
-                }
-              }
-            }
-          },
-          "allowFreeText": {
-            "type": "boolean",
-            "default": false
-          },
-          "lowLabel": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "highLabel": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "min": {
-            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
-            "type": [
-              "null",
-              "number",
-              "string"
-            ],
-            "format": "double"
-          },
-          "max": {
-            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
-            "type": [
-              "null",
-              "number",
-              "string"
-            ],
-            "format": "double"
-          },
-          "step": {
-            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
-            "type": [
-              "null",
-              "number",
-              "string"
-            ],
-            "format": "double"
-          },
-          "unit": {
-            "type": [
-              "null",
-              "string"
-            ]
-          }
-        }
-      },
-      "AiQuestionAnswer": {
-        "required": [
-          "questionId"
-        ],
-        "type": "object",
-        "properties": {
-          "questionId": {
-            "type": "string"
-          },
-          "selectedIds": {
-            "type": [
-              "null",
-              "array"
-            ],
-            "items": {
-              "type": "string"
-            }
-          },
-          "number": {
-            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
-            "type": [
-              "null",
-              "number",
-              "string"
-            ],
-            "format": "double"
-          },
-          "boolean": {
-            "type": [
-              "null",
-              "boolean"
-            ]
-          },
-          "freeText": {
-            "type": [
-              "null",
-              "string"
-            ]
-          }
-        }
-      },
-      "AiQuestionBlock": {
-        "required": [
-          "blockId",
-          "questions",
-          "expiresAtUtc"
-        ],
-        "type": "object",
-        "properties": {
-          "blockId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "questions": {
-            "type": "array",
-            "items": {
-              "required": [
-                "id",
-                "type",
-                "prompt"
-              ],
-              "type": "object",
-              "properties": {
-                "id": {
-                  "type": "string"
-                },
-                "type": {
-                  "enum": [
-                    "singleChoice",
-                    "multipleChoice",
-                    "scale",
-                    "slider",
-                    "yesNo"
-                  ],
-                  "type": "string"
-                },
-                "prompt": {
-                  "type": "string"
-                },
-                "options": {
-                  "type": [
-                    "null",
-                    "array"
-                  ],
-                  "items": {
-                    "required": [
-                      "id",
-                      "label"
-                    ],
-                    "type": "object",
-                    "properties": {
-                      "id": {
-                        "type": "string"
-                      },
-                      "label": {
-                        "type": "string"
-                      },
-                      "recommended": {
-                        "type": "boolean",
-                        "default": false
-                      }
-                    }
-                  }
-                },
-                "allowFreeText": {
-                  "type": "boolean",
-                  "default": false
-                },
-                "lowLabel": {
-                  "type": [
-                    "null",
-                    "string"
-                  ]
-                },
-                "highLabel": {
-                  "type": [
-                    "null",
-                    "string"
-                  ]
-                },
-                "min": {
-                  "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
-                  "type": [
-                    "null",
-                    "number",
-                    "string"
-                  ],
-                  "format": "double"
-                },
-                "max": {
-                  "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
-                  "type": [
-                    "null",
-                    "number",
-                    "string"
-                  ],
-                  "format": "double"
-                },
-                "step": {
-                  "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
-                  "type": [
-                    "null",
-                    "number",
-                    "string"
-                  ],
-                  "format": "double"
-                },
-                "unit": {
-                  "type": [
-                    "null",
-                    "string"
-                  ]
-                }
-              }
-            }
-          },
-          "expiresAtUtc": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "title": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "intro": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "progress": {
-            "required": [
-              "current",
-              "total"
-            ],
-            "type": "object",
-            "properties": {
-              "current": {
-                "pattern": "^-?(?:0|[1-9]\\d*)$",
-                "type": [
-                  "integer",
-                  "string"
-                ],
-                "format": "int32"
-              },
-              "total": {
-                "pattern": "^-?(?:0|[1-9]\\d*)$",
-                "type": [
-                  "integer",
-                  "string"
-                ],
-                "format": "int32"
-              }
-            }
-          }
-        }
-      },
-      "AiQuestionOption": {
-        "required": [
-          "id",
-          "label"
-        ],
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "label": {
-            "type": "string"
-          },
-          "recommended": {
-            "type": "boolean",
-            "default": false
-          }
-        }
-      },
-      "AiQuestionProgress": {
-        "required": [
-          "current",
-          "total"
-        ],
-        "type": "object",
-        "properties": {
-          "current": {
-            "pattern": "^-?(?:0|[1-9]\\d*)$",
-            "type": [
-              "integer",
-              "string"
-            ],
-            "format": "int32"
-          },
-          "total": {
-            "pattern": "^-?(?:0|[1-9]\\d*)$",
-            "type": [
-              "integer",
-              "string"
-            ],
-            "format": "int32"
-          }
-        }
       },
       "AppConfigResponse": {
         "required": [
@@ -19091,6 +18568,529 @@
               "type": "string",
               "format": "uuid"
             }
+          }
+        }
+      },
+      "AstraBlockAnswer": {
+        "required": [
+          "blockId",
+          "selectedIds"
+        ],
+        "type": "object",
+        "properties": {
+          "blockId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "selectedIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "freeText": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "answers": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "required": [
+                "questionId"
+              ],
+              "type": "object",
+              "properties": {
+                "questionId": {
+                  "type": "string"
+                },
+                "selectedIds": {
+                  "type": [
+                    "null",
+                    "array"
+                  ],
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "number": {
+                  "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+                  "type": [
+                    "null",
+                    "number",
+                    "string"
+                  ],
+                  "format": "double"
+                },
+                "boolean": {
+                  "type": [
+                    "null",
+                    "boolean"
+                  ]
+                },
+                "freeText": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "AstraNextAction": {
+        "required": [
+          "offerKey",
+          "kind",
+          "label"
+        ],
+        "type": "object",
+        "properties": {
+          "offerKey": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "surface": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "prompt": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "entityId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "date": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date"
+          }
+        }
+      },
+      "AstraPlan": {
+        "required": [
+          "id",
+          "title",
+          "steps"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string"
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AstraPlanStep"
+            }
+          }
+        }
+      },
+      "AstraPlanStep": {
+        "required": [
+          "id",
+          "text",
+          "status",
+          "tool",
+          "phase"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "tool": {
+            "type": "string"
+          },
+          "phase": {
+            "type": "string"
+          },
+          "toolCallId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "pendingOperationId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          }
+        }
+      },
+      "AstraQuestion": {
+        "required": [
+          "id",
+          "type",
+          "prompt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "singleChoice",
+              "multipleChoice",
+              "scale",
+              "slider",
+              "yesNo"
+            ],
+            "type": "string"
+          },
+          "prompt": {
+            "type": "string"
+          },
+          "options": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "required": [
+                "id",
+                "label"
+              ],
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "recommended": {
+                  "type": "boolean",
+                  "default": false
+                }
+              }
+            }
+          },
+          "allowFreeText": {
+            "type": "boolean",
+            "default": false
+          },
+          "lowLabel": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "highLabel": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "min": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "max": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "step": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "unit": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "AstraQuestionAnswer": {
+        "required": [
+          "questionId"
+        ],
+        "type": "object",
+        "properties": {
+          "questionId": {
+            "type": "string"
+          },
+          "selectedIds": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "number": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "boolean": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "freeText": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "AstraQuestionBlock": {
+        "required": [
+          "blockId",
+          "questions",
+          "expiresAtUtc"
+        ],
+        "type": "object",
+        "properties": {
+          "blockId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "questions": {
+            "type": "array",
+            "items": {
+              "required": [
+                "id",
+                "type",
+                "prompt"
+              ],
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "type": {
+                  "enum": [
+                    "singleChoice",
+                    "multipleChoice",
+                    "scale",
+                    "slider",
+                    "yesNo"
+                  ],
+                  "type": "string"
+                },
+                "prompt": {
+                  "type": "string"
+                },
+                "options": {
+                  "type": [
+                    "null",
+                    "array"
+                  ],
+                  "items": {
+                    "required": [
+                      "id",
+                      "label"
+                    ],
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "label": {
+                        "type": "string"
+                      },
+                      "recommended": {
+                        "type": "boolean",
+                        "default": false
+                      }
+                    }
+                  }
+                },
+                "allowFreeText": {
+                  "type": "boolean",
+                  "default": false
+                },
+                "lowLabel": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "highLabel": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "min": {
+                  "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+                  "type": [
+                    "null",
+                    "number",
+                    "string"
+                  ],
+                  "format": "double"
+                },
+                "max": {
+                  "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+                  "type": [
+                    "null",
+                    "number",
+                    "string"
+                  ],
+                  "format": "double"
+                },
+                "step": {
+                  "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+                  "type": [
+                    "null",
+                    "number",
+                    "string"
+                  ],
+                  "format": "double"
+                },
+                "unit": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                }
+              }
+            }
+          },
+          "expiresAtUtc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "title": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "intro": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "progress": {
+            "required": [
+              "current",
+              "total"
+            ],
+            "type": "object",
+            "properties": {
+              "current": {
+                "pattern": "^-?(?:0|[1-9]\\d*)$",
+                "type": [
+                  "integer",
+                  "string"
+                ],
+                "format": "int32"
+              },
+              "total": {
+                "pattern": "^-?(?:0|[1-9]\\d*)$",
+                "type": [
+                  "integer",
+                  "string"
+                ],
+                "format": "int32"
+              }
+            }
+          }
+        }
+      },
+      "AstraQuestionOption": {
+        "required": [
+          "id",
+          "label"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "recommended": {
+            "type": "boolean",
+            "default": false
+          }
+        }
+      },
+      "AstraQuestionProgress": {
+        "required": [
+          "current",
+          "total"
+        ],
+        "type": "object",
+        "properties": {
+          "current": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "total": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
           }
         }
       },
@@ -20289,7 +20289,7 @@
                 "type": "null"
               },
               {
-                "$ref": "#/components/schemas/AiPlan"
+                "$ref": "#/components/schemas/AstraPlan"
               }
             ]
           }
@@ -20452,7 +20452,7 @@
                 "type": "null"
               },
               {
-                "$ref": "#/components/schemas/AiPlan"
+                "$ref": "#/components/schemas/AstraPlan"
               }
             ]
           },
@@ -20469,7 +20469,7 @@
                 "type": "null"
               },
               {
-                "$ref": "#/components/schemas/AiPlanStep"
+                "$ref": "#/components/schemas/AstraPlanStep"
               }
             ]
           }
@@ -20704,7 +20704,7 @@
                 "type": "null"
               },
               {
-                "$ref": "#/components/schemas/AiPlan"
+                "$ref": "#/components/schemas/AstraPlan"
               }
             ]
           }
@@ -25180,7 +25180,7 @@
                 "type": "null"
               },
               {
-                "$ref": "#/components/schemas/AiNextAction"
+                "$ref": "#/components/schemas/AstraNextAction"
               }
             ]
           }
@@ -25494,7 +25494,7 @@
                 "type": "null"
               },
               {
-                "$ref": "#/components/schemas/AiPlan"
+                "$ref": "#/components/schemas/AstraPlan"
               }
             ]
           }
@@ -27510,7 +27510,7 @@
                 "type": "null"
               },
               {
-                "$ref": "#/components/schemas/AiNextAction"
+                "$ref": "#/components/schemas/AstraNextAction"
               }
             ]
           }
@@ -28389,7 +28389,7 @@
           }
         }
       },
-      "SetProactiveAiEnabledRequest": {
+      "SetProactiveAstraEnabledRequest": {
         "required": [
           "enabled"
         ],
@@ -30579,7 +30579,7 @@
       "name": "Onboarding"
     },
     {
-      "name": "ProactiveAi"
+      "name": "ProactiveAstra"
     },
     {
       "name": "Profile"

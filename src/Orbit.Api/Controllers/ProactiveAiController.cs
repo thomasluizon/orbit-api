@@ -16,6 +16,7 @@ namespace Orbit.Api.Controllers;
 [ApiVersion(1.0)]
 [ApiVersion(2.0)]
 [Route("api/ai/proactive")]
+[Tags("ProactiveAstra")]
 public sealed class ProactiveAiController(ISender sender) : ControllerBase
 {
     private static readonly JsonSerializerOptions ClientContextOptions = new() { PropertyNameCaseInsensitive = true };
