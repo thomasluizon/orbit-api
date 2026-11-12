@@ -150,4 +150,208 @@ public partial class ProcessUserChatCommandHandlerTests
         result.Value.Actions.Should().BeEmpty();
         await write.DidNotReceiveWithAnyArgs().ExecuteAsync(default, default, default);
     }
+
+    /// <summary>
+    /// The block as the server stores it after the ask tool accepted it: the options carry the ids of the habits they
+    /// stand for under <c>target_ids</c>. The JSON form keeps the test independent of the option record.
+    /// </summary>
+    private IssuedAiBlock StoredPositionChoice(Habit[] children, string question)
+    {
+        var first = children[..4].Select(child => child.Id.ToString()).ToArray();
+        var last = children[2..].Select(child => child.Id.ToString()).ToArray();
+        var definition = JsonSerializer.Deserialize<AiBlockDefinition>(JsonSerializer.Serialize(new
+        {
+            Form = "choice",
+            Title = question,
+            Options = new object[]
+            {
+                new { Id = "first4", Label = "4 primeiros", Description = "Da lista em ordem", target_ids = first },
+                new { Id = "last4", Label = "4 últimos", Description = "Da lista em ordem", target_ids = last }
+            },
+            Items = Array.Empty<object>(),
+            MultiSelect = false,
+            AllowFreeText = false
+        }))!;
+        var block = IssuedAiBlock.Create(UserId, definition);
+        _blockStore.GetAsync(block.Id, UserId, Arg.Any<CancellationToken>()).Returns(block);
+        _blockStore.MarkAnsweredAsync(block.Id, UserId, Arg.Any<DateTime>(), Arg.Any<CancellationToken>())
+            .Returns(call => { block.MarkAnswered(call.ArgAt<DateTime>(2)); return true; });
+        _blockStore.CheckpointAnswerAsync(block.Id, UserId, Arg.Any<DateTime>(), Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(true);
+        return block;
+    }
+
+    private static AiResponse SplitWrites(Habit[] children) => new()
+    {
+        ConversationContext = TestConversationContext,
+        ToolCalls =
+        [
+            new("bulk_delete_habits", "delete", JsonSerializer.SerializeToElement(new
+            {
+                habit_ids = children[4..].Select(child => child.Id), orbit_write_complete = true
+            })),
+            new("bulk_update_habits", "rename", JsonSerializer.SerializeToElement(new
+            {
+                filter = new { habit_ids = children[..4].Select(child => child.Id) },
+                updates = new { title = "Water - 1.18L" },
+                orbit_write_complete = true
+            }))
+        ]
+    };
+
+    [Theory]
+    [InlineData("en", "Keep which ones?")]
+    [InlineData("pt-BR", "Mantém quais?")]
+    public async Task G14_AnsweredPositionChoiceSettlesBothSetsAndReachesOnePreview(string language, string question)
+    {
+        var user = User.Create("Reader", "reader@example.test").Value;
+        user.SetLanguage(language);
+        SetupUserAndPayGate(user);
+        EnableComposition();
+        _unitOfWork.PassThroughTransactions<Result<PreparedAiBlockAnswer>>();
+        var (_, children) = SetupSameTitleChildren("Water - 710ml", 6);
+        var delete = new BulkDeleteHabitsTool(_mediator, _habitRepo);
+        var update = new BulkUpdateHabitsTool(_mediator);
+        var handler = CreateHandler(delete, update);
+        var held = HoldReplayWrites(delete, update);
+        var block = StoredPositionChoice(children, question);
+        SetupAiResponse(SplitWrites(children));
+        ReplyToReplay("Review the changes.");
+
+        var result = await handler.Handle(new(UserId, "Answer", BlockAnswer: new(block.Id, ["first4"]),
+            ClientContext: new(SupportsParts: true, SupportsPendingOperationChanges: true, PartKinds: ["choice"])), default);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        held.Select(request => request.OperationId).Should().BeEquivalentTo(["bulk_delete_habits", "bulk_update_habits"]);
+        result.Value.PendingOperations.Should().HaveCount(2);
+        result.Value.PendingOperations!.SelectMany(operation => operation.Items!).Select(item => item.EntityId)
+            .Should().BeEquivalentTo(children.Select(child => child.Id));
+        result.Value.Parts?.OfType<ChatBlockPart>().Should().NotContain(part => part.Block is AiChoiceBlock);
+        result.Value.AiMessage.Should().NotContain("Which habit").And.NotContain("Qual hábito");
+    }
+
+    [Fact]
+    public async Task G14_AnsweredPositionChoiceModelContextHoldsQuestionOptionsAndBothTargetSets()
+    {
+        SetupUserAndPayGate();
+        EnableComposition();
+        _unitOfWork.PassThroughTransactions<Result<PreparedAiBlockAnswer>>();
+        var (_, children) = SetupSameTitleChildren("Water - 710ml", 6);
+        var handler = CreateHandler(new BulkDeleteHabitsTool(_mediator, _habitRepo), new BulkUpdateHabitsTool(_mediator));
+        var block = StoredPositionChoice(children, "Keep which ones?");
+        AiToolRequest? next = null;
+        _aiIntentService.SendWithToolsAsync(Arg.Do<AiToolRequest>(value => next = value),
+                Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AiResponse { TextMessage = "Ready." }));
+
+        var answer = await handler.Handle(new(UserId, "Answer", BlockAnswer: new(block.Id, ["first4"]),
+            ClientContext: new(SupportsParts: true, PartKinds: ["choice"])), default);
+
+        answer.IsSuccess.Should().BeTrue(answer.Error);
+        const string marker = "Validated choice selection: ";
+        var dynamicContext = next!.DynamicContext!;
+        using var context = JsonDocument.Parse(dynamicContext[(dynamicContext.IndexOf(marker, StringComparison.Ordinal) + marker.Length)..]);
+        var root = context.RootElement;
+        root.GetProperty("question").GetString().Should().Be("Keep which ones?");
+        root.GetProperty("options").EnumerateArray().Select(option => option.GetProperty("id").GetString())
+            .Should().Equal("first4", "last4");
+        root.GetProperty("chosenTargets").EnumerateArray().Select(id => id.GetString())
+            .Should().BeEquivalentTo(children[..4].Select(child => child.Id.ToString()));
+        root.GetProperty("unchosenTargets").EnumerateArray().Select(id => id.GetString())
+            .Should().BeEquivalentTo(children[4..].Select(child => child.Id.ToString()));
+    }
+
+    [Fact]
+    public async Task G14_AnsweredChoiceRefusesTheSameDecisionAskedFromTheOtherSide()
+    {
+        SetupUserAndPayGate();
+        EnableComposition();
+        _unitOfWork.PassThroughTransactions<Result<PreparedAiBlockAnswer>>();
+        var (_, children) = SetupSameTitleChildren("Water - 710ml", 6);
+        var query = new QueryHabitsTool(_habitRepo, _userRepo, _userDateService, _scheduleLogReader);
+        var delete = new BulkDeleteHabitsTool(_mediator, _habitRepo);
+        var update = new BulkUpdateHabitsTool(_mediator);
+        var handler = CreateHandler(RealAskTool(), query, delete, update);
+        var held = HoldSelectionReplayWrites(query, delete, update);
+        var block = StoredPositionChoice(children, "Keep which ones?");
+        SetupAiResponse(new AiResponse
+        {
+            ConversationContext = TestConversationContext,
+            ToolCalls =
+            [
+                new(query.Name, "read", ParseArguments("""{"search":"Water 710ml","for_selection":true,"orbit_read_complete":false}""")),
+                new("ask", "again", JsonSerializer.SerializeToElement(new
+                {
+                    input = new
+                    {
+                        form = "choice",
+                        missing_input = "record_selection",
+                        question = "Delete the last 2 or the first 2?",
+                        options = new object[]
+                        {
+                            new { id = "last2", label = "2 últimos", target_ids = children[4..].Select(child => child.Id.ToString()) },
+                            new { id = "first2", label = "2 primeiros", target_ids = children[..2].Select(child => child.Id.ToString()) }
+                        }
+                    }
+                }))
+            ]
+        });
+        _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
+                Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(SplitWrites(children)), Result.Success(new AiResponse { TextMessage = "Review the changes." }));
+
+        var result = await handler.Handle(new(UserId, "Answer", BlockAnswer: new(block.Id, ["first4"]),
+            ClientContext: new(SupportsParts: true, SupportsPendingOperationChanges: true,
+                PartKinds: ["choice", "habitList"], SupportsHabitListCard: true)), default);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        result.Value.Parts?.OfType<ChatBlockPart>().Should().NotContain(part => part.Block is AiChoiceBlock);
+        await _blockStore.DidNotReceive().AddAsync(Arg.Any<IssuedAiBlock>(), Arg.Any<CancellationToken>());
+        held.Select(request => request.OperationId).Should().BeEquivalentTo(["bulk_delete_habits", "bulk_update_habits"]);
+        result.Value.PendingOperations.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task G14_AnsweredChoiceKeepsAQuestionAboutAnotherSetOpen()
+    {
+        SetupUserAndPayGate();
+        EnableComposition();
+        _unitOfWork.PassThroughTransactions<Result<PreparedAiBlockAnswer>>();
+        var (parent, children) = SetupSameTitleChildren("Water - 710ml", 6);
+        var query = new QueryHabitsTool(_habitRepo, _userRepo, _userDateService, _scheduleLogReader);
+        var handler = CreateHandler(RealAskTool(), query);
+        UseProductionReadExecutor(query);
+        var block = StoredPositionChoice(children, "Keep which ones?");
+        _blockStore.AddAsync(Arg.Any<IssuedAiBlock>(), Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
+        var other = CreateHabit("Water - 1.18L");
+        SetupSelectionHabits([parent, .. children, other, CreateHabit("Water - 1.18L")]);
+        SetupAiResponse(new AiResponse
+        {
+            ConversationContext = TestConversationContext,
+            ToolCalls =
+            [
+                new(query.Name, "read", ParseArguments("""{"search":"1.18L","for_selection":true,"orbit_read_complete":false}""")),
+                new("ask", "other", JsonSerializer.SerializeToElement(new
+                {
+                    input = new
+                    {
+                        form = "choice",
+                        missing_input = "record_selection",
+                        question = "Which 1.18L habit?",
+                        options = new object[]
+                        {
+                            new { id = other.Id.ToString(), label = "Water - 1.18L", description = "First" },
+                            new { id = "second", label = "Water - 1.18L", description = "Second" }
+                        }
+                    }
+                }))
+            ]
+        });
+
+        var result = await handler.Handle(new(UserId, "Answer", BlockAnswer: new(block.Id, ["first4"]),
+            ClientContext: new(SupportsParts: true, PartKinds: ["choice", "habitList"], SupportsHabitListCard: true)), default);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>()
+            .Which.Block.Should().BeOfType<AiChoiceBlock>();
+    }
 }
