@@ -1,4 +1,4 @@
-# Astra answer composition
+# AI answer composition
 
 Tracks thomasluizon/orbit-tickets#1617. The API owns composition; #1620 owns the consumer
 and #26 owns real-call bilingual assertions in `evals/astra/`. No second eval harness applies.
@@ -300,7 +300,7 @@ or today's next pending step. A next-step read uses `relative_period: today`,
 it does not replace the habit query. Tool descriptions and read instructions establish this
 distinction without routing messages by keywords or rewriting the model's tool calls.
 
-The Today Astra insight sentence is `DailySummaryResponse.Summary` from
+The Today AI insight sentence is `DailySummaryResponse.Summary` from
 `HabitsController.GetDailySummary` through `GetDailySummaryQueryHandler` and
 `AiSummaryService`. Web and Android summary cards, chat `get_daily_summary` reads
 that request a narrative, and the MCP tool share this producer. The legacy
@@ -388,8 +388,8 @@ A read denied with `target_not_owned` can use the existing single correction all
 to correct that read's owned target or omit it when successful typed reads already answer
 the request. Correction candidates cannot introduce writes or repeat successful reads.
 Other permission denials and failed corrections retain the concise failure status.
-Requests referring to an earlier Astra message take their scope from conversation history
-and read the account data named there. Astra does not ask which message or reminder was
+Requests referring to an earlier Orbit message take their scope from conversation history
+and read the account data named there. Orbit does not ask which message or reminder was
 meant. Every `ask.input` form requires `missing_input`: `habit_setup`, `preference`,
 `check_in`, `record_selection` or `bulk_selection`. Record selection and the log/skip
 pickList actions require a successful `query_habits` result earlier in the current turn,
@@ -821,7 +821,7 @@ replay, and the parts kill flag. It is independent of `astra_block_first`; disab
 must preserve readable legacy answers. Stream reset and replacement text agree with the final
 response and recorded history. A pending preview keeps contextual follow-ups suppressed.
 
-Daily Astra allowance exhaustion retains HTTP 403 with `errorCode: PAY_GATE` and the same
+Daily AI allowance exhaustion retains HTTP 403 with `errorCode: PAY_GATE` and the same
 code on SSE errors. Its localized reason states the allowance limit without an upgrade offer.
 Account language selects the initial copy,
 and HTTP/SSE localization uses internal copy arguments to preserve the quota reason.
@@ -1711,7 +1711,7 @@ strings. Navigation actions have no chat prompt.
 | Plan in Orbit | Planejar no Orbit |
 | Mark as read | Marcar como lido |
 | Use with a habit | Usar em um hábito |
-| Review Astra settings | Ver configurações da Astra |
+| Review AI settings | Ver configurações de IA |
 | Connect Google Calendar | Conectar Google Agenda |
 | Plan this goal | Planejar esta meta |
 | View details | Ver detalhes |

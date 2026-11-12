@@ -189,7 +189,7 @@ public class AiController(
         if (execution?.RequiresReproposal == true)
         {
             LogPendingRejection(id, execution.OperationId, "pending_operation_schema_changed");
-            return Conflict(new { error = "pending_operation_schema_changed", message = "This approval uses an older tool schema. Ask Astra to propose the change again." });
+            return Conflict(new { error = "pending_operation_schema_changed", message = "This approval uses an older tool schema. Ask for the change again." });
         }
         var approvalError = execution is null ? null
             : await revisionService.ApprovalErrorAsync(userId, execution, cancellationToken, parsedClientContext);
@@ -328,7 +328,7 @@ public class AiController(
         if (pendingExecution.RequiresReproposal)
         {
             LogPendingRejection(id, pendingExecution.OperationId, "pending_operation_schema_changed");
-            return Conflict(new { error = "pending_operation_schema_changed", message = "This approval uses an older tool schema. Ask Astra to propose the change again." });
+            return Conflict(new { error = "pending_operation_schema_changed", message = "This approval uses an older tool schema. Ask for the change again." });
         }
 
         if (await revisionService.ApprovalErrorAsync(userId, pendingExecution, cancellationToken, request.ClientContext) is { } approvalError)

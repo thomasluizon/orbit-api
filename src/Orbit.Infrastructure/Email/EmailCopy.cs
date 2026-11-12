@@ -65,8 +65,8 @@ public static class EmailCopy
                 ? "Adicione um hábito que você quer manter. Um já basta para começar."
                 : "Add one habit you want to keep. One is enough to start.",
             Feature2: isPtBr
-                ? "Conte à Astra o que você fez, com suas palavras, e ela registra o resto."
-                : "Tell Astra what you did, in your own words, and it records the rest.",
+                ? "Conte ao Orbit o que você fez, com suas palavras, e ele registra o resto."
+                : "Tell Orbit what you did, in your own words, and it records the rest.",
             Feature3: isPtBr
                 ? "Se você perder um dia, o Orbit mostra o caminho de volta."
                 : "Miss a day and Orbit shows you the way back in.",

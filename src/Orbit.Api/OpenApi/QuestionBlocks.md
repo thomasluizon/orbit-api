@@ -1,4 +1,4 @@
-# Astra question blocks
+# AI question blocks
 
 Tracks thomasluizon/orbit-tickets#1827. Deploy the API before the renderer in
 thomasluizon/orbit-tickets#1828 advertises `question` in `clientContext.partKinds`.

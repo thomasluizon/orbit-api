@@ -179,7 +179,7 @@ public class ProfileCommandHandlerTests
     public async Task SetProactiveAstraEnabled_Free_PayGateFails()
     {
         _payGate.CanManageProactiveAstra(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(Result.PayGateFailure("Proactive Astra check-ins are a Pro feature. Upgrade to unlock!")));
+            .Returns(Task.FromResult(Result.PayGateFailure("Proactive check-ins are a Pro feature.")));
         var user = CreateTestUser();
         SetupUserFound(user);
 

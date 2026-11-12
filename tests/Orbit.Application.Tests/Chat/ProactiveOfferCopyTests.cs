@@ -53,7 +53,7 @@ public sealed class ProactiveOfferCopyTests
             "Turn what we just talked about into a goal.", "Transforme o que acabamos de conversar em uma meta.");
         Check(due, "calendar", "Connect Google Calendar", "Conectar Google Agenda", null, null);
         Check(new AccountRowsCard("profile", [new("aiSummary", "false", "boolean")]), "summary",
-            "Review Astra settings", "Ver configurações da Astra", null, null);
+            "Review AI settings", "Ver configurações de IA", null, null);
         Check(due, "inspect", "View details", "Ver detalhes", null, null);
 
         void Check(object card, string family, string enLabel, string brLabel, string? enPrompt, string? brPrompt)

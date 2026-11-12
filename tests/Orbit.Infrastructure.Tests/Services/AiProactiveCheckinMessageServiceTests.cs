@@ -96,8 +96,8 @@ public sealed class AiProactiveCheckinMessageServiceTests(ITestOutputHelper outp
         request.TryGetProperty("temperature", out _).Should().BeFalse();
         request.GetProperty("text").GetProperty("format").GetProperty("type").GetString().Should().Be("json_object");
         body.Should().Contain("Read");
-        if (locale == "pt-BR") body.Should().Contain("feminine");
-        else body.Should().NotContain("feminine");
+        if (locale == "pt-BR") body.Should().Contain("masculine");
+        else body.Should().NotContain("masculine");
         body.Should().Contain("{{habit:N}}").And.Contain("{{goal}}")
             .And.Contain("zero-based index").And.Contain("Never write a literal habit or goal title")
             .And.Contain("Never name anything else").And.Contain("AFTER the server substitutes");
@@ -272,10 +272,10 @@ public sealed class AiProactiveCheckinMessageServiceTests(ITestOutputHelper outp
         var messages = document.RootElement.GetProperty("input");
         messages[0].GetProperty("role").GetString().Should().Be("system");
         var system = messages[0].GetProperty("content")[0].GetProperty("text").GetString()!;
-        system.Should().StartWith($"You are Astra. Write ONLY in {languageName}.");
+        system.Should().StartWith($"You are Orbit. Write ONLY in {languageName}.");
         system.Should().Contain("Do not infer the language from titles or from the language of these instructions");
         if (locale == "en") system.Should().NotContain("Portuguese").And.NotContain("você");
-        else system.Should().Contain("feminine").And.Contain("você");
+        else system.Should().Contain("masculine").And.Contain("você");
         messages[1].GetProperty("role").GetString().Should().Be("user");
         var prompt = messages[1].GetProperty("content")[0].GetProperty("text").GetString()!;
         prompt.Should().StartWith($"Write ONLY in {languageName}.")
@@ -465,7 +465,7 @@ public sealed class AiProactiveCheckinMessageServiceTests(ITestOutputHelper outp
     }
 
     [Theory]
-    [InlineData("Ask Astra to help you fit {{habit:0}} into your evening.")]
+    [InlineData("Ask Orbit to help you fit {{habit:0}} into your evening.")]
     [InlineData("Open Orbit to choose where {{habit:0}} fits tonight.")]
     public async Task AllowedBrandName_UsesModel(string text)
     {

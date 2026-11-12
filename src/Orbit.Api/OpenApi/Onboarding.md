@@ -27,7 +27,7 @@ Authenticated credentials are ignored before authentication for these routes.
    Input is limited to 100 UTF-16 code units before trimming. URLs and control
    characters are refused. On success, replace the credential with the response's
    `X-Orbit-Install-Id` header. Each credential is single-use, including failed
-   attempts. A fallback ends the Astra attempt rather than retrying a spent credential.
+   attempts. A fallback ends the AI attempt rather than retrying a spent credential.
    Credentials must retain the exact unpadded base64url encoding issued by the API;
    alternate encodings are refused before attestation and replay tracking.
 

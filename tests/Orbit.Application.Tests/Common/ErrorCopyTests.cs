@@ -54,6 +54,38 @@ public class ErrorCopyTests
     }
 
     [Fact]
+    public void NoResolvedSentenceNamesAstra()
+    {
+        ErrorCopy.All.Values.Concat(ErrorCopy.AllCounted.Values)
+            .SelectMany(copy => new[] { copy.En, copy.PtBr })
+            .Should().NotContain(sentence => sentence.Contains("Astra", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Theory]
+    [InlineData(ErrorCodes.SuggestionNotFound, "That suggestion expired. Ask again.", "Essa sugestão expirou. Pergunte de novo.")]
+    [InlineData(ErrorCodes.AiUnavailable, "The AI is not answering right now. Try again in a moment.", "A IA não está respondendo agora. Tente de novo em instantes.")]
+    [InlineData(ErrorCodes.AiEmptyResponse, "No answer came back. Ask again.", "Não veio resposta. Pergunte de novo.")]
+    [InlineData(ErrorCodes.ChatHistoryTooLarge, "This conversation is too long to carry. Start a new one.", "Esta conversa está longa demais. Comece outra.")]
+    [InlineData(ErrorCodes.ClarificationNotFound, "That question expired. Ask again.", "Essa pergunta expirou. Pergunte de novo.")]
+    [InlineData(ErrorCodes.ClarificationValueNotOffered, "Pick one of the options on offer.", "Escolha uma das opções oferecidas.")]
+    [InlineData(ErrorCodes.PendingOperationNotFound, "That pending action expired. Ask again.", "Essa ação pendente expirou. Peça de novo.")]
+    [InlineData(ErrorCodes.ProactiveItemNotFound, "That item is not here any more.", "Esse item não está mais aqui.")]
+    [InlineData("chat.read.astraAllowance", "AI messages used / limit", "Mensagens de IA usadas / limite")]
+    public void ChangedCodes_ResolveToTheOrbitSentence(string code, string en, string ptBr)
+    {
+        ErrorCopy.Resolve(code, false).Should().Be(en);
+        ErrorCopy.Resolve(code, true).Should().Be(ptBr);
+    }
+
+    [Fact]
+    public void FactNoteCopy_NamesOrbit()
+    {
+        ErrorCopy.Resolve(DomainErrors.FactTextRequired.Code, false).Should().Be("Write the note you want Orbit to remember.");
+        ErrorCopy.Resolve(DomainErrors.FactTextRequired.Code, true).Should().Be("Escreva a anotação que você quer que o Orbit lembre.");
+        ErrorCopy.Resolve(DomainErrors.FactTextTooLong.Code, false).Should().Be("A note fits 500 characters. Shorten it.");
+    }
+
+    [Fact]
     public void EveryDeclaredErrorCodeHasCopy()
     {
         var missing = DeclaredErrorCodes().Where(code => !ErrorCopy.All.ContainsKey(code)).ToList();

@@ -78,6 +78,16 @@ public class OAuthConsentPageTests
             .And.NotContain("<script>alert(1)</script>");
     }
 
+    [Theory]
+    [InlineData("en", "Talk to <span translate=\"no\">Orbit</span>")]
+    [InlineData("pt-BR", "Falar com o <span translate=\"no\">Orbit</span>")]
+    public void Render_WrapsOrbitInTranslateNo_AndNamesNoOtherPersona(string language, string chatLabel)
+    {
+        var page = Render(language, [AgentScopes.ChatInteract]);
+
+        page.Should().Contain(chatLabel).And.NotContain("Astra");
+    }
+
     private static string Render(string language, IReadOnlyList<string>? scopes = null) =>
         OAuthConsentPage.Render("ticket", Entry(language, scopes));
 

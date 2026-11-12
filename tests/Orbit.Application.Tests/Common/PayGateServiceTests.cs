@@ -555,6 +555,21 @@ public class PayGateServiceTests
             Environment.SetEnvironmentVariable("SMOKE_TEST_EMAIL", priorEmail);
         }
     }
+
+    [Fact]
+    public async Task ProactiveCheckInGate_FreeAccount_ReturnsTheCalmSentence()
+    {
+        var user = CreateFreeUser();
+        user.StartTrial(DateTime.UtcNow.AddDays(-1));
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+
+        var result = await _sut.CanManageProactiveAstra(UserId);
+
+        result.IsSuccess.Should().BeFalse();
+        result.ErrorCode.Should().Be(ErrorCodes.PayGate);
+        result.Error.Should().Be("Proactive check-ins are a Pro feature.");
+    }
+
     [Theory]
     [InlineData("smart", "pro", true)]
     [InlineData("smart", "free", true)]

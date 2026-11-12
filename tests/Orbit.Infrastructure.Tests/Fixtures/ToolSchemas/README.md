@@ -276,3 +276,9 @@ requests exported by
 The export writes `orbit-1916-tool-schemas.json.gz` in the process temporary
 directory. Adding those three entries preserves every existing baseline entry.
 Generation uses local response fixtures and makes no paid model call.
+
+## Persona wording
+
+The persona change replaces the word "Astra" with "Orbit" in the `ask` tool description,
+at its existing site in each of the nine inlined entries. No type, constraint or structure
+changes. The baseline is not regenerated from the compactor under test.

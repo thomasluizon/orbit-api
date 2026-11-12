@@ -28,7 +28,7 @@ public class EmailTemplateRendererTests
         ["intro"] = "Orbit keeps one routine in front of you.",
         ["featuresTitle"] = "Where to start",
         ["feature1"] = "Add one habit you want to keep.",
-        ["feature2"] = "Tell Astra what you did, in your own words.",
+        ["feature2"] = "Tell Orbit what you did, in your own words.",
         ["feature3"] = "Miss a day and Orbit shows you the way back in.",
         ["cta"] = "Add your first habit",
         ["ctaUrl"] = "https://app.useorbit.org",

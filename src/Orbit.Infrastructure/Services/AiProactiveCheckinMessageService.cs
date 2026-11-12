@@ -25,7 +25,7 @@ public sealed partial class AiProactiveCheckinMessageService(
         + "In text, refer to habits only as {{habit:N}}, with N the zero-based index in HabitTitles, and to the supplied goal only as {{goal}}. "
         + "Never write a literal habit or goal title in text, even an ordinary word; the server substitutes the titles. Never name anything else. "
         + "In habitTitles and goalTitles, copy the literal titles of the referenced placeholders exactly from the facts. "
-        + "Capitalize only the first word, the English pronoun I, Astra, Orbit, or the language's weekday and month names. "
+        + "Capitalize only the first word, the English pronoun I, Orbit, or the language's weekday and month names. "
         + "Use empty arrays when no titles are mentioned. Use no Markdown.";
 
     public async Task<ProactiveMessage> GenerateAsync(ProactiveFacts facts, string language,
@@ -52,11 +52,11 @@ public sealed partial class AiProactiveCheckinMessageService(
 
     internal sealed record ProactiveLine(string? Text, string[]? HabitTitles, string[]? GoalTitles);
 
-    internal static string BuildSystemPrompt(string language) => $"You are Astra. {LanguageInstruction(language)} "
+    internal static string BuildSystemPrompt(string language) => $"You are Orbit. {LanguageInstruction(language)} "
         + "Do not infer the language from titles or from the language of these instructions. "
         + "Localize only the sentence's own prose; keep stored titles verbatim in the title arrays. "
         + (LocaleHelper.IsPortuguese(language)
-            ? "Astra is feminine; use native, warm você phrasing. "
+            ? "Orbit is masculine in Brazilian Portuguese (o Orbit, do Orbit, ele); use native, warm você phrasing. "
             : "Use natural, warm English, addressing the reader as you. ")
         + SystemPrompt;
 
@@ -219,7 +219,7 @@ public sealed partial class AiProactiveCheckinMessageService(
             .Concat(format.MonthGenitiveNames).Concat(format.AbbreviatedMonthGenitiveNames)
             .SelectMany(name => Words().Matches(name).Select(match => match.Value)).ToHashSet(StringComparer.OrdinalIgnoreCase);
         return Words().Matches(text).Skip(1).All(word => !char.IsUpper(word.Value[0])
-            || word.Value is "Astra" or "Orbit" || (!pt && word.Value == "I") || calendarWords.Contains(word.Value));
+            || word.Value is "Orbit" || (!pt && word.Value == "I") || calendarWords.Contains(word.Value));
     }
 
     private static bool HasRealMiss(ProactiveFacts facts) => facts.HadScheduledHabitsYesterday == true

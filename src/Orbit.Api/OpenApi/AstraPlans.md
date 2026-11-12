@@ -1,4 +1,4 @@
-# Astra turn plans
+# AI turn plans
 
 Tracks thomasluizon/orbit-tickets#1976. Publish the API before the paired
 web and Android consumer adds its shared Zod schemas and renderer.

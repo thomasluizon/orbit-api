@@ -31,7 +31,7 @@ public class AstraBehaviourPromptTests
     [InlineData(true)]
     public void EarlierAstraMessage_ResolvesReadScopeFromConversationHistory(bool composition)
     {
-        Build(composition).Should().Contain("A request referring to an earlier Astra message takes its scope from conversation history. Perform the account read that history names; never ask which message, reminder or notification the person means.");
+        Build(composition).Should().Contain("A request referring to an earlier Orbit message takes its scope from conversation history. Perform the account read that history names; never ask which message, reminder or notification the person means.");
     }
 
     [Theory]

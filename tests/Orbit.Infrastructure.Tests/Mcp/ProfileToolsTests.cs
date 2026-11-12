@@ -40,7 +40,7 @@ public class ProfileToolsTests
         request.OperationId.Should().Be("set_proactive_astra");
         request.Arguments.GetProperty("enabled").GetBoolean().Should().Be(enabled);
         request.Surface.Should().Be(AgentExecutionSurface.Mcp);
-        result.Should().Be(enabled ? "Proactive Astra enabled" : "Proactive Astra disabled");
+        result.Should().Be(enabled ? "Proactive check-ins enabled" : "Proactive check-ins disabled");
         _mediator.ReceivedCalls().Should().BeEmpty();
     }
 

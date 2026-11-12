@@ -1,4 +1,4 @@
-# Astra dates and conversation context
+# AI dates and conversation context
 
 Tracks thomasluizon/orbit-tickets#1944.
 

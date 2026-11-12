@@ -79,7 +79,7 @@ public partial class AgentCatalogService
             new AppSurface(
                 "ai-settings",
                 "AI Settings",
-                "Controls daily AI summary and proactive Astra check-in behavior.",
+                "Controls daily AI summary and proactive check-in behavior.",
                 ["Open Profile AI settings.", "Review summary and proactive check-in toggles.", "Enable or disable the AI features you want."],
                 ["Settings are enforced on the backend, not by prompt text."],
                 [AgentCapabilityIds.ProfileReadBasic, AgentCapabilityIds.ProfileAiSummaryWrite, AgentCapabilityIds.ProfileProactiveAstraWrite],

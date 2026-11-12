@@ -185,7 +185,7 @@ public static class ProactiveOfferPlanner
         {
             if (account.SummaryAvailable && read.Block is AccountRowsCard { Kind: "profile" } profile
                 && profile.Rows.Any(row => row is { Key: "aiSummary", Value: "false" }))
-                Add("summary", "Daily summaries are available and disabled in the profile read.", new("Review Astra settings", "Ver configurações da Astra",
+                Add("summary", "Daily summaries are available and disabled in the profile read.", new("Review AI settings", "Ver configurações de IA",
                     "", ""), kind: OpenSurface, surface: "ai-settings");
             if (account.CalendarAvailable && !account.CalendarConnected)
                 Add("calendar", "Google Calendar is available and disconnected; requires dated_event interpretation.",

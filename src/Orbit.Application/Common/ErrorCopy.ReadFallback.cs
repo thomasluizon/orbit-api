@@ -72,7 +72,7 @@ public static partial class ErrorCopy
         ("chat.read.interval", "Billing interval", "Intervalo de cobrança"),
         ("chat.read.source", "Subscription provider", "Provedor da assinatura"),
         ("chat.read.lifetime", "Lifetime access", "Acesso vitalício"),
-        ("chat.read.astraAllowance", "Astra messages used / limit", "Mensagens da Astra usadas / limite"),
+        ("chat.read.astraAllowance", "AI messages used / limit", "Mensagens de IA usadas / limite"),
         ("chat.read.successfulReferrals", "Successful referrals", "Indicações concluídas"),
         ("chat.read.pendingReferrals", "Pending referrals", "Indicações pendentes"),
         ("chat.read.maxReferrals", "Referral limit", "Limite de indicações"),

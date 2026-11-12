@@ -86,7 +86,7 @@ public sealed class ProactiveEngineServiceTests
             : leaves.Select(x => x.Title).Concat(["Breakfast", "Wash"]));
         var expectedText = AiProactiveCheckinMessageService.Template(facts, "en").Text;
         item.Text.Should().Be(expectedText);
-        await h.Push.Received(hour == 19 ? 1 : 0).SendToUserAsync(h.User.Id, "Astra", expectedText, "/chat", Arg.Any<CancellationToken>());
+        await h.Push.Received(hour == 19 ? 1 : 0).SendToUserAsync(h.User.Id, "Orbit", expectedText, "/chat", Arg.Any<CancellationToken>());
     }
 
     [Theory]
@@ -139,7 +139,7 @@ public sealed class ProactiveEngineServiceTests
         ended.ActedAtUtc.Should().NotBeNull();
         ended.OpenedAtUtc.Should().Be(opened);
         h.Db.Notifications.Should().ContainSingle();
-        await h.Push.Received(1).SendToUserAsync(h.User.Id, "Astra", Arg.Any<string>(), "/chat", Arg.Any<CancellationToken>());
+        await h.Push.Received(1).SendToUserAsync(h.User.Id, "Orbit", Arg.Any<string>(), "/chat", Arg.Any<CancellationToken>());
         h.Analytics.Received(1).CaptureUserEvent(h.User.Id, "astra_proactive_item_ended", Arg.Any<string>(),
             Arg.Is<IReadOnlyDictionary<string, object>?>(p => p != null && (string)p["outcome"] == "acted"));
     }
@@ -457,7 +457,7 @@ public sealed class ProactiveEngineServiceTests
         var items = await h.Db.ProactiveItems.ToListAsync();
         items.Single(i => i.Trigger == ProactiveTrigger.BusyCalendarDay).PushedAtUtc.Should().NotBeNull();
         items.Single(i => i.Trigger == ProactiveTrigger.EveningCheckin).PushedAtUtc.Should().BeNull();
-        await h.Push.Received(1).SendToUserAsync(h.User.Id, "Astra", Arg.Any<string>(), "/chat", Arg.Any<CancellationToken>());
+        await h.Push.Received(1).SendToUserAsync(h.User.Id, "Orbit", Arg.Any<string>(), "/chat", Arg.Any<CancellationToken>());
         await h.Calendar.Received(1).FetchAsync(Arg.Any<string>(), Arg.Any<IReadOnlyCollection<string>?>(), null, Arg.Any<CancellationToken>());
         h.Db.Notifications.Count().Should().Be(1);
     }
@@ -725,7 +725,7 @@ public sealed class ProactiveEngineServiceTests
         h.Db.ProactiveItems.Select(i => i.UserId).Should().BeEquivalentTo(expected);
         h.Db.Notifications.Select(n => n.UserId).Should().BeEquivalentTo(expected);
         await h.Push.DidNotReceive().SendToUserAsync(h.User.Id, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
-        await h.Push.Received(globallyDisabled ? 0 : 1).SendToUserAsync(other.Id, "Astra", Arg.Any<string>(), "/chat", Arg.Any<CancellationToken>());
+        await h.Push.Received(globallyDisabled ? 0 : 1).SendToUserAsync(other.Id, "Orbit", Arg.Any<string>(), "/chat", Arg.Any<CancellationToken>());
         (await h.Engine.GetCurrentAsync(h.User.Id, default)).Should().BeNull();
     }
 
@@ -773,7 +773,7 @@ public sealed class ProactiveEngineServiceTests
         h.Db.ProactiveCalendarDays.Select(d => d.UserId).Should().BeEquivalentTo(expected);
         await h.Calendar.Received(expected.Length).FetchAsync(Arg.Any<string>(), Arg.Any<IReadOnlyCollection<string>?>(), null, Arg.Any<CancellationToken>());
         foreach (var id in expected)
-            await h.Push.Received(1).SendToUserAsync(id, "Astra", Arg.Any<string>(), "/chat", Arg.Any<CancellationToken>());
+            await h.Push.Received(1).SendToUserAsync(id, "Orbit", Arg.Any<string>(), "/chat", Arg.Any<CancellationToken>());
         foreach (var id in expected)
         {
             var current = await h.Engine.GetCurrentAsync(id, default);
@@ -802,7 +802,7 @@ public sealed class ProactiveEngineServiceTests
         h.Db.Notifications.Should().ContainSingle().Which.UserId.Should().Be(other.Id);
         h.Db.ProactiveCalendarDays.Should().ContainSingle().Which.UserId.Should().Be(other.Id);
         await h.Push.DidNotReceive().SendToUserAsync(h.User.Id, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
-        await h.Push.Received(1).SendToUserAsync(other.Id, "Astra", Arg.Any<string>(), "/chat", Arg.Any<CancellationToken>());
+        await h.Push.Received(1).SendToUserAsync(other.Id, "Orbit", Arg.Any<string>(), "/chat", Arg.Any<CancellationToken>());
         await h.Calendar.Received(1).FetchAsync(Arg.Any<string>(), Arg.Any<IReadOnlyCollection<string>?>(), null, Arg.Any<CancellationToken>());
     }
 

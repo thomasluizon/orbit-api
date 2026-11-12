@@ -1,6 +1,6 @@
 # Selecting an OpenAPI artifact
 
-The additive Astra turn plan, progress events and approval outcomes for
+The additive AI turn plan, progress events and approval outcomes for
 thomasluizon/orbit-tickets#1976 are documented in [AstraPlans.md](AstraPlans.md).
 Deploy this API before the paired shared schemas and plan renderer.
 
@@ -31,7 +31,7 @@ today when no range is supplied. A positive log on that day resolves the skip.
 Skip receipts without a log are included by the existing schedule read model.
 Search pages put other results before completed OneTime tasks, then order those
 tasks by descending completion date, with missing dates last. Position, creation instant and habit ID
-break ties. The shared query orders in SQL before paging; MCP and Astra reuse it.
+break ties. The shared query orders in SQL before paging; MCP and the AI chat reuse it.
 Deploy this API to production before the search sections and completion labels
 in thomasluizon/orbit-tickets#1924 (orbit-ui-mobile#2271). Tracks
 thomasluizon/orbit-tickets#1933.
@@ -50,7 +50,7 @@ coordinator set its account allowlist through SSM parameter
 `/orbit/staging/api/StagingEval__AccountIds` or
 `/orbit/production/api/StagingEval__AccountIds` before the paired eval harness uses it.
 
-The negotiated Astra `question` block and structured next-turn answers are
+The negotiated AI `question` block and structured next-turn answers are
 documented in [QuestionBlocks.md](QuestionBlocks.md). Publish the API contract
 before the renderer in thomasluizon/orbit-tickets#1828 advertises support.
 

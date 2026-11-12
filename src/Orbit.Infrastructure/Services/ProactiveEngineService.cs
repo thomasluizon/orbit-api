@@ -211,7 +211,7 @@ db.ProactiveItems.Where(i => ids.Contains(i.UserId)
                 && user.ProactiveAstraEnabled && !ProactiveRules.IsQuiet(localHour);
             var item = NewItem(user, today, nowUtc, fact, message);
             if (shouldPush) item.Push(nowUtc);
-            var notification = shouldPush ? Notification.Create(user.Id, "Astra", item.Text, NotificationUrls.Chat) : null;
+            var notification = shouldPush ? Notification.Create(user.Id, "Orbit", item.Text, NotificationUrls.Chat) : null;
             db.ProactiveItems.Add(item);
             if (notification is not null) db.Notifications.Add(notification);
             pending.Add(new(item, notification));
