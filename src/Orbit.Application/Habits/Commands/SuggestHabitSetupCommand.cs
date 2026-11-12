@@ -49,7 +49,7 @@ public partial class SuggestHabitSetupCommandHandler(
         return suggestionResult;
     }
 
-    private static string BuildCacheKey(Guid userId, string title, string language)
+    internal static string BuildCacheKey(Guid userId, string title, string language)
     {
         var normalizedTitle = title.Trim().ToLowerInvariant();
         var titleHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(normalizedTitle)));

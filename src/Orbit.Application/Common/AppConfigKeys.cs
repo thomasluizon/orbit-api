@@ -15,6 +15,7 @@ public static class AppConfigKeys
     public const string FreeMaxHabits = "FreeMaxHabits";
     public const string FreeAiMessagesPerDay = "FreeAiMessagesPerDay";
     public const string ProAiMessagesPerWeek = "ProAiMessagesPerWeek";
+    public const string PhraseReadsPerDay = "PhraseReadsPerDay";
     public const string FreeAiCallsPerDay = "FreeAiCallsPerDay";
     public const string ProAiCallsPerWeek = "ProAiCallsPerWeek";
     public const string FreeAiMicroDollarsPerDay = "FreeAiMicroDollarsPerDay";

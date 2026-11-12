@@ -65,7 +65,8 @@ public record ProfileResponse(
     int? ActiveApiKeyCount = null,
     string? BillingProvider = null,
     string? AiMessagesPeriod = null,
-    DateTime? AiMessagesResetsAt = null);
+    DateTime? AiMessagesResetsAt = null,
+    bool MascotMotionEnabled = true);
 
 public record GetProfileQuery(Guid UserId) : IRequest<Result<ProfileResponse>>;
 
@@ -165,6 +166,7 @@ public class GetProfileQueryHandler(
             activeApiKeyCount,
             user.SubscriptionSource.ToBillingProvider(),
             AiAllowancePeriod.ActiveFor(today, user.HasProAccess, user.WeekStartDay, user.AiMessagesWeekStart).Name,
-            AiAllowanceReset.GetResetsAtUtc(user, today)));
+            AiAllowanceReset.GetResetsAtUtc(user, today),
+            user.MascotMotionEnabled));
     }
 }

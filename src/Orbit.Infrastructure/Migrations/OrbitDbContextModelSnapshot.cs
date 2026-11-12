@@ -647,6 +647,20 @@ namespace Orbit.Infrastructure.Migrations
                             Enabled = true,
                             PlanRequirement = "Pro",
                             UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, 0, DateTimeKind.Utc)
+                        },
+                        new
+                        {
+                            Key = "phrase_reader_ai_disabled",
+                            Description = "Kill switch for the AI read of a habit phrase; the clients ask every question instead",
+                            Enabled = false,
+                            UpdatedAtUtc = new DateTime(2026, 11, 12, 0, 0, 0, 0, DateTimeKind.Utc)
+                        },
+                        new
+                        {
+                            Key = "orbit_guided_flows",
+                            Description = "Roll out the guided create, edit and onboarding flows",
+                            Enabled = false,
+                            UpdatedAtUtc = new DateTime(2026, 11, 12, 0, 0, 0, 0, DateTimeKind.Utc)
                         });
                 });
 
@@ -2877,9 +2891,19 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<bool?>("MarketingEmailConsent")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("MascotMotionEnabled")
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<DateOnly?>("PhraseReadsLocalDate")
+                        .HasColumnType("date");
+
+                    b.Property<int>("PhraseReadsToday")
+                        .HasColumnType("integer");
 
                     b.Property<DateTime?>("PlayCoverageExpiresAtUtc")
                         .HasColumnType("timestamp with time zone");

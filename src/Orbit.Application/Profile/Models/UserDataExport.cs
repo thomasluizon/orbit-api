@@ -56,7 +56,8 @@ public sealed record ExportedSettings(
     bool AiSummaryEnabled,
     bool ProactiveAstraEnabled,
     bool? Uses24HourClock,
-    bool? StoredProactiveAstraEnabled = null);
+    bool? StoredProactiveAstraEnabled = null,
+    bool MascotMotionEnabled = true);
 
 public sealed record ExportedHabit(
     Guid Id,

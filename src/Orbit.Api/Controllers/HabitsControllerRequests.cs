@@ -159,4 +159,6 @@ public partial class HabitsController
     public record InterpretDateRequest(string Phrase, string Language);
 
     public record SuggestHabitSetupRequest(string Title, string Language = "en");
+
+    public record ReadHabitPhraseRequest(string Phrase, string Language = "en");
 }

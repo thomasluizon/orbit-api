@@ -632,6 +632,26 @@ public class GetProfileQueryHandlerTests
         result.Value.Uses24HourClock.Should().Be(uses24HourClock);
     }
 
+    [Theory]
+    [InlineData(null, true)]
+    [InlineData(false, false)]
+    [InlineData(true, true)]
+    public async Task Handle_ReturnsTheMascotMotionPreference_DefaultingToOn(bool? stored, bool expected)
+    {
+        var user = CreateTestUser();
+        if (stored.HasValue) user.SetMascotMotion(stored.Value);
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        _payGate.GetAiMessageLimit(UserId, Arg.Any<CancellationToken>()).Returns(20);
+        _streakFreezeRepo.FindAsync(
+            Arg.Any<Expression<Func<StreakFreeze, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<StreakFreeze>().AsReadOnly());
+
+        var result = await _handler.Handle(new GetProfileQuery(UserId), CancellationToken.None);
+
+        result.Value.MascotMotionEnabled.Should().Be(expected);
+    }
+
     [Fact]
     public async Task Handle_ProUser_CanViewGamificationTrue()
     {

@@ -203,6 +203,9 @@ export const readChains = {
 }
 
 export const deliberateFields = {
+  "Profile.PhraseReadsToday": "The server counts provider-backed phrase reads against a hidden daily cap; AI tools cannot edit or read this bookkeeping.",
+  "Profile.PhraseReadsLocalDate": "The server records the account day of the phrase read count; AI tools cannot edit or read this bookkeeping.",
+  "Profile.MascotMotionEnabled": "The mascot motion switch belongs to the app's Preferences screen and its own endpoint; the AI has no motion to change.",
   "Habit.LongestRecordedStreak": "The persisted achievement maximum is derived from completion history and cannot be edited through AI tools.",
   "SubHabit.LongestRecordedStreak": "The persisted achievement maximum is derived from completion history and cannot be edited through AI tools.",
   "Profile.GoogleAccessTokenExpiresAtUtc": "OAuth token expiry is managed by the provider refresh flow, not AI tools.",

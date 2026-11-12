@@ -225,6 +225,18 @@ public class ExportUserDataQueryHandlerTests
     }
 
     [Fact]
+    public async Task Handle_ExportsTheMascotMotionPreference()
+    {
+        var user = CreateTestUser();
+        user.SetMascotMotion(false);
+        ArrangeUser(user);
+
+        var result = await _handler.Handle(new(UserId), default);
+
+        result.Value.Settings.MascotMotionEnabled.Should().BeFalse();
+    }
+
+    [Fact]
     public async Task Handle_UserNotFound_ReturnsFailure()
     {
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns((User?)null);

@@ -8,6 +8,8 @@ public static class FeatureFlagKeys
     public const string AstraConversationRecording = "astra_conversation_recording";
     public const string AstraAskBlocksDisabled = "astra_ask_blocks_disabled";
     public const string AstraProactiveEngineDisabled = "astra_proactive_engine_disabled";
+    public const string PhraseReaderAiDisabled = "phrase_reader_ai_disabled";
+    public const string OrbitGuidedFlows = "orbit_guided_flows";
     public const string CalendarIntegration = "calendar_integration";
     public const string NotionIntegration = "notion_integration";
     public const string GamificationFreeTier = "gamification_free_tier";

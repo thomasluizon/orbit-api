@@ -800,7 +800,9 @@ public class OrbitDbContext : DbContext
                 new { Key = "bulk_operations", Enabled = true, PlanRequirement = (string?)null, Description = (string?)"Bulk create/delete/log habits", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
                 new { Key = "calendar_integration", Enabled = true, PlanRequirement = (string?)"Pro", Description = (string?)"Google Calendar integration", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
                 new { Key = "notion_integration", Enabled = false, PlanRequirement = (string?)"Pro", Description = (string?)"Notion task integration", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
-                new { Key = "api_keys", Enabled = true, PlanRequirement = (string?)"Pro", Description = (string?)"Personal API keys", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) });
+                new { Key = "api_keys", Enabled = true, PlanRequirement = (string?)"Pro", Description = (string?)"Personal API keys", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
+                new { Key = "phrase_reader_ai_disabled", Enabled = false, PlanRequirement = (string?)null, Description = (string?)"Kill switch for the AI read of a habit phrase; the clients ask every question instead", UpdatedAtUtc = new DateTime(2026, 11, 12, 0, 0, 0, DateTimeKind.Utc) },
+                new { Key = "orbit_guided_flows", Enabled = false, PlanRequirement = (string?)null, Description = (string?)"Roll out the guided create, edit and onboarding flows", UpdatedAtUtc = new DateTime(2026, 11, 12, 0, 0, 0, DateTimeKind.Utc) });
         });
     }
 
@@ -851,6 +853,7 @@ public class OrbitDbContext : DbContext
             entity.Property(u => u.PlayRenewalStoppedByDeletion).HasDefaultValue(false);
             entity.Property(u => u.ProactiveAstraEnabled).HasDefaultValue(true).ValueGeneratedNever();
             entity.Property(u => u.PublicProfileSlug).HasMaxLength(32);
+            entity.Property(u => u.MascotMotionEnabled).HasDefaultValue(true).ValueGeneratedNever();
 
             entity.Property(u => u.ColorScheme).HasMaxLength(50);
             entity.Property(u => u.LastAdRewardAt).HasField("_lastAdRewardAt");

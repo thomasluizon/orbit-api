@@ -29,6 +29,7 @@ public partial class ProfileController(
     public record SetLanguageRequest(string Language);
     public record SetWeekStartDayRequest([property: JsonRequired] int WeekStartDay);
     public record SetClockFormatRequest([property: JsonRequired] bool Uses24HourClock);
+    public record SetMascotMotionRequest([property: JsonRequired] bool Enabled);
     public record SetThemePreferenceRequest(string? ThemePreference);
     public record UpdateMarketingConsentRequest([property: JsonRequired] bool Enabled);
     public record ApplyOnboardingRequest(
@@ -167,6 +168,19 @@ public partial class ProfileController(
         if (result.IsSuccess && logger.IsEnabled(LogLevel.Information))
             logger.LogClockFormatChanged(request.Uses24HourClock ? "24-hour" : "12-hour", HttpContext.GetUserId());
 
+        return result.ToPayGateAwareResult(() => NoContent());
+    }
+
+    [HttpPut("mascot-motion")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> SetMascotMotion(
+        [FromBody] SetMascotMotionRequest request,
+        CancellationToken cancellationToken)
+    {
+        var command = new SetMascotMotionCommand(HttpContext.GetUserId(), request.Enabled);
+        var result = await mediator.Send(command, cancellationToken);
         return result.ToPayGateAwareResult(() => NoContent());
     }
 

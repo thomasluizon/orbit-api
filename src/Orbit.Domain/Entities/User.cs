@@ -41,6 +41,9 @@ public partial class User : Entity
     public DateTime? TrialEndsAt { get; private set; }
     public bool IsLifetimePro { get; private set; } = false;
     public int AiMessagesUsedToday { get; private set; } = 0;
+    public int PhraseReadsToday { get; private set; }
+    public DateOnly? PhraseReadsLocalDate { get; private set; }
+    public bool MascotMotionEnabled { get; private set; } = true;
     public DateOnly? AiMessagesLocalDate { get; private set; }
     public int AiMessagesUsedThisWeek { get; private set; }
     public DateOnly? AiMessagesWeekStart { get; private set; }
@@ -624,6 +627,30 @@ public partial class User : Entity
         ReminderPreferencesVersion++;
         return Result.Success();
     }
+
+    /// <summary>
+    /// Reserves one provider-backed phrase read for the account day. The count starts again when the
+    /// account day changes. Returns false, and leaves the count as it was, when the cap is reached.
+    /// </summary>
+    public bool TryReservePhraseRead(DateOnly userToday, int dailyCap)
+    {
+        if (dailyCap < 1)
+            return false;
+
+        if (!PhraseReadsLocalDate.HasValue || PhraseReadsLocalDate.Value != userToday)
+        {
+            PhraseReadsToday = 0;
+            PhraseReadsLocalDate = userToday;
+        }
+
+        if (PhraseReadsToday >= dailyCap)
+            return false;
+
+        PhraseReadsToday++;
+        return true;
+    }
+
+    public void SetMascotMotion(bool enabled) => MascotMotionEnabled = enabled;
 
     public void SetClockFormat(bool uses24HourClock)
     {

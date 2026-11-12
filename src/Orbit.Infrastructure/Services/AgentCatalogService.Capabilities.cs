@@ -241,6 +241,7 @@ public partial class AgentCatalogService
                 [
                     "HabitsController.CreateHabit",
                     "HabitsController.SuggestSetup",
+                    "HabitsController.ReadPhrase",
                     "OnboardingController.SuggestSetup",
                     "HabitsController.LogHabit",
                     "HabitsController.CorrectDose",
@@ -518,6 +519,7 @@ public partial class AgentCatalogService
                     "ProfileController.SetWeekStartDay",
                     "ProfileController.SetClockFormat",
                     "ProfileController.SetThemePreference",
+                    "ProfileController.SetMascotMotion",
                     "ProfileController.CompleteOnboarding",
                     "ProfileController.ApplyOnboarding",
                     "ProfileController.DismissImportPrompt",

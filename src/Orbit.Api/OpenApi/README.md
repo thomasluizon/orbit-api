@@ -4,6 +4,18 @@ The additive AI turn plan, progress events and approval outcomes for
 thomasluizon/orbit-tickets#1976 are documented in [AstraPlans.md](AstraPlans.md).
 Deploy this API before the paired shared schemas and plan renderer.
 
+`POST /api/habits/read-phrase` reads a free-form habit phrase and costs the person no
+AI message. The body holds `phrase` and `language`. The response holds every field of the
+`suggest-setup` response plus the boolean `read`. When `read` is false, every value is null
+or empty, and the client asks the remaining questions itself. A reached daily cap, the
+`phrase_reader_ai_disabled` kill switch, a provider failure and a refused spend backstop
+all return HTTP 200 with `read: false`. The endpoint never returns the cap and never
+answers a cap with HTTP 429. `POST /api/habits/suggest-setup` is unchanged and still spends
+one message. `PUT /api/profile/mascot-motion` takes `{ "enabled": true }`. `GET /api/profile`
+appends the optional `mascotMotionEnabled`, true by default, and `GET /api/config` serves the
+flag `orbit_guided_flows` in `features`. Deploy this API and its migration before any client
+that reads the new field or calls the new endpoints. Tracks thomasluizon/orbit-tickets#2118.
+
 AI provider credit exhaustion returns HTTP 424 with the existing error body shape:
 `{"error":"...","errorCode":"AI_PROVIDER_QUOTA_EXHAUSTED"}`. This additive code
 means automatic retries must stop for the request. It is separate from the person's

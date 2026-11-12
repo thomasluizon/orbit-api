@@ -9,6 +9,7 @@ using Orbit.Application.Common;
 using Orbit.Application.Habits.Commands;
 using Orbit.Application.Habits.Queries;
 using Orbit.Domain.Interfaces;
+using Orbit.Domain.Models;
 
 namespace Orbit.Api.Controllers;
 
@@ -256,6 +257,25 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
         var command = new SuggestHabitSetupCommand(
             HttpContext.GetUserId(),
             request.Title,
+            request.Language);
+
+        var result = await mediator.Send(command, cancellationToken);
+        return result.ToPayGateAwareResult(v => Ok(v));
+    }
+
+    [HttpPost("read-phrase")]
+    [DistributedRateLimit("phrase-read")]
+    [ProducesResponseType<HabitPhraseReading>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
+    public async Task<IActionResult> ReadPhrase(
+        [FromBody] ReadHabitPhraseRequest request,
+        CancellationToken cancellationToken)
+    {
+        var command = new ReadHabitPhraseCommand(
+            HttpContext.GetUserId(),
+            request.Phrase,
             request.Language);
 
         var result = await mediator.Send(command, cancellationToken);

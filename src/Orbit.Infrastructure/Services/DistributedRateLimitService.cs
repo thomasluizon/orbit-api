@@ -28,6 +28,7 @@ public class DistributedRateLimitService(OrbitDbContext dbContext, TimeProvider 
             ["ai-resolve"] = new(TimeSpan.FromMinutes(1), PermitLimit: 30, SegmentCount: 4),
             ["ai-operations"] = new(TimeSpan.FromMinutes(1), PermitLimit: 15, SegmentCount: 4),
             ["habit-suggest"] = new(TimeSpan.FromMinutes(1), PermitLimit: 15, SegmentCount: 4),
+            ["phrase-read"] = new(TimeSpan.FromMinutes(1), PermitLimit: 20, SegmentCount: 4),
             ["support"] = new(TimeSpan.FromHours(1), PermitLimit: 3, SegmentCount: 1),
             ["upload-reads"] = new(TimeSpan.FromMinutes(1), PermitLimit: 300, SegmentCount: 4),
             ["uploads"] = new(TimeSpan.FromMinutes(1), PermitLimit: 30, SegmentCount: 4),
