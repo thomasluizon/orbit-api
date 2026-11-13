@@ -119,7 +119,9 @@ public partial class ProcessUserChatCommandHandlerTests
         response.IsSuccess.Should().BeTrue();
         initial!.ToolDeclarations.Should().NotContain(tool => JsonSerializer.SerializeToElement(tool).GetProperty("name").GetString() == "ask");
         initial.DynamicContext.Should().NotContain("do not call ask");
-        results.Should().ContainSingle().Which.Error.Should().Contain("plain text");
+        results.Should().ContainSingle().Which.Error.Should().Contain("A failed ask did not issue a question.")
+            .And.NotContain("Ask in plain text", "no selection waits and no habit field is missing, so the turn can still reach a preview");
+        response.Value.AiMessage.Should().Be("Which time suits you?");
         response.Value.Parts?.OfType<ChatBlockPart>().Should().BeEmpty();
         await _blockStore.DidNotReceiveWithAnyArgs().AddAsync(default!, default);
     }
