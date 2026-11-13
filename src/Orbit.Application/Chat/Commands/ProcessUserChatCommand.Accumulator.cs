@@ -23,6 +23,7 @@ public partial class ProcessUserChatCommandHandler
         public IReadOnlyList<Orbit.Domain.Entities.Habit> Habits { get; set; } = [];
         public IReadOnlyList<Orbit.Domain.Entities.Habit> AllHabits { get; set; } = [];
         public bool HasMutationContext { get; set; }
+        public bool RequestNotPrepared { get; set; }
         public bool RequiresCreationProposal { get; set; }
         public bool RequiresExistingParent { get; init; }
         public IReadOnlyList<HabitHeadingParents.Heading> ParentHeadings { get; init; } = [];
