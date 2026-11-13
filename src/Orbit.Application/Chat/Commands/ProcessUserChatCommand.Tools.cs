@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.EntityFrameworkCore;
 using Orbit.Application.Chat.Models;
 using Orbit.Application.Chat.Tools;
+using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Interfaces;
@@ -500,6 +501,8 @@ public partial class ProcessUserChatCommandHandler
         {
             outcomesByCallId[readOnlyCalls[index].Id] = readOnlyOutcomes[index];
             RecordSuccessfulAskRead(readOnlyCalls[index], readOnlyOutcomes[index], executionResults);
+            if (readOnlyOutcomes[index].OperationResult is { Status: AgentOperationStatus.Succeeded, Payload: PendingPreviewDiscard discard })
+                await DiscardPreviewAsync(readOnlyCalls[index], discard, request, executionResults, cancellationToken);
             if (readOnlyOutcomes[index].OperationResult is
                 {
                     Status: AgentOperationStatus.Succeeded,
@@ -570,6 +573,24 @@ public partial class ProcessUserChatCommandHandler
             outcomesByCallId[askCall.Id] = await ExecuteAskCallAsync(askCall, request, executionResults, cancellationToken);
         LogRoundOutcomes(outcomesByCallId.Values, readOnlyCalls.Count, writeCalls.Count, excessReads.Length);
         return outcomesByCallId;
+    }
+
+    /// <summary>
+    /// A revision that removes every item of a preview discards it. A preview of this turn is discarded at once, and an
+    /// earlier preview when the turn ends with its answer, so a withdrawn turn leaves it as it was.
+    /// </summary>
+    private async Task DiscardPreviewAsync(AiToolCall call, PendingPreviewDiscard discard, ProcessUserChatCommand request,
+        ToolExecutionAccumulator results, CancellationToken cancellationToken)
+    {
+        var tool = (RevisePendingChangesTool)ai.ToolRegistry.GetTool(call.Name)!;
+        Task<bool> Discard(CancellationToken ct) => tool.DiscardAsync(request.UserId, discard, request.ClientContext, ct);
+        if (results.EarlierPendingIds.Contains(discard.PendingOperationId))
+        {
+            results.CloseWithTheTurn(discard.PendingOperationId, Discard);
+            return;
+        }
+        await Discard(cancellationToken);
+        results.SupersedePendingOperation(discard.PendingOperationId);
     }
 
     private async Task<ToolCallOutcome> ExecuteBlockWriteAsync(AiToolCall call, ProcessUserChatCommand request,

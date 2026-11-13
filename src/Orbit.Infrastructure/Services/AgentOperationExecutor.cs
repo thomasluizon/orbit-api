@@ -588,7 +588,8 @@ public partial class AgentOperationExecutor(
         CancellationToken cancellationToken)
     {
         if (tool is Orbit.Application.Chat.Tools.Implementations.RevisePendingChangesTool revisionTool)
-            return await revisionTool.ExecuteAsync(execution.Arguments, execution.Request.UserId, cancellationToken, execution.Request.ClientContext);
+            return await revisionTool.ExecuteAsync(execution.Arguments, execution.Request.UserId, cancellationToken,
+                execution.Request.ClientContext, holdDiscard: execution.Request.Surface == AgentExecutionSurface.Chat);
         if (tool is not IConcurrencyRetryableTool)
             return await tool.ExecuteAsync(execution.Arguments, execution.Request.UserId, cancellationToken);
 
