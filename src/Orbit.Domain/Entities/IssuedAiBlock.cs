@@ -80,6 +80,11 @@ public sealed class IssuedAiBlock : Entity
             || string.IsNullOrWhiteSpace(option.Label) || option.Label.Length > 20
             || option.Description?.Length > 24))
             return "options require nonempty ids and labels, labels up to 20 characters and descriptions up to 24 characters.";
+        if (definition.Options.Any(option => option.TargetIds is { } targets
+                && (targets.Count is 0 or > AiBlockOption.MaxTargetIds
+                    || targets.Any(target => !Guid.TryParse(target, out var id) || id == Guid.Empty)
+                    || targets.Distinct(StringComparer.OrdinalIgnoreCase).Count() != targets.Count)))
+            return $"target_ids must hold 1 to {AiBlockOption.MaxTargetIds} distinct ids.";
         return definition.Options.Select(option => option.Id).Distinct(StringComparer.Ordinal).Count() == definition.Options.Count
             ? null : "options must have unique ids.";
     }

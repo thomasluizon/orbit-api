@@ -350,6 +350,331 @@ public partial class ProcessUserChatCommandHandlerTests
             Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
     }
 
+    private (Habit Parent, Habit[] Children) SetupSameTitleChildren(string title, int count)
+    {
+        var parent = CreateHabit("Water");
+        var children = Enumerable.Range(0, count).Select(_ => CreateHabit(title)).ToArray();
+        foreach (var child in children) child.SetParentHabitId(parent.Id);
+        SetupSelectionHabits([parent, .. children]);
+        return (parent, children);
+    }
+
+    [Theory]
+    [InlineData(true, "en")]
+    [InlineData(false, "en")]
+    [InlineData(true, "pt-BR")]
+    [InlineData(false, "pt-BR")]
+    public async Task SelectionReplay_SameTitleChildrenSplitIntoDeleteAndRenameReachOnePreview(bool forSelection, string language)
+    {
+        var user = User.Create("Reader", "reader@example.test").Value;
+        user.SetLanguage(language);
+        SetupUserAndPayGate(user);
+        var (_, children) = SetupSameTitleChildren("Water - 710ml", 6);
+        var query = new QueryHabitsTool(_habitRepo, _userRepo, _userDateService, _scheduleLogReader);
+        var delete = new BulkDeleteHabitsTool(_mediator, _habitRepo);
+        var update = new BulkUpdateHabitsTool(_mediator);
+        var handler = CreateHandler(query, delete, update);
+        var held = HoldSelectionReplayWrites(query, delete, update);
+        SetupAiResponse(new AiResponse
+        {
+            ConversationContext = TestConversationContext,
+            ToolCalls = [new(query.Name, "lookup", JsonSerializer.SerializeToElement(new
+            {
+                search = "Water 710ml", for_selection = forSelection, orbit_read_complete = false
+            }))]
+        });
+        _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
+                Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AiResponse
+            {
+                ConversationContext = TestConversationContext,
+                ToolCalls =
+                [
+                    new(delete.Name, "delete", JsonSerializer.SerializeToElement(new { habit_ids = children[4..].Select(child => child.Id) })),
+                    new(update.Name, "rename", JsonSerializer.SerializeToElement(new
+                    {
+                        filter = new { habit_ids = children[..4].Select(child => child.Id) },
+                        updates = new { title = "Water - 1.18L" }
+                    }))
+                ]
+            }), Result.Success(new AiResponse { TextMessage = "Review the changes." }));
+
+        var result = await handler.Handle(new(UserId,
+            "eu tenho 7 habitos chamados Water - 710ml deleta dois desses, e os outros 4 coloca Water - 1.18L",
+            ClientContext: new(SupportsParts: true, PartKinds: ["habitList", "choice"], SupportsHabitListCard: true,
+                SupportsDatedHabitListCard: true)), default);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        held.Select(request => request.OperationId).Should().BeEquivalentTo([delete.Name, update.Name],
+            "the reply was: " + result.Value.AiMessage);
+        result.Value.PendingOperations.Should().HaveCount(2);
+        result.Value.PendingOperations!.SelectMany(operation => operation.Items!).Select(item => item.EntityId)
+            .Should().BeEquivalentTo(children.Select(child => child.Id));
+        result.Value.Parts?.OfType<ChatBlockPart>().Should().BeEmpty();
+        result.Value.AiMessage.Should().NotContain("Which habit").And.NotContain("Qual hábito");
+    }
+
+    private async Task<(Result<ChatResponse> Result, List<AgentExecuteOperationRequest> Held, Habit[] Children)>
+        RunSameTitleTurnAsync(string message, string search, Func<Habit[], AiToolCall[]> writes, string language = "en",
+            string title = "Water - 710ml", int count = 6)
+    {
+        var parent = CreateHabit("Water");
+        var children = Enumerable.Range(0, count).Select(_ => CreateHabit(title)).ToArray();
+        foreach (var child in children) child.SetParentHabitId(parent.Id);
+        var (result, held) = await RunSelectionTurnAsync(message, search, language, [parent, .. children], writes(children));
+        return (result, held, children);
+    }
+
+    /// <summary>
+    /// A turn that reads the habits with a declared list search and then sends each round of writes in its own
+    /// model response.
+    /// </summary>
+    private async Task<(Result<ChatResponse> Result, List<AgentExecuteOperationRequest> Held)> RunSelectionTurnAsync(
+        string message, string search, string language, Habit[] habits, params AiToolCall[][] rounds)
+    {
+        var user = User.Create("Reader", "reader@example.test").Value;
+        user.SetLanguage(language);
+        SetupUserAndPayGate(user);
+        SetupSelectionHabits(habits);
+        var query = new QueryHabitsTool(_habitRepo, _userRepo, _userDateService, _scheduleLogReader);
+        var delete = new BulkDeleteHabitsTool(_mediator, _habitRepo);
+        var update = new BulkUpdateHabitsTool(_mediator);
+        var handler = CreateHandler(query, delete, update);
+        var held = HoldSelectionReplayWrites(query, delete, update);
+        SetupAiResponse(new AiResponse
+        {
+            ConversationContext = TestConversationContext,
+            ToolCalls = [new(query.Name, "lookup", JsonSerializer.SerializeToElement(new
+            {
+                search, for_selection = false, orbit_read_complete = false
+            }))]
+        });
+        var replies = rounds.Select(round => Result.Success(new AiResponse { ConversationContext = TestConversationContext, ToolCalls = round }))
+            .Append(Result.Success(new AiResponse { TextMessage = "Review the changes." })).ToArray();
+        _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
+                Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(replies[0], replies[1..]);
+        var result = await handler.Handle(new ProcessUserChatCommand(UserId, message,
+            ClientContext: new(SupportsParts: true, PartKinds: ["habitList", "choice"], SupportsHabitListCard: true,
+                SupportsDatedHabitListCard: true)), default);
+        return (result, held);
+    }
+
+    private static AiToolCall DeleteCall(IEnumerable<Habit> habits) => new("bulk_delete_habits", "delete",
+        JsonSerializer.SerializeToElement(new { habit_ids = habits.Select(habit => habit.Id) }));
+
+    private static AiToolCall RenameCall(IEnumerable<Habit> habits) => new("bulk_update_habits", "rename",
+        JsonSerializer.SerializeToElement(new
+        {
+            filter = new { habit_ids = habits.Select(habit => habit.Id) },
+            updates = new { title = "Water - 1.18L" }
+        }));
+
+    [Fact]
+    public async Task SelectionReplay_SearchThatMatchesParentAndChildrenStillSettlesTheSplit()
+    {
+        var run = await RunSameTitleTurnAsync("eu tenho 7 habitos chamados Water deleta dois desses, e os outros 4 coloca Water - 1.18L",
+            "Water", children => [DeleteCall(children[4..]), RenameCall(children[..4])], "pt-BR");
+
+        run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
+        run.Held.Select(request => request.OperationId).Should().BeEquivalentTo(["bulk_delete_habits", "bulk_update_habits"],
+            "the reply was: " + run.Result.Value.AiMessage);
+        run.Result.Value.PendingOperations.Should().HaveCount(2);
+        run.Result.Value.AiMessage.Should().NotContain("Qual hábito");
+    }
+
+    [Theory]
+    [InlineData("delete the last 2 Water - 710ml habits", true)]
+    [InlineData("apague os 2 últimos hábitos Water - 710ml", true)]
+    [InlineData("delete two of the Water - 710ml habits", false)]
+    public async Task SelectionReplay_OneActionOnAnOrderedSubsetRunsOnlyWhenTheMessageNamesTheOrder(string message, bool allowed)
+    {
+        var run = await RunSameTitleTurnAsync(message, "Water 710ml", children => [DeleteCall(children[4..])]);
+
+        run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
+        run.Held.Select(request => request.OperationId).Should().Equal(allowed ? ["bulk_delete_habits"] : []);
+        if (!allowed)
+            run.Result.Value.AiMessage.Should().Be("Which habit would you like to use for “Water - 710ml”?");
+    }
+
+    [Theory]
+    [InlineData("rename all the Water - 710ml habits to Water - 1.18L", true)]
+    [InlineData("renomeie todos os hábitos chamados Water - 710ml para Water - 1.18L", true)]
+    [InlineData("rename the Water - 710ml habit to Water - 1.18L", false)]
+    public async Task SelectionReplay_WholeSetActionRunsOnlyWhenTheMessageNamesTheSet(string message, bool allowed)
+    {
+        var run = await RunSameTitleTurnAsync(message, "Water 710ml", children => [RenameCall(children)]);
+
+        run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
+        run.Held.Select(request => request.OperationId).Should().Equal(allowed ? ["bulk_update_habits"] : []);
+        run.Result.Value.PendingOperations.Should().HaveCount(allowed ? 1 : 0);
+    }
+
+    [Fact]
+    public async Task SelectionReplay_TypedFullRepeatWithNoCardReachesThePreview()
+    {
+        var run = await RunSameTitleTurnAsync(
+            "ja respondi isos, eu falei pra manter os 4 primeiros, isso significa q é pra excluir os 2 ultimos",
+            "Water 710ml", children => [DeleteCall(children[4..]), RenameCall(children[..4])], "pt-BR");
+
+        run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
+        run.Held.Select(request => request.OperationId).Should().BeEquivalentTo(["bulk_delete_habits", "bulk_update_habits"]);
+        run.Result.Value.Parts?.OfType<ChatBlockPart>().Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task SelectionReplay_SingularAmbiguousRequestStillAsksOnceAndQuotesTheStoredTitle()
+    {
+        var run = await RunSameTitleTurnAsync("troque o título do hábito Water 710ml para Water - 1.18L", "Water 710ml",
+            children => [RenameCall(children[..1])], "pt-BR");
+
+        run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
+        run.Held.Should().BeEmpty();
+        run.Result.Value.AiMessage.Should().Be("Qual hábito você quer usar para “Water - 710ml”?");
+    }
+
+    private static AiToolCall UpdateCall(string id, IEnumerable<Habit> habits, object updates) => new("bulk_update_habits", id,
+        JsonSerializer.SerializeToElement(new { filter = new { habit_ids = habits.Select(habit => habit.Id) }, updates }));
+
+    private static readonly object DailyUpdate = new { frequency_unit = "Day", frequency_quantity = 1 };
+
+    private static string SelectionQuestionFor(string title, string language) => language == "en"
+        ? $"Which habit would you like to use for “{title}”?"
+        : $"Qual hábito você quer usar para “{title}”?";
+
+    [Theory]
+    [InlineData("Change Walk to every day", "Walk", "en", false)]
+    [InlineData("Move Walk to each morning", "Walk", "en", false)]
+    [InlineData("Set Walk to every other day", "Walk", "en", false)]
+    [InlineData("All right, set Walk to daily", "Walk", "en", false)]
+    [InlineData("Set Walk to daily, that is all", "Walk", "en", false)]
+    [InlineData("Set Both Sides Plank to daily", "Both Sides Plank", "en", false)]
+    [InlineData("Change both Walk habits to every day", "Walk", "en", true)]
+    [InlineData("Mude Caminhada para todos os dias", "Caminhada", "pt-BR", false)]
+    [InlineData("Mude Caminhada para todas as manhãs", "Caminhada", "pt-BR", false)]
+    [InlineData("Tudo bem, mude Caminhada para diária", "Caminhada", "pt-BR", false)]
+    [InlineData("Mude Caminhada para diária, é tudo", "Caminhada", "pt-BR", false)]
+    [InlineData("Mude Prancha ambos os lados para diária", "Prancha ambos os lados", "pt-BR", false)]
+    [InlineData("Mude todos os hábitos Caminhada para todos os dias", "Caminhada", "pt-BR", true)]
+    public async Task SelectionReplay_WholeSetWordCountsOnlyWhenItScopesTheHabits(string message, string title, string language, bool allowed)
+    {
+        var run = await RunSameTitleTurnAsync(message, title, children => [UpdateCall("schedule", children, DailyUpdate)],
+            language, title, 2);
+
+        run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
+        run.Held.Select(request => request.OperationId).Should().Equal(allowed ? ["bulk_update_habits"] : [],
+            "the reply was: " + run.Result.Value.AiMessage);
+        if (!allowed)
+            run.Result.Value.AiMessage.Should().Be(SelectionQuestionFor(title, language));
+    }
+
+    [Theory]
+    [InlineData("One last thing: rename Walk to Run", "Walk", "en", false)]
+    [InlineData("I walked last week 3 times, rename Walk to Run", "Walk", "en", false)]
+    [InlineData("Rename Walk to Run, I did it 2 times last week", "Walk", "en", false)]
+    [InlineData("Rename Top 3 Stretch to Stretch", "Top 3 Stretch", "en", false)]
+    [InlineData("Rename the first one to Run, I walked last week", "Walk", "en", true)]
+    [InlineData("Uma última coisa: renomeie Caminhada para Corrida", "Caminhada", "pt-BR", false)]
+    [InlineData("Nos últimos dias caminhei pouco, renomeie Caminhada para Corrida", "Caminhada", "pt-BR", false)]
+    [InlineData("Nas últimas 2 semanas caminhei pouco, renomeie Caminhada para Corrida", "Caminhada", "pt-BR", false)]
+    [InlineData("Renomeie Ler as 10 primeiras páginas para Ler", "Ler as 10 primeiras páginas", "pt-BR", false)]
+    [InlineData("Renomeie a primeira das duas para Corrida, caminhei na última semana", "Caminhada", "pt-BR", true)]
+    public async Task SelectionReplay_OrderWordCountsOnlyWhenItScopesTheHabits(string message, string title, string language, bool allowed)
+    {
+        var run = await RunSameTitleTurnAsync(message, title,
+            children => [UpdateCall("rename", children[..1], new { title = "Renamed" })], language, title, 2);
+
+        run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
+        run.Held.Select(request => request.OperationId).Should().Equal(allowed ? ["bulk_update_habits"] : [],
+            "the reply was: " + run.Result.Value.AiMessage);
+        if (!allowed)
+            run.Result.Value.AiMessage.Should().Be(SelectionQuestionFor(title, language));
+    }
+
+    [Theory]
+    [InlineData("Set Walk to daily", "Walk", "en")]
+    [InlineData("Change Walk to every day", "Walk", "en")]
+    [InlineData("Mude Caminhada para diária", "Caminhada", "pt-BR")]
+    [InlineData("Mude Caminhada para todos os dias", "Caminhada", "pt-BR")]
+    public async Task SelectionReplay_OneChangeSentOncePerDuplicateIsNotASplit(string message, string title, string language)
+    {
+        var run = await RunSameTitleTurnAsync(message, title,
+            children => [UpdateCall("first", children[..1], DailyUpdate), UpdateCall("second", children[1..], DailyUpdate)],
+            language, title, 2);
+
+        run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
+        run.Held.Should().BeEmpty("the reply was: " + run.Result.Value.AiMessage);
+        run.Result.Value.AiMessage.Should().Be(SelectionQuestionFor(title, language));
+    }
+
+    [Theory]
+    [InlineData("Rename one Walk to Morning walk and the other to Evening walk", "Walk", "en")]
+    [InlineData("Renomeie uma Caminhada para Caminhada cedo e a outra para Caminhada tarde", "Caminhada", "pt-BR")]
+    public async Task SelectionReplay_DifferentChangesFromOneToolStillSplitTheGroup(string message, string title, string language)
+    {
+        var run = await RunSameTitleTurnAsync(message, title,
+            children => [UpdateCall("first", children[..1], new { title = "Morning walk" }),
+                UpdateCall("second", children[1..], new { title = "Evening walk" })], language, title, 2);
+
+        run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
+        run.Held.Select(request => request.OperationId).Should().Equal(["bulk_update_habits", "bulk_update_habits"],
+            "the reply was: " + run.Result.Value.AiMessage);
+    }
+
+    [Theory]
+    [InlineData("Rename Walk to Run", "en")]
+    [InlineData("Rename Walk to Run, thanks for all the help", "en")]
+    [InlineData("Rename Walk to Run, we both like it", "en")]
+    [InlineData("Rename the first one to Run", "en")]
+    [InlineData("Renomeie Caminhada para Corrida", "pt-BR")]
+    [InlineData("Renomeie Caminhada para Corrida, obrigado por tudo", "pt-BR")]
+    [InlineData("Renomeie Caminhada para Corrida, todos gostamos", "pt-BR")]
+    [InlineData("Renomeie a primeira das duas para Corrida", "pt-BR")]
+    public async Task SelectionReplay_SingularWriteToOneOfDistinctTitlesAsksWhateverSetOrOrderWordTheMessageHas(
+        string message, string language)
+    {
+        var search = language == "en" ? "Walk" : "Caminhada";
+        Habit[] habits = language == "en"
+            ? [CreateHabit("Morning Walk"), CreateHabit("Evening Walk")]
+            : [CreateHabit("Caminhada manha"), CreateHabit("Caminhada noite")];
+
+        var run = await RunSelectionTurnAsync(message, search, language, habits,
+            [UpdateCall("rename", habits[..1], new { title = "Run" })]);
+
+        run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
+        run.Held.Should().BeEmpty("the reply was: " + run.Result.Value.AiMessage);
+        run.Result.Value.PendingOperations.Should().BeNullOrEmpty();
+        run.Result.Value.AiMessage.Should().Be(SelectionQuestionFor(search, language));
+    }
+
+    [Theory]
+    [InlineData(false, "en")]
+    [InlineData(true, "en")]
+    [InlineData(false, "pt-BR")]
+    [InlineData(true, "pt-BR")]
+    public async Task SelectionReplay_SettledSameTitleGroupLeavesTheOtherTitleGuarded(bool sameRound, string language)
+    {
+        var (search, other, message) = language == "en"
+            ? ("Walk", "Morning Walk", "Rename both Walk habits to Run")
+            : ("Caminhada", "Caminhada manha", "Renomeie ambos os hábitos Caminhada para Corrida");
+        var habits = new[] { CreateHabit(search), CreateHabit(search), CreateHabit(other) };
+        var settled = UpdateCall("both", habits[..2], new { title = "Run" });
+        var guessed = UpdateCall("guess", habits[2..], new { title = "Run" });
+
+        var run = sameRound
+            ? await RunSelectionTurnAsync(message, search, language, habits, [settled, guessed])
+            : await RunSelectionTurnAsync(message, search, language, habits, [settled], [guessed]);
+
+        run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
+        run.Held.Should().ContainSingle().Which.Arguments.GetProperty("filter").GetProperty("habit_ids").EnumerateArray()
+            .Select(id => id.GetGuid()).Should().BeEquivalentTo(habits[..2].Select(habit => habit.Id));
+        run.Result.Value.PendingOperations!.SelectMany(operation => operation.Items!).Select(item => item.EntityId)
+            .Should().BeEquivalentTo(habits[..2].Select(habit => habit.Id));
+        await _aiIntentService.Received().ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
+            Arg.Is<IReadOnlyList<AiToolCallResult>>(results => results.Any(outcome => outcome.Id == "guess" && !outcome.Success)),
+            Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
+    }
+
     private void SetupSelectionHabits(params Habit[] habits) => _habitRepo.FindAsync(
         Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
         Arg.Any<CancellationToken>()).Returns(call => habits.Where(call.ArgAt<Expression<Func<Habit, bool>>>(0).Compile()).ToArray());

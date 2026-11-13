@@ -75,6 +75,10 @@ public partial class ProcessUserChatCommandHandler
             return Failed(AskTool.AccountReadInstruction);
         if (AskMissingInputError(call.Args, definition, results) is { } missingInputError)
             return Failed(missingInputError);
+        if (AskTargetError(definition, results) is { } targetError)
+            return Failed(targetError);
+        if (RepeatedDecisionError(call.Args, definition, results) is { } repeatedError)
+            return new ToolCallOutcome(new AiToolCallResult(call.Name, call.Id, false, null, null, repeatedError), null, null, null, null);
         var user = await data.UserRepository.GetByIdAsync(request.UserId, ct);
         definition = AskBlockNegotiation.Definition(definition, request.ClientContext!, call.Args);
         definition = GroundDuplicateRecordOptions(definition, results, ChatLocale.Resolve(request.ClientContext, user?.Language));
@@ -91,7 +95,8 @@ public partial class ProcessUserChatCommandHandler
         {
             AiBlockKinds.Question => new AiQuestionBlock(block.Id, definition.Questions!, block.ExpiresAtUtc,
                 string.IsNullOrWhiteSpace(definition.Title) ? null : definition.Title, definition.Intro, definition.Progress),
-            AiBlockKinds.Choice => new AiChoiceBlock(block.Id, definition.Title, definition.Options, definition.MultiSelect,
+            AiBlockKinds.Choice => new AiChoiceBlock(block.Id, definition.Title,
+                definition.Options.Select(option => option.ForClient()).ToArray(), definition.MultiSelect,
                 definition.AllowFreeText, block.ExpiresAtUtc),
             _ => new AiPickListBlock(block.Id, definition.Title,
                 definition.Items.Select(item => new AiPickListItem(item.Id, item.Label, item.Detail)).ToArray(),

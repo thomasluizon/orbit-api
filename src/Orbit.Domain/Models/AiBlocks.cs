@@ -3,7 +3,18 @@ using System.Text.Json.Serialization;
 
 namespace Orbit.Domain.Models;
 
-public sealed record AiBlockOption(string Id, string Label, string? Description = null);
+/// <summary>
+/// One choice option. <paramref name="TargetIds"/> holds the ids of the records that the option stands for. It stays
+/// on the server: the issued block keeps it and the client copy of the block drops it.
+/// </summary>
+public sealed record AiBlockOption(string Id, string Label, string? Description = null,
+    [property: JsonPropertyName("target_ids"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<string>? TargetIds = null)
+{
+    public const int MaxTargetIds = 50;
+
+    public AiBlockOption ForClient() => this with { TargetIds = null };
+}
 public sealed record AiBlockItem(string Id, string Label, JsonElement Arguments, string? Detail = null);
 public sealed record AiDraftClarification(string DraftCallId, string MissingField, Guid ClarificationId);
 public sealed record AiBlockDefinition(

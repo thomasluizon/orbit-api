@@ -118,7 +118,14 @@ public sealed class AskTool(
                                 {
                                     id = new { type = "string", description = "Nonempty unique option id." },
                                     label = new { type = "string", maxLength = 20, description = "Nonempty option label, at most 20 characters." },
-                                    description = new { type = "string", maxLength = 24, description = "Supporting text, at most 24 characters. Null means absent." }
+                                    description = new { type = "string", maxLength = 24, description = "Supporting text, at most 24 characters. Null means absent." },
+                                    target_ids = new
+                                    {
+                                        type = "array",
+                                        maxItems = AiBlockOption.MaxTargetIds,
+                                        description = "Habit IDs read this turn that the option stands for. Server-only. Null means absent.",
+                                        items = new { type = "string" }
+                                    }
                                 },
                                 required = new[] { "id", "label" }
                             }

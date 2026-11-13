@@ -567,6 +567,7 @@ public partial class ProcessUserChatCommandHandler(
             RequiresExistingParent = RequestsExistingParent(request.Message, context.UserHabits),
             ParentHeadings = HabitHeadingParents.Read(request.Message, context.UserHabits)
         };
+        SeedAnsweredChoice(recording.ChoiceSelection, context.UserHabits, request.UserId, executionResults);
         SeedProposedHabitNames(request, executionResults);
         var actionsStopwatch = System.Diagnostics.Stopwatch.StartNew();
         var toolLoopResult = await RunToolCallLoopAsync(

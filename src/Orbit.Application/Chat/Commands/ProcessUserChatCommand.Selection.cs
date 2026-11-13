@@ -4,6 +4,7 @@ using Orbit.Application.Common;
 using Orbit.Application.Habits.Commands;
 using Orbit.Domain.Models;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace Orbit.Application.Chat.Commands;
 
@@ -39,20 +40,49 @@ public partial class ProcessUserChatCommandHandler
 
     private static ToolCallOutcome SelectionRequiredOutcome(AiToolCall call) => new(
         new AiToolCallResult(call.Name, call.Id, false, null, null,
-            "Selection is unanswered. Call ask with the returned candidates and prepare no write until the person answers."),
+            "Selection is unanswered. Call ask with the returned candidates and prepare no write until the person answers. A request that names the whole set or members by order of several candidates with the same title needs no question; a word in a time phrase, a filler phrase or the title, such as every day, todos os dias or one last thing, names neither. Writes in one round that make different changes and together cover every candidate with that title exactly once are accepted. A candidate with a title of its own always waits for the answer."),
         null, null, null, null);
 
     private static void RejectUnansweredSelections(IReadOnlyList<AiToolCall> calls,
         Dictionary<string, AiToolCall?> resolvedCalls, ToolExecutionAccumulator results,
-        Dictionary<string, ToolCallOutcome> outcomes)
+        Dictionary<string, ToolCallOutcome> outcomes, SelectionScope scope)
     {
+        var settled = new List<SettledSelection>();
+        var held = new List<HabitSelectionCandidates>();
         foreach (var call in calls)
         {
-            if (resolvedCalls[call.Id] is not { } resolved || SelectionForWrite(resolved, results) is not { } unanswered)
+            if (resolvedCalls[call.Id] is not { } resolved)
                 continue;
+            var verdict = SelectionForWrite(resolved, results, scope);
+            settled.AddRange(verdict.Settled);
+            if (verdict.Unanswered is not { } unanswered)
+                continue;
+            held.Add(unanswered);
             results.PendingSelection = unanswered;
             outcomes[call.Id] = SelectionRequiredOutcome(call);
             resolvedCalls[call.Id] = null;
+        }
+        SettleSelections(results, settled.Where(item => !held.Contains(item.Selection, ReferenceEqualityComparer.Instance)));
+    }
+
+    /// <summary>
+    /// Takes the candidates that the checks covered out of each settled selection. The other candidates stay as a
+    /// selection that needs no answer, so a later write to one of them is checked again.
+    /// </summary>
+    private static void SettleSelections(ToolExecutionAccumulator results, IEnumerable<SettledSelection> settled)
+    {
+        foreach (var group in settled.GroupBy<SettledSelection, HabitSelectionCandidates>(item => item.Selection,
+            ReferenceEqualityComparer.Instance))
+        {
+            var covered = group.SelectMany(item => item.CoveredIds).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var rest = group.Key.Candidates.Where(candidate => !covered.Contains(candidate.Id)).ToArray();
+            var index = results.SelectionCandidates.FindIndex(selection => ReferenceEquals(selection, group.Key));
+            if (index >= 0 && rest.Length == 0)
+                results.SelectionCandidates.RemoveAt(index);
+            else if (index >= 0)
+                results.SelectionCandidates[index] = group.Key with { Candidates = rest, RequiresAnswer = false };
+            if (ReferenceEquals(results.PendingSelection, group.Key))
+                results.PendingSelection = results.SelectionCandidates.FirstOrDefault(selection => selection.RequiresAnswer);
         }
     }
 
@@ -90,14 +120,96 @@ public partial class ProcessUserChatCommandHandler
         return BulkNoChangesOutcome.Supports(call.Name) ? EffectiveWriteTargetIds(call, results) : [];
     }
 
-    private static HabitSelectionCandidates? SelectionForWrite(AiToolCall call, ToolExecutionAccumulator results)
+    /// <summary>
+    /// The writes of a turn and the request message. A selection that a write touches is settled, and the write may
+    /// run, when the person answered it, or, for a group of two or more same-titled records, when the message names
+    /// the whole set or members by order, or when the turn's writes make different changes that split the group
+    /// between them without a gap or an overlap.
+    /// </summary>
+    private sealed record SelectionScope(string Message, IReadOnlyList<AiToolCall> TurnWrites);
+
+    private sealed record SelectionVerdict(HabitSelectionCandidates? Unanswered, IReadOnlyList<SettledSelection> Settled);
+
+    /// <summary>
+    /// A selection that a write settled, with the candidates that the checks covered: the candidates that the write
+    /// targets and every member of the title groups that the write touches.
+    /// </summary>
+    private sealed record SettledSelection(HabitSelectionCandidates Selection, IReadOnlyCollection<string> CoveredIds);
+
+    private static SelectionScope SelectionScopeOf(ProcessUserChatCommand request,
+        Dictionary<string, AiToolCall?> resolvedCalls, ToolExecutionAccumulator results) =>
+        new(request.Message, [.. resolvedCalls.Values.OfType<AiToolCall>(), .. results.PreviousWriteCalls]);
+
+    private static SelectionVerdict SelectionForWrite(AiToolCall call, ToolExecutionAccumulator results, SelectionScope scope)
     {
-        var ids = EffectiveWriteTargetIds(call, results).Select(id => id.ToString()).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        if (results.PendingSelection is { } pending && pending.Candidates.Any(candidate => ids.Contains(candidate.Id)))
-            return pending;
-        return results.SelectionCandidates.FirstOrDefault(selection =>
-            selection.Candidates.Any(candidate => ids.Contains(candidate.Id)));
+        var targets = EffectiveWriteTargetIds(call, results).ToHashSet();
+        var ids = targets.Select(id => id.ToString()).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var unanswered = targets.Where(id => !results.AnsweredTargetIds.Contains(id))
+            .Select(id => id.ToString()).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var settled = new List<SettledSelection>();
+        var selections = new[] { results.PendingSelection }.Concat(results.SelectionCandidates).OfType<HabitSelectionCandidates>()
+            .Distinct(ReferenceEqualityComparer.Instance).Cast<HabitSelectionCandidates>();
+        foreach (var selection in selections)
+        {
+            if (!selection.Candidates.Any(candidate => ids.Contains(candidate.Id)))
+                continue;
+            var touched = selection.Candidates.Where(candidate => unanswered.Contains(candidate.Id))
+                .GroupBy(candidate => HabitNameMatcher.Normalize(candidate.Title)).Select(group => group.Key).ToHashSet();
+            var groups = selection.Candidates.GroupBy(candidate => HabitNameMatcher.Normalize(candidate.Title))
+                .Where(group => touched.Contains(group.Key));
+            if (!groups.All(group => GroupIsSettled(group.Key, group.Select(candidate => candidate.Id).ToArray(), scope, results)))
+                return new SelectionVerdict(selection, settled);
+            settled.Add(new SettledSelection(selection, [.. selection.Candidates
+                .Where(candidate => ids.Contains(candidate.Id) || touched.Contains(HabitNameMatcher.Normalize(candidate.Title)))
+                .Select(candidate => candidate.Id)]));
+        }
+        return new SelectionVerdict(null, settled);
     }
+
+    /// <summary>
+    /// A group with one record has no same-titled set for a set word, an order word or a split to scope. A write to
+    /// that record keeps the base rule: it waits for the answer.
+    /// </summary>
+    private static bool GroupIsSettled(string title, IReadOnlyList<string> members, SelectionScope scope,
+        ToolExecutionAccumulator results)
+    {
+        if (members.Count < 2)
+            return false;
+        if (HabitSetRequestScope.NamesMembersByOrder(scope.Message, title))
+            return true;
+        var writes = scope.TurnWrites
+            .Select(write => (Call: write, Targets: EffectiveWriteTargetIds(write, results).Select(id => id.ToString())
+                .ToHashSet(StringComparer.OrdinalIgnoreCase)))
+            .Where(write => members.Any(write.Targets.Contains)).ToArray();
+        var hits = members.Select(member => writes.Count(write => write.Targets.Contains(member))).ToArray();
+        if (HabitSetRequestScope.NamesWholeSet(scope.Message, title) && hits.All(count => count >= 1))
+            return true;
+        return writes.Length >= 2 && hits.All(count => count == 1) && !MakeOneChange([.. writes.Select(write => write.Call)]);
+    }
+
+    /// <summary>
+    /// Writes that make the same change, each to a part of a group, make one change to the whole group. That is a
+    /// whole-set write and not a split, so only a message that names the whole set settles it.
+    /// </summary>
+    private static bool MakeOneChange(IReadOnlyList<AiToolCall> writes)
+    {
+        var change = ChangeOf(writes[0].Args);
+        return writes.All(write => write.Name == writes[0].Name && JsonNode.DeepEquals(ChangeOf(write.Args), change));
+    }
+
+    /// <summary>
+    /// The arguments of a write without the record ids, so that two writes compare by their change alone.
+    /// </summary>
+    private static JsonNode? ChangeOf(JsonElement element) => element.ValueKind switch
+    {
+        JsonValueKind.Object => new JsonObject(element.EnumerateObject().Where(property => !IsRecordId(property.Value))
+            .Select(property => KeyValuePair.Create(property.Name, ChangeOf(property.Value)))),
+        JsonValueKind.Array => new JsonArray([.. element.EnumerateArray().Where(item => !IsRecordId(item)).Select(ChangeOf)]),
+        _ => JsonValue.Create(element)
+    };
+
+    private static bool IsRecordId(JsonElement element) =>
+        element.ValueKind == JsonValueKind.String && element.TryGetGuid(out _);
 
     private static IEnumerable<Guid> EffectiveWriteTargetIds(AiToolCall call, ToolExecutionAccumulator results)
     {
@@ -116,10 +228,19 @@ public partial class ProcessUserChatCommandHandler
 
     private static ResponseCards SelectionQuestion(HabitSelectionCandidates selection, string? language, bool parts)
     {
-        var text = string.IsNullOrWhiteSpace(selection.Reference)
+        var reference = string.IsNullOrWhiteSpace(selection.Reference) ? null : SharedTitle(selection) ?? selection.Reference;
+        var text = string.IsNullOrWhiteSpace(reference)
             ? ErrorCopy.Resolve("chat.answer.selectHabit", LocaleHelper.IsPortuguese(language))
             : string.Format(System.Globalization.CultureInfo.InvariantCulture,
-                ErrorCopy.Resolve("chat.answer.selectHabitReference", LocaleHelper.IsPortuguese(language)), selection.Reference);
+                ErrorCopy.Resolve("chat.answer.selectHabitReference", LocaleHelper.IsPortuguese(language)), reference);
         return new ResponseCards(text, Parts: parts ? [new ChatTextPart(text)] : null) { ServerComposedText = true };
     }
+
+    /// <summary>
+    /// The stored title that every candidate shares. A question about a search quotes it instead of the raw search
+    /// text, so a title with punctuation reads as the person sees it in the list.
+    /// </summary>
+    private static string? SharedTitle(HabitSelectionCandidates selection) =>
+        selection.Candidates.Count > 0 && selection.Candidates.Select(candidate => HabitNameMatcher.Normalize(candidate.Title))
+            .Distinct(StringComparer.Ordinal).Count() == 1 ? selection.Candidates[0].Title : null;
 }

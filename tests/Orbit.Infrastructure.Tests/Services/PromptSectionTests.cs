@@ -127,6 +127,18 @@ public class GlobalRulesSectionTests
     }
 
     [Fact]
+    public void Build_TargetSelectionRuleLetsAClearSetRequestAndAnAnswerReachThePreview()
+    {
+        var ctx = new PromptContext(new List<Habit>(), false, null, null, null, null);
+        var rule = new GlobalRulesSection().Build(ctx);
+
+        rule.Should().Contain("A request that names the whole set or members by order (all of them, the first four, os dois últimos) is a clear target: ask nothing and use the IDs from the lookup, never a title that several habits share.")
+            .And.Contain("Send two actions on two subsets in one round.")
+            .And.Contain("After an answered choice or a typed full decision, go to the preview; never ask the complement or a confirmation.")
+            .And.Contain("When the count the person states differs from the count found, say the found count once with the next step.");
+    }
+
+    [Fact]
     public void Build_SmallerStepRequiresStrictlyLessTimeAndEffort()
     {
         var ctx = new PromptContext(new List<Habit>(), false, null, null, null, null);

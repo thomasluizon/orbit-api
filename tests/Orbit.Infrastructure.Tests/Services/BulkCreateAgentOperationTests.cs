@@ -80,6 +80,8 @@ public sealed partial class BulkCreateAgentOperationTests : IDisposable
             .AddSingleton<IValidator<BulkCreateHabitsCommand>, BulkCreateHabitsCommandValidator>()
             .AddSingleton<IValidator<BulkSkipHabitsCommand>, BulkSkipHabitsCommandValidator>()
             .AddSingleton<IValidator<BulkUpdateHabitsCommand>, BulkUpdateHabitsCommandValidator>()
+            .AddSingleton<IValidator<BulkDeleteHabitsCommand>, BulkDeleteHabitsCommandValidator>()
+            .AddSingleton(Substitute.For<IUserStreakService>())
             .AddSingleton<IPipelineBehavior<BulkCreateHabitsCommand, Result<BulkCreateResult>>>(_afterWriteFailure)
             .AddSingleton<IPipelineBehavior<BulkUpdateHabitsCommand, Result<BulkHabitMutationResult>>>(_rescheduleFailure)
             .AddSingleton<IGenericRepository<Habit>>(new GenericRepository<Habit>(context))
@@ -106,7 +108,10 @@ public sealed partial class BulkCreateAgentOperationTests : IDisposable
             _provider.GetRequiredService<IGenericRepository<Habit>>(), dates,
             new BulkHabitReplayPlanner(Substitute.For<IIdempotencyContext>(), Substitute.For<IIdempotencyStore>(), work));
         var reschedule = new BulkRescheduleHabitsTool(_provider.GetRequiredService<IMediator>());
-        _registry = new AiToolRegistry([tool, skip, reschedule]);
+        var update = new BulkUpdateHabitsTool(_provider.GetRequiredService<IMediator>());
+        var delete = new BulkDeleteHabitsTool(_provider.GetRequiredService<IMediator>(),
+            _provider.GetRequiredService<IGenericRepository<Habit>>());
+        _registry = new AiToolRegistry([tool, skip, reschedule, update, delete]);
         var catalog = new AgentCatalogService(_registry.GetAll());
         var policy = new AgentPolicyEvaluator(context, catalog, _pending, bridge, new FeatureFlagService(context, new MemoryCache(new MemoryCacheOptions()), Substitute.For<IHostEnvironment>(), new ConfigurationBuilder().Build()));
         _audit.RecordAsync(Arg.Any<AgentAuditEntry>(), Arg.Any<CancellationToken>())

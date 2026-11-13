@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
 using FluentAssertions;
 using Orbit.Application.Chat;
@@ -153,5 +154,47 @@ public sealed partial class BulkCreateAgentOperationTests
         var confirmation = _pending.Confirm(_userId, combined.PendingOperation.Id)!;
         return new(_userId, AccountChangeSet.OperationName, execution.Arguments, AgentExecutionSurface.Chat, AgentAuthMethod.Jwt,
             ConfirmationToken: confirmation.ConfirmationToken);
+    }
+
+    [Fact]
+    public async Task CompoundApproval_BulkDeleteAndBulkUpdateShareOneChangeSetAndApplyTogether()
+    {
+        var today = new DateOnly(2026, 3, 20);
+        var habits = Enumerable.Range(0, 3).Select(_ => Habit.Create(new HabitCreateParams(HabitSchedule.OneTime,
+            _userId, "Water - 710ml", null, null, today)).Value).ToArray();
+        _factory.Context.Habits.AddRange(habits);
+        await _factory.Context.SaveChangesAsync();
+        var deleteArgs = JsonSerializer.SerializeToElement(new { habit_ids = new[] { habits[2].Id } });
+        var updateArgs = JsonSerializer.SerializeToElement(new
+        {
+            filter = new { habit_ids = new[] { habits[0].Id, habits[1].Id } },
+            updates = new { title = "Water - 1.18L" }
+        });
+        var delete = await _executor.ExecuteAsync(new(_userId, "bulk_delete_habits", deleteArgs,
+            AgentExecutionSurface.Chat, AgentAuthMethod.Jwt));
+        var update = await _executor.ExecuteAsync(new(_userId, "bulk_update_habits", updateArgs,
+            AgentExecutionSurface.Chat, AgentAuthMethod.Jwt));
+        delete.Operation.Status.Should().Be(AgentOperationStatus.PendingConfirmation);
+        update.Operation.Status.Should().Be(AgentOperationStatus.PendingConfirmation);
+        var service = new AccountChangeSetService(_pending, _previewer,
+            new AgentCatalogService(_registry.GetAll()), _registry);
+
+        var combined = await service.CombineAsync(_userId, [delete.PendingOperation!, update.PendingOperation!], default);
+
+        combined.Should().NotBeNull("a bulk delete and a bulk update are members of one change set");
+        combined!.PendingOperation.Items.Should().HaveCount(3);
+        var execution = _pending.GetExecution(_userId, combined.PendingOperation.Id)!;
+        var confirmation = _pending.Confirm(_userId, combined.PendingOperation.Id)!;
+
+        var result = await _executor.ExecuteAsync(new AgentExecuteOperationRequest(_userId, AccountChangeSet.OperationName,
+            execution.Arguments, AgentExecutionSurface.Chat, AgentAuthMethod.Jwt, ConfirmationToken: confirmation.ConfirmationToken));
+
+        result.Operation.Status.Should().Be(AgentOperationStatus.Succeeded);
+        using var verify = _factory.CreateContext();
+        var saved = verify.Habits.IgnoreQueryFilters().ToDictionary(habit => habit.Id);
+        saved[habits[0].Id].Title.Should().Be("Water - 1.18L");
+        saved[habits[1].Id].Title.Should().Be("Water - 1.18L");
+        saved[habits[2].Id].IsDeleted.Should().BeTrue();
+        saved[habits[2].Id].Title.Should().Be("Water - 710ml");
     }
 }

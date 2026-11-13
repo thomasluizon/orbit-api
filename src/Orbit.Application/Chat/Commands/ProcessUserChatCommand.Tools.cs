@@ -500,7 +500,8 @@ public partial class ProcessUserChatCommandHandler
         }
 
         RejectUnreadDuplicateTargets(writeCalls, resolvedWrites, executionResults, outcomesByCallId);
-        RejectUnansweredSelections(writeCalls, resolvedWrites, executionResults, outcomesByCallId);
+        var selectionScope = SelectionScopeOf(request, resolvedWrites, executionResults);
+        RejectUnansweredSelections(writeCalls, resolvedWrites, executionResults, outcomesByCallId, selectionScope);
         await CoalesceLogCallsAsync(writeCalls, resolvedWrites, request.UserId, executionResults, cancellationToken);
         CoalesceTagCalls(resolvedWrites, executionResults);
         PrepareHabitProposals(resolvedWrites, request, executionResults, language);
@@ -512,11 +513,16 @@ public partial class ProcessUserChatCommandHandler
             if (outcomesByCallId.ContainsKey(call.Id))
                 continue;
             var resolved = resolvedWrites[call.Id];
-            if (resolved is not null && SelectionForWrite(resolved, executionResults) is { } unanswered)
+            if (resolved is not null)
             {
-                executionResults.PendingSelection = unanswered;
-                outcomesByCallId[call.Id] = SelectionRequiredOutcome(call);
-                continue;
+                var verdict = SelectionForWrite(resolved, executionResults, selectionScope);
+                if (verdict.Unanswered is { } unanswered)
+                {
+                    executionResults.PendingSelection = unanswered;
+                    outcomesByCallId[call.Id] = SelectionRequiredOutcome(call);
+                    continue;
+                }
+                SettleSelections(executionResults, verdict.Settled);
             }
             if (bulkRedirects.TryGetValue(call.Id, out var bulkTool))
             {

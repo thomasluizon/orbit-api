@@ -53,6 +53,7 @@ public partial class ProcessUserChatCommandHandler
         public bool HasSuccessfulAccountRead { get; set; }
         public Dictionary<string, HabitSetupDraft> MissingHabitDrafts { get; } = new(StringComparer.Ordinal);
         public Dictionary<string, HabitListCardItem> ReadHabitItems { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public HashSet<Guid> AnsweredTargetIds { get; } = [];
         public HabitSelectionCandidates? PendingSelection { get; set; }
         public List<HabitSelectionCandidates> SelectionCandidates { get; } = [];
         public bool HasBudgetRecovery { get; set; }
