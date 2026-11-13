@@ -561,9 +561,9 @@ public partial class PendingAgentOperationStoreTests : IDisposable
             AgentOperationFingerprint.Compute("bulk_create_habits", json), AgentExecutionSurface.Chat);
 
         _store.GetPendingHabitCreations(_userId).Should().ContainSingle().Which.ParentHabitId.Should().BeNull();
-        _store.SupersedeHabitCreation(_userId, "Stretch", destination).Should().BeFalse();
+        _store.FindHabitCreationReplacement(_userId, "Stretch", destination).Should().BeEmpty();
         _store.GetExecution(_userId, pending.Id).Should().NotBeNull();
-        _store.SupersedeHabitCreation(_userId, "Stretch", null).Should().BeTrue();
+        _store.FindHabitCreationReplacement(_userId, "Stretch", null).Should().Equal(pending.Id);
     }
 
     [Fact]
@@ -596,7 +596,7 @@ public partial class PendingAgentOperationStoreTests : IDisposable
         var pending = _store.Create(_userId, capability, "bulk_create_habits", json, "Create children",
             AgentOperationFingerprint.Compute("bulk_create_habits", json), AgentExecutionSurface.Chat);
 
-        _store.SupersedeHabitCreation(_userId, "TREINO", parentId).Should().BeFalse();
+        _store.FindHabitCreationReplacement(_userId, "TREINO", parentId).Should().BeNull("the preview also creates other habits");
 
         _dbContext.ChangeTracker.Clear();
         var remaining = _store.GetExecution(_userId, pending.Id);
@@ -610,7 +610,7 @@ public partial class PendingAgentOperationStoreTests : IDisposable
     [Theory]
     [InlineData("create_habit", "{\"title\":\"Meditação\"}")]
     [InlineData("bulk_create_habits", "{\"habits\":[{\"title\":\"Meditação\"}]}")]
-    public void RoundFour_SupersedeSingleItem_CancelsOnlyMatchingProposal(string operationId, string json)
+    public void RoundFour_SupersedeSingleItem_FindsOnlyMatchingProposalAndChangesNothing(string operationId, string json)
     {
         var capability = _catalogService.GetCapabilityByChatTool(operationId)!
             with
@@ -618,14 +618,12 @@ public partial class PendingAgentOperationStoreTests : IDisposable
         var pending = _store.Create(_userId, capability, operationId, json, "Create",
             AgentOperationFingerprint.Compute(operationId, json), AgentExecutionSurface.Chat);
 
-        _store.SupersedeHabitCreation(Guid.NewGuid(), "MEDITACAO", null).Should().BeFalse();
-        _store.SupersedeHabitCreation(_userId, "MEDITACAO", Guid.NewGuid()).Should().BeFalse();
-        _store.IsAwaitingConfirmation(_userId, pending.Id).Should().BeTrue();
-        _store.SupersedeHabitCreation(_userId, "MEDITACAO", null).Should().BeTrue();
+        _store.FindHabitCreationReplacement(Guid.NewGuid(), "MEDITACAO", null).Should().BeEmpty();
+        _store.FindHabitCreationReplacement(_userId, "MEDITACAO", Guid.NewGuid()).Should().BeEmpty();
+        _store.FindHabitCreationReplacement(_userId, "MEDITACAO", null).Should().Equal(pending.Id);
 
         _dbContext.ChangeTracker.Clear();
-        _store.GetExecution(_userId, pending.Id).Should().BeNull();
-        _store.Confirm(_userId, pending.Id).Should().BeNull();
+        _store.IsAwaitingConfirmation(_userId, pending.Id).Should().BeTrue("the caller cancels the preview, not the lookup");
     }
 
     [Fact]

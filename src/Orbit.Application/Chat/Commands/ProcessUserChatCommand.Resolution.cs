@@ -2,6 +2,7 @@ using static Orbit.Application.Chat.Tools.ToolArgumentNames;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Text.Json.Nodes;
+using Orbit.Domain.Common;
 using Orbit.Domain.Models;
 using Orbit.Domain.Entities;
 using Orbit.Application.Habits.Commands;
@@ -48,8 +49,12 @@ public partial class ProcessUserChatCommandHandler
             var named = HabitNameMatcher.Matches(request.Message, name.Title);
             if (asksForReplacement && (named || proposals.Count == 1))
             {
-                if (execution.PendingOperationStore.SupersedeHabitCreation(request.UserId, name.Title, name.ParentHabitId))
+                if (execution.PendingOperationStore.FindHabitCreationReplacement(request.UserId, name.Title, name.ParentHabitId)
+                    is { Count: > 0 } replaced)
+                {
+                    ReplaceWithTheTurn(request.UserId, replaced, results);
                     continue;
+                }
                 results.BlockedReplacementNames.Add(name.Title);
                 results.PendingDuplicateNames.Add(name.Title);
             }
@@ -57,6 +62,20 @@ public partial class ProcessUserChatCommandHandler
             results.ProposedHabitNames.Add(key);
             results.PendingHabitNames[key] = name.Title;
         }
+    }
+
+    /// <summary>
+    /// The earlier creation previews that a new preview of the turn replaces close when the turn ends with its answer,
+    /// so a withdrawn turn replaces nothing. A preview that a write of the turn shows again stays open.
+    /// </summary>
+    private void ReplaceWithTheTurn(Guid userId, IEnumerable<Guid> replaced, ToolExecutionAccumulator results)
+    {
+        foreach (var id in replaced.Where(id => results.EarlierPreviewCloses.All(close => close.Id != id)))
+            results.EarlierPreviewCloses.Add(new EarlierPreviewClose(id, null, _ => Task.FromResult(
+                results.PendingOperations.All(pending => pending.Id != id)
+                && execution.PendingOperationStore.GetExecution(userId, id) is { } stored
+                && execution.PendingOperationStore.Cancel(userId, id,
+                    AgentOperationFingerprint.Compute(stored.OperationId, stored.Arguments.GetRawText())))));
     }
 
     private static bool HasResolutionQuestion(ToolExecutionAccumulator results) =>

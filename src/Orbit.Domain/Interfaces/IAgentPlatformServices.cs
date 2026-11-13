@@ -67,7 +67,11 @@ public interface IPendingAgentOperationStore
     /// one that the person approved.
     /// </summary>
     Task<IReadOnlyList<Guid>> GetOpenIdsAsync(Guid userId, CancellationToken cancellationToken = default);
-    bool SupersedeHabitCreation(Guid userId, string title, Guid? parentHabitId);
+    /// <summary>
+    /// The awaiting creation previews of the habit that a new preview replaces, or null when one of them also creates
+    /// other habits. Nothing changes until the caller cancels them.
+    /// </summary>
+    IReadOnlyList<Guid>? FindHabitCreationReplacement(Guid userId, string title, Guid? parentHabitId);
     /// <summary>
     /// Binds new arguments and a new preview fingerprint. Pass <paramref name="revisedPreview"/> only for a revision or
     /// a refresh that the person asked for: it keeps the preview that the person approves and marks the preview revised.

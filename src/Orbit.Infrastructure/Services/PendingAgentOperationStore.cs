@@ -221,14 +221,14 @@ public class PendingAgentOperationStore(
         return names;
     }
 
-    public bool SupersedeHabitCreation(Guid userId, string title, Guid? parentHabitId)
+    public IReadOnlyList<Guid>? FindHabitCreationReplacement(Guid userId, string title, Guid? parentHabitId)
     {
         var checkedAtUtc = TimeProvider.System.GetUtcNow().UtcDateTime;
-        var pending = dbContext.PendingAgentOperations.Where(item => item.UserId == userId
+        var pending = dbContext.PendingAgentOperations.AsNoTracking().Where(item => item.UserId == userId
             && item.ConsumedAtUtc == null && item.ConfirmedAtUtc == null && item.ExpiresAtUtc > checkedAtUtc
             && (item.OperationId == "create_habit" || item.OperationId == "bulk_create_habits" || item.OperationId == "create_sub_habit"))
             .ToList();
-        var matching = new List<PendingAgentOperationState>();
+        var matching = new List<Guid>();
         foreach (var item in pending)
         {
             var args = ParseArguments(item.ArgumentsJson);
@@ -238,11 +238,11 @@ public class PendingAgentOperationStore(
                 && HabitNameMatcher.Normalize(item.Title) == HabitNameMatcher.Normalize(title)))
             {
                 if (HabitCreations(args).Count > 1)
-                    return false;
-                matching.Add(item);
+                    return null;
+                matching.Add(item.Id);
             }
         }
-        return matching.Count > 0 && matching.All(item => Cancel(userId, item.Id, item.OperationFingerprint));
+        return matching;
     }
 
     private static IReadOnlyList<PendingHabitCreation> HabitCreations(JsonElement arguments)

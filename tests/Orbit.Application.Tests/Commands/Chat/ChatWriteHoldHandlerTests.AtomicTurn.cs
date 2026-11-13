@@ -1,6 +1,7 @@
 using System.Text.Json;
 using FluentAssertions;
 using NSubstitute;
+using Orbit.Application.Chat.Commands;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Models;
@@ -131,5 +132,62 @@ public sealed partial class ChatWriteHoldHandlerTests
         _pendingOperationStore.GetExecution(_userId, earlier.Id).Should().NotBeNull("the turn did not create the Zinc row");
         result.Value.PendingOperations.Should().ContainSingle("the turn withdrew the description").Which.Id.Should().Be(earlier.Id);
         result.Value.AiMessage.Should().Be(EarlierKeptAnswer(language));
+    }
+
+    private static AiToolCall NewZinc(Habit[] parents) => new("create_sub_habit", "zinc", JsonSerializer.SerializeToElement(new
+    {
+        parent_habit_id = parents[0].Id,
+        title = "Zinc",
+        frequency_unit = "Day",
+        description = "With lunch"
+    }));
+
+    private ProcessUserChatCommand NewZincPreviewRequest(string message) => new(_userId, message,
+        History: [new ChatHistoryMessage("assistant", "Review the Zinc preview.")]);
+
+    /// <summary>
+    /// The person asks for a new Zinc preview. The turn prepares it and a description, and a skip is turned down. The
+    /// withdrawn turn replaces nothing: the earlier Zinc preview still awaits approval in the store.
+    /// </summary>
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task AtomicTurn_AWithdrawnTurnKeepsTheEarlierCreationThatItsNewPreviewWasToReplace(string language)
+    {
+        var parents = ParentAccount(language);
+        var earlier = await PrepareEarlierZincAsync(parents);
+        _ownership.GetDenialReasonAsync("skip_habit", _userId, Arg.Any<JsonElement>(), Arg.Any<CancellationToken>())
+            .Returns("target_not_owned:skip_habit:habit");
+        ReplyToTurn(
+        [
+            NewZinc(parents),
+            new("update_habit", "edit", JsonSerializer.SerializeToElement(new { habit_id = parents[1].Id, description = "Quiet time" })),
+            new("skip_habit", "skip", JsonSerializer.SerializeToElement(new { habit_id = UnknownHabitId }))
+        ], "Review.");
+
+        var result = await CreateHandler().Handle(NewZincPreviewRequest(
+            "Prepare a new preview for Zinc, describe Before Bed as quiet time and skip my walk today."), default);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        _pendingOperationStore.IsAwaitingConfirmation(_userId, earlier.Id).Should().BeTrue("the withdrawn turn replaces nothing");
+        result.Value.PendingOperations.Should().BeNullOrEmpty("the turn withdrew its new Zinc preview and the description");
+        result.Value.AiMessage.Should().Be(EarlierKeptAnswer(language));
+    }
+
+    /// <summary>The same request in a turn that ends with its answer replaces the earlier Zinc preview with the new one.</summary>
+    [Fact]
+    public async Task AtomicTurn_ATurnThatEndsWithItsAnswerReplacesTheEarlierCreationWithItsNewPreview()
+    {
+        var parents = ParentAccount("en");
+        var earlier = await PrepareEarlierZincAsync(parents);
+        ReplyToTurn([NewZinc(parents)], "Review the new Zinc preview.");
+
+        var result = await CreateHandler().Handle(NewZincPreviewRequest("Prepare a new preview for Zinc."), default);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        _pendingOperationStore.GetExecution(_userId, earlier.Id).Should().BeNull("the new preview replaced it");
+        var replacement = result.Value.PendingOperations.Should().ContainSingle().Subject;
+        replacement.Id.Should().NotBe(earlier.Id);
+        _pendingOperationStore.IsAwaitingConfirmation(_userId, replacement.Id).Should().BeTrue();
     }
 }

@@ -323,7 +323,7 @@ public partial class ProcessUserChatCommandHandlerTests
         var handler = CreateHandler(bulk);
         var held = HoldReplayWrites(bulk);
         _pendingOperationStore.GetPendingHabitCreations(UserId).Returns([new PendingHabitCreation("Novo")]);
-        _pendingOperationStore.SupersedeHabitCreation(UserId, "Novo", null).Returns(true);
+        _pendingOperationStore.FindHabitCreationReplacement(UserId, "Novo", null).Returns([Guid.NewGuid()]);
         _aiIntentService.SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
             .Returns(ReplayCall("bulk_create_habits", """{"habits":[{"title":"NOVO"}]}"""));
         ReplyToReplay("Revise a prévia.");
@@ -467,8 +467,13 @@ public partial class ProcessUserChatCommandHandlerTests
         var bulk = new BulkCreateHabitsTool(_mediator);
         var handler = CreateHandler(bulk);
         var held = HoldReplayWrites(bulk);
-        _pendingOperationStore.GetPendingHabitCreations(UserId).Returns([new PendingHabitCreation("Novo")]);
-        _pendingOperationStore.SupersedeHabitCreation(UserId, "Novo", null).Returns(true);
+        var replaced = Guid.NewGuid();
+        var stored = new PendingAgentOperationExecution(replaced, "habits.bulk.create", "bulk_create_habits",
+            JsonDocument.Parse("""{"habits":[{"title":"Novo"}]}""").RootElement.Clone(), AgentExecutionSurface.Chat,
+            AgentConfirmationRequirement.FreshConfirmation);
+        _pendingOperationStore.GetPendingHabitCreations(UserId).Returns([new PendingHabitCreation("Novo", PendingOperationId: replaced)]);
+        _pendingOperationStore.FindHabitCreationReplacement(UserId, "Novo", null).Returns([replaced]);
+        _pendingOperationStore.GetExecution(UserId, replaced).Returns(stored);
         _aiIntentService.SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
             .Returns(ReplayCall("bulk_create_habits", """{"habits":[{"title":"Novo"}]}"""));
         ReplyToReplay("Revise a prévia.");
@@ -476,7 +481,8 @@ public partial class ProcessUserChatCommandHandlerTests
         var result = await handler.Handle(new(UserId, "Crie Novo de novo.",
             History: [new ChatHistoryMessage("assistant", "Há uma proposta aguardando sua aprovação.")]), default);
 
-        _pendingOperationStore.Received().SupersedeHabitCreation(UserId, "Novo", null);
+        _pendingOperationStore.Received(1).Cancel(UserId, replaced,
+            AgentOperationFingerprint.Compute("bulk_create_habits", stored.Arguments.GetRawText()));
         held.Should().ContainSingle();
         result.Value.PendingOperations.Should().ContainSingle();
     }
