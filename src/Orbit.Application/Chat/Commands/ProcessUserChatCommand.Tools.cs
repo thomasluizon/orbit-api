@@ -786,6 +786,10 @@ public partial class ProcessUserChatCommandHandler
             results.IsPreviewDiscussion = true;
     }
 
+    /// <summary>
+    /// Keeps a later write from preparing a change that an open preview already holds. A preview of this turn closes at
+    /// once. An earlier preview closes when the turn ends with its answer, so a withdrawn turn leaves it as it was.
+    /// </summary>
     private void RegisterPendingWrite(Guid userId, IAiTool tool,
         AgentExecuteOperationResponse response, ToolExecutionAccumulator results)
     {
@@ -815,7 +819,9 @@ public partial class ProcessUserChatCommandHandler
                 continue;
             var fingerprint = AgentOperationFingerprint.Compute(
                 stored.OperationId, stored.Arguments.GetRawText());
-            if (execution.PendingOperationStore.Cancel(userId, id, fingerprint))
+            if (results.EarlierPendingIds.Contains(id))
+                results.CloseWithTheTurn(id, _ => Task.FromResult(execution.PendingOperationStore.Cancel(userId, id, fingerprint)));
+            else if (execution.PendingOperationStore.Cancel(userId, id, fingerprint))
                 results.SupersedePendingOperation(id);
         }
         results.PendingWriteCalls[replacement.Id] = (tool.Name, replacement);

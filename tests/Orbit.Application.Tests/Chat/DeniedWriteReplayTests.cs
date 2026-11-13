@@ -747,4 +747,69 @@ public partial class ProcessUserChatCommandHandlerTests
         run.Result.Value.PendingOperations.Should().ContainSingle("the turn withdrew its own delete").Which.Id.Should().Be(EarlierPreviewId);
         run.Result.Value.AiMessage.Should().Be(EarlierKeptFor(language));
     }
+
+    /// <summary>
+    /// A preview from an earlier turn renames Water 3 to the title of the request and awaits approval when the turn
+    /// starts. The turn reads it, and a bulk rename of the turn covers it.
+    /// </summary>
+    private void ArrangeCoveredEarlierPreview(Habit[] children)
+    {
+        var stored = new PendingAgentOperationExecution(EarlierPreviewId, "habits.update", "update_habit",
+            EarlierPreviewArguments(children, RenameTitle), AgentExecutionSurface.Chat,
+            AgentConfirmationRequirement.FreshConfirmation, "earlier-preview");
+        _pendingOperationStore.GetAwaitingAsync(UserId, Arg.Any<CancellationToken>()).Returns([stored]);
+        _pendingOperationStore.GetExecution(UserId, EarlierPreviewId).Returns(stored);
+        _pendingOperationStore.Cancel(UserId, EarlierPreviewId, Arg.Any<string>()).Returns(true);
+        var title = new PendingOperationChange(children[2].Id, children[2].Title, "title", children[2].Title, RenameTitle, "string");
+        var preview = new PendingAgentOperation(EarlierPreviewId, "habits.update", "update_habit", "update_habit", AgentRiskClass.Low,
+            AgentConfirmationRequirement.FreshConfirmation, DateTime.UtcNow.AddMinutes(10), [title], ChangeTargetCount: 1,
+            Items: [new PendingOperationItem("0", children[2].Id, children[2].Title, [title], "state")],
+            PreviewFingerprint: "earlier-preview");
+        _operationExecutor.ExecuteAsync(Arg.Is<AgentExecuteOperationRequest>(request => request.OperationId == ReviseTool),
+                Arg.Any<CancellationToken>())
+            .Returns(new AgentExecuteOperationResponse(new AgentOperationResult(ReviseTool, ReviseTool, AgentRiskClass.Low,
+                AgentConfirmationRequirement.None, AgentOperationStatus.Succeeded, Payload: preview)));
+    }
+
+    private static AiToolCall DeleteUnknown() => new("delete_habit", "delete-unknown",
+        JsonSerializer.SerializeToElement(new { habit_id = UnknownHabitId }));
+
+    /// <summary>
+    /// The bulk rename of the turn covers the earlier rename of Water 3, and a delete is turned down. The withdrawn turn
+    /// closes nothing that the person had: the earlier preview stays approvable and stays in the answer.
+    /// </summary>
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task DeniedWrite_AWithdrawnTurnLeavesTheEarlierPreviewThatItsBulkWriteCovered(string language)
+    {
+        var run = await RunRequestTurnAsync(language, RequestMessage(language),
+            children => Calls(InspectEarlierPreview(), CorrectedRename(children), DeleteUnknown()),
+            _ => [Text(language), Text(language)], ArrangeCoveredEarlierPreview);
+
+        run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
+        run.Held.Should().Contain(request => request.OperationId == "bulk_update_habits", "the bulk rename prepared");
+        _pendingOperationStore.DidNotReceive().Cancel(UserId, EarlierPreviewId, Arg.Any<string>());
+        run.Result.Value.PendingOperations.Should().ContainSingle("the turn withdrew its own rename").Which.Id.Should().Be(EarlierPreviewId);
+        run.Result.Value.AiMessage.Should().Be(EarlierKeptFor(language));
+    }
+
+    /// <summary>
+    /// The same bulk rename in a turn that ends with its answer still closes the earlier preview that it covers, so the
+    /// person never approves the rename of Water 3 twice.
+    /// </summary>
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task DeniedWrite_ATurnThatEndsWithItsAnswerClosesTheEarlierPreviewThatItsBulkWriteCovered(string language)
+    {
+        var run = await RunRequestTurnAsync(language, RequestMessage(language),
+            children => Calls(InspectEarlierPreview(), CorrectedRename(children), Run4Delete(children)),
+            _ => [Text(language), Text(language)], ArrangeCoveredEarlierPreview);
+
+        run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
+        _pendingOperationStore.Received(1).Cancel(UserId, EarlierPreviewId,
+            AgentOperationFingerprint.Compute("update_habit", EarlierPreviewArguments(run.Children, RenameTitle).GetRawText()));
+        run.Result.Value.PendingOperations.Should().NotBeNullOrEmpty().And.NotContain(pending => pending.Id == EarlierPreviewId);
+    }
 }

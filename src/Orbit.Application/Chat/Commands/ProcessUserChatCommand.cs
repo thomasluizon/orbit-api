@@ -579,6 +579,7 @@ public partial class ProcessUserChatCommandHandler(
             userLanguage,
             aiStreamSink,
             cancellationToken);
+        await CloseEarlierPreviewsAsync(executionResults, cancellationToken);
         await CombinePendingChangesAsync(request, executionResults, cancellationToken);
         await FinishPlanAsync(request, executionResults);
         cancellationToken.ThrowIfCancellationRequested();

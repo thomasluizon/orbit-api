@@ -90,6 +90,22 @@ public partial class ProcessUserChatCommandHandler
         /// <summary>The turn withdrew its preview and an earlier preview still waits for the person's approval.</summary>
         public bool KeepsEarlierPreview { get; set; }
 
+        /// <summary>
+        /// The earlier previews that this turn closes. The store closes each one when the turn ends with its answer,
+        /// and a withdrawn turn leaves each one as it was.
+        /// </summary>
+        internal List<EarlierPreviewClose> EarlierPreviewCloses { get; } = [];
+
+        /// <summary>Puts a card back in the answer, after the turn took it out to close it.</summary>
+        public void KeepPendingOperation(string toolName, PendingAgentOperation pending)
+        {
+            _supersededPendingIds.Remove(pending.Id);
+            PendingWriteCalls[pending.Id] = (toolName, pending);
+            PendingOperations.RemoveAll(item => item.Id == pending.Id);
+            if (pending.ChangeTargetCount != 0 && pending.Items is not { Count: 0 })
+                PendingOperations.Add(pending);
+        }
+
         public List<AgentPolicyDenial> PolicyDenials { get; } = [];
         public List<AiToolCallResult> ToolResults { get; } = [];
         public List<IReadOnlyList<AiToolCall>> CompositionRounds { get; } = [];
@@ -189,6 +205,16 @@ public partial class ProcessUserChatCommandHandler
             CommittedPendingOperations.RemoveAll(item => item.Id == id);
         }
 
+        /// <summary>
+        /// Takes an earlier preview out of the answer and closes it in the store when the turn ends with its answer.
+        /// </summary>
+        public void CloseWithTheTurn(Guid id, Func<CancellationToken, Task<bool>> close)
+        {
+            EarlierPreviewCloses.Add(new EarlierPreviewClose(id,
+                PendingWriteCalls.TryGetValue(id, out var card) ? card : null, close));
+            SupersedePendingOperation(id);
+        }
+
         private void CollectRelatedSurfaces(AgentOperationResult operationResult)
         {
             if (operationResult.Status != AgentOperationStatus.Succeeded)
@@ -198,6 +224,13 @@ public partial class ProcessUserChatCommandHandler
                 _relatedSurfaces.Add(surface);
         }
     }
+
+    /// <summary>
+    /// An earlier preview that this turn closes when it ends with its answer. <paramref name="Card"/> is its card in the
+    /// answer of this turn, when a call of the turn returned it, and <paramref name="Close"/> closes it in the store.
+    /// </summary>
+    internal sealed record EarlierPreviewClose(Guid Id, (string ToolName, PendingAgentOperation Preview)? Card,
+        Func<CancellationToken, Task<bool>> Close);
 
     /// <summary>
     /// Reads the optional "related_surfaces" string array from a tool's anonymous payload

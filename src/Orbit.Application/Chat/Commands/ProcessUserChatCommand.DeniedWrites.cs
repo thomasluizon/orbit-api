@@ -181,25 +181,54 @@ public partial class ProcessUserChatCommandHandler
     /// Withdraws only what this turn prepared, so the turn changes nothing that the person had before it. A preview
     /// that a write of this turn created is closed in the pending operation store too, so no approval, no replay of the
     /// answer checkpoint and no later turn brings it back. An earlier preview that this turn revised gets its earlier
-    /// state back and stays approvable. An earlier preview that this turn only read stays as it is.
+    /// state back. An earlier preview that this turn read, or was to close at its end, stays open as it was.
     /// </summary>
     private void WithdrawPartialPreview(Guid userId, ToolExecutionAccumulator results, string? language)
     {
-        results.KeepsEarlierPreview = results.PendingOperations.Any(pending => results.EarlierPendingIds.Contains(pending.Id));
+        results.KeepsEarlierPreview = results.EarlierPreviewCloses.Count > 0
+            || results.PendingOperations.Any(pending => results.EarlierPendingIds.Contains(pending.Id));
+        foreach (var close in results.EarlierPreviewCloses)
+        {
+            if (results.RevisedEarlierPreviews.ContainsKey(close.Id))
+                RestoreEarlierPreview(userId, close.Id, close.Card?.Preview.PreviewFingerprint, results);
+            else if (close.Card is var (toolName, card))
+                results.KeepPendingOperation(toolName, card);
+        }
+        results.EarlierPreviewCloses.Clear();
         foreach (var pending in results.PreparedPendingOperations.ToArray())
         {
-            if (execution.PendingOperationStore.GetExecution(userId, pending.Id) is { } stored)
-            {
-                var fingerprint = AgentOperationFingerprint.Compute(stored.OperationId, stored.Arguments.GetRawText());
-                if (!results.RevisedEarlierPreviews.TryGetValue(pending.Id, out var earlier))
-                    execution.PendingOperationStore.Cancel(userId, pending.Id, fingerprint);
-                else if (stored.PreviewFingerprint == pending.PreviewFingerprint)
-                    execution.PendingOperationStore.Restore(userId, pending.Id, fingerprint, earlier);
-            }
+            if (results.RevisedEarlierPreviews.ContainsKey(pending.Id))
+                RestoreEarlierPreview(userId, pending.Id, pending.PreviewFingerprint, results);
+            else if (execution.PendingOperationStore.GetExecution(userId, pending.Id) is { } stored)
+                execution.PendingOperationStore.Cancel(userId, pending.Id,
+                    AgentOperationFingerprint.Compute(stored.OperationId, stored.Arguments.GetRawText()));
             results.SupersedePendingOperation(pending.Id);
         }
         results.SanitizeFailedActions(RequestNotPreparedMessage(results, language));
         results.RequestNotPrepared = true;
+    }
+
+    /// <summary>
+    /// Puts back the state from before this turn's revision of an earlier preview, while the store still holds the
+    /// preview of that revision.
+    /// </summary>
+    private void RestoreEarlierPreview(Guid userId, Guid id, string? revisedFingerprint, ToolExecutionAccumulator results)
+    {
+        if (execution.PendingOperationStore.GetExecution(userId, id) is { } stored && stored.PreviewFingerprint == revisedFingerprint)
+            execution.PendingOperationStore.Restore(userId, id,
+                AgentOperationFingerprint.Compute(stored.OperationId, stored.Arguments.GetRawText()), results.RevisedEarlierPreviews[id]);
+    }
+
+    /// <summary>
+    /// Closes the earlier previews of a turn that ends with its answer. A preview that the store does not close stays
+    /// in the answer when the turn showed it.
+    /// </summary>
+    private static async Task CloseEarlierPreviewsAsync(ToolExecutionAccumulator results, CancellationToken ct)
+    {
+        foreach (var close in results.EarlierPreviewCloses)
+            if (!await close.Close(ct) && close.Card is var (toolName, card))
+                results.KeepPendingOperation(toolName, card);
+        results.EarlierPreviewCloses.Clear();
     }
 
     /// <summary>
