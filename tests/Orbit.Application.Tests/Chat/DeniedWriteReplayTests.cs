@@ -238,10 +238,12 @@ public partial class ProcessUserChatCommandHandlerTests
         var delete = new BulkDeleteHabitsTool(_mediator, _habitRepo);
         var update = new BulkUpdateHabitsTool(_mediator);
         var updateOne = new UpdateHabitTool(_habitRepo, _userDateService, _mediator);
+        var deleteOne = new DeleteHabitTool(_mediator, _habitRepo);
         var summary = new SetAiSummaryTool(_mediator);
         const string query = "query_habits";
-        var handler = CreateHandler(ReadTool(query, new ToolResult(true)), delete, update, updateOne, summary);
-        var held = HoldReplayWrites(delete, update, updateOne, summary);
+        var handler = CreateHandler(ReadTool(query, new ToolResult(true)), ReadTool(ReviseTool, new ToolResult(true)),
+            delete, update, updateOne, deleteOne, summary);
+        var held = HoldReplayWrites(delete, update, updateOne, deleteOne, summary);
         DenyUnownedHabitTargets([parent, .. children]);
         var read = new AgentExecuteOperationResponse(new AgentOperationResult(query, query, AgentRiskClass.Low,
             AgentConfirmationRequirement.None, AgentOperationStatus.Succeeded,
@@ -538,5 +540,211 @@ public partial class ProcessUserChatCommandHandlerTests
         gateway.Responses[0].Should().BeOfType<RejectedBeforeDispatchResponse>();
         result.Value.PendingOperations.Should().BeNullOrEmpty("the rename half of the request was not prepared");
         result.Value.AiMessage.Should().Be(NotPreparedFor("en"));
+    }
+
+    private static string TwoRenamesMessage(string language) => language == "en"
+        ? "rename Water 1 to Water - 1.18L and Water 2 to Water - 2L"
+        : "muda o nome do Water 1 para Water - 1.18L e do Water 2 para Water - 2L";
+
+    private static bool PreparedFor(DeniedWriteRun run, string operation, Habit child) => run.Held.Any(request =>
+        request.OperationId == operation && request.Arguments.TryGetProperty("habit_id", out var id) && id.GetGuid() == child.Id);
+
+    /// <summary>
+    /// The model sends the Water 1 rename alone with an id of no record, then the Water 2 rename in the next round.
+    /// The Water 2 rename has another change, so it is not the denied write sent again: the denial stays, and the
+    /// turn holds no preview with only Water 2.
+    /// </summary>
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task DeniedWrite_ALoneDenialStaysWhenALaterWriteRenamesAnotherRecordOfTheRequest(string language)
+    {
+        var run = await RunRequestTurnAsync(language, TwoRenamesMessage(language), children => Calls(RenameOneUnknown(children)),
+            children => [Calls(new AiToolCall("update_habit", "rename-two",
+                JsonSerializer.SerializeToElement(new { habit_id = children[1].Id, title = "Water - 2L" }))), Text(language), Text(language)]);
+
+        run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
+        PreparedFor(run, "update_habit", run.Children[1]).Should().BeTrue("the Water 2 rename prepared in the second round");
+        run.Result.Value.PendingOperations.Should().BeNullOrEmpty("a preview with only Water 2 holds half of the request");
+        run.Result.Value.AiMessage.Should().Be(NotPreparedFor(language));
+    }
+
+    /// <summary>
+    /// A delete has no change to compare, so a later delete of another record never replaces a denied delete.
+    /// </summary>
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task DeniedWrite_ALoneDeniedDeleteStaysWhenALaterDeleteRemovesAnotherRecord(string language)
+    {
+        var run = await RunRequestTurnAsync(language, language == "en" ? "delete Water 1 and Water 2" : "apaga o Water 1 e o Water 2",
+            _ => Calls(new AiToolCall("delete_habit", "delete-one", JsonSerializer.SerializeToElement(new { habit_id = UnknownHabitId }))),
+            children => [Calls(new AiToolCall("delete_habit", "delete-two",
+                JsonSerializer.SerializeToElement(new { habit_id = children[1].Id }))), Text(language), Text(language)]);
+
+        run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
+        PreparedFor(run, "delete_habit", run.Children[1]).Should().BeTrue("the Water 2 delete prepared in the second round");
+        run.Result.Value.PendingOperations.Should().BeNullOrEmpty("a preview with only Water 2 holds half of the request");
+        run.Result.Value.AiMessage.Should().Be(NotPreparedFor(language));
+    }
+
+    /// <summary>
+    /// Beside a prepared delete, the correction of a denied rename sends a rename with another title. It is not the
+    /// denied write sent again, so it binds to no denial and the turn holds no preview.
+    /// </summary>
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task DeniedWrite_ACorrectionWithAnotherChangeDoesNotReplaceTheDenial(string language)
+    {
+        var run = await RunDeniedRequestTurnAsync(language, RenameOneUnknown, children => [Calls(new AiToolCall("update_habit",
+            "rename-other", JsonSerializer.SerializeToElement(new { habit_id = children[0].Id, title = "Water - 2L" }))), Text(language)]);
+
+        run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
+        PreparedFor(run, "update_habit", run.Children[0]).Should().BeFalse("the candidate binds to no denial and never runs");
+        run.Result.Value.PendingOperations.Should().BeNullOrEmpty("the rename half of the request was not prepared");
+        run.Result.Value.AiMessage.Should().Be(NotPreparedFor(language));
+    }
+
+    /// <summary>
+    /// The request renames two records to one title. The first rename prepares and the second is turned down. The
+    /// correction repeats the prepared rename, which prepares nothing, so the denial stays and the turn holds no
+    /// preview with only the first record.
+    /// </summary>
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task DeniedWrite_ACorrectionThatRepeatsAPreparedWriteDoesNotReplaceTheDenial(string language)
+    {
+        var run = await RunRequestTurnAsync(language, language == "en"
+                ? "rename Water 1 and Water 2 to Water - 1.18L"
+                : "muda o nome do Water 1 e do Water 2 para Water - 1.18L",
+            children => Calls(RenameFirst(children), RenameOneUnknown(children)),
+            children => [Calls(RenameFirst(children) with { Id = "repeat" }), Text(language)]);
+
+        run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
+        JsonSerializer.Serialize(run.ToolResults[0].Single(result => result.Id == "rename-one").Payload).Should().Contain("correction_allowed");
+        run.Result.Value.PendingOperations.Should().BeNullOrEmpty("a preview with only Water 1 holds half of the request");
+        run.Result.Value.AiMessage.Should().Be(NotPreparedFor(language));
+    }
+
+    private const string ReviseTool = "revise_pending_changes";
+    private static readonly Guid EarlierPreviewId = Guid.Parse("7b3e9f21-4c8a-4d6e-b1f0-2a9c5d7e3f84");
+    private const string EarlierTitle = "Water - 750ml";
+    private const string RevisedTitle = "Water - 1L";
+
+    private static JsonElement EarlierPreviewArguments(Habit[] children, string title) =>
+        JsonSerializer.SerializeToElement(new { habit_id = children[2].Id, title });
+
+    private static PendingAgentOperationRevision EarlierRevision(Habit[] children)
+    {
+        var arguments = EarlierPreviewArguments(children, EarlierTitle).GetRawText();
+        return new(arguments, AgentOperationFingerprint.Compute("update_habit", arguments), "earlier-preview", null, false, 1);
+    }
+
+    private static string EarlierKeptFor(string language) => language == "en"
+        ? "I couldn't prepare your whole request, so I left your earlier changes as they were. They are still waiting for your approval. Please send the request again."
+        : "Não consegui preparar o seu pedido inteiro, então deixei as alterações anteriores como estavam. Elas continuam esperando a sua aprovação. Mande o pedido de novo, por favor.";
+
+    private static AiToolCall InspectEarlierPreview() => new(ReviseTool, "inspect", JsonSerializer.SerializeToElement(new
+    {
+        pending_operation_id = EarlierPreviewId,
+        items = Array.Empty<object>(),
+        answer_question = true
+    }));
+
+    private static AiToolCall ReviseEarlierPreview() => new(ReviseTool, "revise", JsonSerializer.SerializeToElement(new
+    {
+        pending_operation_id = EarlierPreviewId,
+        items = new[] { new { item_id = "0", edits_json = JsonSerializer.Serialize(new { title = RevisedTitle }) } },
+        answer_question = false
+    }));
+
+    /// <summary>
+    /// A preview from an earlier turn renames Water 3 and awaits approval when the turn starts. A revision in this turn
+    /// changes its title in place and keeps its id; an inspection returns it as it is.
+    /// </summary>
+    private void ArrangeEarlierPreview(Habit[] children, bool revised)
+    {
+        PendingAgentOperationExecution Stored(string title, string preview) => new(EarlierPreviewId, "habits.update", "update_habit",
+            EarlierPreviewArguments(children, title), AgentExecutionSurface.Chat, AgentConfirmationRequirement.FreshConfirmation, preview);
+        var earlier = Stored(EarlierTitle, "earlier-preview");
+        _pendingOperationStore.GetAwaitingAsync(UserId, Arg.Any<CancellationToken>()).Returns([earlier]);
+        _pendingOperationStore.GetRevision(UserId, EarlierPreviewId).Returns(EarlierRevision(children));
+        _pendingOperationStore.GetExecution(UserId, EarlierPreviewId)
+            .Returns(revised ? Stored(RevisedTitle, "revised-preview") : earlier);
+        var preview = new PendingAgentOperation(EarlierPreviewId, "habits.update", "update_habit", "update_habit", AgentRiskClass.Low,
+            AgentConfirmationRequirement.FreshConfirmation, DateTime.UtcNow.AddMinutes(10), ChangeTargetCount: 1,
+            Items: [new PendingOperationItem("0", children[2].Id, children[2].Title, [], "state")],
+            PreviewFingerprint: revised ? "revised-preview" : "earlier-preview");
+        _operationExecutor.ExecuteAsync(Arg.Is<AgentExecuteOperationRequest>(request => request.OperationId == ReviseTool),
+                Arg.Any<CancellationToken>())
+            .Returns(new AgentExecuteOperationResponse(new AgentOperationResult(ReviseTool, ReviseTool, AgentRiskClass.Low,
+                AgentConfirmationRequirement.None, AgentOperationStatus.Succeeded, Payload: preview)));
+    }
+
+    /// <summary>
+    /// The turn only reads an earlier preview beside a rename that the ownership check turns down. The earlier preview
+    /// is not a prepared write of the turn: the denial keeps the base path, and the preview stays approvable.
+    /// </summary>
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task DeniedWrite_AnEarlierPreviewThatTheTurnOnlyReadIsNotAPreparedWriteOfTheTurn(string language)
+    {
+        var run = await RunRequestTurnAsync(language, RenameOneMessage(language),
+            children => Calls(InspectEarlierPreview(), RenameOneUnknown(children)), _ => [Text(language), Text(language)],
+            children => ArrangeEarlierPreview(children, revised: false));
+
+        run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
+        _pendingOperationStore.DidNotReceive().Cancel(UserId, EarlierPreviewId, Arg.Any<string>());
+        var denied = run.ToolResults[0].Should().ContainSingle(result => result.Id == "rename-one").Subject;
+        JsonSerializer.Serialize(denied.Payload).Should().NotContain("correction_allowed", "no write of the turn prepared");
+        run.Result.Value.AiMessage.Should().NotBe(NotPreparedFor(language)).And.NotBe(ToolFailureFor(language));
+        run.Result.Value.PendingOperations.Should().ContainSingle().Which.Id.Should().Be(EarlierPreviewId);
+    }
+
+    /// <summary>
+    /// The turn revises an earlier preview in place beside a rename that the ownership check turns down, and the
+    /// correction never comes. The earlier preview gets its state from before the turn back, is never cancelled, and
+    /// the answer says that it still waits.
+    /// </summary>
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task DeniedWrite_AnEarlierPreviewThatTheTurnRevisedGetsItsEarlierStateBack(string language)
+    {
+        var run = await RunRequestTurnAsync(language, RenameOneMessage(language),
+            children => Calls(ReviseEarlierPreview(), RenameOneUnknown(children)), _ => [Text(language), Text(language)],
+            children => ArrangeEarlierPreview(children, revised: true));
+
+        run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
+        _pendingOperationStore.DidNotReceive().Cancel(UserId, EarlierPreviewId, Arg.Any<string>());
+        _pendingOperationStore.Received(1).Restore(UserId, EarlierPreviewId,
+            AgentOperationFingerprint.Compute("update_habit", EarlierPreviewArguments(run.Children, RevisedTitle).GetRawText()),
+            EarlierRevision(run.Children));
+        run.Result.Value.PendingOperations.Should().BeNullOrEmpty("the revised card is not what the store holds");
+        run.Result.Value.AiMessage.Should().Be(EarlierKeptFor(language));
+    }
+
+    /// <summary>
+    /// The turn reads an earlier preview, prepares a delete and gets a rename turned down, and the correction never
+    /// comes. The turn withdraws only its own delete. The earlier preview stays in the answer, and the answer says
+    /// that it still waits instead of saying that nothing waits.
+    /// </summary>
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task DeniedWrite_AWithdrawnTurnKeepsTheEarlierPreviewItReadAndSaysItStillWaits(string language)
+    {
+        var run = await RunRequestTurnAsync(language, RequestMessage(language),
+            children => Calls(InspectEarlierPreview(), Run4Delete(children), RenameOneUnknown(children)),
+            _ => [Text(language), Text(language)], children => ArrangeEarlierPreview(children, revised: false));
+
+        run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
+        run.Held.Should().Contain(request => request.OperationId == "bulk_delete_habits", "the delete prepared");
+        _pendingOperationStore.DidNotReceive().Cancel(UserId, EarlierPreviewId, Arg.Any<string>());
+        run.Result.Value.PendingOperations.Should().ContainSingle("the turn withdrew its own delete").Which.Id.Should().Be(EarlierPreviewId);
+        run.Result.Value.AiMessage.Should().Be(EarlierKeptFor(language));
     }
 }

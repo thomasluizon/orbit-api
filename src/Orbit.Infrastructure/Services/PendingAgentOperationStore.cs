@@ -294,6 +294,30 @@ public class PendingAgentOperationStore(
         }
     }
 
+    public PendingAgentOperationRevision? GetRevision(Guid userId, Guid pendingOperationId) =>
+        dbContext.PendingAgentOperations.AsNoTracking()
+            .FirstOrDefault(item => item.Id == pendingOperationId && item.UserId == userId)?.CurrentRevision();
+
+    public bool Restore(Guid userId, Guid pendingOperationId, string expectedFingerprint, PendingAgentOperationRevision revision)
+    {
+        var entity = dbContext.PendingAgentOperations.FirstOrDefault(item =>
+            item.Id == pendingOperationId && item.UserId == userId);
+        var checkedAtUtc = DateTime.UtcNow;
+        if (entity is null || entity.OperationFingerprint != expectedFingerprint || !entity.Restore(revision, checkedAtUtc))
+            return false;
+
+        try
+        {
+            SaveChangesWithConversationOutcomes();
+            return true;
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            ResetFailedOutcomeChanges(entity);
+            return false;
+        }
+    }
+
     public bool Cancel(Guid userId, Guid pendingOperationId, string expectedFingerprint)
     {
         var entity = dbContext.PendingAgentOperations.FirstOrDefault(item =>

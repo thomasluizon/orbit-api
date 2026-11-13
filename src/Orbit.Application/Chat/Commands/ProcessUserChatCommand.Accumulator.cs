@@ -72,6 +72,24 @@ public partial class ProcessUserChatCommandHandler
         public Dictionary<string, QueryReadBlock> QueryReads { get; } = new(StringComparer.Ordinal);
         public Dictionary<Guid, string> ReadOfferIntents { get; } = [];
         public List<PendingAgentOperation> PendingOperations { get; } = [];
+
+        /// <summary>The previews that awaited the person's approval before this turn ran a tool.</summary>
+        public IReadOnlySet<Guid> EarlierPendingIds { get; init; } = new HashSet<Guid>();
+
+        /// <summary>The stored state of each earlier preview from before this turn revised it in place.</summary>
+        public Dictionary<Guid, PendingAgentOperationRevision> RevisedEarlierPreviews { get; } = [];
+
+        /// <summary>
+        /// The previews that this turn prepared: each one that its writes created, and each earlier one that it
+        /// revised. An earlier preview that the turn only read, or that a write found already waiting, stays the
+        /// person's earlier card and is never a prepared write of this turn.
+        /// </summary>
+        public IEnumerable<PendingAgentOperation> PreparedPendingOperations => PendingOperations.Where(pending =>
+            !EarlierPendingIds.Contains(pending.Id) || RevisedEarlierPreviews.ContainsKey(pending.Id));
+
+        /// <summary>The turn withdrew its preview and an earlier preview still waits for the person's approval.</summary>
+        public bool KeepsEarlierPreview { get; set; }
+
         public List<AgentPolicyDenial> PolicyDenials { get; } = [];
         public List<AiToolCallResult> ToolResults { get; } = [];
         public List<IReadOnlyList<AiToolCall>> CompositionRounds { get; } = [];

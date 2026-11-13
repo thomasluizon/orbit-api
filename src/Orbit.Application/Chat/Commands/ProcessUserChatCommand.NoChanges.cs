@@ -11,7 +11,7 @@ public partial class ProcessUserChatCommandHandler
         ToolLoopResult loop, AiResponse response, GroundingTurn grounding, CancellationToken ct)
     {
         using var phase = ChatTurnTimer.Measure(ChatPhase.Composition);
-        if ((results.RequestNotPrepared ? RequestNotPreparedMessage(context.Language) : BulkNoChangesMessage(results, context.Language))
+        if ((results.RequestNotPrepared ? RequestNotPreparedMessage(results, context.Language) : BulkNoChangesMessage(results, context.Language))
             is not { } message)
         {
             var reply = await ComposeRegularReplyAsync(request, context, results, loop, response, grounding, ct);

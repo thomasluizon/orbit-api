@@ -114,7 +114,7 @@ public partial class ProcessUserChatCommandHandler
         {
             WithdrawPartialPreview(request.UserId, executionResults, language);
             hadToolFailure = false;
-            aiResponse = new AiResponse { TextMessage = RequestNotPreparedMessage(language) };
+            aiResponse = new AiResponse { TextMessage = RequestNotPreparedMessage(executionResults, language) };
         }
 
         return ValidateTerminalAnswer(new ToolLoopResult(
@@ -482,6 +482,7 @@ public partial class ProcessUserChatCommandHandler
 
         var excessReads = readOnlyCalls.Skip(ChatTurnLimits.MaxReadCallsPerRound).ToArray();
         readOnlyCalls = readOnlyCalls.Take(ChatTurnLimits.MaxReadCallsPerRound).ToList();
+        var earlierRevisions = ReadEarlierRevisions(readOnlyCalls, request.UserId, executionResults);
         var readOnlyTasks = readOnlyCalls
             .Select(call => ExecuteReadOnlyToolCallOnIsolatedScopeAsync(call, request, executionResults, cancellationToken))
             .ToList();
@@ -511,6 +512,7 @@ public partial class ProcessUserChatCommandHandler
                     executionResults.SelectionCandidates.Add(selection);
             }
         }
+        KeepEarlierRevisions(earlierRevisions, outcomesByCallId, executionResults);
 
         RejectUnreadDuplicateTargets(writeCalls, resolvedWrites, executionResults, outcomesByCallId);
         var selectionScope = RejectUnansweredSelections(writeCalls, resolvedWrites, executionResults, outcomesByCallId,

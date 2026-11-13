@@ -31,13 +31,10 @@ public partial class ProcessUserChatCommandHandler
     /// <summary>
     /// The turn holds a prepared write, so a write that the ownership check turned down would leave half of the request
     /// in the preview. Only then is the denial a tool failure with one correction. A denial with no prepared write
-    /// beside it keeps the base path: the model reads and sends the write again, or answers in its own words.
+    /// beside it keeps the base path: the model reads and sends the write again, or answers in its own words. An
+    /// earlier preview that the turn only read is not a prepared write of the turn.
     /// </summary>
-    private static bool HoldsPreparedWrite(ToolExecutionAccumulator results) => results.PendingOperations.Count > 0;
-
-    /// <summary>The two writes are one operation, in the same form or in its single and bulk forms.</summary>
-    private static bool SameOperation(string original, string candidate) => original == candidate
-        || BulkToolRepeatGuard.IsBulkAlternative(original, candidate) || BulkToolRepeatGuard.IsBulkAlternative(candidate, original);
+    private static bool HoldsPreparedWrite(ToolExecutionAccumulator results) => results.PreparedPendingOperations.Any();
 
     private static bool HasReadCorrectionCandidate(ToolExecutionAccumulator results) =>
         results.CorrectionOccurrences.Any(occurrence =>
@@ -112,13 +109,13 @@ public partial class ProcessUserChatCommandHandler
                 .All(item => item.Outcome.ArgumentRepairAllowed || item.Outcome.PreparedResponse is RejectedBeforeDispatchResponse);
 
         public async Task<IReadOnlyList<(AiToolCall Candidate, CorrectionOccurrence Original)>> BindAsync(
-            IReadOnlyList<AiToolCall> candidates, AiToolRegistry registry, CancellationToken ct)
+            IReadOnlyList<AiToolCall> candidates, AiToolRegistry registry, ToolExecutionAccumulator results, CancellationToken ct)
         {
             if (_consumed)
                 return [];
             _consumed = true;
             if (ReplacesDeniedWrites)
-                return BindDeniedWrites(candidates, registry);
+                return BindDeniedWrites(candidates, registry, results);
             try
             {
                 return await PrepareBindingsAsync(candidates, registry, ct);
@@ -176,16 +173,18 @@ public partial class ProcessUserChatCommandHandler
         }
 
         /// <summary>
-        /// Each candidate is a write of the same operation as one denied write, in its single or bulk form. It runs
-        /// through every write guard of the round again, so a corrected id must still be one the person owns.
+        /// Each candidate sends one denied write again: the same operation in its single or bulk form, with the same
+        /// change and the records that the denied write named correctly. A candidate for another change or another
+        /// delete binds to no denial, so the correction fails. Each candidate runs through every write guard of the
+        /// round again, so a corrected id must still be one the person owns.
         /// </summary>
         private IReadOnlyList<(AiToolCall, CorrectionOccurrence)> BindDeniedWrites(IReadOnlyList<AiToolCall> candidates,
-            AiToolRegistry registry)
+            AiToolRegistry registry, ToolExecutionAccumulator results)
         {
             var replacements = new List<(AiToolCall, CorrectionOccurrence)>();
             foreach (var candidate in candidates)
             {
-                var original = _unresolved.FirstOrDefault(item => SameOperation(item.Call.Name, candidate.Name)
+                var original = _unresolved.FirstOrDefault(item => ResendsDeniedWrite(item.Call, candidate, results)
                     && replacements.All(replacement => replacement.Item2 != item));
                 if (registry.GetTool(candidate.Name)?.IsReadOnly != false || original is null)
                     return [];
@@ -232,7 +231,7 @@ public partial class ProcessUserChatCommandHandler
         {
             if (original.Outcome.ArgumentRepairAllowed && outcome.OperationResult?.Status == AgentOperationStatus.PendingConfirmation
                 || IsReadOnly && outcome.OperationResult?.Status == AgentOperationStatus.Succeeded
-                || IsOwnershipWriteDenial(original.Outcome) && outcome.ToolResult.Success
+                || IsOwnershipWriteDenial(original.Outcome) && PreparesWrite(outcome)
                 || IsFailedStartingStep(original)
                     && outcome.OperationResult is { Status: AgentOperationStatus.Succeeded, Payload: StartingStep }
                 || outcome.PreparedResponse?.Operation.Status is AgentOperationStatus.Succeeded or AgentOperationStatus.PendingConfirmation)
@@ -263,7 +262,7 @@ public partial class ProcessUserChatCommandHandler
         ProcessUserChatCommand request, ToolExecutionAccumulator results, string? language, CancellationToken ct)
     {
         var outcomes = new Dictionary<string, ToolCallOutcome>(StringComparer.Ordinal);
-        var bound = await correction.BindAsync(candidates, ai.ToolRegistry, ct);
+        var bound = await correction.BindAsync(candidates, ai.ToolRegistry, results, ct);
         if (correction.ReplacesDeniedWrites)
             return await ExecuteDeniedWriteCorrectionsAsync(bound, correction, request, results, language, ct);
         foreach (var (candidate, original) in bound)

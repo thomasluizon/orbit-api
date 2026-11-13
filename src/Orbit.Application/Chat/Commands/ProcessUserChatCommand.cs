@@ -560,6 +560,7 @@ public partial class ProcessUserChatCommandHandler(
         {
             AnsweredAtUtc = answeredAtUtc,
             Recording = recording,
+            EarlierPendingIds = recording.AwaitingPreviewIds,
             EvalTrace = evalTrace,
             Habits = context.ActiveHabits,
             AllHabits = context.UserHabits,

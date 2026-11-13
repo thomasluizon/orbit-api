@@ -43,6 +43,9 @@ public partial class ProcessUserChatCommandHandler
         public bool ConversationPrepared { get; set; }
         public Guid? ConversationId { get; set; }
         public AiPlan? Plan { get; set; }
+
+        /// <summary>The previews that awaited the person's approval before the turn ran a tool.</summary>
+        public IReadOnlySet<Guid> AwaitingPreviewIds { get; set; } = new HashSet<Guid>();
     }
 
     private async Task<Result<ProcessUserChatCommand>> PrepareConversationAsync(ProcessUserChatCommand request,

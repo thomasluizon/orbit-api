@@ -71,6 +71,12 @@ public interface IPendingAgentOperationStore
     bool Revise(Guid userId, Guid pendingOperationId, string expectedFingerprint,
         string argumentsJson, string operationFingerprint, string previewFingerprint,
         PendingOperationChangePreview? revisedPreview = null);
+    PendingAgentOperationRevision? GetRevision(Guid userId, Guid pendingOperationId);
+    /// <summary>
+    /// Puts back the state from before a revision while the operation still holds <paramref name="expectedFingerprint"/>
+    /// and awaits approval.
+    /// </summary>
+    bool Restore(Guid userId, Guid pendingOperationId, string expectedFingerprint, PendingAgentOperationRevision revision);
     bool Cancel(Guid userId, Guid pendingOperationId, string expectedFingerprint);
     PendingAgentOperationExecution? GetConfirmedExecution(Guid userId, string capabilityId,
         string operationFingerprint, string confirmationToken);
