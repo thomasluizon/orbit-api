@@ -614,6 +614,9 @@ public partial class ProcessUserChatCommandHandlerTests
         return habits;
     }
 
+    /// <summary>Each preview that <see cref="HoldReplayWrites"/> prepared, by its id, with the request that prepared it.</summary>
+    private readonly Dictionary<Guid, (AgentExecuteOperationRequest Request, PendingAgentOperation Preview)> _heldPreviews = [];
+
     private List<AgentExecuteOperationRequest> HoldReplayWrites(params IAiTool[] tools)
     {
         var registry = new AiToolRegistry(tools);
@@ -627,6 +630,7 @@ public partial class ProcessUserChatCommandHandlerTests
             var pending = new PendingAgentOperation(Guid.NewGuid(), request.OperationId, request.OperationId, request.OperationId,
                 AgentRiskClass.Low, AgentConfirmationRequirement.FreshConfirmation, DateTime.UtcNow.AddMinutes(10),
                 Changes: preview?.Changes, ChangeTargetCount: preview?.ChangeTargetCount, Items: preview?.Items, PreviewFingerprint: preview?.PreviewFingerprint);
+            _heldPreviews[pending.Id] = (request, pending);
             return new AgentExecuteOperationResponse(new AgentOperationResult(request.OperationId, request.OperationId,
                 AgentRiskClass.Low, AgentConfirmationRequirement.FreshConfirmation, AgentOperationStatus.PendingConfirmation), PendingOperation: pending);
         });

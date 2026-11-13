@@ -209,13 +209,15 @@ public partial class ProcessUserChatCommandHandler
             && (operation.Access == "write" || ai.ToolRegistry.GetTool(operation.OperationId) is { IsReadOnly: false }));
 
     /// <summary>
-    /// Withdraws only what this turn prepared, so the turn changes nothing that the person had before it. A preview
-    /// that a write of this turn created is closed in the pending operation store too, so no approval, no replay of the
-    /// answer checkpoint and no later turn brings it back. An earlier preview that this turn revised gets its earlier
-    /// state back. An earlier preview that this turn read, or was to close at its end, stays open as it was.
+    /// A turn that leaves part of the request withdraws only what it prepared, so it changes nothing that the person had.
+    /// A preview that a write of this turn created is closed in the pending operation store too, so no approval, no
+    /// replay of the answer checkpoint and no later turn brings it back. An earlier preview that this turn revised gets
+    /// its earlier state back. An earlier preview that this turn read, or was to close at its end, stays as it was.
     /// </summary>
     private void WithdrawPartialPreview(Guid userId, ToolExecutionAccumulator results, string? language)
     {
+        if (!LeavesPartOfTheRequest(results))
+            return;
         results.KeepsEarlierPreview = results.EarlierPreviewCloses.Count > 0
             || results.PendingOperations.Any(pending => results.EarlierPendingIds.Contains(pending.Id));
         foreach (var close in results.EarlierPreviewCloses)

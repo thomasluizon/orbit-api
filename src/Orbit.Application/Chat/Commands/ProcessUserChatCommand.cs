@@ -579,7 +579,6 @@ public partial class ProcessUserChatCommandHandler(
             userLanguage,
             aiStreamSink,
             cancellationToken);
-        await CloseEarlierPreviewsAsync(executionResults, cancellationToken);
         await CombinePendingChangesAsync(request, executionResults, cancellationToken);
         await FinishPlanAsync(request, executionResults);
         cancellationToken.ThrowIfCancellationRequested();
@@ -610,6 +609,7 @@ public partial class ProcessUserChatCommandHandler(
         if (IsEmptyTokenBudgetResponse(toolLoopResult.TokenBudgetExceeded, aiResponse.TextMessage))
             return Result.Failure<ChatResponse>(ErrorMessages.AiUnavailable);
 
+        await CloseEarlierPreviewsAsync(executionResults, cancellationToken);
         var (cards, followUps, facts) = await ComposeFinalReplyAsync(request, context, executionResults,
             toolLoopResult, aiResponse, groundingTurn, cancellationToken);
         var aiMessage = cards.AiMessage;

@@ -13,7 +13,43 @@ namespace Orbit.Application.Chat.Commands;
 
 public partial class ProcessUserChatCommandHandler
 {
+    /// <summary>
+    /// Runs the tool rounds and decides the withdrawal once for every way out of them: a normal end, a provider error, the
+    /// round or token limit, and a cancellation. A turn that leaves part of the request withdraws its preview, and its
+    /// answer says so whatever the last round returned. A cancelled turn has no answer of its own, but it still closes
+    /// its preview, because a block answer replays its checkpoint.
+    /// </summary>
     private async Task<ToolLoopResult> RunToolCallLoopAsync(
+        AiResponse initialResponse,
+        ProcessUserChatCommand request,
+        ChatContext context,
+        ToolExecutionAccumulator executionResults,
+        string? language,
+        Func<AiStreamEvent, Task>? aiStreamSink,
+        CancellationToken cancellationToken)
+    {
+        ToolLoopResult loop;
+        try
+        {
+            loop = await RunToolRoundsAsync(initialResponse, request, context, executionResults, language, aiStreamSink, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            WithdrawPartialPreview(request.UserId, executionResults, language);
+            throw;
+        }
+        WithdrawPartialPreview(request.UserId, executionResults, language);
+        return executionResults.RequestNotPrepared
+            ? loop with
+            {
+                FinalResponse = new AiResponse { TextMessage = RequestNotPreparedMessage(executionResults, language) },
+                HadToolFailure = false,
+                ProviderError = null
+            }
+            : loop;
+    }
+
+    private async Task<ToolLoopResult> RunToolRoundsAsync(
         AiResponse initialResponse,
         ProcessUserChatCommand request,
         ChatContext context,
@@ -35,14 +71,7 @@ public partial class ProcessUserChatCommandHandler
         await RecordModelOfferDismissalsAsync(aiResponse, request, cancellationToken);
 
         if (tokenBudgetExceeded)
-        {
-            LogAiRequestTokenCeilingReached(
-                logger,
-                totalReportedTokens,
-                totalBudgetTokens,
-                AppConstants.MaxAiRequestTotalTokens,
-                iteration);
-        }
+            LogAiRequestTokenCeilingReached(logger, totalReportedTokens, totalBudgetTokens, AppConstants.MaxAiRequestTotalTokens, iteration);
 
         while ((aiResponse.HasToolCalls || RequiresTerminalAnswer(aiResponse, request, context, executionResults)) && !aiResponse.IsTruncated
             && iteration < ChatTurnLimits.MaxToolIterations && !tokenBudgetExceeded)
@@ -60,17 +89,8 @@ public partial class ProcessUserChatCommandHandler
             var roundResult = !aiResponse.HasToolCalls
                 ? await CorrectTerminalAnswerAsync(aiResponse, request, context, executionResults,
                     terminalAnswerCorrectionAttempted, iteration, totalBudgetTokens, cancellationToken)
-                : await ProcessToolCallsAsync(
-                aiResponse,
-                request,
-                context,
-                executionResults,
-                iteration,
-                totalBudgetTokens,
-                correction,
-                language,
-                aiStreamSink,
-                cancellationToken);
+                : await ProcessToolCallsAsync(aiResponse, request, context, executionResults, iteration, totalBudgetTokens,
+                    correction, language, aiStreamSink, cancellationToken);
             if (!aiResponse.HasToolCalls) terminalAnswerCorrectionAttempted = true;
 
             if (roundResult.ProviderError is not null)
@@ -90,14 +110,7 @@ public partial class ProcessUserChatCommandHandler
             totalBudgetTokens += roundResult.Response.RequestBudgetTokenCount ?? roundResult.Response.ReportedTokenCount;
             tokenBudgetExceeded = !unmetered && totalBudgetTokens > AppConstants.MaxAiRequestTotalTokens;
             if (tokenBudgetExceeded)
-            {
-                LogAiRequestTokenCeilingReached(
-                    logger,
-                    totalReportedTokens,
-                    totalBudgetTokens,
-                    AppConstants.MaxAiRequestTotalTokens,
-                    iteration);
-            }
+                LogAiRequestTokenCeilingReached(logger, totalReportedTokens, totalBudgetTokens, AppConstants.MaxAiRequestTotalTokens, iteration);
         }
 
         if (hasUnexecutedCalls && executionResults.EvalTrace is { } remainingTrace)
@@ -110,12 +123,6 @@ public partial class ProcessUserChatCommandHandler
         {
             hadToolFailure = true;
             aiResponse = MessageResponse(language);
-        }
-        if (LeavesPartOfTheRequest(executionResults))
-        {
-            WithdrawPartialPreview(request.UserId, executionResults, language);
-            hadToolFailure = false;
-            aiResponse = new AiResponse { TextMessage = RequestNotPreparedMessage(executionResults, language) };
         }
 
         return ValidateTerminalAnswer(new ToolLoopResult(
@@ -133,10 +140,14 @@ public partial class ProcessUserChatCommandHandler
         results.OperationResults.Any(operation => operation.Status == AgentOperationStatus.Succeeded
             && ai.ToolRegistry.GetTool(operation.OperationId) is { IsReadOnly: false });
 
+    /// <summary>
+    /// Keeps the current previews of a turn whose last continuation failed. The answer of a withdrawn turn is final, so
+    /// no recovery replaces it.
+    /// </summary>
     private ToolLoopResult RecoverOutcomeContinuation(ProcessUserChatCommand request,
         ToolExecutionAccumulator results, ToolLoopResult loop, string? language, CancellationToken cancellationToken)
     {
-        if (request.BlockAnswer is not null || results.RequiresCreationProposal)
+        if (request.BlockAnswer is not null || results.RequiresCreationProposal || results.RequestNotPrepared)
             return loop;
         if (loop.TokenBudgetExceeded && RecoverBudgetOutcome(request, results, language, cancellationToken) is { } recovery)
             return loop with { FinalResponse = recovery, ProviderError = null };

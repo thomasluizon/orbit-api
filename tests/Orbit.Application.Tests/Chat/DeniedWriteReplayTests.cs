@@ -92,33 +92,30 @@ public partial class ProcessUserChatCommandHandlerTests
 
     /// <summary>
     /// The answer turn of run 4: the stored <c>multipleChoice</c> card, the answer with the last two records, and the
-    /// model rounds as recorded replies.
+    /// model rounds as recorded replies. The block store keeps the answer checkpoint and the answer, as the real store
+    /// does, so a turn that fails replays its checkpoint. <paramref name="first"/> replaces the first reply of run 4,
+    /// and <paramref name="lastReply"/> follows the recorded replies.
     /// </summary>
     private async Task<DeniedWriteRun> RunDeniedAnswerTurnAsync(string language, Func<Habit[], AiResponse[]> continuations,
-        Action<Habit[]>? arrange = null)
+        Action<Habit[]>? arrange = null, Func<Habit[], AiResponse>? first = null, Task<Result<AiResponse>>? lastReply = null)
     {
         var user = User.Create("Reader", "reader@example.test").Value;
         user.SetLanguage(language);
         SetupUserAndPayGate(user);
         EnableComposition();
-        _unitOfWork.PassThroughTransactions<Result<PreparedAiBlockAnswer>>();
         var (parent, children) = SetupSameTitleChildren("Water - 710ml", 6);
         var delete = new BulkDeleteHabitsTool(_mediator, _habitRepo);
         var update = new BulkUpdateHabitsTool(_mediator);
         var handler = CreateHandler(delete, update);
         var held = HoldReplayWrites(delete, update);
         DenyUnownedHabitTargets([parent, .. children]);
-        var block = StoredRecordQuestion(children, language == "en"
+        var block = RetryBlock(RecordQuestion(children, language == "en"
             ? "There are 6 Water - 710ml, not 7. Which two do you want to delete?"
-            : "Há 6 Water - 710ml, não 7. Quais dois você quer excluir?");
+            : "Há 6 Water - 710ml, não 7. Quais dois você quer excluir?"));
         _aiIntentService.SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success(new AiResponse
-            {
-                ConversationContext = TestConversationContext,
-                ToolCalls = [Run4Rename(children), Run4Delete(children)]
-            }));
+            .Returns(Result.Success(first?.Invoke(children) ?? Calls(Run4Rename(children), Run4Delete(children))));
         var toolResults = new List<IReadOnlyList<AiToolCallResult>>();
-        var replies = continuations(children).Select(Result.Success).ToArray();
+        var replies = Replies(continuations(children), lastReply);
         _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
                 Arg.Do<IReadOnlyList<AiToolCallResult>>(results => toolResults.Add([.. results])),
                 Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
@@ -130,6 +127,9 @@ public partial class ProcessUserChatCommandHandlerTests
             ClientContext: new(SupportsParts: true, SupportsPendingOperationChanges: true, PartKinds: ["choice", "question"])), default);
         return new DeniedWriteRun(result, children, toolResults, held);
     }
+
+    private static Task<Result<AiResponse>>[] Replies(AiResponse[] recorded, Task<Result<AiResponse>>? lastReply) =>
+        [.. recorded.Select(reply => Task.FromResult(Result.Success(reply))), .. lastReply is null ? [] : new[] { lastReply }];
 
     private static AiResponse Calls(params AiToolCall[] calls) => new() { ConversationContext = TestConversationContext, ToolCalls = calls };
 
@@ -223,10 +223,11 @@ public partial class ProcessUserChatCommandHandlerTests
     /// <summary>
     /// A turn without a card over six sub-habits with distinct titles. <c>query_habits</c> succeeds with the six
     /// sub-habits, each write prepares unless a target is not one of the person's records, and the model rounds are
-    /// recorded replies.
+    /// recorded replies. <paramref name="lastReply"/> follows the recorded replies.
     /// </summary>
     private async Task<DeniedWriteRun> RunRequestTurnAsync(string language, string message, Func<Habit[], AiResponse> first,
-        Func<Habit[], AiResponse[]> continuations, Action<Habit[]>? arrange = null, string? confirmationToken = null)
+        Func<Habit[], AiResponse[]> continuations, Action<Habit[]>? arrange = null, string? confirmationToken = null,
+        Task<Result<AiResponse>>? lastReply = null)
     {
         var user = User.Create("Reader", "reader@example.test").Value;
         user.SetLanguage(language);
@@ -254,7 +255,7 @@ public partial class ProcessUserChatCommandHandlerTests
         arrange?.Invoke(children);
         SetupAiResponse(first(children));
         var toolResults = new List<IReadOnlyList<AiToolCallResult>>();
-        var replies = continuations(children).Select(Result.Success).ToArray();
+        var replies = Replies(continuations(children), lastReply);
         _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
                 Arg.Do<IReadOnlyList<AiToolCallResult>>(results => toolResults.Add([.. results])),
                 Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
@@ -466,6 +467,90 @@ public partial class ProcessUserChatCommandHandlerTests
         run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
         run.Result.Value.PendingOperations.Should().BeNullOrEmpty("the rename half of the request was not prepared");
         run.Result.Value.AiMessage.Should().Be(NotPreparedFor(language));
+    }
+
+    /// <summary>
+    /// The pending operation store keeps each preview that the executor prepares as awaiting until a cancel closes it,
+    /// as the real store does. The plain substitute reads no preview as awaiting, so the recovery after a provider error
+    /// drops each preview as stale and hides a preview that holds half of the request.
+    /// </summary>
+    private void StorePreparedPreviews()
+    {
+        var closed = new HashSet<Guid>();
+        PendingAgentOperationExecution? Stored(Guid id) => !closed.Contains(id) && _heldPreviews.TryGetValue(id, out var held)
+            ? new(id, held.Preview.CapabilityId, held.Request.OperationId, held.Request.Arguments, AgentExecutionSurface.Chat,
+                held.Preview.ConfirmationRequirement, held.Preview.PreviewFingerprint)
+            : null;
+        _pendingOperationStore.IsAwaitingConfirmation(UserId, Arg.Any<Guid>()).Returns(call => Stored(call.ArgAt<Guid>(1)) is not null);
+        _pendingOperationStore.GetExecution(UserId, Arg.Any<Guid>()).Returns(call => Stored(call.ArgAt<Guid>(1)));
+        _pendingOperationStore.Cancel(UserId, Arg.Any<Guid>(), Arg.Any<string>())
+            .Returns(call => Stored(call.ArgAt<Guid>(1)) is not null && closed.Add(call.ArgAt<Guid>(1)));
+    }
+
+    /// <summary>
+    /// The continuation after the round that prepares the sibling: no text and no call, as the preview tool result
+    /// asks, a provider failure, or a cancellation of the turn.
+    /// </summary>
+    private static Task<Result<AiResponse>> FailedReply(string failure) => failure switch
+    {
+        "noOutput" => Task.FromResult(Result.Failure<AiResponse>(ErrorMessages.AiNoOutput)),
+        "unavailable" => Task.FromResult(Result.Failure<AiResponse>(ErrorMessages.AiUnavailable)),
+        _ => Task.FromException<Result<AiResponse>>(new OperationCanceledException())
+    };
+
+    private void ShouldHaveClosedTheDelete()
+    {
+        var (request, preview) = _heldPreviews.Values.Should()
+            .ContainSingle(held => held.Request.OperationId == "bulk_delete_habits", "the sibling delete prepared").Subject;
+        _pendingOperationStore.Received(1).Cancel(UserId, preview.Id,
+            AgentOperationFingerprint.Compute("bulk_delete_habits", request.Arguments.GetRawText()));
+        _pendingOperationStore.IsAwaitingConfirmation(UserId, preview.Id).Should().BeFalse("no approval brings the delete back");
+    }
+
+    /// <summary>
+    /// The same lone denial and sibling delete, but the continuation after the delete round fails. The turn leaves the
+    /// loop with a provider error, and still withdraws the delete, closes it in the store and says so.
+    /// </summary>
+    [Theory]
+    [InlineData("en", "noOutput")]
+    [InlineData("pt-BR", "noOutput")]
+    [InlineData("en", "unavailable")]
+    [InlineData("pt-BR", "unavailable")]
+    public async Task DeniedWrite_AProviderErrorAfterTheSiblingRoundStillLeavesNoPreview(string language, string failure)
+    {
+        var run = await RunRequestTurnAsync(language, RequestMessage(language), children => Calls(RenameOneUnknown(children)),
+            children => [Calls(Run4Delete(children))], _ => StorePreparedPreviews(), lastReply: FailedReply(failure));
+
+        run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
+        run.Result.Value.PendingOperations.Should().BeNullOrEmpty("the rename half of the request was not prepared");
+        run.Result.Value.AiMessage.Should().Be(NotPreparedFor(language));
+        ShouldHaveClosedTheDelete();
+    }
+
+    private static string CommittedFor(string language) => language == "en"
+        ? "I couldn't finish my reply, and nothing changes until you approve."
+        : "Não consegui terminar minha resposta, e nada muda até você aprovar.";
+
+    /// <summary>
+    /// The answer turn of run 4 with the cut-short rename alone in the first round, so the denial keeps the base path,
+    /// and the delete in a later round. The delete writes the answer checkpoint, and then the continuation fails. The
+    /// turn withdraws the delete and closes it in the store, so neither the answer nor a replay of the checkpoint holds
+    /// it. A cancelled turn has no answer of its own, and the block answer replays the checkpoint without the delete.
+    /// </summary>
+    [Theory]
+    [InlineData("en", "noOutput")]
+    [InlineData("pt-BR", "noOutput")]
+    [InlineData("en", "cancel")]
+    [InlineData("pt-BR", "cancel")]
+    public async Task DeniedWrite_AnAnswerTurnThatFailsAfterTheSiblingRoundLeavesNoPreview(string language, string failure)
+    {
+        var run = await RunDeniedAnswerTurnAsync(language, children => [Calls(Run4Delete(children))], _ => StorePreparedPreviews(),
+            first: children => Calls(Run4Rename(children)), lastReply: FailedReply(failure));
+
+        run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
+        run.Result.Value.PendingOperations.Should().BeNullOrEmpty("the rename half of the request was not prepared");
+        run.Result.Value.AiMessage.Should().Be(failure == "cancel" ? CommittedFor(language) : NotPreparedFor(language));
+        ShouldHaveClosedTheDelete();
     }
 
     /// <summary>
@@ -812,6 +897,24 @@ public partial class ProcessUserChatCommandHandlerTests
         _pendingOperationStore.Received(1).Cancel(UserId, EarlierPreviewId,
             AgentOperationFingerprint.Compute("update_habit", EarlierPreviewArguments(run.Children, RenameTitle).GetRawText()));
         run.Result.Value.PendingOperations.Should().NotBeNullOrEmpty().And.NotContain(pending => pending.Id == EarlierPreviewId);
+    }
+
+    /// <summary>
+    /// The same bulk rename, but the continuation after it fails and the turn ends with the provider error instead of
+    /// its answer. The earlier preview that the rename covers stays approvable.
+    /// </summary>
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task DeniedWrite_ATurnThatEndsWithAProviderErrorLeavesTheEarlierPreviewThatItsBulkWriteCovered(string language)
+    {
+        var run = await RunRequestTurnAsync(language, RequestMessage(language),
+            children => Calls(InspectEarlierPreview(), CorrectedRename(children), Run4Delete(children)),
+            _ => [], ArrangeCoveredEarlierPreview, lastReply: FailedReply("unavailable"));
+
+        run.Result.ErrorCode.Should().Be(ErrorCodes.AiUnavailable, "the turn ends with the provider error");
+        run.Held.Should().Contain(request => request.OperationId == "bulk_update_habits", "the bulk rename prepared");
+        _pendingOperationStore.DidNotReceive().Cancel(UserId, EarlierPreviewId, Arg.Any<string>());
     }
 
     private static string SameRenameMessage(string language) => language == "en"
