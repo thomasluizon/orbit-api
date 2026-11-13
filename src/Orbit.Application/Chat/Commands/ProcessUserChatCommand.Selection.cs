@@ -228,11 +228,18 @@ public partial class ProcessUserChatCommandHandler
     /// Writes that make the same change, each to a part of a group, make one change to the whole group. That is a
     /// whole-set write and not a split, so only a message that names the whole set settles it.
     /// </summary>
-    private static bool MakeOneChange(IReadOnlyList<AiToolCall> writes)
-    {
-        var change = ChangeOf(writes[0].Args);
-        return writes.All(write => write.Name == writes[0].Name && JsonNode.DeepEquals(ChangeOf(write.Args), change));
-    }
+    private static bool MakeOneChange(IReadOnlyList<AiToolCall> writes) =>
+        writes.All(write => MakeSameChange(write, writes[0]));
+
+    /// <summary>
+    /// Two writes make the same change when one tool sends the same arguments apart from the record ids, or when they
+    /// are the single and the bulk form of one operation, such as delete_habit and bulk_delete_habits. The two forms
+    /// carry the change in different arguments, so they compare by the operation alone.
+    /// </summary>
+    private static bool MakeSameChange(AiToolCall write, AiToolCall other) => write.Name == other.Name
+        ? JsonNode.DeepEquals(ChangeOf(write.Args), ChangeOf(other.Args))
+        : BulkToolRepeatGuard.IsBulkAlternative(write.Name, other.Name)
+            || BulkToolRepeatGuard.IsBulkAlternative(other.Name, write.Name);
 
     /// <summary>
     /// The arguments of a write without the record ids, so that two writes compare by their change alone.

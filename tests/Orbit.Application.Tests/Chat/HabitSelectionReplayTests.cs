@@ -438,9 +438,10 @@ public partial class ProcessUserChatCommandHandlerTests
         SetupSelectionHabits(habits);
         var query = new QueryHabitsTool(_habitRepo, _userRepo, _userDateService, _scheduleLogReader);
         var delete = new BulkDeleteHabitsTool(_mediator, _habitRepo);
+        var deleteOne = new DeleteHabitTool(_mediator, _habitRepo);
         var update = new BulkUpdateHabitsTool(_mediator);
-        var handler = CreateHandler(query, delete, update);
-        var held = HoldSelectionReplayWrites(query, delete, update);
+        var handler = CreateHandler(query, delete, deleteOne, update);
+        var held = HoldSelectionReplayWrites(query, delete, deleteOne, update);
         SetupAiResponse(new AiResponse
         {
             ConversationContext = TestConversationContext,
@@ -601,6 +602,25 @@ public partial class ProcessUserChatCommandHandlerTests
         var run = await RunSameTitleTurnAsync(message, title,
             children => [UpdateCall("first", children[..1], DailyUpdate), UpdateCall("second", children[1..], DailyUpdate)],
             language, title, 2);
+
+        run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
+        run.Held.Should().BeEmpty("the reply was: " + run.Result.Value.AiMessage);
+        run.Result.Value.AiMessage.Should().Be(SelectionQuestionFor(title, language));
+    }
+
+    /// <summary>
+    /// delete_habit for one Walk and bulk_delete_habits for the other make one delete in two forms, not a split.
+    /// </summary>
+    [Theory]
+    [InlineData("Delete Walk", "Walk", "en")]
+    [InlineData("Exclua Caminhada", "Caminhada", "pt-BR")]
+    public async Task SelectionReplay_SingleAndBulkFormOfOneChangeAreNotASplit(string message, string title, string language)
+    {
+        var run = await RunSameTitleTurnAsync(message, title, children =>
+            [
+                new("delete_habit", "first", JsonSerializer.SerializeToElement(new { habit_id = children[0].Id })),
+                new("bulk_delete_habits", "second", JsonSerializer.SerializeToElement(new { habit_ids = children[1..].Select(child => child.Id) }))
+            ], language, title, 2);
 
         run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
         run.Held.Should().BeEmpty("the reply was: " + run.Result.Value.AiMessage);

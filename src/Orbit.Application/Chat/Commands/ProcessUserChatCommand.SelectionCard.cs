@@ -163,26 +163,37 @@ public partial class ProcessUserChatCommandHandler
     private static string Shorten(string text, int max) => text.Length <= max ? text : text[..(max - 1)] + "…";
 
     /// <summary>
-    /// Keeps the records that a refused write named, so a later round can tell which set of an answered choice the
-    /// refused change was for.
+    /// A write that the policy refused or that failed, with the records that it named.
+    /// </summary>
+    internal sealed record RefusedWrite(AiToolCall Call, IReadOnlySet<string> Targets);
+
+    /// <summary>
+    /// Keeps each refused write with the records that it named, so a later round can tell which set of an answered
+    /// choice the refused change was for and which change it made.
     /// </summary>
     private static void RecordRefusedWrite(AiToolCall call, ToolCallOutcome outcome, ToolExecutionAccumulator results)
     {
         if (outcome.OperationResult?.Status is AgentOperationStatus.Denied or AgentOperationStatus.Failed)
-            results.RefusedWriteTargets.Add(EffectiveWriteTargetIds(call, results).Select(id => id.ToString())
-                .ToHashSet(StringComparer.OrdinalIgnoreCase));
+            results.RefusedWrites.Add(new RefusedWrite(call, EffectiveWriteTargetIds(call, results)
+                .Select(id => id.ToString()).ToHashSet(StringComparer.OrdinalIgnoreCase)));
     }
 
     /// <summary>
-    /// After an answered choice that splits records into a chosen and an unchosen set, the prepared changes touch
-    /// only one set, and a refused write of the turn was a separate change to the other set: it named a record of
-    /// that set and no record of the prepared set. The request had an action for each set, so the other set still
-    /// needs its change. Returns the records of that set, or null.
+    /// The tool of a refused second action for the other set of an answered choice, and the records of that set.
     /// </summary>
-    private static IReadOnlyList<string>? UnpreparedAnsweredSet(ToolExecutionAccumulator results)
+    private sealed record UnpreparedAnsweredChange(string ToolName, IReadOnlyList<string> Records);
+
+    /// <summary>
+    /// The prepared changes of an answered choice touch one set, and a refused write named the other set, no record
+    /// of the prepared set, and a different change from each prepared write by the split rule's test. A refused
+    /// change that a prepared write also makes is a guess with the wrong target. The server asks once, so a turn
+    /// stays open for this rule at most one more round. Returns the refused change and the other set, or null.
+    /// </summary>
+    private static UnpreparedAnsweredChange? UnpreparedAnsweredSet(ToolExecutionAccumulator results)
     {
-        if (results.AnsweredChoice is not { ChosenTargets.Count: > 0, UnchosenTargets.Count: > 0 } choice
-            || results.RefusedWriteTargets.Count == 0)
+        if (results.AskedForAnsweredSet
+            || results.AnsweredChoice is not { ChosenTargets.Count: > 0, UnchosenTargets.Count: > 0 } choice
+            || results.RefusedWrites.Count == 0)
             return null;
         var prepared = results.PendingOperations
             .SelectMany(operation => (operation.Items ?? []).Select(item => item.EntityId)
@@ -192,19 +203,26 @@ public partial class ProcessUserChatCommandHandler
         if (chosen == choice.UnchosenTargets.Any(prepared.Contains))
             return null;
         var (preparedSet, remaining) = chosen ? (choice.ChosenTargets, choice.UnchosenTargets) : (choice.UnchosenTargets, choice.ChosenTargets);
-        return results.RefusedWriteTargets.Any(targets => remaining.Any(targets.Contains) && !preparedSet.Any(targets.Contains))
-            ? remaining : null;
+        var preparedWrites = results.PreviousWriteCalls
+            .Where(write => EffectiveWriteTargetIds(write, results).Any(id => prepared.Contains(id.ToString()))).ToArray();
+        return preparedWrites.Length > 0 && results.RefusedWrites.FirstOrDefault(refused =>
+                remaining.Any(refused.Targets.Contains) && !preparedSet.Any(refused.Targets.Contains)
+                && !preparedWrites.Any(write => MakeSameChange(refused.Call, write))) is { } second
+            ? new UnpreparedAnsweredChange(second.Call.Name, remaining) : null;
     }
 
     /// <summary>
-    /// Tells the model, on each write of the round that it prepared, which answered records still have no change,
-    /// so the remaining action is prepared in this turn and the preview holds the whole request.
+    /// Uses the rule's one round: tells the model, on each write of the round that it prepared, which answered
+    /// records a refused second action was for. The model prepares that same change again only when the person's
+    /// request asked for it.
     /// </summary>
     private static void NoteUnpreparedAnsweredSet(List<AiToolCallResult> toolResults,
         IReadOnlyDictionary<string, ToolCallOutcome> outcomes, ToolExecutionAccumulator results)
     {
         if (UnpreparedAnsweredSet(results) is not { } remaining)
             return;
+        results.AskedForAnsweredSet = true;
+        var instruction = $"This approval preview covers only one of the two sets of the answered selection. A refused {remaining.ToolName} write in this turn targeted remaining_answered_records. Only if the person's request asked for that change to those records, send {remaining.ToolName} again with the same change and those exact IDs now. Otherwise complete the turn with no change to them.";
         for (var index = 0; index < toolResults.Count; index++)
             if (outcomes.GetValueOrDefault(toolResults[index].Id)?.PendingOperation is not null)
                 toolResults[index] = toolResults[index] with
@@ -212,8 +230,8 @@ public partial class ProcessUserChatCommandHandler
                     Payload = new
                     {
                         preview = toolResults[index].Payload,
-                        remaining_answered_records = remaining,
-                        instruction = "This approval preview covers only one of the two sets of the answered selection, and a refused write in this turn was a separate change to remaining_answered_records. Prepare the requested change for remaining_answered_records now, with those exact IDs, so the preview holds the whole request."
+                        remaining_answered_records = remaining.Records,
+                        instruction
                     }
                 };
     }
