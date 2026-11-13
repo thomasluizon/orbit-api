@@ -164,4 +164,129 @@ public partial class ProcessUserChatCommandHandlerTests
         run.Result.Value.PendingOperations.Should().BeNullOrEmpty("the rename half of the request was not prepared");
         run.Result.Value.AiMessage.Should().Be(NotPreparedFor(language));
     }
+
+    /// <summary>
+    /// A request in a turn without a card, over six sub-habits with distinct titles, so no selection guard holds a
+    /// write. The first round sends the delete beside a second write, and the continuations are recorded replies.
+    /// </summary>
+    private async Task<DeniedWriteRun> RunDeniedRequestTurnAsync(string language, Func<Habit[], AiToolCall> second,
+        Func<Habit[], AiResponse[]> continuations, bool failSecondAfterDispatch = false)
+    {
+        var user = User.Create("Reader", "reader@example.test").Value;
+        user.SetLanguage(language);
+        SetupUserAndPayGate(user);
+        var parent = CreateHabit("Water");
+        var children = Enumerable.Range(1, 6).Select(index => CreateHabit($"Water {index}")).ToArray();
+        foreach (var child in children) child.SetParentHabitId(parent.Id);
+        SetupSelectionHabits([parent, .. children]);
+        var delete = new BulkDeleteHabitsTool(_mediator, _habitRepo);
+        var update = new BulkUpdateHabitsTool(_mediator);
+        var updateOne = new UpdateHabitTool(_habitRepo, _userDateService, _mediator);
+        var handler = CreateHandler(delete, update, updateOne);
+        var held = HoldReplayWrites(delete, update, updateOne);
+        DenyUnownedHabitTargets([parent, .. children]);
+        if (failSecondAfterDispatch)
+            _operationExecutor.ExecuteAsync(Arg.Is<AgentExecuteOperationRequest>(request => request.OperationId == updateOne.Name),
+                    Arg.Any<CancellationToken>())
+                .Returns(new AgentExecuteOperationResponse(new AgentOperationResult(updateOne.Name, updateOne.Name,
+                    AgentRiskClass.Low, AgentConfirmationRequirement.FreshConfirmation, AgentOperationStatus.Failed,
+                    PolicyReason: "execution_failed", Access: "write")));
+        SetupAiResponse(Calls(Run4Delete(children), second(children)));
+        var toolResults = new List<IReadOnlyList<AiToolCallResult>>();
+        var replies = continuations(children).Select(Result.Success).ToArray();
+        _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
+                Arg.Do<IReadOnlyList<AiToolCallResult>>(results => toolResults.Add([.. results])),
+                Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(replies[0], replies[1..]);
+        var message = language == "en"
+            ? "delete Water 5 and Water 6, and rename the other 4 to Water - 1.18L"
+            : "apaga Water 5 e Water 6, e os outros 4 coloca Water - 1.18L";
+        var result = await handler.Handle(new ProcessUserChatCommand(UserId, message,
+            ClientContext: new(SupportsParts: true, SupportsPendingOperationChanges: true, PartKinds: ["choice", "question"])), default);
+        return new DeniedWriteRun(result, children, toolResults, held);
+    }
+
+    private static readonly Guid UnknownHabitId = Guid.Parse("5d0c7a43-2f61-4b8e-9c3a-7e1f0b6d2a95");
+
+    /// <summary>A single rename whose id is a GUID of no record of the person.</summary>
+    private static AiToolCall RenameOneUnknown(Habit[] children) => new("update_habit", "rename-one",
+        JsonSerializer.SerializeToElement(new { habit_id = UnknownHabitId, title = RenameTitle }));
+
+    [Theory]
+    [InlineData("en", "bulk")]
+    [InlineData("pt-BR", "bulk")]
+    [InlineData("en", "single")]
+    [InlineData("pt-BR", "single")]
+    public async Task DeniedWrite_TurnWithoutACardCorrectsTheDeniedWriteOrLeavesNoPreview(string language, string form)
+    {
+        Func<Habit[], AiToolCall> second = form == "bulk" ? Run4Rename : RenameOneUnknown;
+        var corrected = await RunDeniedRequestTurnAsync(language, second, children => [Calls(CorrectedRename(children)), Text(language)]);
+
+        corrected.Result.IsSuccess.Should().BeTrue(corrected.Result.Error);
+        corrected.ToolResults[0].Should().ContainSingle(result => !result.Success).Which.Error
+            .Should().Contain(form == "bulk" ? CutShort(corrected.Children[1].Id) : UnknownHabitId.ToString());
+        corrected.Result.Value.PendingOperations!.SelectMany(operation => operation.Items!).Select(item => item.EntityId)
+            .Should().BeEquivalentTo(corrected.Children.Select(child => child.Id));
+
+        var failed = await RunDeniedRequestTurnAsync(language, second, _ => [Text(language), Text(language)]);
+
+        failed.Result.IsSuccess.Should().BeTrue(failed.Result.Error);
+        failed.Result.Value.PendingOperations.Should().BeNullOrEmpty();
+        failed.Result.Value.AiMessage.Should().Be(NotPreparedFor(language));
+    }
+
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task DeniedWrite_AWriteThatFailsAfterDispatchBesideAPreparedWriteLeavesNoPreview(string language)
+    {
+        var run = await RunDeniedRequestTurnAsync(language, children => new("update_habit", "rename-one",
+                JsonSerializer.SerializeToElement(new { habit_id = children[0].Id, title = RenameTitle })),
+            _ => [Text(language), Text(language)], failSecondAfterDispatch: true);
+
+        run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
+        run.Result.Value.PendingOperations.Should().BeNullOrEmpty("the rename failed, so the delete alone is half of the request");
+        run.Result.Value.AiMessage.Should().Be(NotPreparedFor(language), JsonSerializer.Serialize(run.Result.Value.Actions));
+    }
+
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task DeniedWrite_AForeignIdGetsTheSameTextAsAnIdThatDoesNotExist(string language)
+    {
+        var foreign = Guid.NewGuid();
+        var missing = Guid.NewGuid();
+        string ErrorFor(DeniedWriteRun run) => run.ToolResults[0].Single(result => !result.Success).Error!;
+        AiToolCall Rename(Guid id) => new("update_habit", "rename-one",
+            JsonSerializer.SerializeToElement(new { habit_id = id, title = RenameTitle }));
+
+        var foreignRun = await RunDeniedRequestTurnAsync(language, _ => Rename(foreign), _ => [Text(language), Text(language)]);
+        var missingRun = await RunDeniedRequestTurnAsync(language, _ => Rename(missing), _ => [Text(language), Text(language)]);
+
+        ErrorFor(foreignRun).Replace(foreign.ToString(), "ID").Should().Be(ErrorFor(missingRun).Replace(missing.ToString(), "ID"));
+        ErrorFor(foreignRun).Should().Contain(foreign.ToString()).And.Contain("not IDs of this person's records");
+        foreignRun.Result.Value.Operations.Should().ContainSingle(operation => operation.Status == AgentOperationStatus.Denied)
+            .Which.PolicyReason.Should().Be("target_not_owned:update_habit:habit");
+    }
+
+    /// <summary>
+    /// Lead 3 of part 3: the answer turn of run 4 already gives the model every candidate id as server text, the
+    /// selected ones and the remaining ones, so the cut-short id did not come from a missing id.
+    /// </summary>
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task DeniedWrite_Run4AnswerTurnContextHoldsTheSelectedAndTheRemainingIds(string language)
+    {
+        AiToolRequest? sent = null;
+        _aiIntentService.SendWithToolsAsync(Arg.Do<AiToolRequest>(value => sent = value),
+            Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
+
+        var run = await RunDeniedAnswerTurnAsync(language, children => [Calls(CorrectedRename(children)), Text(language)]);
+
+        run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
+        sent!.DynamicContext.Should().Contain("Validated choice selection: ");
+        foreach (var child in run.Children)
+            sent.DynamicContext.Should().Contain(child.Id.ToString());
+    }
 }
