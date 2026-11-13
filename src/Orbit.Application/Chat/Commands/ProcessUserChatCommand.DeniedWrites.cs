@@ -27,17 +27,41 @@ public partial class ProcessUserChatCommandHandler
             if (!outcomes.TryGetValue(candidate.Id, out var outcome))
                 continue;
             correction.Accept(original, outcome);
-            if (!outcome.ToolResult.Success)
-                continue;
-            if (original.Outcome.ActionResult is { } action)
-                results.ActionResults.Remove(action);
-            if (original.Outcome.OperationResult is { } operation)
-                results.OperationResults.Remove(operation);
-            if (original.Outcome.PolicyDenial is { } denial)
-                results.PolicyDenials.Remove(denial);
-            results.ToolResults.Remove(original.Outcome.ToolResult);
+            if (outcome.ToolResult.Success)
+                DropDeniedWrite(original.Outcome, results);
         }
         return outcomes;
+    }
+
+    /// <summary>
+    /// After a denial with no prepared write beside it, the model can read and send the write again without a
+    /// correction. A write of the same operation in a later round that succeeds is that write again, so the denial
+    /// leaves the turn: the end of the loop does not count it as a missing part of the request, and the person sees
+    /// no failure for it.
+    /// </summary>
+    private static void ReplaceResentDeniedWrites(IReadOnlyList<AiToolCall> calls,
+        IReadOnlyDictionary<string, ToolCallOutcome> outcomes, ToolExecutionAccumulator results)
+    {
+        foreach (var call in calls)
+        {
+            if (!outcomes.TryGetValue(call.Id, out var outcome) || !outcome.ToolResult.Success
+                || results.CorrectionOccurrences.FirstOrDefault(item => IsOwnershipWriteDenial(item.Outcome)
+                    && SameOperation(item.Call.Name, call.Name)) is not { } denied)
+                continue;
+            results.CorrectionOccurrences.Remove(denied);
+            DropDeniedWrite(denied.Outcome, results);
+        }
+    }
+
+    private static void DropDeniedWrite(ToolCallOutcome denied, ToolExecutionAccumulator results)
+    {
+        if (denied.ActionResult is { } action)
+            results.ActionResults.Remove(action);
+        if (denied.OperationResult is { } operation)
+            results.OperationResults.Remove(operation);
+        if (denied.PolicyDenial is { } denial)
+            results.PolicyDenials.Remove(denial);
+        results.ToolResults.Remove(denied.ToolResult);
     }
 
     /// <summary>
@@ -53,8 +77,8 @@ public partial class ProcessUserChatCommandHandler
         var unknown = new List<string>();
         CollectUnknownTargets(call.Args, owned, unknown);
         var error = unknown.Count > 0
-            ? $"These target IDs are not IDs of this person's records: {string.Join(", ", unknown.Distinct(StringComparer.Ordinal))}. Copy each ID exactly, with all 36 characters, from the query_habits result or the validated choice selection of this turn."
-            : "A target ID is not an ID of this person's records. Copy each ID exactly, with all 36 characters, from a read result or the validated choice selection of this turn.";
+            ? $"These target IDs are not IDs of this person's records: {string.Join(", ", unknown.Distinct(StringComparer.Ordinal))}. Copy each ID exactly, with all 36 characters, from the Active Habit Index, a query_habits result or the validated choice selection of this turn."
+            : "A target ID is not an ID of this person's records. Copy each ID exactly, with all 36 characters, from the Active Habit Index, a read result or the validated choice selection of this turn.";
         return outcome with { ToolResult = outcome.ToolResult with { Error = error } };
     }
 

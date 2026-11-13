@@ -211,11 +211,14 @@ public partial class ProcessUserChatCommandHandler
         var outcomesByCallId = correction is null
             ? await ExecuteToolCallsAsync(orderedCalls, request, executionResults, language, cancellationToken)
             : await ExecuteCorrectionsAsync(orderedCalls, correction, request, executionResults, language, cancellationToken);
+        if (correction is null)
+            ReplaceResentDeniedWrites(orderedCalls, outcomesByCallId, executionResults);
         await CompletePlanCallsAsync(outcomesByCallId, request, executionResults);
         var toolResults = RecordToolRound(aiResponse, orderedCalls, outcomesByCallId, executionResults, correction is not null);
         RecordReadOfferIntents(aiResponse, request, executionResults);
         executionResults.CapturePreviewDiscussionText(aiResponse.TextMessage);
-        var hadToolFailure = outcomesByCallId.Values.Any(IsToolFailure);
+        var holdsPreparedWrite = HoldsPreparedWrite(executionResults);
+        var hadToolFailure = outcomesByCallId.Values.Any(outcome => IsToolFailure(outcome, holdsPreparedWrite));
 
         if (correction is not null)
             return correction.HasUnresolvedFailures
@@ -243,7 +246,7 @@ public partial class ProcessUserChatCommandHandler
                 return recovered;
             if (!HasCorrectionAllowance(request, context, executionResults, iteration, totalBudgetTokens))
                 return new ToolRoundResult(MessageResponse(language), HadToolFailure: true);
-            correction = new RejectedCallCorrection(executionResults.CorrectionOccurrences);
+            correction = new RejectedCallCorrection(executionResults.CorrectionOccurrences, holdsPreparedWrite);
             OfferCorrections(toolResults, outcomesByCallId);
         }
 
@@ -279,8 +282,8 @@ public partial class ProcessUserChatCommandHandler
             Correction: correction);
     }
 
-    private static bool IsToolFailure(ToolCallOutcome outcome) =>
-        IsOwnershipReadDenial(outcome) || IsOwnershipWriteDenial(outcome)
+    private static bool IsToolFailure(ToolCallOutcome outcome, bool holdsPreparedWrite) =>
+        IsOwnershipReadDenial(outcome) || holdsPreparedWrite && IsOwnershipWriteDenial(outcome)
         || outcome.OperationResult is { Status: AgentOperationStatus.Failed } operation && operation.ErrorCode != ErrorCodes.HabitLimitReached;
 
     private AiToolCall NormalizeExecutionArguments(AiToolCall call) => ai.ToolRegistry.GetTool(call.Name) is { } tool
@@ -421,9 +424,10 @@ public partial class ProcessUserChatCommandHandler
         iteration < ChatTurnLimits.MaxToolIterations
         && (context.EnabledFeatureFlags.Contains(FeatureFlagKeys.AiEvalUnmetered, StringComparer.Ordinal)
             || totalBudgetTokens < AppConstants.MaxAiRequestTotalTokens)
-        && (request.BlockAnswer is null || RejectedCallCorrection.ReplacesDeniedWritesOf(results.CorrectionOccurrences))
+        && (request.BlockAnswer is null
+            || RejectedCallCorrection.ReplacesDeniedWritesOf(results.CorrectionOccurrences, HoldsPreparedWrite(results)))
         && request.ConfirmationToken is null
-        && RejectedCallCorrection.CanRecover(results.CorrectionOccurrences);
+        && RejectedCallCorrection.CanRecover(results.CorrectionOccurrences, HoldsPreparedWrite(results));
 
     private sealed record ToolRoundResult(
         AiResponse Response,
