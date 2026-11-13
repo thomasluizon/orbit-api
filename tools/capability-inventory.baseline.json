@@ -1130,6 +1130,14 @@
             "required": true
           },
           {
+            "name": "input.options[].target_ids",
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
             "name": "input.progress",
             "type": "object",
             "required": false
