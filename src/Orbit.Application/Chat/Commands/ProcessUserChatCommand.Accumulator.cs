@@ -54,9 +54,6 @@ public partial class ProcessUserChatCommandHandler
         public Dictionary<string, HabitSetupDraft> MissingHabitDrafts { get; } = new(StringComparer.Ordinal);
         public OrderedDictionary<string, HabitListCardItem> ReadHabitItems { get; } = new(StringComparer.OrdinalIgnoreCase);
         public HashSet<Guid> AnsweredTargetIds { get; } = [];
-        public AiChoiceSelection? AnsweredChoice { get; set; }
-        public List<RefusedWrite> RefusedWrites { get; } = [];
-        public bool AskedForAnsweredSet { get; set; }
         public HabitSelectionCandidates? PendingSelection { get; set; }
         public List<HabitSelectionCandidates> SelectionCandidates { get; } = [];
         public bool HasBudgetRecovery { get; set; }

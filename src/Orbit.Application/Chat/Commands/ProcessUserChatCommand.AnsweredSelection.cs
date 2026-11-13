@@ -16,7 +16,6 @@ public partial class ProcessUserChatCommandHandler
     {
         if (choice is null)
             return;
-        results.AnsweredChoice = choice;
         var targets = choice.Targets.Select(target => Guid.TryParse(target, out var id) ? id : Guid.Empty)
             .Where(id => id != Guid.Empty).ToHashSet();
         var parentTitles = habits.ToDictionary(habit => habit.Id, habit => habit.Title);

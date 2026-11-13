@@ -246,7 +246,6 @@ public partial class ProcessUserChatCommandHandler
         foreach (var skipped in aiResponse.ToolCalls!.Where(call => toolResults.All(result => result.Id != call.Id)))
             toolResults.Add(new AiToolCallResult(skipped.Name, skipped.Id, false, null, null,
                 "This call was withheld while ask was unresolved. Continue the original request using the ask result; prepare only changes whose inputs are resolved."));
-        NoteUnpreparedAnsweredSet(toolResults, outcomesByCallId, executionResults);
         RefreshAskSchema(aiResponse.ConversationContext, request, context, executionResults);
         toolResults.AddRange(planResults);
         cancellationToken.ThrowIfCancellationRequested();
@@ -287,7 +286,7 @@ public partial class ProcessUserChatCommandHandler
     private bool CanCompleteWriteRound(AiResponse response, IReadOnlyList<AiToolCall> calls,
         IReadOnlyDictionary<string, ToolCallOutcome> outcomes, ToolExecutionAccumulator results) =>
         TerminalWriteDirective.IsComplete(response) && calls.Count == response.ToolCalls!.Count
-        && results.PendingOperations.Count > 0 && UnpreparedAnsweredSet(results) is null
+        && results.PendingOperations.Count > 0
         && calls.All(call => ai.ToolRegistry.GetTool(call.Name)?.IsReadOnly == false
             && outcomes.TryGetValue(call.Id, out var outcome)
             && (outcome.PendingOperation is { Items.Count: > 0 } || results.MergedCallIds.Contains(call.Id)));
@@ -543,7 +542,6 @@ public partial class ProcessUserChatCommandHandler
                 : await ExecuteSingleToolCallAsync(
                     resolved, request, executionResults, execution.OperationExecutor, execution.PendingClarificationStore, cancellationToken);
             outcome = RecordHabitSetupDraft(call, outcome, executionResults);
-            RecordRefusedWrite(resolved, outcome, executionResults);
             if (outcome.ToolResult.Success)
                 executionResults.PreviousWriteCalls.Add(call);
             else

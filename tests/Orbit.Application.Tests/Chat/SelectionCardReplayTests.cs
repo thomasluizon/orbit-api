@@ -375,130 +375,11 @@ public partial class ProcessUserChatCommandHandlerTests
             .Should().BeEquivalentTo(children.Select(child => child.Id));
     }
 
-    private sealed record RefusedSplitAnswerRun(Result<ChatResponse> Result, Habit[] Children,
-        List<AgentExecuteOperationRequest> Held, List<IReadOnlyList<AiToolCallResult>> ToolResults);
-
-    private static AiToolCall RenameFirstFour(Habit[] children, string id) => new("bulk_update_habits", id,
-        JsonSerializer.SerializeToElement(new
-        {
-            filter = new { habit_ids = children[..4].Select(child => child.Id) },
-            updates = new { title = "Water - 1.18L" },
-            orbit_write_complete = true
-        }));
-
-    [Theory]
-    [InlineData("en", "Which 2 should I delete?")]
-    [InlineData("pt-BR", "Quais 2 dos 6 Water - 710ml devo excluir?")]
-    public async Task SelectionCard_RefusedWriteForOneAnsweredSetKeepsTheTurnOpenUntilTheOtherActionIsPrepared(string language, string question)
-    {
-        var run = await RunRefusedSplitAnswerAsync(language, question, children => RenameFirstFour(children, "rename"),
-            children => new("bulk_delete_habits", "delete", JsonSerializer.SerializeToElement(new
-            {
-                habit_ids = children[4..].Select(child => child.Id),
-                orbit_write_complete = true
-            })));
-
-        run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
-        var renameResult = run.ToolResults.Should().HaveCountGreaterThan(1).And.Subject.ElementAt(1)
-            .Should().ContainSingle(item => item.Id == "rename").Subject;
-        JsonSerializer.Serialize(renameResult).Should().Contain(run.Children[4].Id.ToString())
-            .And.Contain(run.Children[5].Id.ToString()).And.Contain("A refused bulk_delete_habits write");
-        run.Held.Where(request => request.OperationId == "bulk_delete_habits")
-            .Should().ContainSingle("the remaining delete is prepared in the same turn");
-        run.Result.Value.PendingOperations!.SelectMany(operation => operation.Items!).Select(item => item.EntityId)
-            .Should().BeEquivalentTo(run.Children.Select(child => child.Id));
-    }
-
-    /// <summary>
-    /// The same answer, but the model never prepares the delete: after the server asks once, it sends the rename
-    /// again in each round. The next round that completes the writes ends the turn with the rename alone.
-    /// </summary>
-    [Theory]
-    [InlineData("en", "Which 2 should I delete?")]
-    [InlineData("pt-BR", "Quais 2 dos 6 Water - 710ml devo excluir?")]
-    public async Task SelectionCard_AnsweredSetRuleKeepsTheTurnOpenAtMostOnce(string language, string question)
-    {
-        var run = await RunRefusedSplitAnswerAsync(language, question, children => RenameFirstFour(children, "rename"),
-            children => RenameFirstFour(children, "rename-again"), children => RenameFirstFour(children, "rename-third"));
-
-        run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
-        run.ToolResults.Should().HaveCount(2, "the round after the one request completes the turn");
-        run.ToolResults.SelectMany(round => round)
-            .Count(item => JsonSerializer.Serialize(item).Contains("remaining_answered_records")).Should().Be(1);
-        run.Held.Should().NotContain(request => request.OperationId == "bulk_delete_habits");
-        run.Result.Value.PendingOperations!.SelectMany(operation => operation.Items!).Select(item => item.EntityId)
-            .Should().BeEquivalentTo(run.Children[..4].Select(child => child.Id));
-    }
-
-    /// <summary>
-    /// "The last two" answered to a card about which 2 of 6 same-titled records to delete, in a request that also
-    /// renames the other four. The first round sends a refused delete of the sixth record beside an ID that no read
-    /// returned, and a read; each later round sends one recorded write.
-    /// </summary>
-    private async Task<RefusedSplitAnswerRun> RunRefusedSplitAnswerAsync(string language, string question,
-        params Func<Habit[], AiToolCall>[] laterRounds)
-    {
-        var user = User.Create("Reader", "reader@example.test").Value;
-        user.SetLanguage(language);
-        SetupUserAndPayGate(user);
-        EnableComposition();
-        _unitOfWork.PassThroughTransactions<Result<PreparedAiBlockAnswer>>();
-        var (_, children) = SetupSameTitleChildren("Water - 710ml", 6);
-        var query = new QueryHabitsTool(_habitRepo, _userRepo, _userDateService, _scheduleLogReader);
-        var delete = new BulkDeleteHabitsTool(_mediator, _habitRepo);
-        var update = new BulkUpdateHabitsTool(_mediator);
-        var handler = CreateHandler(query, delete, update);
-        var held = HoldSelectionReplayWrites(query, delete, update);
-        var foreign = Guid.NewGuid();
-        _operationExecutor.ExecuteAsync(Arg.Is<AgentExecuteOperationRequest>(request =>
-                request.Arguments.GetRawText().Contains(foreign.ToString())), Arg.Any<CancellationToken>())
-            .Returns(new AgentExecuteOperationResponse(new AgentOperationResult("bulk_delete_habits", "bulk_delete_habits",
-                AgentRiskClass.Destructive, AgentConfirmationRequirement.FreshConfirmation, AgentOperationStatus.Denied,
-                PolicyReason: "target_not_owned:bulk_delete_habits:habit")));
-        var definition = JsonSerializer.Deserialize<AiBlockDefinition>(JsonSerializer.Serialize(new
-        {
-            Form = "choice",
-            Title = question,
-            Options = new object[]
-            {
-                new { Id = "first", Label = language == "en" ? "The first two" : "Os dois primeiros", target_ids = children[..2].Select(child => child.Id.ToString()) },
-                new { Id = "last", Label = language == "en" ? "The last two" : "Os dois últimos", target_ids = children[4..].Select(child => child.Id.ToString()) }
-            },
-            Items = Array.Empty<object>(),
-            AllowFreeText = true
-        }))!;
-        var block = StoreAnsweredBlock(definition);
-        SetupAiResponse(new AiResponse
-        {
-            ConversationContext = TestConversationContext,
-            ToolCalls =
-            [
-                new(delete.Name, "delete-guess", JsonSerializer.SerializeToElement(new { habit_ids = new[] { foreign, children[5].Id } })),
-                new(query.Name, "reread", ParseArguments("""{"for_selection":false,"include_sub_habits":true,"orbit_read_complete":false}"""))
-            ]
-        });
-        var toolResults = new List<IReadOnlyList<AiToolCallResult>>();
-        var replies = laterRounds.Select(round => Result.Success(new AiResponse
-        {
-            ConversationContext = TestConversationContext,
-            ToolCalls = [round(children)]
-        }))
-            .Append(Result.Success(new AiResponse { TextMessage = "Review the changes." })).ToArray();
-        _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
-                Arg.Do<IReadOnlyList<AiToolCallResult>>(results => toolResults.Add([.. results])),
-                Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
-            .Returns(replies[0], replies[1..]);
-
-        var result = await handler.Handle(new(UserId, "Answer", BlockAnswer: new(block.Id, ["last"]),
-            ClientContext: new(SupportsParts: true, SupportsPendingOperationChanges: true, PartKinds: ["choice"])), default);
-        return new RefusedSplitAnswerRun(result, children, held, toolResults);
-    }
-
     /// <summary>
     /// "Which Walk should I delete?" answered with the first Walk: one action for one record. A refused delete of the
     /// turn names a record that no read returned beside no Walk, both Walks, or only the Walk the person turned down.
-    /// None is a separate change to the turned-down Walk: a delete beside the prepared delete is a guess with the
-    /// wrong target. The delete of the chosen Walk completes the turn alone.
+    /// The delete of the chosen Walk completes the turn alone, so the server never asks for a change to the
+    /// turned-down Walk.
     /// </summary>
     [Theory]
     [InlineData("en", new int[0])]
@@ -507,8 +388,7 @@ public partial class ProcessUserChatCommandHandlerTests
     [InlineData("pt-BR", new[] { 0, 1 })]
     [InlineData("en", new[] { 1 })]
     [InlineData("pt-BR", new[] { 1 })]
-    public async Task SelectionCard_RefusedWriteThatMakesNoSeparateChangeToTheOtherSetLeavesAOneActionAnswerComplete(
-        string language, int[] refusedWalks)
+    public async Task SelectionCard_RefusedWriteLeavesAOneActionAnswerComplete(string language, int[] refusedWalks)
     {
         var portuguese = language == "pt-BR";
         var user = User.Create("Reader", "reader@example.test").Value;
@@ -560,8 +440,7 @@ public partial class ProcessUserChatCommandHandlerTests
             ClientContext: new(SupportsParts: true, SupportsPendingOperationChanges: true, PartKinds: ["choice"])), default);
 
         result.IsSuccess.Should().BeTrue(result.Error);
-        toolResults.SelectMany(round => round).Select(item => JsonSerializer.Serialize(item))
-            .Should().NotContain(item => item.Contains("remaining_answered_records"));
+        toolResults.Should().ContainSingle("the delete of the chosen Walk completes the turn in the next round");
         result.Value.PendingOperations!.SelectMany(operation => operation.Items!).Select(item => item.EntityId)
             .Should().Equal([walks[0].Id], "the person chose the first Walk and turned the other down");
     }
