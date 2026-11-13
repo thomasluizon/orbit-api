@@ -440,8 +440,9 @@ public partial class ProcessUserChatCommandHandlerTests
         var delete = new BulkDeleteHabitsTool(_mediator, _habitRepo);
         var deleteOne = new DeleteHabitTool(_mediator, _habitRepo);
         var update = new BulkUpdateHabitsTool(_mediator);
-        var handler = CreateHandler(query, delete, deleteOne, update);
-        var held = HoldSelectionReplayWrites(query, delete, deleteOne, update);
+        var updateOne = new UpdateHabitTool(_habitRepo, _userDateService, _mediator);
+        var handler = CreateHandler(query, delete, deleteOne, update, updateOne);
+        var held = HoldSelectionReplayWrites(query, delete, deleteOne, update, updateOne);
         SetupAiResponse(new AiResponse
         {
             ConversationContext = TestConversationContext,
@@ -609,23 +610,65 @@ public partial class ProcessUserChatCommandHandlerTests
     }
 
     /// <summary>
-    /// delete_habit for one Walk and bulk_delete_habits for the other make one delete in two forms, not a split.
+    /// delete_habit for one Walk and bulk_delete_habits for the other make one delete in two forms, and update_habit
+    /// and bulk_update_habits to one title make one rename in two forms: neither is a split.
     /// </summary>
     [Theory]
-    [InlineData("Delete Walk", "Walk", "en")]
-    [InlineData("Exclua Caminhada", "Caminhada", "pt-BR")]
-    public async Task SelectionReplay_SingleAndBulkFormOfOneChangeAreNotASplit(string message, string title, string language)
+    [InlineData("Delete Walk", "Walk", "en", null)]
+    [InlineData("Exclua Caminhada", "Caminhada", "pt-BR", null)]
+    [InlineData("Rename Walk to Morning walk", "Walk", "en", "Morning walk")]
+    [InlineData("Renomeie Caminhada para Caminhada cedo", "Caminhada", "pt-BR", "Caminhada cedo")]
+    public async Task SelectionReplay_SingleAndBulkFormOfOneChangeAreNotASplit(string message, string title, string language,
+        string? rename)
     {
-        var run = await RunSameTitleTurnAsync(message, title, children =>
+        var run = await RunSameTitleTurnAsync(message, title, children => rename is null
+            ?
             [
                 new("delete_habit", "first", JsonSerializer.SerializeToElement(new { habit_id = children[0].Id })),
                 new("bulk_delete_habits", "second", JsonSerializer.SerializeToElement(new { habit_ids = children[1..].Select(child => child.Id) }))
-            ], language, title, 2);
+            ]
+            : [RenameOne("first", children[0], rename), UpdateCall("second", children[1..], new { title = rename, description = (string?)null })],
+            language, title, 2);
 
         run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
         run.Held.Should().BeEmpty("the reply was: " + run.Result.Value.AiMessage);
         run.Result.Value.AiMessage.Should().Be(SelectionQuestionFor(title, language));
     }
+
+    /// <summary>
+    /// update_habit to one title for one Walk and bulk_update_habits to another title for the other make two
+    /// changes in two forms: a split, so both writes reach the preview and the person gets no question.
+    /// </summary>
+    [Theory]
+    [InlineData("Rename one Walk to Morning walk and the other to Evening walk", "Walk", "en", "Morning walk", "Evening walk")]
+    [InlineData("Renomeie uma Caminhada para Caminhada cedo e a outra para Caminhada tarde", "Caminhada", "pt-BR",
+        "Caminhada cedo", "Caminhada tarde")]
+    public async Task SelectionReplay_SingleAndBulkFormWithDifferentChangesSplitTheGroup(string message, string title,
+        string language, string first, string second)
+    {
+        var run = await RunSameTitleTurnAsync(message, title,
+            children => [RenameOne("first", children[0], first), UpdateCall("second", children[1..], new { title = second, description = (string?)null })],
+            language, title, 2);
+
+        run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
+        run.Held.Select(request => request.OperationId).Should().BeEquivalentTo(["update_habit", "bulk_update_habits"],
+            "the reply was: " + run.Result.Value.AiMessage);
+        run.Result.Value.AiMessage.Should().NotBe(SelectionQuestionFor(title, language));
+    }
+
+    /// <summary>
+    /// An update_habit rename as the strict tool schema makes the model send it: each optional field that the rename
+    /// leaves unchanged is null.
+    /// </summary>
+    private static AiToolCall RenameOne(string id, Habit habit, string title) => new("update_habit", id,
+        JsonSerializer.SerializeToElement(new
+        {
+            habit_id = habit.Id,
+            title,
+            description = (string?)null,
+            goal_ids = (string[]?)null,
+            parent_habit_id = (string?)null
+        }));
 
     [Theory]
     [InlineData("Rename one Walk to Morning walk and the other to Evening walk", "Walk", "en")]

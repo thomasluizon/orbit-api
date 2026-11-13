@@ -232,14 +232,33 @@ public partial class ProcessUserChatCommandHandler
         writes.All(write => MakeSameChange(write, writes[0]));
 
     /// <summary>
-    /// Two writes make the same change when one tool sends the same arguments apart from the record ids, or when they
-    /// are the single and the bulk form of one operation, such as delete_habit and bulk_delete_habits. The two forms
-    /// carry the change in different arguments, so they compare by the operation alone.
+    /// Two writes make the same change when one tool sends the same arguments apart from the record ids, or when one
+    /// write is the single form and the other the bulk form of one operation and both set the same fields.
     /// </summary>
     private static bool MakeSameChange(AiToolCall write, AiToolCall other) => write.Name == other.Name
         ? JsonNode.DeepEquals(ChangeOf(write.Args), ChangeOf(other.Args))
-        : BulkToolRepeatGuard.IsBulkAlternative(write.Name, other.Name)
-            || BulkToolRepeatGuard.IsBulkAlternative(other.Name, write.Name);
+        : MakeOneChangeInTwoForms(write, other) || MakeOneChangeInTwoForms(other, write);
+
+    /// <summary>
+    /// The single form's fields, put in the bulk form's shape, equal the bulk form's fields apart from its targets. A
+    /// delete sets no field, so the two delete forms always match. An update sets the fields that bulk_update_habits
+    /// holds in updates; a log, skip or reschedule sets its date. A create holds its habits in a different shape and
+    /// never matches.
+    /// </summary>
+    private static bool MakeOneChangeInTwoForms(AiToolCall single, AiToolCall bulk) =>
+        BulkToolRepeatGuard.IsBulkAlternative(single.Name, bulk.Name)
+        && JsonNode.DeepEquals(bulk.Name == "bulk_update_habits"
+                ? new JsonObject { ["updates"] = FieldsOf(single.Args, "habit_id") }
+                : FieldsOf(single.Args, "habit_id"),
+            FieldsOf(bulk.Args, "filter", "habit_ids", "restart_plan"));
+
+    /// <summary>
+    /// The arguments of a write without the named target arguments. The guard reads execution arguments, which carry
+    /// no completion argument and no optional null field.
+    /// </summary>
+    private static JsonObject FieldsOf(JsonElement args, params string[] targets) => new(args.EnumerateObject()
+        .Where(property => !targets.Contains(property.Name))
+        .Select(property => KeyValuePair.Create(property.Name, JsonNode.Parse(property.Value.GetRawText()))));
 
     /// <summary>
     /// The arguments of a write without the record ids, so that two writes compare by their change alone.
