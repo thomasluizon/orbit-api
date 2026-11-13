@@ -44,7 +44,10 @@ public partial class ProcessUserChatCommandHandler
         public Guid? ConversationId { get; set; }
         public AiPlan? Plan { get; set; }
 
-        /// <summary>The previews that awaited the person's approval before the turn ran a tool.</summary>
+        /// <summary>
+        /// The previews that were open before the turn ran a tool: each one that awaited the person's approval and each
+        /// one that the person approved and that did not run yet. The turn did not create any of them.
+        /// </summary>
         public IReadOnlySet<Guid> AwaitingPreviewIds { get; set; } = new HashSet<Guid>();
     }
 

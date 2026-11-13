@@ -397,6 +397,41 @@ public partial class PendingAgentOperationStoreTests : IDisposable
         _store.Confirm(_userId, pending.Id).Should().NotBeNull("the restored preview stays approvable");
     }
 
+    /// <summary>
+    /// The open operations of a person are the ones that a chat turn did not create: each one that awaits approval and
+    /// each approved one that did not run yet. A cancelled, a run or an expired operation is not open.
+    /// </summary>
+    [Fact]
+    public async Task GetOpenIdsAsync_HoldsTheAwaitingAndTheApprovedOperationsThatDidNotRun()
+    {
+        var capability = _catalogService.GetCapability(AgentCapabilityIds.HabitsBulkWrite)!;
+        PendingAgentOperation Create(string emoji)
+        {
+            var json = "{\"filter\":{\"all\":true},\"updates\":{\"emoji\":\"" + emoji + "\"}}";
+            return _store.Create(_userId, capability, "bulk_update_habits", json, "Update habits",
+                AgentOperationFingerprint.Compute("bulk_update_habits", json), AgentExecutionSurface.Chat);
+        }
+        var awaiting = Create("A");
+        var approved = Create("B");
+        var cancelled = Create("C");
+        var run = Create("D");
+        var expired = Create("E");
+        _store.Confirm(_userId, approved.Id).Should().NotBeNull();
+        _store.Cancel(_userId, cancelled.Id, AgentOperationFingerprint.Compute("bulk_update_habits",
+            "{\"filter\":{\"all\":true},\"updates\":{\"emoji\":\"C\"}}")).Should().BeTrue();
+        var token = _store.Confirm(_userId, run.Id)!.ConfirmationToken;
+        _store.TryConsumeFreshConfirmation(_userId, capability.Id, AgentOperationFingerprint.Compute("bulk_update_habits",
+            "{\"filter\":{\"all\":true},\"updates\":{\"emoji\":\"D\"}}"), token, requireStepUp: false).Should().BeTrue();
+        typeof(PendingAgentOperationState).GetProperty(nameof(PendingAgentOperationState.ExpiresAtUtc))!
+            .SetValue(_dbContext.PendingAgentOperations.Single(item => item.Id == expired.Id), DateTime.UtcNow.AddSeconds(-1));
+        await _dbContext.SaveChangesAsync();
+
+        var open = await _store.GetOpenIdsAsync(_userId);
+
+        open.Should().BeEquivalentTo([awaiting.Id, approved.Id]);
+        (await _store.GetOpenIdsAsync(Guid.NewGuid())).Should().BeEmpty();
+    }
+
     [Fact]
     public void Restore_LeavesAPreviewThatMovedOnAsItIs()
     {

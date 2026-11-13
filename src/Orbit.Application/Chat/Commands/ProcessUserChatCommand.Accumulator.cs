@@ -73,7 +73,10 @@ public partial class ProcessUserChatCommandHandler
         public Dictionary<Guid, string> ReadOfferIntents { get; } = [];
         public List<PendingAgentOperation> PendingOperations { get; } = [];
 
-        /// <summary>The previews that awaited the person's approval before this turn ran a tool.</summary>
+        /// <summary>
+        /// The previews that were open before this turn ran a tool, approved or not. A write of the turn that the store
+        /// hands one of them did not create it, so the turn never withdraws or cancels it.
+        /// </summary>
         public IReadOnlySet<Guid> EarlierPendingIds { get; init; } = new HashSet<Guid>();
 
         /// <summary>The stored state of each earlier preview from before this turn revised it in place.</summary>

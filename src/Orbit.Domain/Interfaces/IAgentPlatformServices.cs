@@ -62,6 +62,11 @@ public interface IPendingAgentOperationStore
     IReadOnlyList<PendingHabitCreation> GetPendingHabitCreations(Guid userId);
     IReadOnlyList<PendingAgentOperationExecution> GetAwaiting(Guid userId);
     Task<IReadOnlyList<PendingAgentOperationExecution>> GetAwaitingAsync(Guid userId, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// The operations that did not run, were not cancelled and did not expire: each one that awaits approval and each
+    /// one that the person approved.
+    /// </summary>
+    Task<IReadOnlyList<Guid>> GetOpenIdsAsync(Guid userId, CancellationToken cancellationToken = default);
     bool SupersedeHabitCreation(Guid userId, string title, Guid? parentHabitId);
     /// <summary>
     /// Binds new arguments and a new preview fingerprint. Pass <paramref name="revisedPreview"/> only for a revision or

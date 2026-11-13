@@ -98,4 +98,38 @@ public sealed partial class ChatWriteHoldHandlerTests
         forwarded.Should().ContainSingle(item => item.Id == "discard").Which.Success.Should().BeTrue();
         result.Value.AiMessage.Should().Be("I dropped the Zinc preview.");
     }
+
+    /// <summary>
+    /// The person approved the Zinc preview, and it did not run yet. A turn without a conversation sends the same Zinc
+    /// creation again, so the store hands the turn the approved row, beside a description that prepares and a skip that
+    /// is turned down. The withdrawn turn cancels only the description, the preview that it created.
+    /// </summary>
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task AtomicTurn_AWithdrawnTurnCancelsOnlyThePreviewsThatItCreated(string language)
+    {
+        var parents = ParentAccount(language);
+        var earlier = await PrepareEarlierZincAsync(parents);
+        _pendingOperationStore.Confirm(_userId, earlier.Id).Should().NotBeNull();
+        _ownership.GetDenialReasonAsync("skip_habit", _userId, Arg.Any<JsonElement>(), Arg.Any<CancellationToken>())
+            .Returns("target_not_owned:skip_habit:habit");
+        var forwarded = ReplyToTurn(
+        [
+            new("create_sub_habit", "zinc", JsonSerializer.SerializeToElement(new { parent_habit_id = parents[0].Id, title = "Zinc", frequency_unit = "Day" })),
+            new("update_habit", "edit", JsonSerializer.SerializeToElement(new { habit_id = parents[1].Id, description = "Quiet time" })),
+            new("skip_habit", "skip", JsonSerializer.SerializeToElement(new { habit_id = UnknownHabitId }))
+        ], "Review.");
+
+        var result = await CreateHandler().Handle(new(_userId,
+            "Add Zinc under Post Lunch, describe Before Bed as quiet time and skip my walk today."), default);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        forwarded.Should().Contain(item => item.Id == "zinc" && item.Success, "the Zinc creation prepared");
+        _dbContext.PendingAgentOperations.Count(row => row.UserId == _userId && row.OperationId == "create_sub_habit")
+            .Should().Be(1, "the store handed the turn the approved Zinc row");
+        _pendingOperationStore.GetExecution(_userId, earlier.Id).Should().NotBeNull("the turn did not create the Zinc row");
+        result.Value.PendingOperations.Should().ContainSingle("the turn withdrew the description").Which.Id.Should().Be(earlier.Id);
+        result.Value.AiMessage.Should().Be(EarlierKeptAnswer(language));
+    }
 }

@@ -182,6 +182,14 @@ public class PendingAgentOperationStore(
         return AwaitingExecutions(pending);
     }
 
+    public async Task<IReadOnlyList<Guid>> GetOpenIdsAsync(Guid userId, CancellationToken cancellationToken = default)
+    {
+        var checkedAtUtc = TimeProvider.System.GetUtcNow().UtcDateTime;
+        return await dbContext.PendingAgentOperations.AsNoTracking()
+            .Where(item => item.UserId == userId && item.ConsumedAtUtc == null && item.ExpiresAtUtc > checkedAtUtc)
+            .Select(item => item.Id).ToListAsync(cancellationToken);
+    }
+
     private static IReadOnlyList<PendingAgentOperationExecution> AwaitingExecutions(IReadOnlyList<PendingAgentOperationState> pending)
     {
         var members = pending.Where(item => item.OperationId == AccountChangeSet.OperationName)
