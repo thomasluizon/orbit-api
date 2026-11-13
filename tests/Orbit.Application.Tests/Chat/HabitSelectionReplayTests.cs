@@ -414,14 +414,28 @@ public partial class ProcessUserChatCommandHandlerTests
         result.Value.AiMessage.Should().NotContain("Which habit").And.NotContain("Qual hábito");
     }
 
-    private async Task<(ProcessUserChatCommand Request, Result<ChatResponse> Result, List<AgentExecuteOperationRequest> Held, Habit Parent, Habit[] Children)>
+    private async Task<(Result<ChatResponse> Result, List<AgentExecuteOperationRequest> Held, Habit[] Children)>
         RunSameTitleTurnAsync(string message, string search, Func<Habit[], AiToolCall[]> writes, string language = "en",
             string title = "Water - 710ml", int count = 6)
+    {
+        var parent = CreateHabit("Water");
+        var children = Enumerable.Range(0, count).Select(_ => CreateHabit(title)).ToArray();
+        foreach (var child in children) child.SetParentHabitId(parent.Id);
+        var (result, held) = await RunSelectionTurnAsync(message, search, language, [parent, .. children], writes(children));
+        return (result, held, children);
+    }
+
+    /// <summary>
+    /// A turn that reads the habits with a declared list search and then sends each round of writes in its own
+    /// model response.
+    /// </summary>
+    private async Task<(Result<ChatResponse> Result, List<AgentExecuteOperationRequest> Held)> RunSelectionTurnAsync(
+        string message, string search, string language, Habit[] habits, params AiToolCall[][] rounds)
     {
         var user = User.Create("Reader", "reader@example.test").Value;
         user.SetLanguage(language);
         SetupUserAndPayGate(user);
-        var (parent, children) = SetupSameTitleChildren(title, count);
+        SetupSelectionHabits(habits);
         var query = new QueryHabitsTool(_habitRepo, _userRepo, _userDateService, _scheduleLogReader);
         var delete = new BulkDeleteHabitsTool(_mediator, _habitRepo);
         var update = new BulkUpdateHabitsTool(_mediator);
@@ -435,14 +449,15 @@ public partial class ProcessUserChatCommandHandlerTests
                 search, for_selection = false, orbit_read_complete = false
             }))]
         });
+        var replies = rounds.Select(round => Result.Success(new AiResponse { ConversationContext = TestConversationContext, ToolCalls = round }))
+            .Append(Result.Success(new AiResponse { TextMessage = "Review the changes." })).ToArray();
         _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
                 Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success(new AiResponse { ConversationContext = TestConversationContext, ToolCalls = writes(children) }),
-                Result.Success(new AiResponse { TextMessage = "Review the changes." }));
-        var request = new ProcessUserChatCommand(UserId, message,
+            .Returns(replies[0], replies[1..]);
+        var result = await handler.Handle(new ProcessUserChatCommand(UserId, message,
             ClientContext: new(SupportsParts: true, PartKinds: ["habitList", "choice"], SupportsHabitListCard: true,
-                SupportsDatedHabitListCard: true));
-        return (request, await handler.Handle(request, default), held, parent, children);
+                SupportsDatedHabitListCard: true)), default);
+        return (result, held);
     }
 
     private static AiToolCall DeleteCall(IEnumerable<Habit> habits) => new("bulk_delete_habits", "delete",
@@ -604,6 +619,60 @@ public partial class ProcessUserChatCommandHandlerTests
         run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
         run.Held.Select(request => request.OperationId).Should().Equal(["bulk_update_habits", "bulk_update_habits"],
             "the reply was: " + run.Result.Value.AiMessage);
+    }
+
+    [Theory]
+    [InlineData("Rename Walk to Run", "en")]
+    [InlineData("Rename Walk to Run, thanks for all the help", "en")]
+    [InlineData("Rename Walk to Run, we both like it", "en")]
+    [InlineData("Rename the first one to Run", "en")]
+    [InlineData("Renomeie Caminhada para Corrida", "pt-BR")]
+    [InlineData("Renomeie Caminhada para Corrida, obrigado por tudo", "pt-BR")]
+    [InlineData("Renomeie Caminhada para Corrida, todos gostamos", "pt-BR")]
+    [InlineData("Renomeie a primeira das duas para Corrida", "pt-BR")]
+    public async Task SelectionReplay_SingularWriteToOneOfDistinctTitlesAsksWhateverSetOrOrderWordTheMessageHas(
+        string message, string language)
+    {
+        var search = language == "en" ? "Walk" : "Caminhada";
+        Habit[] habits = language == "en"
+            ? [CreateHabit("Morning Walk"), CreateHabit("Evening Walk")]
+            : [CreateHabit("Caminhada manha"), CreateHabit("Caminhada noite")];
+
+        var run = await RunSelectionTurnAsync(message, search, language, habits,
+            [UpdateCall("rename", habits[..1], new { title = "Run" })]);
+
+        run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
+        run.Held.Should().BeEmpty("the reply was: " + run.Result.Value.AiMessage);
+        run.Result.Value.PendingOperations.Should().BeNullOrEmpty();
+        run.Result.Value.AiMessage.Should().Be(SelectionQuestionFor(search, language));
+    }
+
+    [Theory]
+    [InlineData(false, "en")]
+    [InlineData(true, "en")]
+    [InlineData(false, "pt-BR")]
+    [InlineData(true, "pt-BR")]
+    public async Task SelectionReplay_SettledSameTitleGroupLeavesTheOtherTitleGuarded(bool sameRound, string language)
+    {
+        var (search, other, message) = language == "en"
+            ? ("Walk", "Morning Walk", "Rename both Walk habits to Run")
+            : ("Caminhada", "Caminhada manha", "Renomeie ambos os hábitos Caminhada para Corrida");
+        var habits = new[] { CreateHabit(search), CreateHabit(search), CreateHabit(other) };
+        var settled = UpdateCall("both", habits[..2], new { title = "Run" });
+        var guessed = UpdateCall("guess", habits[2..], new { title = "Run" });
+
+        var run = sameRound
+            ? await RunSelectionTurnAsync(message, search, language, habits, [settled, guessed])
+            : await RunSelectionTurnAsync(message, search, language, habits, [settled], [guessed]);
+
+        run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
+        run.Held.Should().ContainSingle().Which.Arguments.GetProperty("filter").GetProperty("habit_ids").EnumerateArray()
+            .Select(id => id.GetGuid()).Should().BeEquivalentTo(habits[..2].Select(habit => habit.Id));
+        run.Result.Value.PendingOperations!.SelectMany(operation => operation.Items!).Select(item => item.EntityId)
+            .Should().BeEquivalentTo(habits[..2].Select(habit => habit.Id));
+        await _aiIntentService.Received().ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
+            Arg.Is<IReadOnlyList<AiToolCallResult>>(results => results.Any(outcome => outcome.Id == "guess" && !outcome.Success)),
+            Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
     }
 
     private void SetupSelectionHabits(params Habit[] habits) => _habitRepo.FindAsync(
