@@ -62,9 +62,9 @@ public partial class ProcessUserChatCommandHandler
 
     /// <summary>
     /// The later write is the denied write sent again: the same operation and change (<see cref="MakeSameChange"/>
-    /// without the targets) and a link to the records. It names exactly the chosen or the unchosen records of the
-    /// validated choice selection, or each habit that the denied write named correctly and at least as many targets.
-    /// Without the selection, a delete or another write that sets no field beside its targets shows no such link.
+    /// without the targets) and evidence for each record. It names the chosen or the unchosen records of the validated
+    /// choice selection, or each record of the denied write and at least as many targets. An unknown denied id names
+    /// only the habit that it was copied from (<see cref="CopiedFrom"/>), so no other write replaces its denial.
     /// </summary>
     private static bool ResendsDeniedWrite(AiToolCall denied, AiToolCall candidate, ToolExecutionAccumulator results)
     {
@@ -78,14 +78,45 @@ public partial class ProcessUserChatCommandHandler
             && new[] { choice.ChosenTargets, choice.UnchosenTargets }.Any(set => set.Count > 0
                 && resentIds.SetEquals(set.Select(target => Guid.TryParse(target, out var id) ? id : Guid.Empty))))
             return true;
-        if (!change.Args.EnumerateObject().Any(property => property.Name != "filter"))
-            return false;
-        var owned = results.AllHabits.Select(habit => habit.Id).ToHashSet();
+        var owned = results.AllHabits.Select(habit => habit.Id).ToArray();
+        var resentValues = resentTargets.Select(target => target.Value).ToHashSet(StringComparer.Ordinal);
         var deniedTargets = TargetsOf(denied.Args);
-        return resentTargets.Select(target => target.Value).Distinct(StringComparer.Ordinal).Count()
-                >= deniedTargets.Select(target => target.Value).Distinct(StringComparer.Ordinal).Count()
-            && deniedTargets.All(target => !target.Habit || !Guid.TryParse(target.Value, out var id) || !owned.Contains(id)
-                || resentIds.Contains(id));
+        return resentValues.Count >= deniedTargets.Select(target => target.Value).Distinct(StringComparer.Ordinal).Count()
+            && deniedTargets.All(target => !target.Habit ? resentValues.Contains(target.Value)
+                : Guid.TryParse(target.Value, out var id) && owned.Contains(id) ? resentIds.Contains(id)
+                : CopiedFrom(target.Value, owned) is { } copied && resentIds.Contains(copied));
+    }
+
+    /// <summary>
+    /// The one owned habit that a denied id was copied from: the id cut short at the end of its groups, with the first
+    /// group whole, or one character off. Null when no habit or more than one habit fits.
+    /// </summary>
+    private static Guid? CopiedFrom(string value, IReadOnlyCollection<Guid> owned)
+    {
+        var copy = value.Trim().ToLowerInvariant();
+        var sources = owned.Where(id => IsCutShort(copy, id.ToString()) || IsOneCharacterOff(copy, id.ToString())).Take(2).ToArray();
+        return sources.Length == 1 ? sources[0] : null;
+    }
+
+    private static bool IsCutShort(string copy, string id)
+    {
+        var groups = copy.Split('-');
+        var source = id.Split('-');
+        return copy.Length < id.Length && groups.Length <= source.Length && groups[0] == source[0]
+            && groups.Zip(source).All(pair => pair.First.Length > 0 && pair.Second.StartsWith(pair.First, StringComparison.Ordinal));
+    }
+
+    private static bool IsOneCharacterOff(string copy, string id)
+    {
+        if (copy == id || Math.Abs(copy.Length - id.Length) > 1)
+            return false;
+        var (shorter, longer) = copy.Length <= id.Length ? (copy, id) : (id, copy);
+        var index = 0;
+        while (index < shorter.Length && shorter[index] == longer[index])
+            index++;
+        return shorter.Length == longer.Length
+            ? shorter[(index + 1)..] == longer[(index + 1)..]
+            : shorter[index..] == longer[(index + 1)..];
     }
 
     /// <summary>

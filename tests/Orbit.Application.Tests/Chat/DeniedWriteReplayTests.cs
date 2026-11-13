@@ -277,12 +277,12 @@ public partial class ProcessUserChatCommandHandlerTests
     [InlineData("pt-BR", "single")]
     public async Task DeniedWrite_TurnWithoutACardCorrectsTheDeniedWriteOrLeavesNoPreview(string language, string form)
     {
-        Func<Habit[], AiToolCall> second = form == "bulk" ? Run4Rename : RenameOneUnknown;
+        Func<Habit[], AiToolCall> second = form == "bulk" ? Run4Rename : children => Rename("rename-one", OneCharacterOff(children[1].Id));
         var corrected = await RunDeniedRequestTurnAsync(language, second, children => [Calls(CorrectedRename(children)), Text(language)]);
 
         corrected.Result.IsSuccess.Should().BeTrue(corrected.Result.Error);
         corrected.ToolResults[0].Should().ContainSingle(result => !result.Success).Which.Error
-            .Should().Contain(form == "bulk" ? CutShort(corrected.Children[1].Id) : UnknownHabitId.ToString());
+            .Should().Contain(form == "bulk" ? CutShort(corrected.Children[1].Id) : OneCharacterOff(corrected.Children[1].Id));
         corrected.Result.Value.PendingOperations!.SelectMany(operation => operation.Items!).Select(item => item.EntityId)
             .Should().BeEquivalentTo(corrected.Children.Select(child => child.Id));
 
@@ -392,15 +392,16 @@ public partial class ProcessUserChatCommandHandlerTests
         language == "en" ? EnglishToolFailureMessage : PortugueseToolFailureMessage;
 
     /// <summary>
-    /// The ownership check turns down the only write of the turn, so no preview can hold half of the request. The
-    /// model reads the habits and sends the write again with the right id, as it could before the correction rule.
+    /// The ownership check turns down the only write of the turn, whose id is the Water 1 id one character off, so no
+    /// preview can hold half of the request. The model reads the habits and sends the write again with the right id.
     /// </summary>
     [Theory]
     [InlineData("en")]
     [InlineData("pt-BR")]
     public async Task DeniedWrite_ALoneDenialLetsTheModelReadAndSendTheWriteAgain(string language)
     {
-        var run = await RunRequestTurnAsync(language, RenameOneMessage(language), children => Calls(RenameOneUnknown(children)),
+        var run = await RunRequestTurnAsync(language, RenameOneMessage(language),
+            children => Calls(Rename("rename-one", OneCharacterOff(children[0].Id))),
             children => [Calls(ReadWater(1)), Calls(RenameFirst(children)), Text(language)]);
 
         run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
@@ -408,7 +409,7 @@ public partial class ProcessUserChatCommandHandlerTests
         run.Result.Value.PendingOperations.Should().ContainSingle().Which.Items.Should().ContainSingle()
             .Which.EntityId.Should().Be(run.Children[0].Id);
         var denied = run.ToolResults[0].Should().ContainSingle().Subject;
-        denied.Error.Should().Contain(UnknownHabitId.ToString());
+        denied.Error.Should().Contain(OneCharacterOff(run.Children[0].Id));
         JsonSerializer.Serialize(denied.Payload).Should().NotContain("correction_allowed");
         run.ToolResults[1].Should().ContainSingle().Which.Success.Should().BeTrue();
         run.Result.Value.PolicyDenials.Should().BeNullOrEmpty("the rename on the right id replaced the denied rename");
@@ -811,5 +812,123 @@ public partial class ProcessUserChatCommandHandlerTests
         _pendingOperationStore.Received(1).Cancel(UserId, EarlierPreviewId,
             AgentOperationFingerprint.Compute("update_habit", EarlierPreviewArguments(run.Children, RenameTitle).GetRawText()));
         run.Result.Value.PendingOperations.Should().NotBeNullOrEmpty().And.NotContain(pending => pending.Id == EarlierPreviewId);
+    }
+
+    private static string SameRenameMessage(string language) => language == "en"
+        ? "rename Water 1 and Water 2 to Water - 1.18L"
+        : "muda o nome do Water 1 e do Water 2 para Water - 1.18L";
+
+    private static AiToolCall Rename(string id, string target) => new("update_habit", id,
+        JsonSerializer.SerializeToElement(new { habit_id = target, title = RenameTitle }));
+
+    /// <summary>A bulk rename by id, the form in which the model cut the run 4 id short.</summary>
+    private static AiToolCall BulkRename(string id, string target) => new("bulk_update_habits", id, JsonSerializer.SerializeToElement(new
+    {
+        filter = new { all = false, habit_ids = new[] { target }, is_completed = false },
+        updates = new { title = RenameTitle }
+    }));
+
+    /// <summary>The id with one hex digit changed, the way a copy goes one character off.</summary>
+    private static string OneCharacterOff(Guid id)
+    {
+        var text = id.ToString();
+        return text[..10] + (text[10] == 'a' ? 'b' : 'a') + text[11..];
+    }
+
+    /// <summary>
+    /// The request renames Water 1 and Water 2 to one title. The Water 1 rename names an id of no record and is turned
+    /// down alone, and the next round renames Water 2 to the same title. The Water 2 rename has no evidence that it sends
+    /// the Water 1 rename again, so the denial stays and the turn holds no preview with only Water 2.
+    /// </summary>
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task DeniedWrite_ALoneDenialStaysWhenALaterWriteMakesTheSameChangeOnAnotherRecord(string language)
+    {
+        var run = await RunRequestTurnAsync(language, SameRenameMessage(language), children => Calls(RenameOneUnknown(children)),
+            children => [Calls(Rename("rename-two", children[1].Id.ToString())), Text(language), Text(language)]);
+
+        run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
+        PreparedFor(run, "update_habit", run.Children[1]).Should().BeTrue("the Water 2 rename prepared in the second round");
+        run.Result.Value.PendingOperations.Should().BeNullOrEmpty("a preview with only Water 2 holds half of the request");
+        run.Result.Value.AiMessage.Should().Be(NotPreparedFor(language));
+    }
+
+    /// <summary>
+    /// The Water 1 rename prepares and the second rename is turned down. The correction renames Water 3 to the same
+    /// title with no evidence that it sends the denied rename again, so it binds to no denial.
+    /// </summary>
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task DeniedWrite_ACorrectionWithTheSameChangeOnAnotherRecordDoesNotReplaceTheDenial(string language)
+    {
+        var run = await RunRequestTurnAsync(language, SameRenameMessage(language),
+            children => Calls(RenameFirst(children), RenameOneUnknown(children)),
+            children => [Calls(Rename("rename-three", children[2].Id.ToString())), Text(language)]);
+
+        run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
+        PreparedFor(run, "update_habit", run.Children[2]).Should().BeFalse("the candidate binds to no denial and never runs");
+        run.Result.Value.PendingOperations.Should().BeNullOrEmpty("the Water 2 half of the request was not prepared");
+        run.Result.Value.AiMessage.Should().Be(NotPreparedFor(language));
+    }
+
+    /// <summary>
+    /// The denied id is the Water 1 id cut short. That relation links only a resend that names Water 1, so a later
+    /// rename of Water 2 to the same title leaves the denial in place.
+    /// </summary>
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task DeniedWrite_ACutShortIdLinksOnlyTheRecordThatItWasCopiedFrom(string language)
+    {
+        var run = await RunRequestTurnAsync(language, SameRenameMessage(language),
+            children => Calls(BulkRename("rename-one", CutShort(children[0].Id))),
+            children => [Calls(Rename("rename-two", children[1].Id.ToString())), Text(language), Text(language)]);
+
+        run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
+        run.Result.Value.PendingOperations.Should().BeNullOrEmpty("a preview with only Water 2 holds half of the request");
+        run.Result.Value.AiMessage.Should().Be(NotPreparedFor(language));
+    }
+
+    /// <summary>
+    /// A denied id that is the Water 1 id cut short or one character off is a copy of exactly one record. A later
+    /// rename of Water 1 with the same change sends the denied rename again and replaces the denial.
+    /// </summary>
+    [Theory]
+    [InlineData("en", "cut")]
+    [InlineData("pt-BR", "cut")]
+    [InlineData("en", "one-off")]
+    [InlineData("pt-BR", "one-off")]
+    public async Task DeniedWrite_AnIdCopiedFromOneRecordLinksTheResendOfThatRecord(string language, string copy)
+    {
+        var run = await RunRequestTurnAsync(language, RenameOneMessage(language),
+            children => Calls(BulkRename("rename-one", copy == "cut" ? CutShort(children[0].Id) : OneCharacterOff(children[0].Id))),
+            children => [Calls(RenameFirst(children)), Text(language)]);
+
+        run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
+        run.Result.Value.AiMessage.Should().NotBe(ToolFailureFor(language)).And.NotBe(NotPreparedFor(language));
+        run.Result.Value.PendingOperations.Should().ContainSingle().Which.Items.Should().ContainSingle()
+            .Which.EntityId.Should().Be(run.Children[0].Id);
+        run.Result.Value.PolicyDenials.Should().BeNullOrEmpty();
+    }
+
+    /// <summary>
+    /// The model invents an id for the Water 1 rename, reads Water 1 and sends the rename again with its id. An id of no
+    /// record was copied from no habit, so nothing shows that the later rename sends the denied rename again: the
+    /// denial stays and the turn holds no preview.
+    /// </summary>
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task DeniedWrite_ALaterWriteNeverReplacesTheDenialOfAnIdThatNoHabitWasCopiedTo(string language)
+    {
+        var run = await RunRequestTurnAsync(language, RenameOneMessage(language), children => Calls(RenameOneUnknown(children)),
+            children => [Calls(ReadWater(1)), Calls(RenameFirst(children)), Text(language), Text(language)]);
+
+        run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
+        PreparedFor(run, "update_habit", run.Children[0]).Should().BeTrue("the Water 1 rename prepared in the third round");
+        run.Result.Value.PendingOperations.Should().BeNullOrEmpty("no evidence links the rename to the denied rename");
+        run.Result.Value.AiMessage.Should().Be(NotPreparedFor(language));
     }
 }
