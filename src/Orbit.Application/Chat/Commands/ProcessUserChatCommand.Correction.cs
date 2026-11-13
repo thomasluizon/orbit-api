@@ -21,8 +21,10 @@ public partial class ProcessUserChatCommandHandler
     /// A write that the ownership check turned down names a target id that is not one of the person's records. The
     /// model gets one correction with the right ids, the same allowance that an ownership denial of a read gets.
     /// </summary>
-    private static bool IsOwnershipWriteDenial(ToolCallOutcome outcome) =>
-        outcome.OperationResult is { Status: AgentOperationStatus.Denied, Access: "write", PolicyReason: { } reason }
+    private static bool IsOwnershipWriteDenial(ToolCallOutcome outcome) => IsOwnershipWriteDenial(outcome.OperationResult);
+
+    private static bool IsOwnershipWriteDenial(AgentOperationResult? operation) =>
+        operation is { Status: AgentOperationStatus.Denied, Access: "write", PolicyReason: { } reason }
         && reason.StartsWith("target_not_owned:", StringComparison.Ordinal);
 
     private static bool HasReadCorrectionCandidate(ToolExecutionAccumulator results) =>

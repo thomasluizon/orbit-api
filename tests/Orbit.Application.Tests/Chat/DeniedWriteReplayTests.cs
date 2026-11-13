@@ -3,11 +3,13 @@ using FluentAssertions;
 using NSubstitute;
 using Orbit.Application.Chat;
 using Orbit.Application.Chat.Commands;
+using Orbit.Application.Chat.Models;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Application.Tests.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 
 namespace Orbit.Application.Tests.Commands.Chat;
@@ -91,7 +93,8 @@ public partial class ProcessUserChatCommandHandlerTests
     /// The answer turn of run 4: the stored <c>multipleChoice</c> card, the answer with the last two records, and the
     /// model rounds as recorded replies.
     /// </summary>
-    private async Task<DeniedWriteRun> RunDeniedAnswerTurnAsync(string language, Func<Habit[], AiResponse[]> continuations)
+    private async Task<DeniedWriteRun> RunDeniedAnswerTurnAsync(string language, Func<Habit[], AiResponse[]> continuations,
+        Action<Habit[]>? arrange = null)
     {
         var user = User.Create("Reader", "reader@example.test").Value;
         user.SetLanguage(language);
@@ -119,6 +122,7 @@ public partial class ProcessUserChatCommandHandlerTests
                 Arg.Do<IReadOnlyList<AiToolCallResult>>(results => toolResults.Add([.. results])),
                 Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
             .Returns(replies[0], replies[1..]);
+        arrange?.Invoke(children);
 
         var result = await handler.Handle(new(UserId, "Answer", BlockAnswer: new(block.Id, [],
                 Answers: [new AiQuestionAnswer("records", [.. children[4..].Select(child => child.Id.ToString())])]),
@@ -166,11 +170,38 @@ public partial class ProcessUserChatCommandHandlerTests
     }
 
     /// <summary>
+    /// The delete of run 4 that the turn withdraws is closed in the pending operation store too. The answer checkpoint
+    /// already holds that delete, so only a closed row keeps an approval, a replay of the checkpoint, or the pending
+    /// previews of the next turn from bringing it back.
+    /// </summary>
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task DeniedWrite_Run4AnswerTurnWhoseCorrectionFailsCancelsTheWithdrawnDeleteInTheStore(string language)
+    {
+        var run = await RunDeniedAnswerTurnAsync(language, _ => [Text(language), Text(language)], children =>
+            _pendingOperationStore.GetExecution(UserId, Arg.Any<Guid>()).Returns(call => new PendingAgentOperationExecution(
+                call.ArgAt<Guid>(1), "habits.bulk.delete", "bulk_delete_habits", Run4Delete(children).Args,
+                AgentExecutionSurface.Chat, AgentConfirmationRequirement.FreshConfirmation)));
+
+        run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
+        run.Result.Value.PendingOperations.Should().BeNullOrEmpty();
+        var checkpointed = _blockStore.ReceivedCalls()
+            .Where(call => call.GetMethodInfo().Name == nameof(IIssuedAiBlockStore.CheckpointAnswerAsync))
+            .SelectMany(call => JsonSerializer.Deserialize<ChatResponse>((string)call.GetArguments()[3]!,
+                ChatStreamEvent.SerializerOptions)!.PendingOperations ?? []).ToArray();
+        var withdrawn = checkpointed.Should().ContainSingle("the answer checkpoint holds the delete-only preview").Subject;
+        _pendingOperationStore.Received(1).Cancel(UserId, withdrawn.Id,
+            AgentOperationFingerprint.Compute("bulk_delete_habits", Run4Delete(run.Children).Args.GetRawText()));
+    }
+
+    /// <summary>
     /// A request in a turn without a card, over six sub-habits with distinct titles, so no selection guard holds a
     /// write. The first round sends the delete beside a second write, and the continuations are recorded replies.
+    /// <paramref name="secondOutcome"/> is the status and reason the executor gives the second write after dispatch.
     /// </summary>
     private async Task<DeniedWriteRun> RunDeniedRequestTurnAsync(string language, Func<Habit[], AiToolCall> second,
-        Func<Habit[], AiResponse[]> continuations, bool failSecondAfterDispatch = false)
+        Func<Habit[], AiResponse[]> continuations, (AgentOperationStatus Status, string Reason)? secondOutcome = null)
     {
         var user = User.Create("Reader", "reader@example.test").Value;
         user.SetLanguage(language);
@@ -182,16 +213,19 @@ public partial class ProcessUserChatCommandHandlerTests
         var delete = new BulkDeleteHabitsTool(_mediator, _habitRepo);
         var update = new BulkUpdateHabitsTool(_mediator);
         var updateOne = new UpdateHabitTool(_habitRepo, _userDateService, _mediator);
-        var handler = CreateHandler(delete, update, updateOne);
-        var held = HoldReplayWrites(delete, update, updateOne);
+        var summary = new SetAiSummaryTool(_mediator);
+        var handler = CreateHandler(delete, update, updateOne, summary);
+        var held = HoldReplayWrites(delete, update, updateOne, summary);
         DenyUnownedHabitTargets([parent, .. children]);
-        if (failSecondAfterDispatch)
-            _operationExecutor.ExecuteAsync(Arg.Is<AgentExecuteOperationRequest>(request => request.OperationId == updateOne.Name),
+        var secondCall = second(children);
+        if (secondOutcome is var (status, reason))
+            _operationExecutor.ExecuteAsync(Arg.Is<AgentExecuteOperationRequest>(request => request.OperationId == secondCall.Name),
                     Arg.Any<CancellationToken>())
-                .Returns(new AgentExecuteOperationResponse(new AgentOperationResult(updateOne.Name, updateOne.Name,
-                    AgentRiskClass.Low, AgentConfirmationRequirement.FreshConfirmation, AgentOperationStatus.Failed,
-                    PolicyReason: "execution_failed", Access: "write")));
-        SetupAiResponse(Calls(Run4Delete(children), second(children)));
+                .Returns(new AgentExecuteOperationResponse(new AgentOperationResult(secondCall.Name, secondCall.Name,
+                    AgentRiskClass.Low, AgentConfirmationRequirement.FreshConfirmation, status, PolicyReason: reason, Access: "write"),
+                    PolicyDenial: status == AgentOperationStatus.Failed ? null : new AgentPolicyDenial(secondCall.Name,
+                        secondCall.Name, AgentRiskClass.Low, AgentConfirmationRequirement.FreshConfirmation, reason)));
+        SetupAiResponse(Calls(Run4Delete(children), secondCall));
         var toolResults = new List<IReadOnlyList<AiToolCallResult>>();
         var replies = continuations(children).Select(Result.Success).ToArray();
         _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
@@ -242,11 +276,41 @@ public partial class ProcessUserChatCommandHandlerTests
     {
         var run = await RunDeniedRequestTurnAsync(language, children => new("update_habit", "rename-one",
                 JsonSerializer.SerializeToElement(new { habit_id = children[0].Id, title = RenameTitle })),
-            _ => [Text(language), Text(language)], failSecondAfterDispatch: true);
+            _ => [Text(language), Text(language)], secondOutcome: (AgentOperationStatus.Failed, "execution_failed"));
 
         run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
         run.Result.Value.PendingOperations.Should().BeNullOrEmpty("the rename failed, so the delete alone is half of the request");
         run.Result.Value.AiMessage.Should().Be(NotPreparedFor(language), JsonSerializer.Serialize(run.Result.Value.Actions));
+    }
+
+    /// <summary>
+    /// A plan, feature or policy denial does not change when the person sends the request again. The turn keeps the
+    /// prepared delete, the denied write keeps its own reason, and the reply never asks for a second send.
+    /// </summary>
+    [Theory]
+    [InlineData("en", AgentOperationStatus.Denied, "plan_required:Pro", "policyDenied")]
+    [InlineData("pt-BR", AgentOperationStatus.Denied, "plan_required:Pro", "policyDenied")]
+    [InlineData("en", AgentOperationStatus.Denied, "feature_disabled:ai_summary", "policyDenied")]
+    [InlineData("pt-BR", AgentOperationStatus.Denied, "PAY_GATE", "policyDenied")]
+    [InlineData("en", AgentOperationStatus.UnsupportedByPolicy, "unsupported_by_policy", "unsupportedByPolicy")]
+    public async Task DeniedWrite_APlanOrPolicyDenialBesideAPreparedWriteKeepsThePreviewAndItsOwnReason(string language,
+        AgentOperationStatus status, string reason, string messageKey)
+    {
+        var explanation = language == "en" ? "The AI summary needs Pro." : "O resumo com IA precisa do Pro.";
+        var run = await RunDeniedRequestTurnAsync(language,
+            _ => new("set_ai_summary", "summary", JsonSerializer.SerializeToElement(new { enabled = true })),
+            _ => [new AiResponse { TextMessage = explanation }, new AiResponse { TextMessage = explanation }],
+            secondOutcome: (status, reason));
+
+        run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
+        run.Result.Value.AiMessage.Should().NotBe(NotPreparedFor(language));
+        run.Result.Value.PendingOperations.Should().NotBeNullOrEmpty("the delete is the allowed part of the request").And.Subject
+            .SelectMany(operation => operation.Items!).Select(item => item.EntityId)
+            .Should().BeEquivalentTo(run.Children[4..].Select(child => child.Id));
+        run.Result.Value.PolicyDenials.Should().ContainSingle().Which.Reason.Should().Be(reason);
+        var denied = run.Result.Value.Actions.Should().ContainSingle(action => action.Type == "SetAiSummary").Subject;
+        denied.Error.Should().NotBe(NotPreparedFor(language));
+        denied.MessageKey.Should().Be($"chat.toolResult.{messageKey}");
     }
 
     [Theory]

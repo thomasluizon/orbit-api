@@ -112,7 +112,7 @@ public partial class ProcessUserChatCommandHandler
         }
         if (LeavesPartOfTheRequest(executionResults))
         {
-            WithdrawPartialPreview(executionResults, language);
+            WithdrawPartialPreview(request.UserId, executionResults, language);
             hadToolFailure = false;
             aiResponse = new AiResponse { TextMessage = RequestNotPreparedMessage(language) };
         }

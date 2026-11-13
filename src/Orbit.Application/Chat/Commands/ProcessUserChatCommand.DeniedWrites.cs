@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Orbit.Application.Common;
+using Orbit.Domain.Common;
 using Orbit.Domain.Models;
 
 namespace Orbit.Application.Chat.Commands;
@@ -85,20 +86,29 @@ public partial class ProcessUserChatCommandHandler
     }
 
     /// <summary>
-    /// A write of the turn that did not prepare beside a write that did leaves a preview with only a part of the
-    /// request. The turn then holds no preview, and the answer says that the request was not prepared.
+    /// A write that failed, or that the ownership check turned down, beside a prepared write leaves a part of the
+    /// request that a second send can prepare, so the turn holds no preview and says so. A plan, feature or policy
+    /// denial does not change on a second send: the turn keeps the prepared part and the reason for the denial.
     /// </summary>
     private bool LeavesPartOfTheRequest(ToolExecutionAccumulator results) =>
         results.PendingOperations.Count > 0
-        && results.OperationResults.Any(operation => operation.Status is AgentOperationStatus.Failed
-                or AgentOperationStatus.Denied or AgentOperationStatus.UnsupportedByPolicy
-            && operation.ErrorCode != ErrorCodes.HabitLimitReached
+        && results.OperationResults.Any(operation => IsOwnershipWriteDenial(operation)
+            || operation.Status == AgentOperationStatus.Failed && operation.ErrorCode != ErrorCodes.HabitLimitReached
             && (operation.Access == "write" || ai.ToolRegistry.GetTool(operation.OperationId) is { IsReadOnly: false }));
 
-    private static void WithdrawPartialPreview(ToolExecutionAccumulator results, string? language)
+    /// <summary>
+    /// Closes each withdrawn preview in the pending operation store too, so no approval, no replay of the answer
+    /// checkpoint and no later turn brings back a part of the request that the answer says is not waiting.
+    /// </summary>
+    private void WithdrawPartialPreview(Guid userId, ToolExecutionAccumulator results, string? language)
     {
         foreach (var pending in results.PendingOperations.ToArray())
+        {
+            if (execution.PendingOperationStore.GetExecution(userId, pending.Id) is { } stored)
+                execution.PendingOperationStore.Cancel(userId, pending.Id,
+                    AgentOperationFingerprint.Compute(stored.OperationId, stored.Arguments.GetRawText()));
             results.SupersedePendingOperation(pending.Id);
+        }
         results.SanitizeFailedActions(RequestNotPreparedMessage(language));
         results.RequestNotPrepared = true;
     }
