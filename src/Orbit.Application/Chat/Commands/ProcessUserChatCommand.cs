@@ -565,8 +565,7 @@ public partial class ProcessUserChatCommandHandler(
             AllHabits = context.UserHabits,
             IsTaggingIntent = IsTagOnlyIntent(request.Message),
             RequiresExistingParent = RequestsExistingParent(request.Message, context.UserHabits),
-            ParentHeadings = HabitHeadingParents.Read(request.Message, context.UserHabits),
-            AnsweredChoice = recording.ChoiceSelection
+            ParentHeadings = HabitHeadingParents.Read(request.Message, context.UserHabits)
         };
         SeedAnsweredChoice(recording.ChoiceSelection, context.UserHabits, request.UserId, executionResults);
         SeedProposedHabitNames(request, executionResults);

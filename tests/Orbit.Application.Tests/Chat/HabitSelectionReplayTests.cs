@@ -415,12 +415,13 @@ public partial class ProcessUserChatCommandHandlerTests
     }
 
     private async Task<(ProcessUserChatCommand Request, Result<ChatResponse> Result, List<AgentExecuteOperationRequest> Held, Habit Parent, Habit[] Children)>
-        RunSameTitleTurnAsync(string message, string search, Func<Habit[], AiToolCall[]> writes, string language = "en")
+        RunSameTitleTurnAsync(string message, string search, Func<Habit[], AiToolCall[]> writes, string language = "en",
+            string title = "Water - 710ml", int count = 6)
     {
         var user = User.Create("Reader", "reader@example.test").Value;
         user.SetLanguage(language);
         SetupUserAndPayGate(user);
-        var (parent, children) = SetupSameTitleChildren("Water - 710ml", 6);
+        var (parent, children) = SetupSameTitleChildren(title, count);
         var query = new QueryHabitsTool(_habitRepo, _userRepo, _userDateService, _scheduleLogReader);
         var delete = new BulkDeleteHabitsTool(_mediator, _habitRepo);
         var update = new BulkUpdateHabitsTool(_mediator);
@@ -515,6 +516,94 @@ public partial class ProcessUserChatCommandHandlerTests
         run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
         run.Held.Should().BeEmpty();
         run.Result.Value.AiMessage.Should().Be("Qual hábito você quer usar para “Water - 710ml”?");
+    }
+
+    private static AiToolCall UpdateCall(string id, IEnumerable<Habit> habits, object updates) => new("bulk_update_habits", id,
+        JsonSerializer.SerializeToElement(new { filter = new { habit_ids = habits.Select(habit => habit.Id) }, updates }));
+
+    private static readonly object DailyUpdate = new { frequency_unit = "Day", frequency_quantity = 1 };
+
+    private static string SelectionQuestionFor(string title, string language) => language == "en"
+        ? $"Which habit would you like to use for “{title}”?"
+        : $"Qual hábito você quer usar para “{title}”?";
+
+    [Theory]
+    [InlineData("Change Walk to every day", "Walk", "en", false)]
+    [InlineData("Move Walk to each morning", "Walk", "en", false)]
+    [InlineData("Set Walk to every other day", "Walk", "en", false)]
+    [InlineData("All right, set Walk to daily", "Walk", "en", false)]
+    [InlineData("Set Walk to daily, that is all", "Walk", "en", false)]
+    [InlineData("Set Both Sides Plank to daily", "Both Sides Plank", "en", false)]
+    [InlineData("Change both Walk habits to every day", "Walk", "en", true)]
+    [InlineData("Mude Caminhada para todos os dias", "Caminhada", "pt-BR", false)]
+    [InlineData("Mude Caminhada para todas as manhãs", "Caminhada", "pt-BR", false)]
+    [InlineData("Tudo bem, mude Caminhada para diária", "Caminhada", "pt-BR", false)]
+    [InlineData("Mude Caminhada para diária, é tudo", "Caminhada", "pt-BR", false)]
+    [InlineData("Mude Prancha ambos os lados para diária", "Prancha ambos os lados", "pt-BR", false)]
+    [InlineData("Mude todos os hábitos Caminhada para todos os dias", "Caminhada", "pt-BR", true)]
+    public async Task SelectionReplay_WholeSetWordCountsOnlyWhenItScopesTheHabits(string message, string title, string language, bool allowed)
+    {
+        var run = await RunSameTitleTurnAsync(message, title, children => [UpdateCall("schedule", children, DailyUpdate)],
+            language, title, 2);
+
+        run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
+        run.Held.Select(request => request.OperationId).Should().Equal(allowed ? ["bulk_update_habits"] : [],
+            "the reply was: " + run.Result.Value.AiMessage);
+        if (!allowed)
+            run.Result.Value.AiMessage.Should().Be(SelectionQuestionFor(title, language));
+    }
+
+    [Theory]
+    [InlineData("One last thing: rename Walk to Run", "Walk", "en", false)]
+    [InlineData("I walked last week 3 times, rename Walk to Run", "Walk", "en", false)]
+    [InlineData("Rename Walk to Run, I did it 2 times last week", "Walk", "en", false)]
+    [InlineData("Rename Top 3 Stretch to Stretch", "Top 3 Stretch", "en", false)]
+    [InlineData("Rename the first one to Run, I walked last week", "Walk", "en", true)]
+    [InlineData("Uma última coisa: renomeie Caminhada para Corrida", "Caminhada", "pt-BR", false)]
+    [InlineData("Nos últimos dias caminhei pouco, renomeie Caminhada para Corrida", "Caminhada", "pt-BR", false)]
+    [InlineData("Nas últimas 2 semanas caminhei pouco, renomeie Caminhada para Corrida", "Caminhada", "pt-BR", false)]
+    [InlineData("Renomeie Ler as 10 primeiras páginas para Ler", "Ler as 10 primeiras páginas", "pt-BR", false)]
+    [InlineData("Renomeie a primeira das duas para Corrida, caminhei na última semana", "Caminhada", "pt-BR", true)]
+    public async Task SelectionReplay_OrderWordCountsOnlyWhenItScopesTheHabits(string message, string title, string language, bool allowed)
+    {
+        var run = await RunSameTitleTurnAsync(message, title,
+            children => [UpdateCall("rename", children[..1], new { title = "Renamed" })], language, title, 2);
+
+        run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
+        run.Held.Select(request => request.OperationId).Should().Equal(allowed ? ["bulk_update_habits"] : [],
+            "the reply was: " + run.Result.Value.AiMessage);
+        if (!allowed)
+            run.Result.Value.AiMessage.Should().Be(SelectionQuestionFor(title, language));
+    }
+
+    [Theory]
+    [InlineData("Set Walk to daily", "Walk", "en")]
+    [InlineData("Change Walk to every day", "Walk", "en")]
+    [InlineData("Mude Caminhada para diária", "Caminhada", "pt-BR")]
+    [InlineData("Mude Caminhada para todos os dias", "Caminhada", "pt-BR")]
+    public async Task SelectionReplay_OneChangeSentOncePerDuplicateIsNotASplit(string message, string title, string language)
+    {
+        var run = await RunSameTitleTurnAsync(message, title,
+            children => [UpdateCall("first", children[..1], DailyUpdate), UpdateCall("second", children[1..], DailyUpdate)],
+            language, title, 2);
+
+        run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
+        run.Held.Should().BeEmpty("the reply was: " + run.Result.Value.AiMessage);
+        run.Result.Value.AiMessage.Should().Be(SelectionQuestionFor(title, language));
+    }
+
+    [Theory]
+    [InlineData("Rename one Walk to Morning walk and the other to Evening walk", "Walk", "en")]
+    [InlineData("Renomeie uma Caminhada para Caminhada cedo e a outra para Caminhada tarde", "Caminhada", "pt-BR")]
+    public async Task SelectionReplay_DifferentChangesFromOneToolStillSplitTheGroup(string message, string title, string language)
+    {
+        var run = await RunSameTitleTurnAsync(message, title,
+            children => [UpdateCall("first", children[..1], new { title = "Morning walk" }),
+                UpdateCall("second", children[1..], new { title = "Evening walk" })], language, title, 2);
+
+        run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
+        run.Held.Select(request => request.OperationId).Should().Equal(["bulk_update_habits", "bulk_update_habits"],
+            "the reply was: " + run.Result.Value.AiMessage);
     }
 
     private void SetupSelectionHabits(params Habit[] habits) => _habitRepo.FindAsync(

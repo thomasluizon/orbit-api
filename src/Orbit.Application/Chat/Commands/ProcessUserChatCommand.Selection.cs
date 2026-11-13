@@ -4,6 +4,7 @@ using Orbit.Application.Common;
 using Orbit.Application.Habits.Commands;
 using Orbit.Domain.Models;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace Orbit.Application.Chat.Commands;
 
@@ -39,7 +40,7 @@ public partial class ProcessUserChatCommandHandler
 
     private static ToolCallOutcome SelectionRequiredOutcome(AiToolCall call) => new(
         new AiToolCallResult(call.Name, call.Id, false, null, null,
-            "Selection is unanswered. Call ask with the returned candidates and prepare no write until the person answers. A request that names the whole set or members by order needs no question, and writes that together cover every candidate exactly once in one round are accepted."),
+            "Selection is unanswered. Call ask with the returned candidates and prepare no write until the person answers. A request that names the whole set or members by order needs no question; a word in a time phrase, a filler phrase or the title, such as every day, todos os dias or one last thing, names neither. Writes in one round that make different changes and together cover every candidate exactly once are accepted."),
         null, null, null, null);
 
     private static void RejectUnansweredSelections(IReadOnlyList<AiToolCall> calls,
@@ -111,7 +112,8 @@ public partial class ProcessUserChatCommandHandler
     /// <summary>
     /// The writes of a turn and the request message. A selection that a write touches is settled, and the write may
     /// run, when the person answered it, when the message names the whole set or members by order, or when the
-    /// turn's writes split one group of same-titled records between them without a gap or an overlap.
+    /// turn's writes make different changes that split one group of same-titled records between them without a gap
+    /// or an overlap.
     /// </summary>
     private sealed record SelectionScope(string Message, IReadOnlyList<AiToolCall> TurnWrites);
 
@@ -138,7 +140,7 @@ public partial class ProcessUserChatCommandHandler
                 .GroupBy(candidate => HabitNameMatcher.Normalize(candidate.Title)).Select(group => group.Key).ToHashSet();
             var groups = selection.Candidates.GroupBy(candidate => HabitNameMatcher.Normalize(candidate.Title))
                 .Where(group => touched.Contains(group.Key));
-            if (groups.All(group => GroupIsSettled(group.Select(candidate => candidate.Id).ToArray(), scope, results)))
+            if (groups.All(group => GroupIsSettled(group.Key, group.Select(candidate => candidate.Id).ToArray(), scope, results)))
                 settled.Add(selection);
             else
                 return new SelectionVerdict(selection, settled);
@@ -146,18 +148,44 @@ public partial class ProcessUserChatCommandHandler
         return new SelectionVerdict(null, settled);
     }
 
-    private static bool GroupIsSettled(IReadOnlyList<string> members, SelectionScope scope, ToolExecutionAccumulator results)
+    private static bool GroupIsSettled(string title, IReadOnlyList<string> members, SelectionScope scope,
+        ToolExecutionAccumulator results)
     {
-        if (HabitSetRequestScope.NamesMembersByOrder(scope.Message))
+        if (HabitSetRequestScope.NamesMembersByOrder(scope.Message, title))
             return true;
         var writes = scope.TurnWrites
-            .Select(write => EffectiveWriteTargetIds(write, results).Select(id => id.ToString()).ToHashSet(StringComparer.OrdinalIgnoreCase))
-            .Where(targets => members.Any(targets.Contains)).ToArray();
-        var hits = members.Select(member => writes.Count(targets => targets.Contains(member))).ToArray();
-        if (HabitSetRequestScope.NamesWholeSet(scope.Message) && hits.All(count => count >= 1))
+            .Select(write => (Call: write, Targets: EffectiveWriteTargetIds(write, results).Select(id => id.ToString())
+                .ToHashSet(StringComparer.OrdinalIgnoreCase)))
+            .Where(write => members.Any(write.Targets.Contains)).ToArray();
+        var hits = members.Select(member => writes.Count(write => write.Targets.Contains(member))).ToArray();
+        if (HabitSetRequestScope.NamesWholeSet(scope.Message, title) && hits.All(count => count >= 1))
             return true;
-        return writes.Length >= 2 && hits.All(count => count == 1);
+        return writes.Length >= 2 && hits.All(count => count == 1) && !MakeOneChange([.. writes.Select(write => write.Call)]);
     }
+
+    /// <summary>
+    /// Writes that make the same change, each to a part of a group, make one change to the whole group. That is a
+    /// whole-set write and not a split, so only a message that names the whole set settles it.
+    /// </summary>
+    private static bool MakeOneChange(IReadOnlyList<AiToolCall> writes)
+    {
+        var change = ChangeOf(writes[0].Args);
+        return writes.All(write => write.Name == writes[0].Name && JsonNode.DeepEquals(ChangeOf(write.Args), change));
+    }
+
+    /// <summary>
+    /// The arguments of a write without the record ids, so that two writes compare by their change alone.
+    /// </summary>
+    private static JsonNode? ChangeOf(JsonElement element) => element.ValueKind switch
+    {
+        JsonValueKind.Object => new JsonObject(element.EnumerateObject().Where(property => !IsRecordId(property.Value))
+            .Select(property => KeyValuePair.Create(property.Name, ChangeOf(property.Value)))),
+        JsonValueKind.Array => new JsonArray([.. element.EnumerateArray().Where(item => !IsRecordId(item)).Select(ChangeOf)]),
+        _ => JsonValue.Create(element)
+    };
+
+    private static bool IsRecordId(JsonElement element) =>
+        element.ValueKind == JsonValueKind.String && element.TryGetGuid(out _);
 
     private static IEnumerable<Guid> EffectiveWriteTargetIds(AiToolCall call, ToolExecutionAccumulator results)
     {
