@@ -86,9 +86,34 @@ public partial class ProcessUserChatCommandHandler
                     logger.LogWarning("Invalid model plan arguments for call {CallId}", call.Id);
                 }
             }
-            acknowledgements.Add(new(call.Name, call.Id, accepted, null, null, accepted ? null : "Plan was not accepted. Continue only with the requested action tools."));
+            acknowledgements.Add(new(call.Name, call.Id, accepted, null, null, accepted ? null
+                : response.ToolCalls!.All(action => action.Name == PlanToolDeclaration.Name) ? AlonePlanRejection(call)
+                : "Plan was not accepted. Continue only with the requested action tools."));
         }
         return acknowledgements;
+    }
+
+    /// <summary>
+    /// A plan that arrives without an action call shows nothing to the person. The rejection names the registered
+    /// action tools of the plan, so the next round calls them and does not send another plan.
+    /// </summary>
+    private string AlonePlanRejection(AiToolCall call)
+    {
+        string[] tools = [];
+        try
+        {
+            tools = call.Args.Deserialize<AiPlanDraft>(AiPlan.JsonOptions)?.Steps?
+                .Select(step => step.Tool).Where(tool => tool is not null && tool != PlanToolDeclaration.Name && ai.ToolRegistry.GetTool(tool) is not null)
+                .Distinct(StringComparer.Ordinal).ToArray() ?? [];
+        }
+        catch (JsonException)
+        {
+            logger.LogDebug("Plan-only call {CallId} has no readable steps", call.Id);
+        }
+        return "present_plan arrived without an action call, so the person saw no plan. "
+            + (tools.Length > 0
+                ? "Call the planned action tools in your next response, without present_plan: " + string.Join(", ", tools) + "."
+                : "Call the action tools for the request in your next response, without present_plan.");
     }
 
     private static async Task StartPlanCallsAsync(IReadOnlyList<AiToolCall> calls, ProcessUserChatCommand request, ToolExecutionAccumulator results)

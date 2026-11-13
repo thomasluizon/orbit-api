@@ -73,7 +73,7 @@ public partial class ProcessUserChatCommandHandler
                     selection_required = true,
                     selection.Reference,
                     selection.Candidates,
-                    instruction = "Ask the person to select from these candidates using a supported ask form. Do not choose an ID or prepare any write before the answer."
+                    instruction = SelectionRule
                 },
                 HabitMonthCard month => HabitMonthModelPayload.From(month),
                 IReadOnlyList<ChecklistTemplateResponse> templates when !ModelPayloadBudget.Fits(templates) => ChecklistTemplateModelPayload.From(templates),
