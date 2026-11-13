@@ -16,18 +16,32 @@ public partial class ProcessUserChatCommandHandler
         || call.Args.TryGetProperty("for_selection", out var selection) && selection.ValueKind == JsonValueKind.False;
 
     /// <summary>
-    /// A name search that matches several habits is not ambiguous when the message names every match by its
-    /// complete title, and no match title is part of another match title. That read selects nothing, so a write
-    /// over the named habits needs no ask. A read that the model declares with for_selection=true still asks.
+    /// A read whose message names every match by its distinct complete title selects nothing. A read with no
+    /// declared purpose needs no answer when the message names the whole set or members by order of a same-titled
+    /// group, and the guard checks its candidates again for each write. A for_selection=true read still asks.
     /// </summary>
     private static AgentOperationResult ResolveNamedSelection(AiToolCall call, AgentOperationResult operation, string message)
     {
         if (call.Name != "query_habits" || IsSelectionRead(call)
-            || operation.Payload is not HabitListCard { Selection: { } selection } card
-            || card.TotalCount != selection.Candidates.Count || !NamesEveryCandidate(message, selection.Candidates))
+            || operation.Payload is not HabitListCard { Selection: { } selection } card)
             return operation;
-        return operation with { Payload = card with { Selection = null } };
+        if (card.TotalCount == selection.Candidates.Count && NamesEveryCandidate(message, selection.Candidates))
+            return operation with { Payload = card with { Selection = null } };
+        return selection.RequiresAnswer && MessageScopesAGroup(message, selection)
+            ? operation with { Payload = card with { Selection = selection with { RequiresAnswer = false } } }
+            : operation;
     }
+
+    private static bool MessageScopesAGroup(string message, HabitSelectionCandidates selection) =>
+        selection.Candidates.GroupBy(candidate => HabitNameMatcher.Normalize(candidate.Title))
+            .Any(group => group.Count() > 1 && MessageScopesGroup(message, group.Key));
+
+    /// <summary>
+    /// The message names the whole set or members by order of one same-titled group. The guard and the read result
+    /// both read this one decision.
+    /// </summary>
+    private static bool MessageScopesGroup(string message, string title) =>
+        HabitSetRequestScope.NamesMembersByOrder(message, title) || HabitSetRequestScope.NamesWholeSet(message, title);
 
     private static bool NamesEveryCandidate(string message, IReadOnlyList<HabitListCardItem> candidates)
     {
@@ -38,31 +52,54 @@ public partial class ProcessUserChatCommandHandler
                 && titles.All(other => other == title || !other.Contains(title, StringComparison.Ordinal)));
     }
 
-    private static ToolCallOutcome SelectionRequiredOutcome(AiToolCall call) => new(
-        new AiToolCallResult(call.Name, call.Id, false, null, null,
-            "Selection is unanswered. Call ask with the returned candidates and prepare no write until the person answers. A request that names the whole set or members by order of several candidates with the same title needs no question; a word in a time phrase, a filler phrase or the title, such as every day, todos os dias or one last thing, names neither. Writes in one round that make different changes and together cover every candidate with that title exactly once are accepted. A candidate with a title of its own always waits for the answer."),
-        null, null, null, null);
+    /// <summary>
+    /// The selection guard's rule. A write that the guard holds and a read whose candidates need an answer both
+    /// return this text, so the model reads one rule for when a write over the candidates is accepted.
+    /// </summary>
+    private const string SelectionRule = "Selection is unanswered. Call ask with the returned candidates and prepare no write until the person answers. A request that names the whole set or members by order of several candidates with the same title needs no question; a word in a time phrase, a filler phrase or the title, such as every day, todos os dias or one last thing, names neither. Writes in one round that make different changes and together cover every candidate with that title exactly once are accepted. A candidate with a title of its own always waits for the answer.";
 
-    private static void RejectUnansweredSelections(IReadOnlyList<AiToolCall> calls,
+    private static ToolCallOutcome SelectionRequiredOutcome(AiToolCall call) => new(
+        new AiToolCallResult(call.Name, call.Id, false, null, null, SelectionRule),
+        null, null, null, null, FailureKey: "selection_unanswered");
+
+    /// <summary>
+    /// Holds each write whose selection is unanswered. A held write makes no change, so it covers no part of a split:
+    /// the check runs again without the held writes until no further write is held. Returns the scope of the writes
+    /// that remain.
+    /// </summary>
+    private static SelectionScope RejectUnansweredSelections(IReadOnlyList<AiToolCall> calls,
         Dictionary<string, AiToolCall?> resolvedCalls, ToolExecutionAccumulator results,
         Dictionary<string, ToolCallOutcome> outcomes, SelectionScope scope)
     {
-        var settled = new List<SettledSelection>();
         var held = new List<HabitSelectionCandidates>();
-        foreach (var call in calls)
+        while (true)
         {
-            if (resolvedCalls[call.Id] is not { } resolved)
-                continue;
-            var verdict = SelectionForWrite(resolved, results, scope);
-            settled.AddRange(verdict.Settled);
-            if (verdict.Unanswered is not { } unanswered)
-                continue;
-            held.Add(unanswered);
-            results.PendingSelection = unanswered;
-            outcomes[call.Id] = SelectionRequiredOutcome(call);
-            resolvedCalls[call.Id] = null;
+            var settled = new List<SettledSelection>();
+            var heldWrites = new List<AiToolCall>();
+            foreach (var call in calls)
+            {
+                if (resolvedCalls[call.Id] is not { } resolved)
+                    continue;
+                var verdict = SelectionForWrite(resolved, results, scope);
+                settled.AddRange(verdict.Settled);
+                if (verdict.Unanswered is not { } unanswered)
+                    continue;
+                held.Add(unanswered);
+                heldWrites.Add(resolved);
+                results.PendingSelection = unanswered;
+                outcomes[call.Id] = SelectionRequiredOutcome(call);
+                resolvedCalls[call.Id] = null;
+            }
+            if (heldWrites.Count == 0)
+            {
+                SettleSelections(results, settled.Where(item => !held.Contains(item.Selection, ReferenceEqualityComparer.Instance)));
+                return scope;
+            }
+            scope = scope with
+            {
+                TurnWrites = [.. scope.TurnWrites.Where(write => !heldWrites.Contains(write, ReferenceEqualityComparer.Instance))]
+            };
         }
-        SettleSelections(results, settled.Where(item => !held.Contains(item.Selection, ReferenceEqualityComparer.Instance)));
     }
 
     /// <summary>
@@ -101,7 +138,7 @@ public partial class ProcessUserChatCommandHandler
                 continue;
             outcomes[call.Id] = new ToolCallOutcome(new AiToolCallResult(call.Name, call.Id, false, null, null,
                 "Several targets share a title and have not been read in this turn. Call query_habits to resolve the requested scope. A singular name requires for_selection=true and ask with the returned IDs; do not pass every matching ID to a bulk write. An explicit request for the full set uses for_selection=false without a name search."),
-                null, null, null, null);
+                null, null, null, null, FailureKey: "unread_duplicate_targets");
             resolvedCalls[call.Id] = null;
         }
     }
@@ -191,11 +228,37 @@ public partial class ProcessUserChatCommandHandler
     /// Writes that make the same change, each to a part of a group, make one change to the whole group. That is a
     /// whole-set write and not a split, so only a message that names the whole set settles it.
     /// </summary>
-    private static bool MakeOneChange(IReadOnlyList<AiToolCall> writes)
-    {
-        var change = ChangeOf(writes[0].Args);
-        return writes.All(write => write.Name == writes[0].Name && JsonNode.DeepEquals(ChangeOf(write.Args), change));
-    }
+    private static bool MakeOneChange(IReadOnlyList<AiToolCall> writes) =>
+        writes.All(write => MakeSameChange(write, writes[0]));
+
+    /// <summary>
+    /// Two writes make the same change when one tool sends the same arguments apart from the record ids, or when one
+    /// write is the single form and the other the bulk form of one operation and both set the same fields.
+    /// </summary>
+    private static bool MakeSameChange(AiToolCall write, AiToolCall other) => write.Name == other.Name
+        ? JsonNode.DeepEquals(ChangeOf(write.Args), ChangeOf(other.Args))
+        : MakeOneChangeInTwoForms(write, other) || MakeOneChangeInTwoForms(other, write);
+
+    /// <summary>
+    /// The single form's fields, put in the bulk form's shape, equal the bulk form's fields apart from its targets. A
+    /// delete sets no field, so the two delete forms always match. An update sets the fields that bulk_update_habits
+    /// holds in updates; a log, skip or reschedule sets its date. A create holds its habits in a different shape and
+    /// never matches.
+    /// </summary>
+    private static bool MakeOneChangeInTwoForms(AiToolCall single, AiToolCall bulk) =>
+        BulkToolRepeatGuard.IsBulkAlternative(single.Name, bulk.Name)
+        && JsonNode.DeepEquals(bulk.Name == "bulk_update_habits"
+                ? new JsonObject { ["updates"] = FieldsOf(single.Args, "habit_id") }
+                : FieldsOf(single.Args, "habit_id"),
+            FieldsOf(bulk.Args, "filter", "habit_ids", "restart_plan"));
+
+    /// <summary>
+    /// The arguments of a write without the named target arguments. The guard reads execution arguments, which carry
+    /// no completion argument and no optional null field.
+    /// </summary>
+    private static JsonObject FieldsOf(JsonElement args, params string[] targets) => new(args.EnumerateObject()
+        .Where(property => !targets.Contains(property.Name))
+        .Select(property => KeyValuePair.Create(property.Name, JsonNode.Parse(property.Value.GetRawText()))));
 
     /// <summary>
     /// The arguments of a write without the record ids, so that two writes compare by their change alone.

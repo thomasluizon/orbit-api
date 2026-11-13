@@ -37,6 +37,30 @@ public sealed partial class ChatWriteHoldHandlerTests
         await _habitRepo.DidNotReceive().AddAsync(Arg.Any<Orbit.Domain.Entities.Habit>(), Arg.Any<CancellationToken>());
     }
 
+    [Theory]
+    [InlineData("en", "Create Read a book daily and Stretch daily")]
+    [InlineData("pt-BR", "Crie Ler um livro todo dia e Alongar todo dia")]
+    public async Task PlanOnlyRound_RejectionNamesThePlannedActionToolsSoTheNextRoundActs(string language, string message)
+    {
+        AllowHabitCreation();
+        _aiIntentService.SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(PlanOnlyResponse()));
+        var sent = new List<IReadOnlyList<AiToolCallResult>>();
+        _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
+                Arg.Do<IReadOnlyList<AiToolCallResult>>(results => sent.Add([.. results])),
+                Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(BulkCreateResponse()), Result.Success(new AiResponse { TextMessage = "Confirm to create." }));
+
+        var result = await CreateHandler().Handle(new ProcessUserChatCommand(_userId, message,
+            ClientContext: new(Locale: language)), default);
+
+        result.IsSuccess.Should().BeTrue();
+        sent[0].Should().ContainSingle().Which.Error.Should().Be(
+            "present_plan arrived without an action call, so the person saw no plan. Call the planned action tools in your next response, without present_plan: bulk_create_habits.");
+        result.Value.PendingOperations.Should().ContainSingle().Which.Items.Should().HaveCount(2);
+        sent.Should().HaveCount(2, "the plan-only round costs one model call and the action round ends the turn");
+    }
+
     [Fact]
     public async Task PlanOnlyRoundAfterRead_ContinuesToPreviewInPlaceOfTheReadBlock()
     {

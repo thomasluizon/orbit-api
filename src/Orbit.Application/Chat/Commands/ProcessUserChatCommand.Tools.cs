@@ -1,4 +1,3 @@
-using Microsoft.Extensions.Logging;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.EntityFrameworkCore;
@@ -479,7 +478,8 @@ public partial class ProcessUserChatCommandHandler
         foreach (var call in excessReads)
             outcomesByCallId[call.Id] = new ToolCallOutcome(
                 new AiToolCallResult(call.Name, call.Id, false, null, null, "Read call limit reached; narrow the request or read the next page in another round."),
-                new ActionResult(ToolNameToPascalCase(call.Name), ActionStatus.Failed, Error: "read_call_limit"), null, null, null);
+                new ActionResult(ToolNameToPascalCase(call.Name), ActionStatus.Failed, Error: "read_call_limit"), null, null, null,
+                FailureKey: "read_call_limit");
         foreach (var call in deferredCreations)
             outcomesByCallId[call.Id] = AwaitCreationReads(call);
         for (var index = 0; index < readOnlyCalls.Count; index++)
@@ -500,8 +500,8 @@ public partial class ProcessUserChatCommandHandler
         }
 
         RejectUnreadDuplicateTargets(writeCalls, resolvedWrites, executionResults, outcomesByCallId);
-        var selectionScope = SelectionScopeOf(request, resolvedWrites, executionResults);
-        RejectUnansweredSelections(writeCalls, resolvedWrites, executionResults, outcomesByCallId, selectionScope);
+        var selectionScope = RejectUnansweredSelections(writeCalls, resolvedWrites, executionResults, outcomesByCallId,
+            SelectionScopeOf(request, resolvedWrites, executionResults));
         await CoalesceLogCallsAsync(writeCalls, resolvedWrites, request.UserId, executionResults, cancellationToken);
         CoalesceTagCalls(resolvedWrites, executionResults);
         PrepareHabitProposals(resolvedWrites, request, executionResults, language);
@@ -633,14 +633,6 @@ public partial class ProcessUserChatCommandHandler
         }
     }
 
-    private void LogRoundOutcomes(IEnumerable<ToolCallOutcome> outcomes, int reads, int writes, int deferred)
-    {
-        var failed = outcomes.Count(outcome => !outcome.ToolResult.Success);
-        logger.Log(failed > 0 ? LogLevel.Warning : LogLevel.Debug,
-            "AI round ran {ReadCount} reads and {WriteCount} writes; failed calls {FailedCount}; deferred reads {DeferredCount}",
-            reads, writes, failed, deferred);
-    }
-
     private static void InvalidateTurnSnapshotIfMutated(Guid userId, IAiTool tool, AgentOperationResult result)
     {
         if (result.Status == AgentOperationStatus.Succeeded && !tool.IsReadOnly)
@@ -655,7 +647,8 @@ public partial class ProcessUserChatCommandHandler
             new ActionResult(ToolNameToPascalCase(call.Name), ActionStatus.Failed, Error: error).WithToolResultMessage(call, key: "repeatedSingleEntity", parameters: new(ToolName: call.Name, BulkTool: bulkTool)),
             null,
             null,
-            null);
+            null,
+            FailureKey: "repeated_single_entity");
     }
 
     private async Task<ToolCallOutcome> ExecuteReadOnlyToolCallOnIsolatedScopeAsync(
@@ -853,7 +846,8 @@ public partial class ProcessUserChatCommandHandler
                 AgentRiskClass.Low,
                 AgentConfirmationRequirement.None,
                 Orbit.Application.Common.AgentPolicyReasons.UnsupportedByPolicy),
-            null);
+            null,
+            FailureKey: "unknown_tool");
     }
 
     private static ToolCallOutcome UnsupportedByPolicyOutcome(AiToolCall call, IAiTool tool)
@@ -976,5 +970,6 @@ public partial class ProcessUserChatCommandHandler
         PendingAgentOperation? PendingOperation,
         AgentOperationStatus? TraceStatus = null,
         PreparedToolOperationResponse? PreparedResponse = null,
-        bool ArgumentRepairAllowed = false);
+        bool ArgumentRepairAllowed = false,
+        string? FailureKey = null);
 }

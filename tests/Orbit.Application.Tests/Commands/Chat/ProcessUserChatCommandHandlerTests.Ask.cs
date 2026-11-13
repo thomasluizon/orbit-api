@@ -81,7 +81,8 @@ public partial class ProcessUserChatCommandHandlerTests
                 new(write.Name, "after", ParseArguments("{}"))]
         });
 
-        SetupSelectionHabits(CreateHabit("Walk"), CreateHabit("Walk"));
+        var walks = new[] { CreateHabit("Walk"), CreateHabit("Walk") };
+        SetupSelectionHabits(walks);
         var query = new QueryHabitsTool(_habitRepo, _userRepo, _userDateService, _scheduleLogReader);
         var result = await CreateHandler(RealAskTool(), write, query).Handle(new(UserId,
             language == "pt-BR" ? "Exclua Caminhada" : "Delete Walk",
@@ -94,7 +95,10 @@ public partial class ProcessUserChatCommandHandlerTests
         var block = result.Value.Parts!.OfType<ChatBlockPart>().Should().ContainSingle().Which.Block
             .Should().BeOfType<AiChoiceBlock>().Subject;
         block.Question.Should().Be(question);
-        block.Options.Select(option => option.Label).Should().Equal(first, second);
+        block.MultiSelect.Should().BeFalse("the request names one walk");
+        block.Options.Select(option => option.Label).Should().NotContain([first, second],
+            "options that name no record cannot hold the answer, so the server lists each Walk");
+        block.Options.Select(option => option.Id).Should().BeEquivalentTo(walks.Select(walk => walk.Id.ToString()));
         await write.DidNotReceiveWithAnyArgs().ExecuteAsync(default, default, default);
     }
 
@@ -119,7 +123,9 @@ public partial class ProcessUserChatCommandHandlerTests
         response.IsSuccess.Should().BeTrue();
         initial!.ToolDeclarations.Should().NotContain(tool => JsonSerializer.SerializeToElement(tool).GetProperty("name").GetString() == "ask");
         initial.DynamicContext.Should().NotContain("do not call ask");
-        results.Should().ContainSingle().Which.Error.Should().Contain("plain text");
+        results.Should().ContainSingle().Which.Error.Should().Contain("A failed ask did not issue a question.")
+            .And.NotContain("Ask in plain text", "no selection waits and no habit field is missing, so the turn can still reach a preview");
+        response.Value.AiMessage.Should().Be("Which time suits you?");
         response.Value.Parts?.OfType<ChatBlockPart>().Should().BeEmpty();
         await _blockStore.DidNotReceiveWithAnyArgs().AddAsync(default!, default);
     }

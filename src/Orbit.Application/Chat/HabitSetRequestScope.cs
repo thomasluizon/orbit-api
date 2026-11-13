@@ -16,6 +16,12 @@ internal static partial class HabitSetRequestScope
         OrderedMembers().IsMatch(ScopeText(message, title));
 
     /// <summary>
+    /// The message names a count of more than one record, such as "delete two of them" or "os outros 4", so a
+    /// question about which records it means takes several selections.
+    /// </summary>
+    internal static bool NamesSeveralMembers(string message, string title) => SeveralMembers().IsMatch(ScopeText(message, title));
+
+    /// <summary>
     /// The message without its time phrases, filler phrases and title. Each removed phrase leaves a break, so the
     /// words on its two sides cannot join into a new set or order phrase.
     /// </summary>
@@ -40,6 +46,10 @@ internal static partial class HabitSetRequestScope
     [GeneratedRegex(@"\b(?:(?:" + SetWord + "|" + Quantity + "|" + Order + "|" + Joiner + @")\s+)+" + TimeOrFillerNoun + @"\b|\b" + FillerPhrase + @"\b",
         RegexOptions.CultureInvariant)]
     private static partial Regex NotAboutTheSet();
+
+    [GeneratedRegex(@"\b(?:[2-9]|[1-9]\d+|two|three|four|five|six|seven|eight|nine|ten|dois|duas|tres|quatro|cinco|seis|sete|oito|nove|dez)\b",
+        RegexOptions.CultureInvariant)]
+    private static partial Regex SeveralMembers();
 
     [GeneratedRegex(@"\b" + SetWord + @"\b|\b(?:habits|habitos)\s+(?:called|named|titled|chamados|chamadas|intitulados)\b",
         RegexOptions.CultureInvariant)]

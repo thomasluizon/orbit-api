@@ -60,30 +60,38 @@ public partial class ProcessUserChatCommandHandler
         call = call with { Args = AskTool.ExecutionArguments(call.Args) };
         results.CanRetryAsk = false;
         PreserveAskRecordSelection(call.Args, request.UserId, results);
-        ToolCallOutcome Failed(string error) => new(new AiToolCallResult(call.Name, call.Id, false, null, null,
-            error + AskRecoveryInstruction(request, results)), null, null, null, null);
+        ToolCallOutcome Failed(string key, string error) => new(new AiToolCallResult(call.Name, call.Id, false, null, null,
+            error + AskRecoveryInstruction(request, results)), null, null, null, null, FailureKey: key);
         var flags = await data.FeatureFlagService.GetEnabledKeysForUserAsync(request.UserId, ct);
         if (AskAvailabilityError(call.Args, request, flags, results) is { } availabilityError)
-            return Failed(availabilityError);
+            return Failed(availabilityError.Key, availabilityError.Error);
         var tool = ai.ToolRegistry.GetTool("ask");
         if (tool is null)
-            return Failed("The ask tool is unavailable.");
+            return Failed("ask_tool_missing", "The ask tool is unavailable.");
         var result = await tool.ExecuteAsync(call.Args, request.UserId, ct);
         if (!result.Success || result.Payload is not AiBlockDefinition definition)
-            return Failed(result.Error ?? "Invalid ask arguments.");
+            return Failed("ask_invalid_arguments", result.Error ?? "Invalid ask arguments.");
         if (!results.HasSuccessfulAccountRead && !HasBoundMissingField(call.Args, results))
-            return Failed(AskTool.AccountReadInstruction);
+            return Failed("ask_account_read_required", AskTool.AccountReadInstruction);
         if (AskMissingInputError(call.Args, definition, results) is { } missingInputError)
-            return Failed(missingInputError);
+            return Failed("ask_missing_input", missingInputError);
         if (AskTargetError(definition, results) is { } targetError)
-            return Failed(targetError);
+            return Failed("ask_target", targetError);
+        if (UnknownRecordOptionError(call.Args, definition, results) is { } unknownError)
+            return Failed("ask_target", unknownError);
         if (RepeatedDecisionError(call.Args, definition, results) is { } repeatedError)
-            return new ToolCallOutcome(new AiToolCallResult(call.Name, call.Id, false, null, null, repeatedError), null, null, null, null);
+            return new ToolCallOutcome(new AiToolCallResult(call.Name, call.Id, false, null, null, repeatedError), null, null, null, null,
+                FailureKey: "ask_repeated_decision");
         var user = await data.UserRepository.GetByIdAsync(request.UserId, ct);
         definition = AskBlockNegotiation.Definition(definition, request.ClientContext!, call.Args);
-        definition = GroundDuplicateRecordOptions(definition, results, ChatLocale.Resolve(request.ClientContext, user?.Language));
+        var locale = ChatLocale.Resolve(request.ClientContext, user?.Language);
+        definition = GroundDuplicateRecordOptions(definition, results, locale);
+        var card = HoldTheAnswer(call.Args, definition, request, results, locale);
+        if (card.Definition is null)
+            return Failed("ask_selection_incomplete", card.Error!);
+        definition = card.Definition;
         if (request.ClientContext!.PartKinds?.Contains(definition.Form, StringComparer.Ordinal) != true)
-            return Failed("The client does not support this block kind.");
+            return Failed("ask_form_unsupported", "The client does not support this block kind.");
         if (HasBoundMissingField(call.Args, results))
         {
             var draft = results.MissingHabitDrafts[JsonArgumentParser.GetOptionalString(call.Args, "draft_call_id")!];
@@ -114,19 +122,21 @@ public partial class ProcessUserChatCommandHandler
             null, null, null, null);
     }
 
-    private static string? AskAvailabilityError(JsonElement args, ProcessUserChatCommand request,
+    private sealed record AskFailure(string Key, string Error);
+
+    private static AskFailure? AskAvailabilityError(JsonElement args, ProcessUserChatCommand request,
         IReadOnlyList<string> flags, ToolExecutionAccumulator results)
     {
         if (request.AuthMethod != AgentAuthMethod.Jwt || flags.Contains(FeatureFlagKeys.AiAskBlocksDisabled)
             || flags.Contains(FeatureFlagKeys.AiPartsDisabled)
             || request.ClientContext?.SupportsParts != true || results.AskBlock is not null)
-            return "Interactive questions are unavailable.";
+            return new("ask_unavailable", "Interactive questions are unavailable.");
         if (results.AskAttempts >= 2)
-            return "The ask retry limit has been reached.";
+            return new("ask_retry_limit", "The ask retry limit has been reached.");
         results.AskAttempts++;
         results.CanRetryAsk = results.AskAttempts < 2 && request.ClientContext.PartKinds?.Any(IsAskKind) == true
             && (results.HasSuccessfulAccountRead || results.MissingHabitDrafts.Count > 0);
-        if (!CanAttemptAsk(args, request.ClientContext)) return "The client does not support this block kind.";
+        if (!CanAttemptAsk(args, request.ClientContext)) return new("ask_form_unsupported", "The client does not support this block kind.");
         return null;
     }
 
@@ -248,6 +258,10 @@ public partial class ProcessUserChatCommandHandler
         return ordered.Select(NormalizeExecutionArguments).ToList();
     }
 
+    /// <summary>
+    /// Choice options for records that share a title show the record title and the first detail that tells the
+    /// records apart. When no detail does, each option shows the place of its record in the read.
+    /// </summary>
     private static AiBlockDefinition GroundDuplicateRecordOptions(AiBlockDefinition definition,
         ToolExecutionAccumulator results, string? language)
     {
@@ -268,14 +282,14 @@ public partial class ProcessUserChatCommandHandler
             };
             var distinction = details.FirstOrDefault(detail => candidates.All(item => detail(item) is { Length: > 0 and <= 24 })
                 && candidates.Select(detail).Distinct(StringComparer.Ordinal).Count() == candidates.Length);
+            var sameTitle = SameTitleRecords(group.Key, results);
             foreach (var option in group)
             {
                 var item = results.ReadHabitItems[option.Id];
-                var label = item.Title.Length <= 20 ? item.Title : item.Title[..19] + "…";
                 options[Array.IndexOf(options, option)] = option with
                 {
-                    Label = label,
-                    Description = distinction?.Invoke(item) ?? (LocaleHelper.IsPortuguese(language) ? "Parece igual" : "Looks the same")
+                    Label = Shorten(item.Title, 20),
+                    Description = distinction?.Invoke(item) ?? PlaceInGroup(sameTitle, option.Id, LocaleHelper.IsPortuguese(language))
                 };
             }
         }
@@ -332,11 +346,19 @@ public partial class ProcessUserChatCommandHandler
     private static string AskRecoveryInstruction(ProcessUserChatCommand request, ToolExecutionAccumulator results) =>
         " A failed ask did not issue a question. Continue the original request with the appropriate tools when its inputs are clear; no ask is needed for an actionable request."
         + (results.AskAttempts == 0 || results.AskAttempts >= 2 || request.ClientContext?.PartKinds?.Any(IsAskKind) != true
-            ? " Ask in plain text instead."
+            ? PlainTextQuestion(results)
             : !results.HasSuccessfulAccountRead && results.MissingHabitDrafts.Count == 0
             ? " Continue the original request with the appropriate account read, requested create tool or short advice; ask remains unavailable until its typed prerequisite is met."
             : results.CanRetryAsk
             ? " Retry ask once with valid arguments and a supported form: " + string.Join(", ", request.ClientContext?.PartKinds?.Where(IsAskKind) ?? [])
                 + ". choice requires question and options; pickList requires title, action and items; question requires questions."
-            : " Ask in plain text instead.");
+            : PlainTextQuestion(results));
+
+    /// <summary>
+    /// A plain-text question replaces a failed ask only when the turn holds an input that nobody can read from the
+    /// account or the message: a selection that waits for the person's answer, or a missing habit field. Otherwise
+    /// the turn can still reach a preview, and the server text tells the model to continue, not to ask.
+    /// </summary>
+    private static string PlainTextQuestion(ToolExecutionAccumulator results) =>
+        results.PendingSelection is not null || results.MissingHabitDrafts.Count > 0 ? " Ask in plain text instead." : string.Empty;
 }
