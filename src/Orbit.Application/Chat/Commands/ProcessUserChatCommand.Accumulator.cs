@@ -52,9 +52,10 @@ public partial class ProcessUserChatCommandHandler
         public bool HasSuccessfulSelectionRead { get; set; }
         public bool HasSuccessfulAccountRead { get; set; }
         public Dictionary<string, HabitSetupDraft> MissingHabitDrafts { get; } = new(StringComparer.Ordinal);
-        public Dictionary<string, HabitListCardItem> ReadHabitItems { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public OrderedDictionary<string, HabitListCardItem> ReadHabitItems { get; } = new(StringComparer.OrdinalIgnoreCase);
         public HashSet<Guid> AnsweredTargetIds { get; } = [];
         public AiChoiceSelection? AnsweredChoice { get; set; }
+        public List<IReadOnlySet<string>> RefusedWriteTargets { get; } = [];
         public HabitSelectionCandidates? PendingSelection { get; set; }
         public List<HabitSelectionCandidates> SelectionCandidates { get; } = [];
         public bool HasBudgetRecovery { get; set; }

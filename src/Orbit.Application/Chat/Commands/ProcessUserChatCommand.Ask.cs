@@ -258,6 +258,10 @@ public partial class ProcessUserChatCommandHandler
         return ordered.Select(NormalizeExecutionArguments).ToList();
     }
 
+    /// <summary>
+    /// Choice options for records that share a title show the record title and the first detail that tells the
+    /// records apart. When no detail does, each option shows the place of its record in the read.
+    /// </summary>
     private static AiBlockDefinition GroundDuplicateRecordOptions(AiBlockDefinition definition,
         ToolExecutionAccumulator results, string? language)
     {
@@ -278,14 +282,14 @@ public partial class ProcessUserChatCommandHandler
             };
             var distinction = details.FirstOrDefault(detail => candidates.All(item => detail(item) is { Length: > 0 and <= 24 })
                 && candidates.Select(detail).Distinct(StringComparer.Ordinal).Count() == candidates.Length);
+            var sameTitle = SameTitleRecords(group.Key, results);
             foreach (var option in group)
             {
                 var item = results.ReadHabitItems[option.Id];
-                var label = item.Title.Length <= 20 ? item.Title : item.Title[..19] + "…";
                 options[Array.IndexOf(options, option)] = option with
                 {
-                    Label = label,
-                    Description = distinction?.Invoke(item) ?? (LocaleHelper.IsPortuguese(language) ? "Parece igual" : "Looks the same")
+                    Label = Shorten(item.Title, 20),
+                    Description = distinction?.Invoke(item) ?? PlaceInGroup(sameTitle, option.Id, LocaleHelper.IsPortuguese(language))
                 };
             }
         }

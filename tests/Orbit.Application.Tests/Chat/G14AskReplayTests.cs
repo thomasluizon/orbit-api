@@ -88,8 +88,7 @@ public partial class ProcessUserChatCommandHandlerTests
         var block = result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>()
             .Which.Block.Should().BeOfType<AiChoiceBlock>().Subject;
         block.Options.Select(option => option.Id).Should().Equal(first.Id.ToString(), second.Id.ToString());
-        block.Options.Select(option => option.Description).Should().OnlyContain(detail => detail ==
-            (language == "en" ? "Looks the same" : "Parece igual"));
+        block.Options.Select(option => option.Description).Should().Equal(language == "en" ? ["1 of 2", "2 of 2"] : ["1º de 2", "2º de 2"]);
         await AssertNoCompositionContinuation();
         result.Value.PendingOperations.Should().BeNullOrEmpty();
         AssertStoredComposition(result.Value, client, language);
@@ -183,8 +182,8 @@ public partial class ProcessUserChatCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue(result.Error);
         result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>()
-            .Which.Block.Should().BeOfType<AiChoiceBlock>().Which.Options.Should().OnlyContain(option =>
-                option.Description == (language == "en" ? "Looks the same" : "Parece igual"));
+            .Which.Block.Should().BeOfType<AiChoiceBlock>().Which.Options.Select(option => option.Description)
+                .Should().Equal(language == "en" ? ["1 of 2", "2 of 2"] : ["1º de 2", "2º de 2"]);
         round.Should().Be(2);
         AssertStoredComposition(result.Value, client, language);
     }

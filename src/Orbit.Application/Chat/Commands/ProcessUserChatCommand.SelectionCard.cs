@@ -51,7 +51,25 @@ public partial class ProcessUserChatCommandHandler
         if (group.All(candidate => named.Contains(candidate.Id)) && card.OptionTargets.All(targets => targets.Length > 0))
             return card.OptionTargets.All(targets => targets.Length == 1) && several && !card.PicksSeveral
                 ? new(TakeSeveral(definition), null) : keep;
-        return CompleteRecordCard(card, group, several, request.ClientContext?.PartKinds ?? [], LocaleHelper.IsPortuguese(language));
+        return CompleteRecordCard(card, OfferedRecords(named, group, results), group, several,
+            request.ClientContext?.PartKinds ?? [], LocaleHelper.IsPortuguese(language));
+    }
+
+    /// <summary>
+    /// The records that a completed card offers, in the order of the read: every record that the card offered and
+    /// each member of the group, or, when the options name no record, every candidate of the selections that hold
+    /// the group.
+    /// </summary>
+    private static HabitListCardItem[] OfferedRecords(IReadOnlySet<string> named, HabitListCardItem[] group,
+        ToolExecutionAccumulator results)
+    {
+        var members = group.Select(candidate => candidate.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var offered = named.Count > 0
+            ? named.Concat(members).ToHashSet(StringComparer.OrdinalIgnoreCase)
+            : Selections(results).Where(selection => selection.Candidates.Any(candidate => members.Contains(candidate.Id)))
+                .SelectMany(selection => selection.Candidates).Select(candidate => candidate.Id)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return [.. TurnRecords(results).Where(record => offered.Contains(record.Id))];
     }
 
     /// <summary>
@@ -70,37 +88,61 @@ public partial class ProcessUserChatCommandHandler
         _ => null
     };
 
-    private static SelectionCardVerdict CompleteRecordCard(RecordCard card, IReadOnlyList<HabitListCardItem> group,
-        bool several, IReadOnlyCollection<string> kinds, bool portuguese)
+    private static SelectionCardVerdict CompleteRecordCard(RecordCard card, HabitListCardItem[] offered,
+        HabitListCardItem[] group, bool several, IReadOnlyCollection<string> kinds, bool portuguese)
     {
-        string Position(int index) => string.Format(CultureInfo.InvariantCulture, portuguese ? "{0}º de {1}" : "{0} of {1}",
-            index + 1, group.Count);
-        if (group.Count <= 4 && kinds.Contains(AiBlockKinds.Choice, StringComparer.Ordinal) && card.Prompt.Length <= 120)
+        if (offered.Length <= 4 && kinds.Contains(AiBlockKinds.Choice, StringComparer.Ordinal) && card.Prompt.Length <= 120)
             return new(new AiBlockDefinition(AiBlockKinds.Choice, card.Prompt,
-                [.. group.Select((candidate, index) => new AiBlockOption(candidate.Id, Shorten(candidate.Title, 20), Position(index)))],
+                [.. offered.Select(record => new AiBlockOption(record.Id, Shorten(record.Title, 20), PlaceInGroup(group, record.Id, portuguese)))],
                 [], several, card.AllowFreeText), null);
-        if (group.Count <= 10 && kinds.Contains(AiBlockKinds.Question, StringComparer.Ordinal))
+        if (offered.Length <= 10 && kinds.Contains(AiBlockKinds.Question, StringComparer.Ordinal))
             return new(new AiBlockDefinition(AiBlockKinds.Question, string.Empty, [], [],
                 Questions: [new AiQuestion(RecordQuestionId, several ? "multipleChoice" : "singleChoice", card.Prompt,
-                    [.. group.Select((candidate, index) => new AiQuestionOption(candidate.Id,
-                        $"{Shorten(candidate.Title, 100)} ({Position(index)})"))], card.AllowFreeText)]), null);
-        return new(null, $"This card cannot hold the answer: the person must be able to select each of the {group.Count} habits titled \"{group[0].Title}\", and this client cannot show one option for each of them. Use form choice with 2 to 4 options whose target_ids together hold every habit ID that query_habits returned for that title, and set multiSelect=true when the person picks several options. The card was not shown.");
+                    [.. offered.Select(record => new AiQuestionOption(record.Id, PlaceInGroup(group, record.Id, portuguese) is { } place
+                        ? $"{Shorten(record.Title, 100)} ({place})" : Shorten(record.Title, 120)))], card.AllowFreeText)]), null);
+        return new(null, $"This card cannot hold the answer: the person must be able to select each of the {offered.Length} habits that the card is about, {group.Length} of them titled \"{group[0].Title}\", and this client cannot show one option for each of them. Use form choice with 2 to 4 options whose target_ids together hold each of those habit IDs, and set multiSelect=true when the person picks several options. The card was not shown.");
+    }
+
+    /// <summary>
+    /// The place of a record among the records that share its title, in the order the read returned them: "2 of 6",
+    /// or "2º de 6" in Portuguese. Null when the record is not a member of the group.
+    /// </summary>
+    private static string? PlaceInGroup(HabitListCardItem[] group, string id, bool portuguese)
+    {
+        var index = Array.FindIndex(group, member => string.Equals(member.Id, id, StringComparison.OrdinalIgnoreCase));
+        return index < 0 ? null
+            : string.Format(CultureInfo.InvariantCulture, portuguese ? "{0}º de {1}" : "{0} of {1}", index + 1, group.Length);
     }
 
     /// <summary>
     /// The same-titled group that a record card is about: the one group that the options name, or, when the options
     /// name no record, the one same-titled group of the turn's selections. Candidates keep the order of the read.
     /// </summary>
-    private static IReadOnlyList<HabitListCardItem>? SelectionGroup(IReadOnlySet<string> named, ToolExecutionAccumulator results)
+    private static HabitListCardItem[]? SelectionGroup(IReadOnlySet<string> named, ToolExecutionAccumulator results)
     {
-        var selected = new[] { results.PendingSelection }.Concat(results.SelectionCandidates).OfType<HabitSelectionCandidates>()
-            .SelectMany(selection => selection.Candidates);
-        if (named.Count == 0)
-            return SameTitleGroups(selected) is [var only] ? only : null;
-        var touched = SameTitleGroups(selected.Concat(results.ReadHabitItems.Values))
-            .Where(group => group.Any(candidate => named.Contains(candidate.Id))).ToArray();
-        return touched is [var group] ? group : null;
+        var selected = Selections(results).SelectMany(selection => selection.Candidates)
+            .Select(candidate => candidate.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var groups = SameTitleGroups(TurnRecords(results).Where(record => named.Count > 0 || selected.Contains(record.Id)))
+            .Where(group => named.Count == 0 || group.Any(candidate => named.Contains(candidate.Id))).ToArray();
+        return groups is [var group] ? group : null;
     }
+
+    private static IEnumerable<HabitSelectionCandidates> Selections(ToolExecutionAccumulator results) =>
+        new[] { results.PendingSelection }.Concat(results.SelectionCandidates).OfType<HabitSelectionCandidates>();
+
+    /// <summary>
+    /// Every record that a read of the turn returned, in the order the reads returned them, then each selection
+    /// candidate that no read returned.
+    /// </summary>
+    private static IEnumerable<HabitListCardItem> TurnRecords(ToolExecutionAccumulator results) => results.ReadHabitItems.Values
+        .Concat(Selections(results).SelectMany(selection => selection.Candidates))
+        .DistinctBy(record => record.Id, StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// The records of the turn that share the title, in the order the reads returned them.
+    /// </summary>
+    private static HabitListCardItem[] SameTitleRecords(string normalizedTitle, ToolExecutionAccumulator results) =>
+        [.. TurnRecords(results).Where(record => HabitNameMatcher.Normalize(record.Title) == normalizedTitle)];
 
     private static HabitListCardItem[][] SameTitleGroups(IEnumerable<HabitListCardItem> candidates) => [.. candidates
         .DistinctBy(candidate => candidate.Id, StringComparer.OrdinalIgnoreCase)
@@ -121,30 +163,44 @@ public partial class ProcessUserChatCommandHandler
     private static string Shorten(string text, int max) => text.Length <= max ? text : text[..(max - 1)] + "…";
 
     /// <summary>
-    /// After an answered choice that splits records into a chosen and an unchosen set, a write of the turn was
-    /// refused and the prepared changes touch only one set. The request had an action for each set, so the other
-    /// set still needs its change. Returns the records of that set, or null.
+    /// Keeps the records that a refused write named, so a later round can tell which set of an answered choice the
+    /// refused change was for.
     /// </summary>
-    private IReadOnlyList<string>? UnpreparedAnsweredSet(ToolExecutionAccumulator results)
+    private static void RecordRefusedWrite(AiToolCall call, ToolCallOutcome outcome, ToolExecutionAccumulator results)
+    {
+        if (outcome.OperationResult?.Status is AgentOperationStatus.Denied or AgentOperationStatus.Failed)
+            results.RefusedWriteTargets.Add(EffectiveWriteTargetIds(call, results).Select(id => id.ToString())
+                .ToHashSet(StringComparer.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// After an answered choice that splits records into a chosen and an unchosen set, the prepared changes touch
+    /// only one set, and a refused write of the turn was a separate change to the other set: it named a record of
+    /// that set and no record of the prepared set. The request had an action for each set, so the other set still
+    /// needs its change. Returns the records of that set, or null.
+    /// </summary>
+    private static IReadOnlyList<string>? UnpreparedAnsweredSet(ToolExecutionAccumulator results)
     {
         if (results.AnsweredChoice is not { ChosenTargets.Count: > 0, UnchosenTargets.Count: > 0 } choice
-            || !results.OperationResults.Any(operation => operation.Status is AgentOperationStatus.Denied or AgentOperationStatus.Failed
-                && ai.ToolRegistry.GetTool(operation.OperationId) is { IsReadOnly: false }))
+            || results.RefusedWriteTargets.Count == 0)
             return null;
         var prepared = results.PendingOperations
             .SelectMany(operation => (operation.Items ?? []).Select(item => item.EntityId)
                 .Concat((operation.Changes ?? []).Select(change => (Guid?)change.EntityId)))
             .OfType<Guid>().Select(id => id.ToString()).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var chosen = choice.ChosenTargets.Any(prepared.Contains);
-        var unchosen = choice.UnchosenTargets.Any(prepared.Contains);
-        return chosen == unchosen ? null : chosen ? choice.UnchosenTargets : choice.ChosenTargets;
+        if (chosen == choice.UnchosenTargets.Any(prepared.Contains))
+            return null;
+        var (preparedSet, remaining) = chosen ? (choice.ChosenTargets, choice.UnchosenTargets) : (choice.UnchosenTargets, choice.ChosenTargets);
+        return results.RefusedWriteTargets.Any(targets => remaining.Any(targets.Contains) && !preparedSet.Any(targets.Contains))
+            ? remaining : null;
     }
 
     /// <summary>
     /// Tells the model, on each write of the round that it prepared, which answered records still have no change,
     /// so the remaining action is prepared in this turn and the preview holds the whole request.
     /// </summary>
-    private void NoteUnpreparedAnsweredSet(List<AiToolCallResult> toolResults,
+    private static void NoteUnpreparedAnsweredSet(List<AiToolCallResult> toolResults,
         IReadOnlyDictionary<string, ToolCallOutcome> outcomes, ToolExecutionAccumulator results)
     {
         if (UnpreparedAnsweredSet(results) is not { } remaining)
@@ -157,7 +213,7 @@ public partial class ProcessUserChatCommandHandler
                     {
                         preview = toolResults[index].Payload,
                         remaining_answered_records = remaining,
-                        instruction = "This approval preview covers only one of the two sets of the answered selection, and a write in this turn was refused. Prepare the requested change for remaining_answered_records now, with those exact IDs, so the preview holds the whole request."
+                        instruction = "This approval preview covers only one of the two sets of the answered selection, and a refused write in this turn was a separate change to remaining_answered_records. Prepare the requested change for remaining_answered_records now, with those exact IDs, so the preview holds the whole request."
                     }
                 };
     }
