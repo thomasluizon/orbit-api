@@ -77,12 +77,19 @@ public partial class ProcessUserChatCommandHandler
             return Failed("ask_missing_input", missingInputError);
         if (AskTargetError(definition, results) is { } targetError)
             return Failed("ask_target", targetError);
+        if (UnknownRecordOptionError(call.Args, definition, results) is { } unknownError)
+            return Failed("ask_target", unknownError);
         if (RepeatedDecisionError(call.Args, definition, results) is { } repeatedError)
             return new ToolCallOutcome(new AiToolCallResult(call.Name, call.Id, false, null, null, repeatedError), null, null, null, null,
                 FailureKey: "ask_repeated_decision");
         var user = await data.UserRepository.GetByIdAsync(request.UserId, ct);
         definition = AskBlockNegotiation.Definition(definition, request.ClientContext!, call.Args);
-        definition = GroundDuplicateRecordOptions(definition, results, ChatLocale.Resolve(request.ClientContext, user?.Language));
+        var locale = ChatLocale.Resolve(request.ClientContext, user?.Language);
+        definition = GroundDuplicateRecordOptions(definition, results, locale);
+        var card = HoldTheAnswer(call.Args, definition, request, results, locale);
+        if (card.Definition is null)
+            return Failed("ask_selection_incomplete", card.Error!);
+        definition = card.Definition;
         if (request.ClientContext!.PartKinds?.Contains(definition.Form, StringComparer.Ordinal) != true)
             return Failed("ask_form_unsupported", "The client does not support this block kind.");
         if (HasBoundMissingField(call.Args, results))
