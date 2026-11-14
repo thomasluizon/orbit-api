@@ -92,18 +92,43 @@ public partial class ProcessUserChatCommandHandler
     }
 
     /// <summary>
-    /// The writes that the turn prepared, in any round, carry a write that a guard of the handler turned down: together,
-    /// the writes of the same operation in its single or bulk form hold each target of the refused write in their
-    /// targets or prepared previews. The guard asked for other arguments, so the change may differ, and a filter for
-    /// every record carries each one through its preview. An earlier write carries a refused repeat of itself.
+    /// The writes that the turn prepared, in any round, carry a write that a guard of the handler turned down: a write of
+    /// the same operation in its single or bulk form prepared, and together these writes hold each record of the refused
+    /// write (<see cref="RecordsOf"/>) in their records or prepared previews. The guard asked for other arguments, so the
+    /// change may differ. An earlier write carries a refused repeat of itself.
     /// </summary>
-    private static bool CarriesRefusedWrite(AiToolCall refused, IEnumerable<CorrectionOccurrence> prepared)
+    private static bool CarriesRefusedWrite(AiToolCall refused, ToolExecutionAccumulator results)
     {
-        var carried = prepared.Where(write => IsSameOperation(refused.Name, write.Call.Name))
-            .SelectMany(write => TargetsOf(write.Call.Args).Select(target => target.Value)
-                .Concat((write.Outcome.PendingOperation?.Items ?? []).Select(item => item.EntityId?.ToString() ?? string.Empty)))
+        var family = results.PreparedWrites.Where(write => IsSameOperation(refused.Name, write.Call.Name)).ToArray();
+        var carried = family.SelectMany(write => RecordsOf(write.Call)
+                .Concat((write.Outcome.PendingOperation?.Items ?? [])
+                    .Select(item => item.EntityId?.ToString() ?? HabitNameMatcher.Normalize(item.EntityName))))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        return TargetsOf(refused.Args).All(target => carried.Contains(target.Value));
+        return family.Length > 0 && RecordsOf(refused).All(carried.Contains);
+    }
+
+    /// <summary>
+    /// The records that a write changes. A creation names each habit that it makes by its title, because the habit has
+    /// no id yet and the ids of a creation, such as its parent or its tags, name other records. Any other write names its
+    /// target ids.
+    /// </summary>
+    private static IEnumerable<string> RecordsOf(AiToolCall write) =>
+        write.Name is "create_habit" or "create_sub_habit" or "bulk_create_habits"
+            ? CreatedTitles(write.Args)
+            : TargetsOf(write.Args).Select(target => target.Value);
+
+    /// <summary>The normalized title of each habit that a creation makes, with the habits and sub-habits that it holds.</summary>
+    private static List<string> CreatedTitles(JsonElement item)
+    {
+        var titles = new List<string>();
+        if (item.ValueKind != JsonValueKind.Object)
+            return titles;
+        if (JsonArgumentParser.GetOptionalString(item, "title") is { } title)
+            titles.Add(HabitNameMatcher.Normalize(title));
+        foreach (var field in new[] { "habits", "sub_habits" })
+            if (item.TryGetProperty(field, out var children) && children.ValueKind == JsonValueKind.Array)
+                titles.AddRange(children.EnumerateArray().SelectMany(CreatedTitles));
+        return titles;
     }
 
     /// <summary>The two writes run one operation: the same tool, or its single and its bulk form.</summary>

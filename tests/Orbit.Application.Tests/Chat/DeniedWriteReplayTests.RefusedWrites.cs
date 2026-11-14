@@ -1,5 +1,10 @@
 using System.Text.Json;
 using FluentAssertions;
+using NSubstitute;
+using Orbit.Application.Chat.Commands;
+using Orbit.Application.Chat.Models;
+using Orbit.Application.Chat.Tools.Implementations;
+using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Models;
 
@@ -69,5 +74,74 @@ public partial class ProcessUserChatCommandHandlerTests
         run.ToolResults[1].Should().HaveCount(3).And.OnlyContain(result => !result.Success);
         run.Result.Value.AiMessage.Should().NotBe(NotPreparedFor(language));
         PreparedIds(run).Should().BeEquivalentTo(run.Children[..3].Select(child => child.Id));
+    }
+
+    /// <summary>A creation that the habit proposal check turns down: an avoid habit with no recurrence.</summary>
+    private static AiToolCall RefusedCreation(string title) => new("create_habit", "create-" + title,
+        JsonSerializer.SerializeToElement(new { title, frequency_unit = "Day", frequency_quantity = 1, is_bad_habit = true, is_general = true }));
+
+    private static AiToolCall Creation(string title) => new("create_habit", "created-" + title,
+        JsonSerializer.SerializeToElement(new { title, frequency_unit = "Day", frequency_quantity = 1 }));
+
+    /// <summary>
+    /// The request creates Water and Tea. The proposal check turns the Water creation down, and the next round creates
+    /// only Tea. A creation names the habit that it makes by its title, so the Tea creation does not carry the refused
+    /// Water creation, and the turn holds no preview with only Tea. A later creation of Water carries it.
+    /// </summary>
+    [Theory]
+    [InlineData("Tea", false)]
+    [InlineData("Water", true)]
+    public async Task DeniedWrite_ARefusedCreationIsCarriedOnlyByACreationOfTheSameHabit(string later, bool carried)
+    {
+        SetupUserAndPayGate();
+        var create = RecoveryCreateHabitTool();
+        var handler = CreateHandler(create);
+        var gateway = InstallCorrectionGateway(create, hold: true);
+        SetupAiResponse(Calls(RefusedCreation("Water")));
+        _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
+                Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(Calls(Creation(later))), Result.Success(Text("en")), Result.Success(Text("en")));
+
+        var result = await handler.Handle(new ProcessUserChatCommand(UserId, "Create a Water habit and a Tea habit."), default);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        gateway.Requests.Should().ContainSingle("the proposal check turned the first Water creation down before dispatch")
+            .Which.Arguments.GetProperty("title").GetString().Should().Be(later);
+        if (carried)
+            result.Value.PendingOperations.Should().NotBeNullOrEmpty("the later creation makes the refused habit");
+        else
+        {
+            result.Value.PendingOperations.Should().BeNullOrEmpty("a preview with only Tea holds half of the request");
+            result.Value.AiMessage.Should().Be(NotPreparedFor("en"));
+        }
+    }
+
+    /// <summary>
+    /// The proposal check turns the Water creation down, and the next round deletes another habit. No creation of the
+    /// turn prepared, so nothing carries the refused creation, and the turn holds no preview with only the delete.
+    /// </summary>
+    [Fact]
+    public async Task DeniedWrite_ARefusedCreationWithNoPreparedCreationLeavesNoPreview()
+    {
+        SetupUserAndPayGate();
+        var run = CreateHabit("Run");
+        SetupSelectionHabits([run]);
+        var create = RecoveryCreateHabitTool();
+        var delete = new DeleteHabitTool(_mediator, _habitRepo);
+        var handler = CreateHandler(create, delete);
+        var gateway = InstallCorrectionGateway(create, hold: true, delete);
+        SetupAiResponse(Calls(RefusedCreation("Water")));
+        _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
+                Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(Calls(new AiToolCall(delete.Name, "delete-run", JsonSerializer.SerializeToElement(new { habit_id = run.Id })))),
+                Result.Success(Text("en")), Result.Success(Text("en")));
+
+        var result = await handler.Handle(new ProcessUserChatCommand(UserId, "Create a Water habit and delete Run."), default);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        gateway.Requests.Should().ContainSingle("the proposal check turned the Water creation down before dispatch")
+            .Which.OperationId.Should().Be(delete.Name);
+        result.Value.PendingOperations.Should().BeNullOrEmpty("a preview with only the delete holds half of the request");
+        result.Value.AiMessage.Should().Be(NotPreparedFor("en"));
     }
 }

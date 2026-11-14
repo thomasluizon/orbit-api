@@ -57,7 +57,7 @@ public partial class ProcessUserChatCommandHandler
                 || operation.Status == AgentOperationStatus.Failed && operation.ErrorCode != ErrorCodes.HabitLimitReached
                 && (operation.Access == "write" || ai.ToolRegistry.GetTool(operation.OperationId) is { IsReadOnly: false }))
             || results.PendingSelection is null && results.AskBlock is null
-            && results.RefusedWrites.Any(refused => !CarriesRefusedWrite(refused.Call, results.PreparedWrites)));
+            && results.RefusedWrites.Any(refused => !CarriesRefusedWrite(refused.Call, results)));
 
     /// <summary>
     /// A write that a guard of the handler turned down before dispatch, so it has no operation result: repeated single
