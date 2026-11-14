@@ -117,8 +117,8 @@ public partial class ProcessUserChatCommandHandler
     /// <summary>
     /// The later write is the denied write sent again: the same operation and change (<see cref="MakeSameChange"/>
     /// without the targets) and evidence for each record. It names the chosen or the unchosen records of the validated
-    /// choice selection, a set that no other write of the turn changes, or each record of the denied write and at least
-    /// as many targets. An unknown denied id names only the habit that it was copied from (<see cref="CopiedFrom"/>).
+    /// choice selection, a set that no other write of the turn deletes or gives this change (<see cref="ChangesAnyOf"/>),
+    /// or each record of the denied write and at least as many targets. An unknown denied id names only the habit that it was copied from (<see cref="CopiedFrom"/>).
     /// </summary>
     private static bool ResendsDeniedWrite(AiToolCall denied, AiToolCall candidate, ToolExecutionAccumulator results)
     {
@@ -143,12 +143,14 @@ public partial class ProcessUserChatCommandHandler
     }
 
     /// <summary>
-    /// Another write of the turn already changes a record of the set. The answer of a choice gives each set the one change
-    /// that the request asks for it, so a resend on that set is not the denied write of the other set.
+    /// Another write of the turn already deletes a record of the set, or gives it this kind of change: the same tool, or
+    /// its single or bulk form. A deleted record takes no other change, and the set already has this change, so a resend
+    /// on that set is not the denied write of the other set. Another kind of change, such as a tag, leaves the link.
     /// </summary>
     private static bool ChangesAnyOf(IReadOnlySet<Guid> records, AiToolCall candidate, ToolExecutionAccumulator results) =>
-        results.PreviousWriteCalls.Any(call => call.Id != candidate.Id && TargetsOf(call.Args)
-            .Any(target => target.Habit && Guid.TryParse(target.Value, out var id) && records.Contains(id)));
+        results.PreviousWriteCalls.Any(call => call.Id != candidate.Id
+            && (IsSameOperation(call.Name, candidate.Name) || IsSameOperation(call.Name, "delete_habit"))
+            && TargetsOf(call.Args).Any(target => target.Habit && Guid.TryParse(target.Value, out var id) && records.Contains(id)));
 
     /// <summary>
     /// The one owned habit that a denied id was copied from: the id cut short at the end of its groups, with the first
