@@ -5,7 +5,10 @@ using Orbit.Domain.Models;
 
 namespace Orbit.Application.Chat.Tools.Implementations;
 
-/// <summary>A revision in a chat turn that removes every item of a preview, held until the turn ends with its answer.</summary>
+/// <summary>
+/// A revision in a chat turn that removes every item of a preview. The preview ledger of the turn runs the discard: at
+/// once for a preview of this turn, and when the turn ends with its answer for an earlier preview.
+/// </summary>
 public sealed record PendingPreviewDiscard(Guid PendingOperationId, string PreviewFingerprint)
 {
     public const string Instruction = "The preview is discarded when your answer reaches the person. Say so in one short sentence.";
@@ -45,8 +48,8 @@ public sealed class RevisePendingChangesTool(IServiceProvider services) : IAiToo
 
     /// <summary>
     /// Revises a pending preview. A revision that removes every item discards the preview. With
-    /// <paramref name="holdDiscard"/>, a chat turn gets the discard to run when it ends with its answer, so a withdrawn
-    /// turn discards nothing.
+    /// <paramref name="holdDiscard"/>, the chat turn gets the discard and its preview ledger runs it, so a withdrawn turn
+    /// discards no earlier preview.
     /// </summary>
     public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct, AgentClientContext? clientContext,
         bool holdDiscard = false)
