@@ -368,7 +368,7 @@ public partial class ProcessUserChatCommandHandlerTests
     public async Task DeniedWrite_Run4AnswerTurnContextHoldsTheSelectedAndTheRemainingIds(string language)
     {
         AiToolRequest? sent = null;
-        _aiIntentService.SendWithToolsAsync(Arg.Do<AiToolRequest>(value => sent = value),
+        _ = _aiIntentService.SendWithToolsAsync(Arg.Do<AiToolRequest>(value => sent = value),
             Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
 
         var run = await RunDeniedAnswerTurnAsync(language, children => [Calls(CorrectedRename(children)), Text(language)]);
