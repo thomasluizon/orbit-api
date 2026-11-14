@@ -70,6 +70,12 @@ test('staging landing uses the managed widget and its host is admitted only by s
   assert.match(policy, /staging\s*=\s*\["orbit-landing-staging.onrender.com"\]/)
   assert.doesNotMatch(policy.split('staging')[0], /orbit-landing-staging/)
 })
+test('neither landing site sets NODE_VERSION, so Render builds with the landing .node-version', () => {
+  for (const [file, resource] of [['staging.tf', 'staging_landing'], ['production.tf', 'landing']]) {
+    const site = text(file).split(`resource "render_static_site" "${resource}" {`)[1].split('\nresource ')[0]
+    assert.doesNotMatch(site, /NODE_VERSION/, `${resource} must not override the landing .node-version`)
+  }
+})
 test('production web values point at production hosts', () => {
   const web = configuration.split('  production_web_values = {')[1].split('  staging_web_values =')[0]
   value(web, 'API_BASE', 'https://api.useorbit.org')

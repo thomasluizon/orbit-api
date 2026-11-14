@@ -73,6 +73,40 @@ public sealed class O200kTokenCounterTests
         }
     }
 
+    /// <summary>
+    /// A run of lowercase letters is one pre-token, so these pieces reach the heap merge above 256 bytes and
+    /// the scan merge below it. Few letters give many equal-rank pairs, which tests the leftmost tie rule.
+    /// </summary>
+    [Fact]
+    public void CountTokens_MatchesTheLibraryOnLongSinglePieces()
+    {
+        var random = new Random(2074);
+        foreach (var alphabet in new[] { "ab", "xyz", "abcdefghijklmnopqrstuvwxyz", "éçãßø" })
+        {
+            foreach (var length in new[] { 128, 255, 256, 257, 258, 1000 }.Concat(Enumerable.Range(0, 12).Select(_ => random.Next(200, 3000))))
+            {
+                var value = new string(Enumerable.Range(0, length).Select(_ => alphabet[random.Next(alphabet.Length)]).ToArray());
+                O200kTokenCounter.Shared.CountTokens(value).Should().Be(Reference.CountTokens(value), $"{alphabet} x {length}");
+            }
+        }
+    }
+
+    /// <summary>
+    /// A space and a run of one letter is one pre-token. When the run is four times longer, the merge work of an
+    /// n log n merge grows about 4.6 times, and the work of a merge that scans every part for each merge grows about
+    /// 16 times. The test counts the work, not the time, so a slow or busy machine cannot change the result.
+    /// </summary>
+    [Fact]
+    public void CountTokens_MergeWorkOfALongPieceGrowsWithNLogN()
+    {
+        var shorter = MergeVisitsFor(10_000);
+        var longer = MergeVisitsFor(40_000);
+
+        shorter.Should().BePositive();
+        ((double)longer / shorter).Should().BeLessThan(8,
+            "a piece four times longer must cost about four times the merge work, not sixteen times");
+    }
+
     [Fact]
     public void Vocabulary_HoldsEveryRankInFlatArraysOfAFewMegabytes()
     {
@@ -90,6 +124,15 @@ public sealed class O200kTokenCounterTests
         typeof(O200kTokenCounter).Assembly.GetReferencedAssemblies().Select(name => name.Name)
             .Should().NotContain("Microsoft.ML.Tokenizers",
                 "the library tokenizer caches about 42 MB statically; O200kTokenCounter counts with about 4 MB");
+    }
+
+    private static long MergeVisitsFor(int letters)
+    {
+        var text = " " + new string('x', letters);
+        var counter = O200kTokenCounter.Shared;
+        var before = O200kTokenCounter.MergeVisits;
+        counter.CountTokens(text);
+        return O200kTokenCounter.MergeVisits - before;
     }
 
     private static IEnumerable<string> Strings(JsonElement element) => element.ValueKind switch

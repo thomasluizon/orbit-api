@@ -10,7 +10,7 @@
 
 Clean architecture, four projects: `Orbit.Api` → `Orbit.Application` → `Orbit.Domain` ← `Orbit.Infrastructure`. CQRS via MediatR. Commands and queries live per-feature folder in `Orbit.Application`. Domain entities use factory methods (`Habit.Create()`, `User.Create()`). Generic repository + Unit of Work in Infrastructure. Each project has a scoped `CLAUDE.md` — read those when editing inside that project.
 
-Run `node tools/arch-map.mjs` before reading `architecture.json` or `architecture.html`. Both maps are generated locally and are not committed. The `arch-map` workflow runs the generator and publishes both maps as an artifact.
+Run `node tools/arch-map.mjs` before reading `architecture.json` or `architecture.html`. Both maps are generated locally and are not committed.
 
 ## Cross-cutting hard rules
 
@@ -18,7 +18,7 @@ These apply everywhere — they override project-local conventions if they confl
 
 - Write rules, docs and comments timelessly: no dates except load-bearing data, names or attributions, incident stories, or machine paths. `tools/check-timeless.mjs` enforces this when installed.
 
-- **Suppressions are a closed set.** `tools/suppression-allowlist.json` declares every `#pragma warning disable` and `[SuppressMessage]` under `src/`, per file and per rule with a site count and a reason, and `Guard Conventions` fails an undeclared one. The EF scaffolder's migration pragmas are exempted by a visible directory entry, not by a hidden regex. `node tools/check-suppression-allowlist.mjs --print` reseeds the shape; the reasons are written by hand.
+- **Suppressions are a closed set.** `tools/suppression-allowlist.json` declares every `#pragma warning disable` and `[SuppressMessage]` under `src/`, per file and per rule with a site count and a reason, and `Guards` fails an undeclared one. The EF scaffolder's migration pragmas are exempted by a visible directory entry, not by a hidden regex. `node tools/check-suppression-allowlist.mjs --print` reseeds the shape; the reasons are written by hand.
 - **Timezone:** All user-facing dates MUST use `IUserDateService.GetUserTodayAsync(userId)`. `DateTime.UtcNow` is only for `*AtUtc` timestamp parameters, fields and properties (including `Add*` arithmetic on the instant and locals used exclusively by those sinks), cache keys, and `TimeZoneInfo` conversion into the user's timezone - Roslyn `ORBIT0004` (`src/Orbit.Analyzers`) blocks other raw `DateTime.UtcNow` reads in Api/Application/Infrastructure and blocks `DateOnly.FromDateTime(DateTime.UtcNow...)` in all four projects with no exemption.
 - **Authorization:** default `[Authorize]`; Roslyn `ORBIT0003` (`src/Orbit.Analyzers`) fails the build on a Controller with no class-level `[Authorize]`/`[AllowAnonymous]` (per-action attributes on every action also satisfy it). Exempt (mark `[AllowAnonymous]`): `/health`, `/api/auth/*`, signature-verified webhooks.
 - **Validation:** Every new feature needs validators in `Orbit.Application/<Feature>/Validators/` AND domain-entity guards in factory/update methods. The backend is the source of truth — never trust the frontend.
@@ -70,7 +70,7 @@ Pre-commit hook: a git-level `pre-commit` (lefthook, `lefthook.yml`) runs `dotne
 - Every new feature needs unit tests: commands, queries, validators, domain logic.
 - Test accounts bypass email verification via the `TEST_ACCOUNTS` env var (`email:code` pairs) — see `tests/CLAUDE.md`.
 - **Query-shape / N+1 guard:** `tests/Orbit.Infrastructure.Tests/Persistence/QueryRoundTripCountTests.cs` runs the filtered-include and batched reads (`GetRetrospectiveQuery`, `GetDailySummaryQuery`, `ExportUserDataQuery` shapes) over SQLite in-memory with a `CountingDbCommandInterceptor` and asserts the SQL round-trip count is invariant to row volume — the tripwire for an N+1 regression. Reuses the shared `SqliteOrbitDbContextFactory` shim (extracted for these tests; the ~6 inline copies remain a dedup follow-up).
-- **Benchmarks (not tests):** `bench/Orbit.Benchmarks` is a BenchmarkDotNet console (`net10.0`, `[MemoryDiagnoser][ShortRunJob]`) over the three pure hot paths (`HabitScheduleService`, `HabitMetricsCalculator.Calculate`, `RetrospectiveMetricsCalculator.Compute`). It is deliberately outside `dotnet test`/coverage/Stryker. `benchmark.yml` runs it nightly, exports JSON, and `check_bench.py` compares each mean to `bench/baseline.json` (~50% tolerance, report-only). Run locally: `dotnet run -c Release --project bench/Orbit.Benchmarks -- --filter '*'` (or `--list flat` to enumerate).
+- **Benchmarks (not tests):** `bench/Orbit.Benchmarks` is a BenchmarkDotNet console (`net10.0`, `[MemoryDiagnoser][ShortRunJob]`) over the three pure hot paths (`HabitScheduleService`, `HabitMetricsCalculator.Calculate`, `RetrospectiveMetricsCalculator.Compute`). It is deliberately outside `dotnet test` and coverage, and no CI job runs it. Run locally: `dotnet run -c Release --project bench/Orbit.Benchmarks -- --filter '*'` (or `--list flat` to enumerate).
 
 ## Deployment
 
@@ -90,7 +90,7 @@ branch, including pull request runs, do not qualify. See
 Run `node tools/gating-matrix.mjs` to write `gating-matrix.json` at the repository root. The file is not committed.
 Gate rows distinguish a hard `planRequirement` from a plan-scoped quota in `quotaLiftedByPlan`.
 Feature flag rows always set `quotaLiftedByPlan` to `null` because their `planRequirement` comes from the database column.
-The `Gating matrix drift` check generates it twice, verifies deterministic output, and publishes the `gating-matrix` artifact.
+The `Guards` job generates it twice and verifies deterministic output.
 Its provenance hash covers every C# input read. Live `AppConfigs` rows can override the compiled defaults it reports.
 
 ## Generated capability inventory
@@ -104,7 +104,7 @@ Counts come from registration code; MCP-only tools are excluded from the exposed
 Full field readback is distinct from a count or summary. Creation without update and writes without full readback are gaps.
 Domain edit contracts also reveal writable fields with no tool parameter. Deliberate omissions carry their reason.
 
-`Capability inventory drift` runs source-mutation tests, compares the reviewed semantic snapshot, and publishes the artifact.
+The `Guards` job runs the source-mutation tests in `tools/__tests__/capability-inventory.test.mjs` and `node tools/capability-inventory.mjs --check`, which compares the reviewed semantic snapshot.
 The readable baseline records registrations, parameter contracts, per-field operation verdicts, routes and tracked gaps.
 Source hashes and line numbers are excluded. Evidence in the artifact and gap report identifies a path and type/member,
 so whitespace, line shifts and unrelated implementation edits do not require accepting a new capability baseline.

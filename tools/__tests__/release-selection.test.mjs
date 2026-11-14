@@ -214,7 +214,8 @@ test("staging builds the verified source checkout and carries its SHA into the i
   const staging = job("staging")
   assert.match(staging, /packages: write/)
   assert.match(staging, /ref: \$\{\{ needs.prepare.outputs.sha \}\}[\s\S]*?fetch-depth: 0[\s\S]*?path: release-source/)
-  assert.match(staging, /driver: docker/)
+  assert.match(staging, /cache-from: type=gha,scope=api-image\n/)
+  assert.doesNotMatch(staging, /cache-to:/)
   assert.match(staging, /context: \.\/release-source/)
   assert.match(staging, /file: \.\/release-source\/Dockerfile/)
   assert.match(staging, /push: true/)
@@ -224,6 +225,7 @@ test("staging builds the verified source checkout and carries its SHA into the i
   assert.doesNotMatch(staging, /Select staging branch|render_request PATCH|commitId/)
   const dockerfile = readFileSync(join(root, "Dockerfile"), "utf8")
   assert.match(dockerfile, /FROM .* AS runtime[\s\S]*ARG API_COMMIT_SHA\nENV RENDER_GIT_COMMIT=\$API_COMMIT_SHA/)
+  assert.match(dockerfile, /COPY --chown=appuser:appuser --from=build \/app \.\n(?:#.*\n)*ARG API_COMMIT_SHA\n/, "the release commit must follow every cached layer")
   const directory = mkdtempSync(join(tmpdir(), "orbit-image-source-"))
   const git = (...args) => execFileSync("git", args, { cwd: directory, encoding: "utf8" }).trim()
   try {

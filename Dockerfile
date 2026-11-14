@@ -10,12 +10,12 @@ COPY src/Orbit.Api/Orbit.Api.csproj src/Orbit.Api/
 # ReadyToRun keeps precompiled code in file-backed pages instead of JIT memory; see infra/memory-budget.md.
 ARG TARGETARCH
 RUN dotnet restore src/Orbit.Api/Orbit.Api.csproj -r "linux-$([ "$TARGETARCH" = arm64 ] && echo arm64 || echo x64)" -p:PublishReadyToRun=true
+RUN dotnet tool install --tool-path /tools dotnet-ef --version 10.0.12
 
 # Copy everything and publish
 COPY src/ src/
 RUN dotnet publish src/Orbit.Api/Orbit.Api.csproj -c Release -o /app --no-restore \
     -r "linux-$([ "$TARGETARCH" = arm64 ] && echo arm64 || echo x64)" --self-contained false -p:PublishReadyToRun=true
-RUN dotnet tool install --tool-path /tools dotnet-ef --version 10.0.12
 RUN OpenApiGenerateDocumentsOnBuild=false /tools/dotnet-ef migrations bundle \
     --project src/Orbit.Infrastructure/Orbit.Infrastructure.csproj \
     --startup-project src/Orbit.Api/Orbit.Api.csproj \
@@ -28,8 +28,6 @@ RUN OpenApiGenerateDocumentsOnBuild=false /tools/dotnet-ef migrations bundle \
 # Runtime stage
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
-ARG API_COMMIT_SHA
-ENV RENDER_GIT_COMMIT=$API_COMMIT_SHA
 ENV DOTNET_BUNDLE_EXTRACT_BASE_DIR=/tmp/efbundle
 # Two glibc malloc arenas instead of one per thread keep the native heap from growing with uptime; see infra/memory-budget.md.
 ENV MALLOC_ARENA_MAX=2
@@ -41,6 +39,9 @@ RUN apt-get update \
 USER appuser
 
 COPY --chown=appuser:appuser --from=build /app .
+# The release commit changes on every release, so it comes after every cached layer.
+ARG API_COMMIT_SHA
+ENV RENDER_GIT_COMMIT=$API_COMMIT_SHA
 
 EXPOSE 8080
 ENTRYPOINT ["dotnet", "Orbit.Api.dll"]

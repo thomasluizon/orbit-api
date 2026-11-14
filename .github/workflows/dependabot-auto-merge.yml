@@ -1,6 +1,8 @@
 name: Dependabot auto-merge
 
-on: pull_request
+on:
+  pull_request:
+    branches: [main]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
@@ -13,6 +15,7 @@ permissions:
 jobs:
   auto-merge:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     if: ${{ github.event.pull_request.user.login == 'dependabot[bot]' }}
     steps:
       - name: Fetch Dependabot metadata
@@ -33,8 +36,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # Auto-merge only the safe lanes (GitHub Actions + NuGet, patch/minor). npm is left
-      # for a human review — the mobile workspace is Expo-SDK-pinned. Build + Unit Tests
-      # still gate the merge.
+      # for a human review — the mobile workspace is Expo-SDK-pinned. Unit Tests and the
+      # other required checks still gate the merge.
       - name: Enable auto-merge for safe lanes
         if: ${{ steps.meta.outputs.package-ecosystem != 'npm' && (steps.meta.outputs.update-type == 'version-update:semver-patch' || steps.meta.outputs.update-type == 'version-update:semver-minor') }}
         run: gh pr merge --auto --squash "$PR_URL"

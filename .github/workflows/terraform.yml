@@ -7,7 +7,14 @@ on:
       - infra/**
       - .github/workflows/terraform.yml
       - .github/workflows/staging-reseed.yml
+      - .github/workflows/staging-postgres-access-reconcile.yml
+      - .github/workflows/release.yml
       - .github/scripts/staging-reseed*
+      - .github/scripts/*staging-postgres-access*
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -16,6 +23,7 @@ jobs:
   validate:
     name: Validate Render infrastructure
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -31,4 +39,5 @@ jobs:
       - run: terraform -chdir=infra validate
       - run: npm ci --prefix infra --ignore-scripts
       - run: npm test --prefix infra
-      - run: node --test .github/scripts/staging-reseed.test.mjs
+      - run: node --test .github/scripts/staging-reseed.test.mjs .github/scripts/staging-reseed-image.test.mjs
+      - run: bash .github/scripts/test-staging-postgres-access.sh

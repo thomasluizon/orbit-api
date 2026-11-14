@@ -20,8 +20,12 @@ internal sealed partial class O200kTokenCounter
     private const string CapacityPrefix = "Capacity: ";
     private const int NoRank = int.MaxValue;
     private const int StackPieceBytes = 256;
+    private const int ScanMergeBytes = 256;
 
     private static readonly Lazy<O200kTokenCounter> SharedCounter = new(Load);
+
+    [ThreadStatic]
+    private static long _mergeVisits;
 
     private readonly byte[] _tokenBytes;
     private readonly int[] _tokenOffsets;
@@ -49,6 +53,13 @@ internal sealed partial class O200kTokenCounter
 
     internal long RetainedBytes =>
         _tokenBytes.LongLength + ((long)_tokenOffsets.Length + _slots.Length) * sizeof(int);
+
+    /// <summary>
+    /// Counts the merge work on the calling thread: the pair ranks that each scan of the scan merge reads, and the
+    /// heap levels that each push or pop of the heap merge visits. A test reads it to prove that the merge work of
+    /// a long piece grows with n log n, not with n².
+    /// </summary>
+    internal static long MergeVisits => _mergeVisits;
 
     public int CountTokens(string text)
     {
@@ -108,7 +119,16 @@ internal sealed partial class O200kTokenCounter
     {
         if (piece.Length == 1 || Rank(piece) != NoRank)
             return 1;
+        return piece.Length <= ScanMergeBytes ? MergeByScan(piece) : MergeByHeap(piece);
+    }
 
+    /// <summary>
+    /// Merges the lowest-ranked adjacent pair, the leftmost on a tie, until no pair has a rank, and returns the
+    /// number of parts. Each merge scans every part, so the work grows with the square of the piece length. It is
+    /// the fastest choice for the short pieces that ordinary text holds.
+    /// </summary>
+    private int MergeByScan(ReadOnlySpan<byte> piece)
+    {
         var parts = piece.Length + 1;
         var starts = ArrayPool<int>.Shared.Rent(parts);
         var ranks = ArrayPool<int>.Shared.Rent(parts);
@@ -144,6 +164,7 @@ internal sealed partial class O200kTokenCounter
 
     private static int LowestRank(int[] ranks, int parts)
     {
+        _mergeVisits += parts - 1;
         var lowest = NoRank;
         var at = -1;
         for (var index = 0; index < parts - 1; index++)
@@ -159,6 +180,103 @@ internal sealed partial class O200kTokenCounter
 
     private int MergedRank(ReadOnlySpan<byte> piece, int[] starts, int parts, int index) =>
         index + 3 < parts ? Rank(piece[starts[index]..starts[index + 3]]) : NoRank;
+
+    /// <summary>
+    /// Makes the merges of <see cref="MergeByScan"/> in the same order with a min-heap keyed on rank, then start,
+    /// and a linked list of parts, so a long piece such as a pasted key costs O(n log n) CPU instead of O(n²).
+    /// An entry is stale when its part's rank changed: a merge grows a pair's span, which is another token.
+    /// </summary>
+    private int MergeByHeap(ReadOnlySpan<byte> piece)
+    {
+        var length = piece.Length;
+        var next = ArrayPool<int>.Shared.Rent(length);
+        var previous = ArrayPool<int>.Shared.Rent(length);
+        var ranks = ArrayPool<int>.Shared.Rent(length);
+        var heap = ArrayPool<long>.Shared.Rent(3 * length);
+        try
+        {
+            var size = 0;
+            for (var start = 0; start < length; start++)
+            {
+                next[start] = start + 1;
+                previous[start] = start - 1;
+                ranks[start] = start + 1 < length ? Rank(piece.Slice(start, 2)) : NoRank;
+                Push(heap, ref size, ranks[start], start);
+            }
+
+            var parts = length;
+            while (size > 0)
+            {
+                var (rank, start) = Pop(heap, ref size);
+                if (ranks[start] != rank)
+                    continue;
+                var merged = next[start];
+                next[start] = next[merged];
+                if (next[start] < length)
+                    previous[next[start]] = start;
+                ranks[merged] = NoRank;
+                parts--;
+                ranks[start] = PairRank(piece, next, start);
+                Push(heap, ref size, ranks[start], start);
+                if (previous[start] is var before && before >= 0)
+                {
+                    ranks[before] = PairRank(piece, next, before);
+                    Push(heap, ref size, ranks[before], before);
+                }
+            }
+            return parts;
+        }
+        finally
+        {
+            ArrayPool<int>.Shared.Return(next);
+            ArrayPool<int>.Shared.Return(previous);
+            ArrayPool<int>.Shared.Return(ranks);
+            ArrayPool<long>.Shared.Return(heap);
+        }
+    }
+
+    private int PairRank(ReadOnlySpan<byte> piece, int[] next, int start) =>
+        next[start] < piece.Length ? Rank(piece[start..next[next[start]]]) : NoRank;
+
+    /// <summary>Adds a pair with a rank to the min-heap; the key orders by rank, then by start.</summary>
+    private static void Push(long[] heap, ref int size, int rank, int start)
+    {
+        if (rank == NoRank)
+            return;
+        var key = ((long)rank << 32) | (uint)start;
+        var index = size++;
+        var visits = 1;
+        while (index > 0 && heap[(index - 1) / 2] > key)
+        {
+            heap[index] = heap[(index - 1) / 2];
+            index = (index - 1) / 2;
+            visits++;
+        }
+        heap[index] = key;
+        _mergeVisits += visits;
+    }
+
+    private static (int Rank, int Start) Pop(long[] heap, ref int size)
+    {
+        var top = heap[0];
+        var last = heap[--size];
+        var index = 0;
+        var visits = 1;
+        while (2 * index + 1 < size)
+        {
+            var child = 2 * index + 1;
+            if (child + 1 < size && heap[child + 1] < heap[child])
+                child++;
+            if (heap[child] >= last)
+                break;
+            heap[index] = heap[child];
+            index = child;
+            visits++;
+        }
+        heap[index] = last;
+        _mergeVisits += visits;
+        return ((int)(top >> 32), (int)(top & uint.MaxValue));
+    }
 
     private ReadOnlySpan<byte> Token(int rank) =>
         _tokenBytes.AsSpan(_tokenOffsets[rank], _tokenOffsets[rank + 1] - _tokenOffsets[rank]);

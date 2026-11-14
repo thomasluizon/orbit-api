@@ -1,0 +1,17 @@
+<Project>
+
+  <!--
+    SonarScanner for .NET clears WarningsAsErrors in its OverrideRoslynCodeAnalysisProperties target, before
+    CoreCompile. The Unit Tests job builds every project inside the scanner, so this target adds the nullable rule
+    of Directory.Build.props again after the scanner's target. Without the scanner, it runs before CoreCompile and
+    changes nothing.
+  -->
+  <Target Name="KeepNullableWarningsAsErrors"
+          AfterTargets="OverrideRoslynCodeAnalysisProperties"
+          BeforeTargets="CoreCompile">
+    <PropertyGroup>
+      <WarningsAsErrors>$(WarningsAsErrors);nullable</WarningsAsErrors>
+    </PropertyGroup>
+  </Target>
+
+</Project>

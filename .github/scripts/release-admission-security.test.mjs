@@ -30,6 +30,6 @@ test('release admission pins both CLI executables to trusted system paths', () =
   }
 })
 test('API CI runs the release admission security regressions', () => {
-  const workflow = readFileSync(new URL('../workflows/test.yml', import.meta.url), 'utf8')
+  const workflow = readFileSync(new URL('../workflows/guards.yml', import.meta.url), 'utf8')
   assert.ok(workflow.includes('node --test .github/scripts/release-admission.test.mjs .github/scripts/release-admission-security.test.mjs'))
 })
