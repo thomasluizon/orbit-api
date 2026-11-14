@@ -74,10 +74,10 @@ public partial class ProcessUserChatCommandHandler
     }
 
     /// <summary>
-    /// Chooses the correction of a round once. Beside a change of the turn, a write that the ownership check turned down
-    /// gets only the <see cref="DeniedWriteCorrection"/>, in a request or an answer turn. With no change of the turn, the
-    /// <see cref="RejectedCallCorrection"/> gets the calls without the write denials, which get no offer. A read correction
-    /// ends the turn after its reads and accepts no write, so a round with a write denial beside it fails at once.
+    /// Chooses the correction of a round once. Beside a change of the turn, a write denial gets only the
+    /// <see cref="DeniedWriteCorrection"/>, in a request or an answer turn. Otherwise the <see cref="RejectedCallCorrection"/>
+    /// gets the calls without the write denials: they get no offer, and a resend of one binds to no call, so it fails. A read
+    /// correction ends the turn after its reads and accepts no write, so a round with a write denial beside it fails at once.
     /// </summary>
     private static ICallCorrection? ChooseCorrection(ProcessUserChatCommand request,
         IReadOnlyList<CorrectionOccurrence> occurrences, bool holdsChange)
