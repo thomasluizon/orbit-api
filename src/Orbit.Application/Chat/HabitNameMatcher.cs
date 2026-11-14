@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using System.Text.RegularExpressions;
 using Orbit.Domain.Entities;
 
 namespace Orbit.Application.Chat;
@@ -16,6 +17,33 @@ public static class HabitNameMatcher
     public static string TitleKey(string? title) =>
         title is null ? string.Empty
         : Normalize(title) is { Length: > 0 } normalized ? normalized : Fold(title, keepSymbols: true);
+
+    /// <summary>
+    /// The message names the title. A title with words is found in the normalized message. A title with no letter or
+    /// digit, such as one of emoji only, is found by its symbols in the message folded the same way. A title with no
+    /// key is named by no message.
+    /// </summary>
+    public static bool MentionsTitle(string message, string title)
+    {
+        var words = Normalize(title);
+        if (words.Length > 0)
+            return Normalize(message).Contains(words, StringComparison.Ordinal);
+        var symbols = TitleKey(title);
+        return symbols.Length > 0 && Fold(message, keepSymbols: true).Contains(symbols, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The message names the title right after a lead, a pattern over normalized words such as "under ". The title is
+    /// found as <see cref="MentionsTitle"/> finds it, and no letter or digit follows it. A title with no key is named by
+    /// no message.
+    /// </summary>
+    public static bool NamesTitleAfter(string message, string lead, string title)
+    {
+        var words = Normalize(title);
+        var key = words.Length > 0 ? words : TitleKey(title);
+        return key.Length > 0 && Regex.IsMatch(words.Length > 0 ? Normalize(message) : Fold(message, keepSymbols: true),
+            lead + Regex.Escape(key) + @"(?!\w)", RegexOptions.None, TimeSpan.FromSeconds(1));
+    }
 
     private static string Fold(string value, bool keepSymbols)
     {

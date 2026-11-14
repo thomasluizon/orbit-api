@@ -28,12 +28,9 @@ public partial class ProcessUserChatCommandHandler
             return true;
         var asksForChildren = Regex.IsMatch(normalized, @"\b(sub habitos?|subhabitos?|children|child)\b",
             RegexOptions.None, TimeSpan.FromSeconds(1));
-        return habits.Any(habit => Regex.IsMatch(normalized,
-            @"\b(under|dentro d[oa]|sob [oa]|n[oa] habito|ao habito)\s+" + Regex.Escape(HabitNameMatcher.Normalize(habit.Title)) + @"\b",
-            RegexOptions.None, TimeSpan.FromSeconds(1))
-            || asksForChildren && Regex.IsMatch(normalized,
-                @"\b(no|na|ao|do|da|of|em)\s+(?:habito\s+)?" + Regex.Escape(HabitNameMatcher.Normalize(habit.Title)) + @"\b",
-                RegexOptions.None, TimeSpan.FromSeconds(1)));
+        return habits.Any(habit =>
+            HabitNameMatcher.NamesTitleAfter(message, @"\b(under|dentro d[oa]|sob [oa]|n[oa] habito|ao habito)\s+", habit.Title)
+            || asksForChildren && HabitNameMatcher.NamesTitleAfter(message, @"\b(no|na|ao|do|da|of|em)\s+(?:habito\s+)?", habit.Title));
     }
 
     private void SeedProposedHabitNames(ProcessUserChatCommand request, ToolExecutionAccumulator results)

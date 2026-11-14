@@ -106,7 +106,7 @@ public partial class ProcessUserChatCommandHandler
             return CarriesCreatedTitles(CreatedTitles(refused), family);
         var carried = family.SelectMany(write => TargetsOf(write.Call.Args).Select(target => target.Value)
                 .Concat((write.Outcome.PendingOperation?.Items ?? [])
-                    .Select(item => item.EntityId?.ToString() ?? HabitNameMatcher.Normalize(item.EntityName))))
+                    .Select(item => item.EntityId?.ToString() ?? HabitNameMatcher.TitleKey(item.EntityName))))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         return TargetsOf(refused.Args).All(target => carried.Contains(target.Value));
     }

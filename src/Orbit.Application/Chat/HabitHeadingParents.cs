@@ -26,9 +26,8 @@ internal static partial class HabitHeadingParents
 
     public static Heading? ForItem(JsonObject item, IReadOnlyList<Heading> headings)
     {
-        var title = HabitNameMatcher.Normalize(item["title"]?.ToString() ?? string.Empty);
-        if (title.Length == 0) return null;
-        var matches = headings.Where(heading => HabitNameMatcher.Normalize(heading.Body).Contains(title, StringComparison.Ordinal)).ToArray();
+        var title = item["title"]?.ToString() ?? string.Empty;
+        var matches = headings.Where(heading => HabitNameMatcher.MentionsTitle(heading.Body, title)).ToArray();
         return matches.Length == 1 ? matches[0] : null;
     }
 
@@ -38,7 +37,7 @@ internal static partial class HabitHeadingParents
         foreach (var item in items.OfType<JsonObject>())
         {
             var heading = headings.FirstOrDefault(heading =>
-                NormalizeName(heading.Name) == NormalizeName(item["title"]?.ToString()));
+                HabitNameMatcher.TitleKey(heading.Name) == HabitNameMatcher.TitleKey(item["title"]?.ToString()));
             if (heading is { Candidates.Count: > 0 } && item["sub_habits"] is JsonArray { Count: > 0 } children)
             {
                 foreach (var child in children.OfType<JsonObject>())
@@ -53,8 +52,6 @@ internal static partial class HabitHeadingParents
         }
         return output;
     }
-
-    private static string NormalizeName(string? name) => HabitNameMatcher.Normalize(name ?? string.Empty);
 
     public static bool Bind(JsonObject item, Heading heading, bool removeInventedDescription)
     {
@@ -75,7 +72,7 @@ internal static partial class HabitHeadingParents
 
     internal static IReadOnlyList<Habit> Candidates(string name, IReadOnlyList<Habit> habits)
     {
-        var exact = habits.Where(habit => HabitNameMatcher.Normalize(habit.Title) == HabitNameMatcher.Normalize(name)).ToArray();
+        var exact = habits.Where(habit => HabitNameMatcher.TitleKey(habit.Title) == HabitNameMatcher.TitleKey(name)).ToArray();
         return exact.Length > 0 ? exact : habits.Where(habit => CloseName(habit.Title, name)).ToArray();
     }
 

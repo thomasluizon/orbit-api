@@ -33,7 +33,7 @@ public partial class ProcessUserChatCommandHandler
     }
 
     private static bool MessageScopesAGroup(string message, HabitSelectionCandidates selection) =>
-        selection.Candidates.GroupBy(candidate => HabitNameMatcher.Normalize(candidate.Title))
+        selection.Candidates.GroupBy(candidate => HabitNameMatcher.TitleKey(candidate.Title))
             .Any(group => group.Count() > 1 && MessageScopesGroup(message, group.Key));
 
     /// <summary>
@@ -135,7 +135,7 @@ public partial class ProcessUserChatCommandHandler
                 continue;
             var ids = DuplicateWriteTargetIds(resolved, results).ToHashSet();
             var duplicateTargets = results.AllHabits.Where(habit => ids.Contains(habit.Id))
-                .GroupBy(habit => HabitNameMatcher.Normalize(habit.Title)).Where(group => group.Count() > 1);
+                .GroupBy(habit => HabitNameMatcher.TitleKey(habit.Title)).Where(group => group.Count() > 1);
             if (!duplicateTargets.Any(group => group.Any(habit => !results.ReadHabitItems.ContainsKey(habit.Id.ToString()))))
                 continue;
             outcomes[call.Id] = new ToolCallOutcome(new AiToolCallResult(call.Name, call.Id, false, null, null,
@@ -193,13 +193,13 @@ public partial class ProcessUserChatCommandHandler
             if (!selection.Candidates.Any(candidate => ids.Contains(candidate.Id)))
                 continue;
             var touched = selection.Candidates.Where(candidate => unanswered.Contains(candidate.Id))
-                .GroupBy(candidate => HabitNameMatcher.Normalize(candidate.Title)).Select(group => group.Key).ToHashSet();
-            var groups = selection.Candidates.GroupBy(candidate => HabitNameMatcher.Normalize(candidate.Title))
+                .GroupBy(candidate => HabitNameMatcher.TitleKey(candidate.Title)).Select(group => group.Key).ToHashSet();
+            var groups = selection.Candidates.GroupBy(candidate => HabitNameMatcher.TitleKey(candidate.Title))
                 .Where(group => touched.Contains(group.Key));
             if (!groups.All(group => GroupIsSettled(group.Key, group.Select(candidate => candidate.Id).ToArray(), scope, results)))
                 return new SelectionVerdict(selection, settled);
             settled.Add(new SettledSelection(selection, [.. selection.Candidates
-                .Where(candidate => ids.Contains(candidate.Id) || touched.Contains(HabitNameMatcher.Normalize(candidate.Title)))
+                .Where(candidate => ids.Contains(candidate.Id) || touched.Contains(HabitNameMatcher.TitleKey(candidate.Title)))
                 .Select(candidate => candidate.Id)]));
         }
         return new SelectionVerdict(null, settled);
@@ -306,6 +306,6 @@ public partial class ProcessUserChatCommandHandler
     /// text, so a title with punctuation reads as the person sees it in the list.
     /// </summary>
     private static string? SharedTitle(HabitSelectionCandidates selection) =>
-        selection.Candidates.Count > 0 && selection.Candidates.Select(candidate => HabitNameMatcher.Normalize(candidate.Title))
+        selection.Candidates.Count > 0 && selection.Candidates.Select(candidate => HabitNameMatcher.TitleKey(candidate.Title))
             .Distinct(StringComparer.Ordinal).Count() == 1 ? selection.Candidates[0].Title : null;
 }
