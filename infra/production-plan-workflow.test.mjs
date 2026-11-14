@@ -40,7 +40,7 @@ test('plan role authorizes the configured SSM hierarchy roots and retains child 
   assert.equal(roots.length, environments.length)
 })
 test('Sonar imports coverage generated for the production plan checker', () => {
-  const sonar = readFileSync(new URL('../.github/workflows/sonarcloud.yml', import.meta.url), 'utf8')
+  const sonar = readFileSync(new URL('../.github/workflows/test.yml', import.meta.url), 'utf8')
   const reports = sonar.match(/sonar.javascript.lcov.reportPaths="([^"]+)"/)[1].split(',')
   const report = 'coverage/production-plan.lcov'
   assert.ok(reports.includes(report), 'Production plan coverage must be imported into Sonar')

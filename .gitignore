@@ -32,9 +32,6 @@
 TestResults/
 *.trhx
 
-## Mutation testing (Stryker)
-StrykerOutput/
-
 ## BenchmarkDotNet
 BenchmarkDotNet.Artifacts/
 

@@ -4,7 +4,7 @@
     <DataCollectors>
       <DataCollector friendlyName="XPlat Code Coverage">
         <Configuration>
-          <Format>cobertura</Format>
+          <Format>cobertura,opencover</Format>
           <Include>[Orbit.Domain]*,[Orbit.Application]*,[Orbit.Infrastructure]*,[Orbit.Api]*</Include>
           <Exclude>[*.Tests]*</Exclude>
           <ExcludeByFile>**/Migrations/**/*.cs,**/Orbit.Api/Program.cs,**/Orbit.Api/Extensions/ServiceCollectionExtensions*.cs,**/Orbit.Api/Extensions/WebApplicationExtensions.cs,**/Orbit.Api/OpenApi/BearerSecuritySchemeTransformer.cs,**/*.generated.cs</ExcludeByFile>

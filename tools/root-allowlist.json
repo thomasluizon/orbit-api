@@ -12,6 +12,7 @@
     "CLAUDE.md",
     "CodeMetricsConfig.txt",
     "Directory.Build.props",
+    "Directory.Build.targets",
     "Dockerfile",
     "LICENSE",
     "Orbit.slnx",
@@ -26,10 +27,7 @@
     "gating-matrix.json",
     "global.json",
     "lefthook.yml",
-    "opencode.json",
-    "stryker-config.application.json",
-    "stryker-config.domain.json",
-    "stryker-config.infrastructure.json"
+    "opencode.json"
   ],
   "directories": [
     ".claude",
@@ -41,7 +39,6 @@
     ".vs",
     ".vscode",
     "BenchmarkDotNet.Artifacts",
-    "StrykerOutput",
     "TestResults",
     "bench",
     "caddy_config",
