@@ -228,7 +228,7 @@ public partial class ProcessUserChatCommandHandler
                 ? ChooseCorrection(request, executionResults.CorrectionOccurrences, holdsPreparedWrite) : null;
             if (correction is null)
                 return new ToolRoundResult(MessageResponse(language), HadToolFailure: true);
-            OfferCorrections(toolResults, outcomesByCallId);
+            OfferCorrections(toolResults, outcomesByCallId, correction);
         }
 
         foreach (var skipped in aiResponse.ToolCalls!.Where(call => toolResults.All(result => result.Id != call.Id)))

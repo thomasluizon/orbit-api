@@ -628,6 +628,42 @@ public partial class ProcessUserChatCommandHandlerTests
         result.Value.AiMessage.Should().Be(NotPreparedFor("en"));
     }
 
+    /// <summary>
+    /// A lone denial and a write that the argument check turned down before dispatch in one round. The round's correction
+    /// repairs the rejected write and cannot bind a resent rename, so only the rejected write gets the correction offer.
+    /// </summary>
+    [Fact]
+    public async Task DeniedWrite_ALoneDenialInTheRoundOfARejectedWriteGetsNoCorrectionOffer()
+    {
+        SetupUserAndPayGate();
+        var create = RecoveryCreateHabitTool();
+        var updateOne = new UpdateHabitTool(_habitRepo, _userDateService, _mediator);
+        var handler = CreateHandler(create, updateOne);
+        var gateway = InstallCorrectionGateway(create, hold: true, updateOne);
+        DenyUnownedHabitTargets([]);
+        SetupAiResponse(Calls(RenameOneUnknown([]),
+            new AiToolCall(create.Name, "rejected", ParseArguments(WithMinuteSeconds(ProductionAdaptationArguments)))));
+        var toolResults = new List<IReadOnlyList<AiToolCallResult>>();
+        _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
+                Arg.Do<IReadOnlyList<AiToolCallResult>>(results => toolResults.Add([.. results])),
+                Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(Calls(new AiToolCall(create.Name, "repaired", ParseArguments(ProductionAdaptationArguments)))),
+                Result.Success(Text("en")));
+
+        var result = await handler.Handle(new ProcessUserChatCommand(UserId,
+            "Rename Water to Water - 1.18L and create the adaptation habit at 21:00."), default);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        var offered = toolResults.Should().NotBeEmpty().And.Subject.First();
+        JsonSerializer.Serialize(offered.Should().ContainSingle(item => item.Id == "rename-one").Subject.Payload)
+            .Should().NotContain("correction_allowed").And.NotContain("Send this write once more");
+        JsonSerializer.Serialize(offered.Should().ContainSingle(item => item.Id == "rejected").Subject.Payload)
+            .Should().Contain("correction_allowed");
+        gateway.Requests.Where(request => request.OperationId == create.Name).Should().HaveCount(2, "the rejected create gets its repair");
+        result.Value.PendingOperations.Should().BeNullOrEmpty("the rename half of the request was not prepared");
+        result.Value.AiMessage.Should().Be(NotPreparedFor("en"));
+    }
+
     private static string TwoRenamesMessage(string language) => language == "en"
         ? "rename Water 1 to Water - 1.18L and Water 2 to Water - 2L"
         : "muda o nome do Water 1 para Water - 1.18L e do Water 2 para Water - 2L";
