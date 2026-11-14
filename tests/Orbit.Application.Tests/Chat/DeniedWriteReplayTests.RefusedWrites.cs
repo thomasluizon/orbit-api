@@ -117,6 +117,87 @@ public partial class ProcessUserChatCommandHandlerTests
     }
 
     /// <summary>
+    /// The proposal check turns a creation down, and the next round creates another habit. A creation with no title names
+    /// no habit, and a title of emoji only names its habit by the text as written, so no creation of another habit
+    /// carries the refused creation and the turn holds no preview. A later creation with the same emoji title carries it.
+    /// </summary>
+    [Theory]
+    [InlineData(null, "Tea", false)]
+    [InlineData("💧", "🍵", false)]
+    [InlineData("💧", "💧", true)]
+    public async Task DeniedWrite_ARefusedCreationIsCarriedOnlyByACreationWithItsOwnTitle(string? refused, string later, bool carried)
+    {
+        SetupUserAndPayGate();
+        var create = RecoveryCreateHabitTool();
+        var handler = CreateHandler(create);
+        var gateway = InstallCorrectionGateway(create, hold: true);
+        SetupAiResponse(Calls(refused is null
+            ? new AiToolCall("create_habit", "create-untitled", JsonSerializer.SerializeToElement(new
+            {
+                name = "Water",
+                frequency_unit = "Day",
+                frequency_quantity = 1,
+                is_bad_habit = true,
+                is_general = true
+            }))
+            : RefusedCreation(refused)));
+        _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
+                Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(Calls(Creation(later))), Result.Success(Text("en")), Result.Success(Text("en")));
+
+        var result = await handler.Handle(new ProcessUserChatCommand(UserId, "Create a Water habit and a Tea habit."), default);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        gateway.Requests.Should().ContainSingle("the proposal check turned the first creation down before dispatch")
+            .Which.Arguments.GetProperty("title").GetString().Should().Be(later);
+        if (carried)
+            result.Value.PendingOperations.Should().NotBeNullOrEmpty("the later creation makes the refused habit");
+        else
+        {
+            result.Value.PendingOperations.Should().BeNullOrEmpty("the later creation makes another habit");
+            result.Value.AiMessage.Should().Be(NotPreparedFor("en"));
+        }
+    }
+
+    /// <summary>A bulk creation of <paramref name="count"/> Water habits.</summary>
+    private static AiToolCall WaterCreations(string id, int count, bool refused) => new("bulk_create_habits", id,
+        JsonSerializer.SerializeToElement(new
+        {
+            habits = Enumerable.Range(0, count).Select(_ => refused
+                ? (object)new { title = "Water", frequency_unit = "Day", frequency_quantity = 1, is_bad_habit = true, is_general = true }
+                : new { title = "Water", frequency_unit = "Day", frequency_quantity = 1 })
+        }));
+
+    /// <summary>
+    /// The proposal check turns down a bulk creation of two Water habits, and the next round creates one Water habit or
+    /// two. A creation is compared by the count of each title in the prepared preview. The handler keeps one Water habit
+    /// of a pair and asks about the other, so no preview carries the refused pair, and the turn holds no preview.
+    /// </summary>
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    public async Task DeniedWrite_ARefusedCreationOfATitleTwiceIsCarriedOnlyByAsManyPreparedCreationsOfIt(int later)
+    {
+        SetupUserAndPayGate();
+        var create = new BulkCreateHabitsTool(_mediator);
+        var handler = CreateHandler(create);
+        var held = HoldReplayWrites(create);
+        SetupAiResponse(Calls(WaterCreations("create-pair", 2, refused: true)));
+        _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
+                Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(Calls(WaterCreations("created", later, refused: false))),
+                Result.Success(Text("en")), Result.Success(Text("en")));
+
+        var result = await handler.Handle(new ProcessUserChatCommand(UserId, "Create two Water habits."), default);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        held.Should().ContainSingle("the proposal check turned the pair down before dispatch")
+            .Which.Arguments.GetProperty("habits").GetArrayLength().Should().Be(1, "the handler keeps one habit of a title");
+        result.Value.PendingOperations.Should().BeNullOrEmpty("one Water habit holds half of the request");
+        result.Value.AiMessage.Should().Be(NotPreparedFor("en"));
+    }
+
+    /// <summary>
     /// The proposal check turns the Water creation down, and the next round deletes another habit. No creation of the
     /// turn prepared, so nothing carries the refused creation, and the turn holds no preview with only the delete.
     /// </summary>

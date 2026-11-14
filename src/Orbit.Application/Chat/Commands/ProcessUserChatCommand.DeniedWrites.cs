@@ -93,43 +93,61 @@ public partial class ProcessUserChatCommandHandler
 
     /// <summary>
     /// The writes that the turn prepared, in any round, carry a write that a guard of the handler turned down: a write of
-    /// the same operation in its single or bulk form prepared, and together these writes hold each record of the refused
-    /// write (<see cref="RecordsOf"/>) in their records or prepared previews. The guard asked for other arguments, so the
-    /// change may differ. An earlier write carries a refused repeat of itself.
+    /// the same operation in its single or bulk form prepared, and together these writes hold each target id of the
+    /// refused write in their targets or prepared previews (<see cref="CarriesCreatedTitles"/> for a creation). The guard
+    /// asked for other arguments, so the change may differ. An earlier write carries a refused repeat of itself.
     /// </summary>
     private static bool CarriesRefusedWrite(AiToolCall refused, ToolExecutionAccumulator results)
     {
         var family = results.PreparedWrites.Where(write => IsSameOperation(refused.Name, write.Call.Name)).ToArray();
-        var carried = family.SelectMany(write => RecordsOf(write.Call)
+        if (family.Length == 0)
+            return false;
+        if (refused.Name is "create_habit" or "create_sub_habit" or "bulk_create_habits")
+            return CarriesCreatedTitles(CreatedTitles(refused), family);
+        var carried = family.SelectMany(write => TargetsOf(write.Call.Args).Select(target => target.Value)
                 .Concat((write.Outcome.PendingOperation?.Items ?? [])
                     .Select(item => item.EntityId?.ToString() ?? HabitNameMatcher.Normalize(item.EntityName))))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        return family.Length > 0 && RecordsOf(refused).All(carried.Contains);
+        return TargetsOf(refused.Args).All(target => carried.Contains(target.Value));
     }
 
     /// <summary>
-    /// The records that a write changes. A creation names each habit that it makes by its title, because the habit has
-    /// no id yet and the ids of a creation, such as its parent or its tags, name other records. Any other write names its
-    /// target ids.
+    /// A creation names each habit that it makes by its title, because the habit has no id yet. Each refused title must be
+    /// a title, and the prepared previews must make it at least as often as the refused creation does. The previews count,
+    /// not the arguments, because the handler keeps one habit of a title under one parent and asks about the others.
     /// </summary>
-    private static IEnumerable<string> RecordsOf(AiToolCall write) =>
-        write.Name is "create_habit" or "create_sub_habit" or "bulk_create_habits"
-            ? CreatedTitles(write.Args)
-            : TargetsOf(write.Args).Select(target => target.Value);
-
-    /// <summary>The normalized title of each habit that a creation makes, with the habits and sub-habits that it holds.</summary>
-    private static List<string> CreatedTitles(JsonElement item)
+    private static bool CarriesCreatedTitles(IReadOnlyList<string> refused, IEnumerable<CorrectionOccurrence> family)
     {
-        var titles = new List<string>();
-        if (item.ValueKind != JsonValueKind.Object)
-            return titles;
-        if (JsonArgumentParser.GetOptionalString(item, "title") is { } title)
-            titles.Add(HabitNameMatcher.Normalize(title));
-        foreach (var field in new[] { "habits", "sub_habits" })
-            if (item.TryGetProperty(field, out var children) && children.ValueKind == JsonValueKind.Array)
-                titles.AddRange(children.EnumerateArray().SelectMany(CreatedTitles));
-        return titles;
+        var carried = family.SelectMany(write => (write.Outcome.PendingOperation?.Items ?? []).Select(item => TitleKey(item.EntityName)))
+            .CountBy(title => title, StringComparer.OrdinalIgnoreCase).ToDictionary(StringComparer.OrdinalIgnoreCase);
+        return refused.Count > 0 && refused.All(title => title.Length > 0)
+            && refused.CountBy(title => title, StringComparer.OrdinalIgnoreCase)
+                .All(pair => carried.GetValueOrDefault(pair.Key) >= pair.Value);
     }
+
+    /// <summary>
+    /// The title key of each habit that a creation makes, with the habits and sub-habits that it holds. A habit with no
+    /// title gives an empty key, which nothing carries.
+    /// </summary>
+    private static List<string> CreatedTitles(AiToolCall creation) =>
+        creation.Name == "bulk_create_habits" ? Children(creation.Args, "habits").SelectMany(HabitTitles).ToList()
+            : HabitTitles(creation.Args).ToList();
+
+    private static IEnumerable<string> HabitTitles(JsonElement habit) =>
+        Children(habit, "sub_habits").SelectMany(HabitTitles)
+            .Prepend(habit.ValueKind == JsonValueKind.Object ? TitleKey(JsonArgumentParser.GetOptionalString(habit, "title")) : string.Empty);
+
+    private static IEnumerable<JsonElement> Children(JsonElement item, string field) =>
+        item.ValueKind == JsonValueKind.Object && item.TryGetProperty(field, out var children) && children.ValueKind == JsonValueKind.Array
+            ? children.EnumerateArray() : [];
+
+    /// <summary>
+    /// The normalized title. A title that normalizes to nothing, such as one of emoji only, keeps its text as written, so
+    /// it never matches another such title.
+    /// </summary>
+    private static string TitleKey(string? title) =>
+        title is null ? string.Empty
+        : HabitNameMatcher.Normalize(title) is { Length: > 0 } normalized ? normalized : title.Trim();
 
     /// <summary>The two writes run one operation: the same tool, or its single and its bulk form.</summary>
     private static bool IsSameOperation(string name, string other) => name == other
