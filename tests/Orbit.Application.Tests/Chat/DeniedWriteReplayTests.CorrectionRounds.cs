@@ -1,5 +1,6 @@
 using System.Text.Json;
 using FluentAssertions;
+using NSubstitute;
 using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Models;
@@ -43,5 +44,39 @@ public partial class ProcessUserChatCommandHandlerTests
             .Which.Arguments.GetProperty("filter").GetProperty("habit_ids").EnumerateArray().Select(id => id.GetGuid())
             .Should().BeEquivalentTo(run.Children[..4].Select(child => child.Id));
         run.Result.Value.PendingOperations.Should().NotBeNullOrEmpty();
+    }
+
+    /// <summary>A read of Water 1 by an id of no record of the person.</summary>
+    private static AiToolCall ReadUnknown() => new("query_habits", "read-unknown",
+        JsonSerializer.SerializeToElement(new { habit_id = UnknownHabitId }));
+
+    /// <summary>The ownership check turns down a read that names a habit id, with the reason the real check writes.</summary>
+    private void DenyReadsById() =>
+        _operationExecutor.ExecuteAsync(Arg.Is<AgentExecuteOperationRequest>(request => request.OperationId == "query_habits"
+                && request.Arguments.GetRawText().Contains("habit_id")), Arg.Any<CancellationToken>())
+            .Returns(new AgentExecuteOperationResponse(new AgentOperationResult("query_habits", "query_habits", AgentRiskClass.Low,
+                AgentConfirmationRequirement.None, AgentOperationStatus.Denied, PolicyReason: "target_not_owned:query_habits:habit",
+                Access: "read"), PolicyDenial: new AgentPolicyDenial("query_habits", "query_habits", AgentRiskClass.Low,
+                AgentConfirmationRequirement.None, "target_not_owned:query_habits:habit")));
+
+    /// <summary>
+    /// One round reads Water 1 and renames it, each by an id of no record of the person, and nothing prepared. A read
+    /// correction ends the turn after its reads and accepts no write, so it can never send the rename. The round fails
+    /// at once with the tool failure answer, as a round with a read denial beside any other failure does.
+    /// </summary>
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task DeniedWrite_AReadDenialBesideALoneWriteDenialFailsTheRoundAtOnce(string language)
+    {
+        var run = await RunRequestTurnAsync(language, RenameOneMessage(language),
+            children => Calls(ReadUnknown(), RenameOneUnknown(children)),
+            children => [Calls(ReadWater(1)), Calls(RenameFirst(children)), Text(language)], _ => DenyReadsById());
+
+        run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
+        run.Result.Value.AiMessage.Should().Be(ToolFailureFor(language));
+        run.ToolResults.Should().BeEmpty("the round offers no correction, so the model gets no further round");
+        run.Held.Should().BeEmpty();
+        run.Result.Value.PendingOperations.Should().BeNullOrEmpty();
     }
 }

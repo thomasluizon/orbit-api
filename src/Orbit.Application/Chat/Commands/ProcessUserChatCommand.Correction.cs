@@ -76,8 +76,8 @@ public partial class ProcessUserChatCommandHandler
     /// <summary>
     /// Chooses the correction of a round once. Beside a change of the turn, a write that the ownership check turned down
     /// gets only the <see cref="DeniedWriteCorrection"/>, in a request or an answer turn. With no change of the turn, the
-    /// <see cref="RejectedCallCorrection"/> gets the calls of the turn without its write denials, so a denial of any tool
-    /// neither stops nor joins it and gets no offer. A resend of the denied write binds to no call, so that correction fails.
+    /// <see cref="RejectedCallCorrection"/> gets the calls without the write denials, which get no offer. A read correction
+    /// ends the turn after its reads and accepts no write, so a round with a write denial beside it fails at once.
     /// </summary>
     private static ICallCorrection? ChooseCorrection(ProcessUserChatCommand request,
         IReadOnlyList<CorrectionOccurrence> occurrences, bool holdsChange)
@@ -85,7 +85,10 @@ public partial class ProcessUserChatCommandHandler
         if (holdsChange && occurrences.Any(item => IsOwnershipWriteDenial(item.Outcome)))
             return DeniedWriteCorrection.CanReplace(occurrences) ? new DeniedWriteCorrection(occurrences) : null;
         var calls = occurrences.Where(item => !IsOwnershipWriteDenial(item.Outcome)).ToArray();
-        return request.BlockAnswer is null && RejectedCallCorrection.CanRecover(calls) ? new RejectedCallCorrection(calls) : null;
+        if (request.BlockAnswer is not null || !RejectedCallCorrection.CanRecover(calls))
+            return null;
+        var correction = new RejectedCallCorrection(calls);
+        return correction.IsReadOnly && calls.Length < occurrences.Count ? null : correction;
     }
 
     /// <summary>
