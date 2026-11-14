@@ -52,7 +52,7 @@ public partial class ProcessUserChatCommandHandler
     /// the answer. A plan, feature or policy denial does not change on a second send: the turn keeps the prepared part.
     /// </summary>
     private bool LeavesPartOfTheRequest(ToolExecutionAccumulator results) =>
-        HoldsPreparedWrite(results)
+        results.Previews.HoldsChange
         && (results.OperationResults.Any(operation => IsOwnershipWriteDenial(operation)
                 || operation.Status == AgentOperationStatus.Failed && operation.ErrorCode != ErrorCodes.HabitLimitReached
                 && (operation.Access == "write" || ai.ToolRegistry.GetTool(operation.OperationId) is { IsReadOnly: false }))

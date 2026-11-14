@@ -8,8 +8,8 @@ namespace Orbit.Application.Chat.Commands;
 public partial class ProcessUserChatCommandHandler
 {
     /// <summary>
-    /// The correction of the writes that the ownership check turned down beside a prepared write. The model sends each
-    /// denied write once more on the right ids, and a resend that prepares replaces its denial.
+    /// The correction of the writes that the ownership check turned down beside a change of the turn. The model sends
+    /// each denied write once more on the right ids, and a resend that prepares replaces its denial.
     /// </summary>
     private sealed class DeniedWriteCorrection(IReadOnlyList<CorrectionOccurrence> occurrences) : ICallCorrection
     {
@@ -72,7 +72,7 @@ public partial class ProcessUserChatCommandHandler
     }
 
     /// <summary>
-    /// After a denial with no prepared write beside it, the model can read and send the write again without a
+    /// After a denial with no change of the turn beside it, the model can read and send the write again without a
     /// correction. A later write that prepares and sends the denied write again replaces the denial, so the end of the
     /// loop does not count it and the person sees no failure for it; a write for another change or record does not.
     /// </summary>

@@ -391,7 +391,7 @@ A write denied with `target_not_owned` beside a preview that the turn prepared, 
 earlier preview that the turn closes, gets one correction that sends the write again with
 owned target IDs. When that correction fails, the turn withdraws its previews and answers
 with `chat.answer.requestNotPrepared` or `chat.answer.requestNotPreparedEarlierKept`. A
-write denied with `target_not_owned` and nothing else prepared is not a failure: the
+write denied with `target_not_owned` beside no change of the turn is not a failure: the
 model can read and send it again, or answer in its own words.
 Other permission denials and other failed corrections retain the concise failure status.
 Requests referring to an earlier Orbit message take their scope from conversation history

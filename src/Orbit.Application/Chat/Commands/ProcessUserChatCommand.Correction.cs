@@ -19,21 +19,14 @@ public partial class ProcessUserChatCommandHandler
 
     /// <summary>
     /// A write that the ownership check turned down names a target id that is not one of the person's records. Beside a
-    /// prepared write, the model gets one correction with the right ids, the same allowance that an ownership denial
-    /// of a read gets.
+    /// change of the turn, the model gets one correction with the right ids, the same allowance that an ownership
+    /// denial of a read gets.
     /// </summary>
     private static bool IsOwnershipWriteDenial(ToolCallOutcome outcome) => IsOwnershipWriteDenial(outcome.OperationResult);
 
     private static bool IsOwnershipWriteDenial(AgentOperationResult? operation) =>
         operation is { Status: AgentOperationStatus.Denied, Access: "write", PolicyReason: { } reason }
         && reason.StartsWith("target_not_owned:", StringComparison.Ordinal);
-
-    /// <summary>
-    /// The turn holds a change (<see cref="TurnPreviewLedger.HoldsChange"/>), so a write that the ownership check turned
-    /// down would leave half of the request. Only then is the denial a tool failure with one correction. A denial with
-    /// no change beside it keeps the base path: the model reads and sends the write again, or answers in its own words.
-    /// </summary>
-    private static bool HoldsPreparedWrite(ToolExecutionAccumulator results) => results.Previews.HoldsChange;
 
     private static bool HasReadCorrectionCandidate(ToolExecutionAccumulator results) =>
         results.CorrectionOccurrences.Any(occurrence =>
@@ -81,15 +74,15 @@ public partial class ProcessUserChatCommandHandler
     }
 
     /// <summary>
-    /// Chooses the correction of a round once. Beside a prepared write, a write that the ownership check turned down gets
-    /// only the <see cref="DeniedWriteCorrection"/>, in a request or an answer turn. With no prepared write, the
+    /// Chooses the correction of a round once. Beside a change of the turn, a write that the ownership check turned down
+    /// gets only the <see cref="DeniedWriteCorrection"/>, in a request or an answer turn. With no change of the turn, the
     /// <see cref="RejectedCallCorrection"/> gets the calls of the turn without its write denials, so a denial of any tool
     /// neither stops nor joins it and gets no offer. A resend of the denied write binds to no call, so that correction fails.
     /// </summary>
     private static ICallCorrection? ChooseCorrection(ProcessUserChatCommand request,
-        IReadOnlyList<CorrectionOccurrence> occurrences, bool holdsPreparedWrite)
+        IReadOnlyList<CorrectionOccurrence> occurrences, bool holdsChange)
     {
-        if (holdsPreparedWrite && occurrences.Any(item => IsOwnershipWriteDenial(item.Outcome)))
+        if (holdsChange && occurrences.Any(item => IsOwnershipWriteDenial(item.Outcome)))
             return DeniedWriteCorrection.CanReplace(occurrences) ? new DeniedWriteCorrection(occurrences) : null;
         var calls = occurrences.Where(item => !IsOwnershipWriteDenial(item.Outcome)).ToArray();
         return request.BlockAnswer is null && RejectedCallCorrection.CanRecover(calls) ? new RejectedCallCorrection(calls) : null;

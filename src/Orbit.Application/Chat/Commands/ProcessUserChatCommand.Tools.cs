@@ -197,8 +197,8 @@ public partial class ProcessUserChatCommandHandler
         var toolResults = RecordToolRound(aiResponse, orderedCalls, outcomesByCallId, executionResults, correction is not null);
         RecordReadOfferIntents(aiResponse, request, executionResults);
         executionResults.CapturePreviewDiscussionText(aiResponse.TextMessage);
-        var holdsPreparedWrite = HoldsPreparedWrite(executionResults);
-        var hadToolFailure = outcomesByCallId.Values.Any(outcome => IsToolFailure(outcome, holdsPreparedWrite));
+        var holdsChange = executionResults.Previews.HoldsChange;
+        var hadToolFailure = outcomesByCallId.Values.Any(outcome => IsToolFailure(outcome, holdsChange));
 
         if (correction is not null)
             return correction.HasUnresolvedFailures
@@ -225,7 +225,7 @@ public partial class ProcessUserChatCommandHandler
                 request, context, executionResults, iteration, totalBudgetTokens, language, cancellationToken) is { } recovered)
                 return recovered;
             correction = HasCorrectionAllowance(request, context, iteration, totalBudgetTokens)
-                ? ChooseCorrection(request, executionResults.CorrectionOccurrences, holdsPreparedWrite) : null;
+                ? ChooseCorrection(request, executionResults.CorrectionOccurrences, holdsChange) : null;
             if (correction is null)
                 return new ToolRoundResult(MessageResponse(language), HadToolFailure: true);
             OfferCorrections(toolResults, outcomesByCallId, correction);
@@ -263,8 +263,13 @@ public partial class ProcessUserChatCommandHandler
             Correction: correction);
     }
 
-    private static bool IsToolFailure(ToolCallOutcome outcome, bool holdsPreparedWrite) =>
-        IsOwnershipReadDenial(outcome) || holdsPreparedWrite && IsOwnershipWriteDenial(outcome)
+    /// <summary>
+    /// A write that the ownership check turned down is a tool failure with one correction only beside a change of the
+    /// turn (<see cref="TurnPreviewLedger.HoldsChange"/>), which it would leave half done. A denial with no change beside
+    /// it keeps the base path: the model reads and sends the write again, or answers in its own words.
+    /// </summary>
+    private static bool IsToolFailure(ToolCallOutcome outcome, bool holdsChange) =>
+        IsOwnershipReadDenial(outcome) || holdsChange && IsOwnershipWriteDenial(outcome)
         || outcome.OperationResult is { Status: AgentOperationStatus.Failed } operation && operation.ErrorCode != ErrorCodes.HabitLimitReached;
 
     private AiToolCall NormalizeExecutionArguments(AiToolCall call) => ai.ToolRegistry.GetTool(call.Name) is { } tool
