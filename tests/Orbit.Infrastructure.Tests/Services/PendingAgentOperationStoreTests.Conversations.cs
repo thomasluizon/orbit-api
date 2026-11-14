@@ -11,6 +11,7 @@ using Microsoft.Extensions.Options;
 using Orbit.Domain.Entities;
 using Orbit.Infrastructure.Configuration;
 using Orbit.Infrastructure.Services;
+using Orbit.Infrastructure.Tests.Persistence;
 
 namespace Orbit.Infrastructure.Tests.Services;
 
@@ -191,6 +192,50 @@ public partial class PendingAgentOperationStoreTests
         _store.IsAwaitingConfirmation(_userId, shown.Id).Should().BeTrue("a released member stays open");
         (await _store.GetLastConversationPreviewsAsync(_userId, id)).Select(item => item.Proposal.Id).Should().Equal(shown.Id);
         _store.Confirm(_userId, shown.Id).Should().NotBeNull("no change set holds the released member");
+    }
+
+    /// <summary>
+    /// A concurrent write makes the save of a change set close fail after the store closed its members in memory. The
+    /// store drops those member closes too, so a later save of the same context never closes a member of an open change
+    /// set. SQLite rolls back the failed save as a whole, as the production database does.
+    /// </summary>
+    [Fact]
+    public void Withdraw_AFailedChangeSetSaveNeverClosesItsMembersOnALaterSave()
+    {
+        using var database = new SqliteOrbitDbContextFactory();
+        var user = User.Create("Alex", "alex@example.com").Value;
+        database.Context.Users.Add(user);
+        database.Context.SaveChanges();
+        var store = new PendingAgentOperationStore(database.Context, Options.Create(new AgentPlatformSettings()));
+        PendingAgentOperation Held(string title)
+        {
+            var arguments = JsonSerializer.Serialize(new { title, frequency_unit = "OneTime", due_date = "2026-12-31" });
+            var fingerprint = AgentOperationFingerprint.Compute("create_habit", arguments);
+            var pending = store.Create(user.Id, _catalogService.GetCapabilityByChatTool("create_habit")!, "create_habit",
+                arguments, title, fingerprint, AgentExecutionSurface.Chat);
+            store.Revise(user.Id, pending.Id, fingerprint, arguments, fingerprint, "preview").Should().BeTrue();
+            return pending;
+        }
+        var first = Held("Reservation");
+        var second = Held("Travel");
+        var arguments = AccountChangeSet.BuildArguments([store.GetExecution(user.Id, first.Id)!, store.GetExecution(user.Id, second.Id)!]);
+        var fingerprint = AgentOperationFingerprint.Compute(AccountChangeSet.OperationName, arguments.GetRawText());
+        var combined = store.Create(user.Id, _catalogService.GetCapability(AccountChangeSet.CapabilityId)!,
+            AccountChangeSet.OperationName, arguments.GetRawText(), "Review changes", fingerprint, AgentExecutionSurface.Chat);
+        store.Revise(user.Id, combined.Id, fingerprint, arguments.GetRawText(), fingerprint, "combined-preview").Should().BeTrue();
+        using (var concurrent = database.CreateContext())
+        {
+            var stored = concurrent.PendingAgentOperations.Single(item => item.Id == combined.Id);
+            stored.Revise(stored.ArgumentsJson, stored.OperationFingerprint, "concurrent-preview", DateTime.UtcNow).Should().BeTrue();
+            concurrent.SaveChanges();
+        }
+
+        store.Withdraw(user.Id, combined.Id, fingerprint).Should().BeFalse("the concurrent write changed the change set first");
+        database.Context.SaveChanges();
+
+        store.IsAwaitingConfirmation(user.Id, combined.Id).Should().BeTrue("the change set stays open");
+        store.IsAwaitingConfirmation(user.Id, first.Id).Should().BeTrue("a member of an open change set stays open");
+        store.IsAwaitingConfirmation(user.Id, second.Id).Should().BeTrue("a member of an open change set stays open");
     }
 
     [Fact]

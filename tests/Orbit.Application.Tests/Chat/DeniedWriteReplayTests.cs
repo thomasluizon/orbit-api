@@ -509,7 +509,7 @@ public partial class ProcessUserChatCommandHandlerTests
         _pendingOperationStore.GetExecution(UserId, Arg.Any<Guid>()).Returns(call => Stored(call.ArgAt<Guid>(1)));
         _pendingOperationStore.Cancel(UserId, Arg.Any<Guid>(), Arg.Any<string>())
             .Returns(call => Stored(call.ArgAt<Guid>(1)) is not null && closed.Add(call.ArgAt<Guid>(1)));
-        _pendingOperationStore.Withdraw(UserId, Arg.Any<Guid>(), Arg.Any<string>())
+        _pendingOperationStore.Withdraw(UserId, Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<IReadOnlyCollection<Guid>?>())
             .Returns(call => Stored(call.ArgAt<Guid>(1)) is not null && closed.Add(call.ArgAt<Guid>(1)));
     }
 

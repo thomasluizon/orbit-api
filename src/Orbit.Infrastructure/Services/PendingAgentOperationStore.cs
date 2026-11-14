@@ -344,8 +344,8 @@ public class PendingAgentOperationStore(
             || HasChangeSetOwner(userId, pendingOperationId)
             || !close(entity, cancelledAtUtc))
             return false;
-        if (entity.OperationId == AccountChangeSet.OperationName)
-            CloseChangeSetMembers(entity, cancelledAtUtc, close, releasedMemberIds);
+        var closedMembers = entity.OperationId == AccountChangeSet.OperationName
+            ? CloseChangeSetMembers(entity, cancelledAtUtc, close, releasedMemberIds) : [];
         try
         {
             SaveChangesWithConversationOutcomes();
@@ -353,6 +353,8 @@ public class PendingAgentOperationStore(
         }
         catch (DbUpdateConcurrencyException)
         {
+            foreach (var member in closedMembers)
+                ResetFailedOutcomeChanges(member);
             ResetFailedOutcomeChanges(entity);
             return false;
         }
@@ -369,17 +371,21 @@ public class PendingAgentOperationStore(
 
     /// <summary>
     /// Closes each member that a closed change set still reserves in the same way as the change set: a cancel cancels it,
-    /// and a withdrawal withdraws it. A released member stays open on its own.
+    /// and a withdrawal withdraws it. A released member stays open on its own. Returns the members that it closed, so a
+    /// failed save can drop their closes with the close of the change set.
     /// </summary>
-    private void CloseChangeSetMembers(PendingAgentOperationState owner, DateTime cancelledAtUtc,
+    private List<PendingAgentOperationState> CloseChangeSetMembers(PendingAgentOperationState owner, DateTime cancelledAtUtc,
         Func<PendingAgentOperationState, DateTime, bool> close, IReadOnlyCollection<Guid> releasedMemberIds)
     {
         var reservations = AccountChangeSet.Reservations(ParseArguments(owner.ArgumentsJson))
             .Where(member => !releasedMemberIds.Contains(member.PendingOperationId)).ToDictionary(member => member.PendingOperationId);
         var ids = reservations.Keys.ToArray();
+        var closed = new List<PendingAgentOperationState>();
         foreach (var member in dbContext.PendingAgentOperations.Where(item => item.UserId == owner.UserId
             && ids.Contains(item.Id) && item.ConsumedAtUtc == null))
-            if (member.OperationFingerprint == reservations[member.Id].Fingerprint) close(member, cancelledAtUtc);
+            if (member.OperationFingerprint == reservations[member.Id].Fingerprint && close(member, cancelledAtUtc))
+                closed.Add(member);
+        return closed;
     }
 
     public PendingAgentOperationExecution? GetConfirmedExecution(Guid userId, string capabilityId,
