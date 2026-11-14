@@ -136,6 +136,35 @@ public sealed partial class ChatWriteHoldHandlerTests
     }
 
     /// <summary>
+    /// The earlier Zinc preview waits, and the turn never touches it. The turn prepares Magnesium and gets a description
+    /// of a habit that is not the person's turned down, so it withdraws Magnesium. The answer must not say that nothing
+    /// waits for approval, because the Zinc preview still does.
+    /// </summary>
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task AtomicTurn_AWithdrawnTurnSaysThatAnUntouchedEarlierPreviewStillWaits(string language)
+    {
+        var parents = ParentAccount(language);
+        var earlier = await PrepareEarlierZincAsync(parents);
+        _ownership.GetDenialReasonAsync("update_habit", _userId, Arg.Any<JsonElement>(), Arg.Any<CancellationToken>())
+            .Returns("target_not_owned:update_habit:habit");
+        ReplyToTurn(
+        [
+            new("create_sub_habit", "child", JsonSerializer.SerializeToElement(new { parent_habit_id = parents[0].Id, title = "Magnesium", frequency_unit = "Day" })),
+            new("update_habit", "edit", JsonSerializer.SerializeToElement(new { habit_id = UnknownHabitId, description = "Quiet time" }))
+        ], "Review.");
+
+        var result = await CreateHandler().Handle(new(_userId,
+            "Add Magnesium under Post Lunch and describe the other habit as quiet time."), default);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        result.Value.PendingOperations.Should().BeNullOrEmpty("the turn withdrew its own Magnesium preview");
+        _pendingOperationStore.IsAwaitingConfirmation(_userId, earlier.Id).Should().BeTrue();
+        result.Value.AiMessage.Should().Be(EarlierKeptAnswer(language));
+    }
+
+    /// <summary>
     /// The same revision in a turn that ends with its answer discards the earlier preview, and the model learns that
     /// the preview is discarded instead of reading a failure.
     /// </summary>

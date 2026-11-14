@@ -67,8 +67,8 @@ public partial class ProcessUserChatCommandHandler
     }
 
     /// <summary>
-    /// The answer of a withdrawn turn. It says that nothing waits for approval only when no earlier preview that the
-    /// turn read or revised still waits.
+    /// The answer of a withdrawn turn. It says that nothing waits for approval only when no earlier preview still waits
+    /// in the store after the withdrawal, whether the turn touched that preview or not.
     /// </summary>
     private static string RequestNotPreparedMessage(ToolExecutionAccumulator results, string? language) =>
         ErrorCopy.Resolve(results.Previews.KeepsEarlierPreview ? "chat.answer.requestNotPreparedEarlierKept" : "chat.answer.requestNotPrepared",
@@ -94,7 +94,10 @@ public partial class ProcessUserChatCommandHandler
         private readonly Dictionary<Guid, PendingAgentOperationRevision> _earlierRevisions = [];
         private readonly List<DeferredClose> _closes = [];
 
-        /// <summary>The turn withdrew its preview and an earlier preview still waits for the person's approval.</summary>
+        /// <summary>
+        /// The turn withdrew its change and an earlier preview still waits for the person's approval in the store, read
+        /// after the withdrawal put back what the turn revised.
+        /// </summary>
         public bool KeepsEarlierPreview { get; private set; }
 
         /// <summary>
@@ -172,7 +175,6 @@ public partial class ProcessUserChatCommandHandler
         /// </summary>
         public void Withdraw(Guid userId, IPendingAgentOperationStore store)
         {
-            KeepsEarlierPreview = _closes.Count > 0 || results.PendingOperations.Any(pending => earlierIds.Contains(pending.Id));
             foreach (var close in _closes)
             {
                 if (_earlierRevisions.ContainsKey(close.Id))
@@ -189,6 +191,7 @@ public partial class ProcessUserChatCommandHandler
                     store.Cancel(userId, pending.Id, AgentOperationFingerprint.Compute(stored.OperationId, stored.Arguments.GetRawText()));
                 results.SupersedePendingOperation(pending.Id);
             }
+            KeepsEarlierPreview = earlierIds.Any(id => store.IsAwaitingConfirmation(userId, id));
         }
 
         /// <summary>
