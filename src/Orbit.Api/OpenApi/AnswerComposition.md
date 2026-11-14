@@ -387,7 +387,13 @@ goal index support goal and link writes.
 A read denied with `target_not_owned` can use the existing single correction allowance
 to correct that read's owned target or omit it when successful typed reads already answer
 the request. Correction candidates cannot introduce writes or repeat successful reads.
-Other permission denials and failed corrections retain the concise failure status.
+A write denied with `target_not_owned` beside a preview that the turn prepared, or an
+earlier preview that the turn closes, gets one correction that sends the write again with
+owned target IDs. When that correction fails, the turn withdraws its previews and answers
+with `chat.answer.requestNotPrepared` or `chat.answer.requestNotPreparedEarlierKept`. A
+write denied with `target_not_owned` and nothing else prepared is not a failure: the
+model can read and send it again, or answer in its own words.
+Other permission denials and other failed corrections retain the concise failure status.
 Requests referring to an earlier Orbit message take their scope from conversation history
 and read the account data named there. Orbit does not ask which message or reminder was
 meant. Every `ask.input` form requires `missing_input`: `habit_setup`, `preference`,
@@ -1247,6 +1253,30 @@ translation is for copy review; the model receives the English instruction in bo
 | Removed calendar title prefix | Habit calendar: | Calendário de hábitos: |
 | `DescribeFeatureTool.Description` | Read authoritative rules before explaining streaks, freezes, frequencies, XP/levels, notifications, paygate or schedule math. Use only mechanics, screens, fields and steps explicitly documented in markdown or app_surfaces. related_surfaces lists destinations, not editing instructions. app_surfaces comes from the same catalog as list_app_surfaces_v2; use only its documented destinations and steps. Never infer a habit edit screen or creation workflow from a related destination. When the requested detail is absent, say that the explanation does not cover it; do not invent navigation or settings. Answer in the person's language. | Consulte as regras oficiais antes de explicar sequências, proteções de sequência, frequências, XP e níveis, notificações, limites do plano ou regras de agendamento. Use apenas os mecanismos, telas, campos e passos descritos no markdown ou em app_surfaces. related_surfaces lista destinos, sem explicar como editar. app_surfaces vem do mesmo catálogo de list_app_surfaces_v2; use apenas os destinos e passos documentados. Nunca deduza uma tela de edição de hábito nem um fluxo de criação a partir de um destino relacionado. Se o detalhe pedido não estiver no conteúdo, diga que a explicação não cobre esse ponto. Não invente caminhos de navegação nem configurações. Responda no idioma da pessoa. |
 | `describe_feature.answer_scope` | Use only mechanics, screens, fields and steps explicitly documented in markdown or app_surfaces. related_surfaces lists destinations, not editing instructions. app_surfaces comes from the same catalog as list_app_surfaces_v2; use only its documented destinations and steps. Never infer a habit edit screen or creation workflow from a related destination. When the requested detail is absent, say that the explanation does not cover it; do not invent navigation or settings. Answer in the person's language. | Use apenas os mecanismos, telas, campos e passos descritos no markdown ou em app_surfaces. related_surfaces lista destinos, sem explicar como editar. app_surfaces vem do mesmo catálogo de list_app_surfaces_v2; use apenas os destinos e passos documentados. Nunca deduza uma tela de edição de hábito nem um fluxo de criação a partir de um destino relacionado. Se o detalhe pedido não estiver no conteúdo, diga que a explicação não cobre esse ponto. Não invente caminhos de navegação nem configurações. Responda no idioma da pessoa. |
+
+## Atomic turn copy
+
+A turn that cannot prepare the whole request withdraws its previews and answers with one
+of these two catalog keys. The second key applies when an earlier preview still waits for
+the person's approval.
+
+| Source | en | pt-BR |
+| --- | --- | --- |
+| `chat.answer.requestNotPrepared` | I couldn't prepare your whole request, so nothing is waiting for your approval. Please send it again. | Não consegui preparar o seu pedido inteiro, então nada ficou esperando a sua aprovação. Mande de novo, por favor. |
+| `chat.answer.requestNotPreparedEarlierKept` | I couldn't prepare your whole request, so I left your earlier changes as they were. They are still waiting for your approval. Please send the request again. | Não consegui preparar o seu pedido inteiro, então deixei as alterações anteriores como estavam. Elas continuam esperando a sua aprovação. Mande o pedido de novo, por favor. |
+
+The model receives the texts below in English in both locales. The code holds no pt-BR
+text for them, so the pt-BR column states that.
+
+| Source | en | pt-BR |
+| --- | --- | --- |
+| `CorrectionOffer`, a write denied with `target_not_owned` beside a prepared write | Send this write once more with each target ID copied exactly from the Active Habit Index, a read result or the validated choice selection of this turn, and keep its change and every record the request names for it. This correction accepts no read; when none of these sources holds an ID, send no call. Do not repeat the writes that were prepared. | English in both locales. |
+| `DescribeUnownedTargets`, with the unknown IDs | These target IDs are not IDs of this person's records: {ids}. Copy each ID exactly, with all 36 characters, from the Active Habit Index, a query_habits result or the validated choice selection of this turn. | English in both locales. |
+| `DescribeUnownedTargets`, with no unknown ID | A target ID is not an ID of this person's records. Copy each ID exactly, with all 36 characters, from the Active Habit Index, a read result or the validated choice selection of this turn. | English in both locales. |
+| `PendingPreviewDiscard.Instruction` | The preview is discarded when your answer reaches the person. Say so in one short sentence. | English in both locales. |
+| `AlonePlanRejection`, with planned tools | present_plan arrived without an action call, so the person saw no plan. Call the planned action tools in your next response, without present_plan: {tools}. | English in both locales. |
+| `AlonePlanRejection`, with no planned tool | present_plan arrived without an action call, so the person saw no plan. Call the action tools for the request in your next response, without present_plan. | English in both locales. |
+| Selection card with more records than the client can show | This card cannot hold the answer: the person must be able to select each of the {count} habits that the card is about, {group count} of them titled "{title}", and this client cannot show one option for each of them. Use form choice with 2 to 4 options whose target_ids together hold each of those habit IDs, and set multiSelect=true when the person picks several options. The card was not shown. | English in both locales. |
 
 ## Composition planning copy
 
