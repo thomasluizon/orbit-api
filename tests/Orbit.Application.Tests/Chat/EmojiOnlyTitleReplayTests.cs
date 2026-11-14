@@ -143,6 +143,8 @@ public partial class ProcessUserChatCommandHandlerTests
     [Theory]
     [InlineData("Crie Leitura sob o sol da manhã.", true)]
     [InlineData("Crie Leitura sob o 🏃.", false)]
+    [InlineData("Crie Leitura sob o \"🏃\".", false)]
+    [InlineData("Crie Leitura sob o 🏃‍♀️.", true)]
     public async Task EmojiOnlyTitles_AnExistingParentIsRequestedOnlyByAPhraseWithItsSymbols(string message, bool prepared)
     {
         Habit[] habits = [.. SetupResolutionAccount(), CreateHabit("🏃")];
@@ -207,9 +209,10 @@ public partial class ProcessUserChatCommandHandlerTests
     [Theory]
     [InlineData("Add Stretch to Academia", new[] { "Academia" })]
     [InlineData("Add Stretch to 🏃", new[] { "🏃" })]
+    [InlineData("Add Stretch to 🏃‍♀️", new[] { "🏃‍♀️" })]
     public void EmojiOnlyTitles_APlacementDestinationIsOnlyAHabitThatTheMessageNames(string message, string[] destinations)
     {
-        Habit[] habits = [CreateHabit("🏃"), CreateHabit("📚"), CreateHabit("Academia")];
+        Habit[] habits = [CreateHabit("🏃"), CreateHabit("📚"), CreateHabit("Academia"), CreateHabit("🏃‍♀️")];
 
         var text = HabitPlacementContext.Build(habits, message);
 
