@@ -10,6 +10,11 @@ public sealed record PendingAccountChangeSet(PendingAgentOperation PendingOperat
 public sealed class AccountChangeSetService(IPendingAgentOperationStore store,
     IPendingOperationChangePreviewer previewer, IAgentCatalogService catalog, AiToolRegistry registry)
 {
+    /// <summary>
+    /// Combines <paramref name="operations"/> into one change set that reserves each of them. When the store refuses to
+    /// bind the preview of the change set, the change set is withdrawn and releases every member: the caller created or
+    /// revised each member, so the caller closes it or puts it back.
+    /// </summary>
     public async Task<PendingAccountChangeSet?> CombineAsync(Guid userId, IReadOnlyList<PendingAgentOperation> operations,
         CancellationToken ct, AgentClientContext? clientContext = null, bool requireAllMembers = false,
         PendingOperationConversation? conversation = null)
@@ -45,7 +50,7 @@ public sealed class AccountChangeSetService(IPendingAgentOperationStore store,
         }
         catch
         {
-            store.Cancel(userId, pending.Id, fingerprint);
+            store.Withdraw(userId, pending.Id, fingerprint, [.. members.Select(member => member.PendingOperationId)]);
             throw;
         }
         return new(pending with

@@ -4,7 +4,9 @@ public partial class ProcessUserChatCommandHandler
 {
     /// <summary>
     /// Combines the previews that this turn prepared into one approval. An earlier preview that the turn only read stays
-    /// its own card, so the person can still approve it alone.
+    /// its own card, so the person can still approve it alone. A combine that throws, as when the store refuses to bind
+    /// the change set, first withdraws the previews of the turn as a round that throws does, so each earlier preview that
+    /// the turn revised gets its state from before the turn back.
     /// </summary>
     private async Task CombinePendingChangesAsync(ProcessUserChatCommand request, ToolExecutionAccumulator results, CancellationToken ct)
     {
@@ -13,8 +15,18 @@ public partial class ProcessUserChatCommandHandler
         var previewer = execution.PendingOperationPreviewer ?? new PendingOperationChangePreviewer(
             data.HabitRepository, data.GoalRepository, data.TagRepository, execution.UserDateService, ai.ToolRegistry);
         var service = new AccountChangeSetService(execution.PendingOperationStore, previewer, ai.CatalogService, ai.ToolRegistry);
-        var combined = await service.CombineAsync(request.UserId, prepared, ct, request.ClientContext,
-            conversation: request.PendingOperationConversation);
+        PendingAccountChangeSet? combined;
+        try
+        {
+            combined = await service.CombineAsync(request.UserId, prepared, ct, request.ClientContext,
+                conversation: request.PendingOperationConversation);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            execution.UnitOfWork.ResetTracking();
+            results.Previews.Withdraw(request.UserId, execution.PendingOperationStore);
+            throw;
+        }
         if (combined is null) return;
         results.Previews.KeepCombination(combined.PendingOperation.Id, prepared.Where(pending => combined.MemberIds.Contains(pending.Id)));
         results.PendingOperations.RemoveAll(pending => combined.MemberIds.Contains(pending.Id));

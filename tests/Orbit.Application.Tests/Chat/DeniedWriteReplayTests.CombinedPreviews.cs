@@ -6,6 +6,7 @@ using NSubstitute;
 using Orbit.Application.Chat;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Tools.Implementations;
+using Orbit.Application.Tests.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Models;
@@ -172,6 +173,47 @@ public partial class ProcessUserChatCommandHandlerTests
         rows.Where(row => row.OperationId is "bulk_update_habits" or "bulk_delete_habits")
             .Should().HaveCount(2).And.OnlyContain(row => row.ConsumedAtUtc != null, "the turn withdrew its two writes");
         store.IsAwaitingConfirmation(UserId, earlier.Id).Should().BeTrue("the earlier preview stays approvable");
+        store.GetRevision(UserId, earlier.Id).Should().Be(revisionBefore, "the earlier preview has its state from before the turn");
+        store.Confirm(UserId, earlier.Id).Should().NotBeNull("no change set holds the earlier preview");
+    }
+
+    /// <summary>
+    /// The same revision and two writes, and a concurrent write makes the store refuse the bind of their change set. The
+    /// turn withdraws its two writes, and the earlier preview gets its state from before the turn back and stays approvable.
+    /// </summary>
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task DeniedWrite_AFailedChangeSetBindGivesTheEarlierPreviewItsStateBack(string language)
+    {
+        var binding = new ConcurrentChangeSetBind();
+        using var database = binding.CreateContext();
+        var store = AnswerFromTheRealStore(database);
+        PendingAgentOperation? earlier = null;
+        PendingAgentOperationRevision? revisionBefore = null;
+
+        var run = await RunDeniedAnswerTurnAsync(language, _ => [Text(language)], children =>
+            {
+                HoldWritesIn(store, new BulkDeleteHabitsTool(_mediator, _habitRepo), new BulkUpdateHabitsTool(_mediator));
+                ReviseInPlace(store, earlier!, children, RevisedTitle);
+            },
+            first: children =>
+            {
+                earlier = StoreEarlierPreview(store, children);
+                revisionBefore = store.GetRevision(UserId, earlier.Id);
+                return Calls(ReviseStoredPreview(earlier.Id, RevisedTitle), CorrectedRename(children), Run4Delete(children));
+            },
+            tools: [ReadTool(ReviseTool, new ToolResult(true)), new UpdateHabitTool(_habitRepo, _userDateService, _mediator)]);
+
+        run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
+        run.Result.Value.AiMessage.Should().Be(CommittedFor(language));
+        run.Result.Value.PendingOperations.Should().BeNullOrEmpty("the turn withdrew the two writes that its checkpoint holds");
+        var rows = await database.PendingAgentOperations.AsNoTracking().ToListAsync();
+        rows.Should().ContainSingle(row => row.OperationId == AccountChangeSet.OperationName, "the turn tried to combine")
+            .Which.ConsumedAtUtc.Should().NotBeNull("the store refused the bind, so the change set closed");
+        rows.Where(row => row.OperationId is "bulk_update_habits" or "bulk_delete_habits")
+            .Should().HaveCount(2).And.OnlyContain(row => row.ConsumedAtUtc != null, "the turn withdrew its two writes");
+        store.IsAwaitingConfirmation(UserId, earlier!.Id).Should().BeTrue("the earlier preview stays approvable");
         store.GetRevision(UserId, earlier.Id).Should().Be(revisionBefore, "the earlier preview has its state from before the turn");
         store.Confirm(UserId, earlier.Id).Should().NotBeNull("no change set holds the earlier preview");
     }
