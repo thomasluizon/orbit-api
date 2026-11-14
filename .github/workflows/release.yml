@@ -135,7 +135,7 @@ jobs:
       deployments: write
       statuses: read
       packages: write
-    timeout-minutes: 170
+    timeout-minutes: 45
     env:
       RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
       RENDER_SERVICE_ID: ${{ vars.RENDER_PRODUCTION_SERVICE_ID }}
@@ -239,8 +239,6 @@ jobs:
 
       - if: inputs.force_unstaged && steps.staging_image.outputs.build_required == 'true'
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-        with:
-          driver: docker
 
       - if: inputs.force_unstaged && steps.staging_image.outputs.build_required == 'true'
         uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
@@ -264,6 +262,7 @@ jobs:
           labels: |
             org.opencontainers.image.source=https://github.com/thomasluizon/orbit-api
             org.opencontainers.image.revision=${{ needs.prepare.outputs.sha }}
+          cache-from: type=gha,scope=api-image
 
       - name: Select production image
         id: image
@@ -328,7 +327,7 @@ jobs:
           echo "log_url=$log_url" >> "$GITHUB_OUTPUT"
           echo "Render deploy: $log_url"
 
-          for attempt in {1..640}; do
+          for attempt in {1..60}; do
             response=$(render_request GET "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys/$deploy_id")
             status=$(jq -er '.status' <<< "$response")
             echo "Render deploy status: $status (poll $attempt)"
@@ -412,7 +411,7 @@ jobs:
       deployments: write
       statuses: write
       packages: write
-    timeout-minutes: 170
+    timeout-minutes: 30
     env:
       RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
       RENDER_SERVICE_ID: ${{ vars.RENDER_STAGING_SERVICE_ID }}
@@ -452,8 +451,6 @@ jobs:
           fi
 
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-        with:
-          driver: docker
 
       - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
@@ -475,6 +472,7 @@ jobs:
           labels: |
             org.opencontainers.image.source=https://github.com/thomasluizon/orbit-api
             org.opencontainers.image.revision=${{ needs.prepare.outputs.sha }}
+          cache-from: type=gha,scope=api-image
 
       - name: Record image digest
         env:
@@ -529,7 +527,7 @@ jobs:
           echo "log_url=$log_url" >> "$GITHUB_OUTPUT"
           echo "Render deploy: $log_url"
 
-          for attempt in {1..640}; do
+          for attempt in {1..60}; do
             response=$(render_request GET "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys/$deploy_id")
             status=$(jq -er '.status' <<< "$response")
             echo "Render deploy status: $status (poll $attempt)"
