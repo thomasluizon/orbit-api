@@ -163,6 +163,36 @@ public partial class PendingAgentOperationStoreTests
         (await _store.GetLastConversationPreviewsAsync(_userId, id)).Select(item => item.Proposal.Id).Should().Equal(shown.Id);
     }
 
+    /// <summary>
+    /// A turn combines a preview that the person saw and a write of its own into a change set, then withdraws the change
+    /// set. The write is withdrawn with it, the released earlier preview stays open on its own, and the conversation lists
+    /// the batch that the person saw, never the withdrawn write as a rejected proposal.
+    /// </summary>
+    [Fact]
+    public async Task Withdraw_AChangeSetWithdrawsTheMembersItReservesAndKeepsAReleasedMemberOpen()
+    {
+        var id = Guid.NewGuid();
+        var nowAtUtc = DateTime.UtcNow;
+        var shown = ConversationProposal(new(id, nowAtUtc.AddMinutes(-1)), "Reservation");
+        var batch = new PendingOperationConversation(id, nowAtUtc);
+        var created = ConversationProposal(batch, "Travel");
+        var arguments = AccountChangeSet.BuildArguments([
+            _store.GetExecution(_userId, shown.Id)!, _store.GetExecution(_userId, created.Id)!]);
+        var fingerprint = AgentOperationFingerprint.Compute(AccountChangeSet.OperationName, arguments.GetRawText());
+        var combined = _store.Create(_userId, _catalogService.GetCapability(AccountChangeSet.CapabilityId)!,
+            AccountChangeSet.OperationName, arguments.GetRawText(), "Review changes", fingerprint, AgentExecutionSurface.Chat, batch);
+        _store.Revise(_userId, combined.Id, fingerprint, arguments.GetRawText(), fingerprint, "combined-preview").Should().BeTrue();
+        _store.Confirm(_userId, shown.Id).Should().BeNull("the change set reserves the earlier preview");
+
+        _store.Withdraw(_userId, combined.Id, fingerprint, [shown.Id]).Should().BeTrue();
+        _dbContext.ChangeTracker.Clear();
+
+        _store.GetExecution(_userId, created.Id).Should().BeNull("the change set withdraws the write that it reserves");
+        _store.IsAwaitingConfirmation(_userId, shown.Id).Should().BeTrue("a released member stays open");
+        (await _store.GetLastConversationPreviewsAsync(_userId, id)).Select(item => item.Proposal.Id).Should().Equal(shown.Id);
+        _store.Confirm(_userId, shown.Id).Should().NotBeNull("no change set holds the released member");
+    }
+
     [Fact]
     public void Creation_DeduplicatesOnlyWithinTheSameConversationTurn()
     {

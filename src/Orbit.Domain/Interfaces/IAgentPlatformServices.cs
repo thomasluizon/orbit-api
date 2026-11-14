@@ -89,9 +89,11 @@ public interface IPendingAgentOperationStore
     bool Cancel(Guid userId, Guid pendingOperationId, string expectedFingerprint);
     /// <summary>
     /// Cancels a preview that its own chat turn withdrew before the person saw it, and detaches it from its
-    /// conversation, so <see cref="GetLastConversationPreviewsAsync"/> never lists it.
+    /// conversation, so <see cref="GetLastConversationPreviewsAsync"/> never lists it. A change set withdraws each member
+    /// that it still reserves the same way, except each one in <paramref name="releasedMemberIds"/>, which stays open.
     /// </summary>
-    bool Withdraw(Guid userId, Guid pendingOperationId, string expectedFingerprint);
+    bool Withdraw(Guid userId, Guid pendingOperationId, string expectedFingerprint,
+        IReadOnlyCollection<Guid>? releasedMemberIds = null);
     PendingAgentOperationExecution? GetConfirmedExecution(Guid userId, string capabilityId,
         string operationFingerprint, string confirmationToken);
     bool TryConsumeFreshConfirmation(

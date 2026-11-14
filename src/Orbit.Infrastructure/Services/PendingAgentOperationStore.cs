@@ -327,13 +327,15 @@ public class PendingAgentOperationStore(
     }
 
     public bool Cancel(Guid userId, Guid pendingOperationId, string expectedFingerprint) =>
-        Close(userId, pendingOperationId, expectedFingerprint, (entity, cancelledAtUtc) => entity.Cancel(cancelledAtUtc));
+        Close(userId, pendingOperationId, expectedFingerprint, (entity, cancelledAtUtc) => entity.Cancel(cancelledAtUtc), []);
 
-    public bool Withdraw(Guid userId, Guid pendingOperationId, string expectedFingerprint) =>
-        Close(userId, pendingOperationId, expectedFingerprint, (entity, cancelledAtUtc) => entity.Withdraw(cancelledAtUtc));
+    public bool Withdraw(Guid userId, Guid pendingOperationId, string expectedFingerprint,
+        IReadOnlyCollection<Guid>? releasedMemberIds = null) =>
+        Close(userId, pendingOperationId, expectedFingerprint, (entity, cancelledAtUtc) => entity.Withdraw(cancelledAtUtc),
+            releasedMemberIds ?? []);
 
     private bool Close(Guid userId, Guid pendingOperationId, string expectedFingerprint,
-        Func<PendingAgentOperationState, DateTime, bool> close)
+        Func<PendingAgentOperationState, DateTime, bool> close, IReadOnlyCollection<Guid> releasedMemberIds)
     {
         var entity = dbContext.PendingAgentOperations.FirstOrDefault(item =>
             item.Id == pendingOperationId && item.UserId == userId);
@@ -343,7 +345,7 @@ public class PendingAgentOperationStore(
             || !close(entity, cancelledAtUtc))
             return false;
         if (entity.OperationId == AccountChangeSet.OperationName)
-            CancelChangeSetMembers(entity, cancelledAtUtc);
+            CloseChangeSetMembers(entity, cancelledAtUtc, close, releasedMemberIds);
         try
         {
             SaveChangesWithConversationOutcomes();
@@ -365,13 +367,19 @@ public class PendingAgentOperationStore(
             .Any(json => AccountChangeSet.Reservations(ParseArguments(json)).Any(member => member.PendingOperationId == pendingOperationId));
     }
 
-    private void CancelChangeSetMembers(PendingAgentOperationState owner, DateTime cancelledAtUtc)
+    /// <summary>
+    /// Closes each member that a closed change set still reserves in the same way as the change set: a cancel cancels it,
+    /// and a withdrawal withdraws it. A released member stays open on its own.
+    /// </summary>
+    private void CloseChangeSetMembers(PendingAgentOperationState owner, DateTime cancelledAtUtc,
+        Func<PendingAgentOperationState, DateTime, bool> close, IReadOnlyCollection<Guid> releasedMemberIds)
     {
-        var reservations = AccountChangeSet.Reservations(ParseArguments(owner.ArgumentsJson)).ToDictionary(member => member.PendingOperationId);
+        var reservations = AccountChangeSet.Reservations(ParseArguments(owner.ArgumentsJson))
+            .Where(member => !releasedMemberIds.Contains(member.PendingOperationId)).ToDictionary(member => member.PendingOperationId);
         var ids = reservations.Keys.ToArray();
         foreach (var member in dbContext.PendingAgentOperations.Where(item => item.UserId == owner.UserId
             && ids.Contains(item.Id) && item.ConsumedAtUtc == null))
-            if (member.OperationFingerprint == reservations[member.Id].Fingerprint) member.Cancel(cancelledAtUtc);
+            if (member.OperationFingerprint == reservations[member.Id].Fingerprint) close(member, cancelledAtUtc);
     }
 
     public PendingAgentOperationExecution? GetConfirmedExecution(Guid userId, string capabilityId,

@@ -16,6 +16,7 @@ public partial class ProcessUserChatCommandHandler
         var combined = await service.CombineAsync(request.UserId, prepared, ct, request.ClientContext,
             conversation: request.PendingOperationConversation);
         if (combined is null) return;
+        results.Previews.KeepCombination(combined.PendingOperation.Id, prepared.Where(pending => combined.MemberIds.Contains(pending.Id)));
         results.PendingOperations.RemoveAll(pending => combined.MemberIds.Contains(pending.Id));
         results.PendingOperations.Add(combined.PendingOperation);
         results.PendingWriteCalls[combined.PendingOperation.Id] = (AccountChangeSet.OperationName, combined.PendingOperation);

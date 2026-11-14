@@ -109,6 +109,7 @@ public partial class ProcessUserChatCommandHandler
     internal sealed class TurnPreviewLedger(ToolExecutionAccumulator results, IReadOnlySet<Guid> earlierIds)
     {
         private readonly Dictionary<Guid, PendingAgentOperationRevision> _earlierRevisions = [];
+        private readonly Dictionary<Guid, PendingAgentOperation[]> _combinedMembers = [];
         private readonly List<DeferredClose> _closes = [];
 
         /// <summary>
@@ -176,6 +177,13 @@ public partial class ProcessUserChatCommandHandler
             return revisions;
         }
 
+        /// <summary>
+        /// Keeps the previews of this turn that the change set <paramref name="changeSetId"/> combines, so a withdrawal
+        /// can put back each earlier preview among them.
+        /// </summary>
+        public void KeepCombination(Guid changeSetId, IEnumerable<PendingAgentOperation> members) =>
+            _combinedMembers[changeSetId] = [.. members];
+
         /// <summary>Keeps the state that <see cref="ReadRevisions"/> read for each revision of the round that prepared.</summary>
         public void KeepRevisions(IReadOnlyDictionary<string, (Guid Id, PendingAgentOperationRevision Revision)> revisions,
             IReadOnlyDictionary<string, ToolCallOutcome> outcomes)
@@ -188,8 +196,8 @@ public partial class ProcessUserChatCommandHandler
         /// <summary>
         /// Withdraws only what the turn prepared, so it changes nothing that the person had. Each preview that a write of
         /// this turn created, also one in the answer checkpoint that a round stopped by an exception never recorded, is
-        /// withdrawn in the store too, so no approval, replay or later turn brings it back. An earlier preview that this
-        /// turn revised gets its earlier state back; one that it read, or was to close at its end, stays as it was.
+        /// withdrawn in the store, so no approval, replay or later turn brings it back. Each earlier preview that this turn
+        /// revised, also in a change set of the turn, gets its earlier state back; any other earlier preview stays as it was.
         /// </summary>
         public void Withdraw(Guid userId, IPendingAgentOperationStore store)
         {
@@ -206,11 +214,26 @@ public partial class ProcessUserChatCommandHandler
             {
                 if (_earlierRevisions.ContainsKey(pending.Id))
                     Restore(userId, store, pending.Id, pending.PreviewFingerprint);
-                else if (store.GetExecution(userId, pending.Id) is { } stored)
-                    store.Withdraw(userId, pending.Id, AgentOperationFingerprint.Compute(stored.OperationId, stored.Arguments.GetRawText()));
+                else
+                    WithdrawCreated(userId, store, pending.Id);
                 results.SupersedePendingOperation(pending.Id);
             }
             KeepsEarlierPreview = earlierIds.Any(id => store.IsAwaitingConfirmation(userId, id));
+        }
+
+        /// <summary>
+        /// Withdraws a preview that a write of this turn created. A change set of the turn first puts back each earlier
+        /// preview that it combines and releases it, so the store withdraws only the members that this turn created.
+        /// </summary>
+        private void WithdrawCreated(Guid userId, IPendingAgentOperationStore store, Guid id)
+        {
+            var earlierMembers = _combinedMembers.TryGetValue(id, out var members)
+                ? members.Where(member => _earlierRevisions.ContainsKey(member.Id)).ToArray() : null;
+            foreach (var member in earlierMembers ?? [])
+                Restore(userId, store, member.Id, member.PreviewFingerprint);
+            if (store.GetExecution(userId, id) is { } stored)
+                store.Withdraw(userId, id, AgentOperationFingerprint.Compute(stored.OperationId, stored.Arguments.GetRawText()),
+                    earlierMembers?.Select(member => member.Id).ToArray());
         }
 
         /// <summary>
@@ -230,24 +253,25 @@ public partial class ProcessUserChatCommandHandler
         }
 
         /// <summary>
-        /// Runs the answer of the turn and settles the held closes on its way out. The answer path commits them before it
-        /// composes the reply. A failure result or an exception commits them when the turn saved an answer checkpoint,
-        /// because the block answer replays it; after an exception, it first clears the changes that the
-        /// exception left tracked, as the block answer recovery does. An answer that shows no preview of the turn drops them.
+        /// Runs the answer of the turn and settles the turn on its way out. The answer path commits the held closes before
+        /// it composes the reply. A failure result or an exception settles the turn as <see cref="SettleFailureAsync"/>
+        /// says, after an exception once it clears the changes that the exception left tracked, as the block answer
+        /// recovery does. An answer that shows no preview of the turn drops the held closes.
         /// </summary>
-        public async Task<Result<ChatResponse>> SettleOnExitAsync(Func<Task<Result<ChatResponse>>> answer, IUnitOfWork unitOfWork)
+        public async Task<Result<ChatResponse>> SettleOnExitAsync(Func<Task<Result<ChatResponse>>> answer, Guid userId,
+            IPendingAgentOperationStore store, IUnitOfWork unitOfWork)
         {
             try
             {
                 var result = await answer();
                 if (result.IsFailure)
-                    await CommitReplayedClosesAsync();
+                    await SettleFailureAsync(userId, store);
                 return result;
             }
             catch
             {
                 unitOfWork.ResetTracking();
-                await CommitReplayedClosesAsync();
+                await SettleFailureAsync(userId, store);
                 throw;
             }
             finally
@@ -256,8 +280,17 @@ public partial class ProcessUserChatCommandHandler
             }
         }
 
-        private async Task CommitReplayedClosesAsync()
+        /// <summary>
+        /// Settles a turn that ends without its answer. No answer shows a change set of the turn, so each one is withdrawn
+        /// and releases every member, which stays as the turn left it. The held closes commit when the turn saved an answer
+        /// checkpoint, because the block answer replays it.
+        /// </summary>
+        private async Task SettleFailureAsync(Guid userId, IPendingAgentOperationStore store)
         {
+            foreach (var (id, members) in _combinedMembers)
+                if (store.GetExecution(userId, id) is { } stored)
+                    store.Withdraw(userId, id, AgentOperationFingerprint.Compute(stored.OperationId, stored.Arguments.GetRawText()),
+                        [.. members.Select(member => member.Id)]);
             if (results.CommittedPendingOperations.Count > 0 || results.CommittedActions.Count > 0)
                 await CommitAsync(CancellationToken.None);
         }
