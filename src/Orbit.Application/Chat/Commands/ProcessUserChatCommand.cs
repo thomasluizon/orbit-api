@@ -556,7 +556,7 @@ public partial class ProcessUserChatCommandHandler(
             return response.PropagateError<ChatResponse>();
 
         recording.UsedModel = true;
-        var executionResults = new ToolExecutionAccumulator
+        var executionResults = new ToolExecutionAccumulator(recording.AwaitingPreviewIds)
         {
             AnsweredAtUtc = answeredAtUtc,
             Recording = recording,
@@ -608,6 +608,7 @@ public partial class ProcessUserChatCommandHandler(
         if (IsEmptyTokenBudgetResponse(toolLoopResult.TokenBudgetExceeded, aiResponse.TextMessage))
             return Result.Failure<ChatResponse>(ErrorMessages.AiUnavailable);
 
+        await executionResults.Previews.CommitAsync(cancellationToken);
         var (cards, followUps, facts) = await ComposeFinalReplyAsync(request, context, executionResults,
             toolLoopResult, aiResponse, groundingTurn, cancellationToken);
         var aiMessage = cards.AiMessage;

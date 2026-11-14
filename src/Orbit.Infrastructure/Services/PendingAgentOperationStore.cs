@@ -182,6 +182,14 @@ public class PendingAgentOperationStore(
         return AwaitingExecutions(pending);
     }
 
+    public async Task<IReadOnlyList<Guid>> GetOpenIdsAsync(Guid userId, CancellationToken cancellationToken = default)
+    {
+        var checkedAtUtc = TimeProvider.System.GetUtcNow().UtcDateTime;
+        return await dbContext.PendingAgentOperations.AsNoTracking()
+            .Where(item => item.UserId == userId && item.ConsumedAtUtc == null && item.ExpiresAtUtc > checkedAtUtc)
+            .Select(item => item.Id).ToListAsync(cancellationToken);
+    }
+
     private static IReadOnlyList<PendingAgentOperationExecution> AwaitingExecutions(IReadOnlyList<PendingAgentOperationState> pending)
     {
         var members = pending.Where(item => item.OperationId == AccountChangeSet.OperationName)
@@ -213,14 +221,14 @@ public class PendingAgentOperationStore(
         return names;
     }
 
-    public bool SupersedeHabitCreation(Guid userId, string title, Guid? parentHabitId)
+    public IReadOnlyList<Guid>? FindHabitCreationReplacement(Guid userId, string title, Guid? parentHabitId)
     {
         var checkedAtUtc = TimeProvider.System.GetUtcNow().UtcDateTime;
-        var pending = dbContext.PendingAgentOperations.Where(item => item.UserId == userId
+        var pending = dbContext.PendingAgentOperations.AsNoTracking().Where(item => item.UserId == userId
             && item.ConsumedAtUtc == null && item.ConfirmedAtUtc == null && item.ExpiresAtUtc > checkedAtUtc
             && (item.OperationId == "create_habit" || item.OperationId == "bulk_create_habits" || item.OperationId == "create_sub_habit"))
             .ToList();
-        var matching = new List<PendingAgentOperationState>();
+        var matching = new List<Guid>();
         foreach (var item in pending)
         {
             var args = ParseArguments(item.ArgumentsJson);
@@ -230,11 +238,11 @@ public class PendingAgentOperationStore(
                 && HabitNameMatcher.Normalize(item.Title) == HabitNameMatcher.Normalize(title)))
             {
                 if (HabitCreations(args).Count > 1)
-                    return false;
-                matching.Add(item);
+                    return null;
+                matching.Add(item.Id);
             }
         }
-        return matching.Count > 0 && matching.All(item => Cancel(userId, item.Id, item.OperationFingerprint));
+        return matching;
     }
 
     private static IReadOnlyList<PendingHabitCreation> HabitCreations(JsonElement arguments)
@@ -280,6 +288,30 @@ public class PendingAgentOperationStore(
             || entity.OperationFingerprint != expectedFingerprint
             || !entity.Revise(argumentsJson, operationFingerprint, previewFingerprint, checkedAtUtc, revisedPreviewJson,
                 revisedByPerson: revisedPreview is not null))
+            return false;
+
+        try
+        {
+            SaveChangesWithConversationOutcomes();
+            return true;
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            ResetFailedOutcomeChanges(entity);
+            return false;
+        }
+    }
+
+    public PendingAgentOperationRevision? GetRevision(Guid userId, Guid pendingOperationId) =>
+        dbContext.PendingAgentOperations.AsNoTracking()
+            .FirstOrDefault(item => item.Id == pendingOperationId && item.UserId == userId)?.CurrentRevision();
+
+    public bool Restore(Guid userId, Guid pendingOperationId, string expectedFingerprint, PendingAgentOperationRevision revision)
+    {
+        var entity = dbContext.PendingAgentOperations.FirstOrDefault(item =>
+            item.Id == pendingOperationId && item.UserId == userId);
+        var checkedAtUtc = DateTime.UtcNow;
+        if (entity is null || entity.OperationFingerprint != expectedFingerprint || !entity.Restore(revision, checkedAtUtc))
             return false;
 
         try

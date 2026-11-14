@@ -43,6 +43,12 @@ public partial class ProcessUserChatCommandHandler
         public bool ConversationPrepared { get; set; }
         public Guid? ConversationId { get; set; }
         public AiPlan? Plan { get; set; }
+
+        /// <summary>
+        /// The previews that were open before the turn ran a tool: each one that awaited the person's approval and each
+        /// one that the person approved and that did not run yet. The turn did not create any of them.
+        /// </summary>
+        public IReadOnlySet<Guid> AwaitingPreviewIds { get; set; } = new HashSet<Guid>();
     }
 
     private async Task<Result<ProcessUserChatCommand>> PrepareConversationAsync(ProcessUserChatCommand request,

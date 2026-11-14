@@ -367,6 +367,92 @@ public partial class PendingAgentOperationStoreTests : IDisposable
         _dbContext.PendingAgentOperations.Single(item => item.Id == pending.Id).RevisedPreviewJson.Should().BeNull();
     }
 
+    /// <summary>
+    /// A chat turn that ends without its whole request puts back an earlier preview that it revised. The preview holds
+    /// its earlier arguments, preview and revision number again and still awaits approval.
+    /// </summary>
+    [Fact]
+    public void Restore_PutsBackTheStateFromBeforeARevisionAndKeepsItApprovable()
+    {
+        var capability = _catalogService.GetCapability(AgentCapabilityIds.HabitsBulkWrite)!;
+        const string earlierJson = "{\"filter\":{\"all\":true},\"updates\":{\"emoji\":\"A\"}}";
+        const string revisedJson = "{\"filter\":{\"all\":true},\"updates\":{\"emoji\":\"B\"}}";
+        var earlierFingerprint = AgentOperationFingerprint.Compute("bulk_update_habits", earlierJson);
+        var revisedFingerprint = AgentOperationFingerprint.Compute("bulk_update_habits", revisedJson);
+        var pending = _store.Create(_userId, capability, "bulk_update_habits", earlierJson,
+            "Update habits", earlierFingerprint, AgentExecutionSurface.Chat);
+        _store.Revise(_userId, pending.Id, earlierFingerprint, earlierJson, earlierFingerprint, "earlier-preview").Should().BeTrue();
+        var earlier = _store.GetRevision(_userId, pending.Id)!;
+        _store.Revise(_userId, pending.Id, earlierFingerprint, revisedJson, revisedFingerprint, "revised-preview",
+            new PendingOperationChangePreview([], 1, PreviewFingerprint: "revised-preview")).Should().BeTrue();
+
+        _store.Restore(_userId, pending.Id, revisedFingerprint, earlier).Should().BeTrue();
+
+        _dbContext.ChangeTracker.Clear();
+        _store.GetRevision(_userId, pending.Id).Should().Be(earlier);
+        _store.IsAwaitingConfirmation(_userId, pending.Id).Should().BeTrue();
+        var execution = _store.GetExecution(_userId, pending.Id)!;
+        execution.Arguments.GetProperty("updates").GetProperty("emoji").GetString().Should().Be("A");
+        execution.PreviewFingerprint.Should().Be("earlier-preview");
+        _store.Confirm(_userId, pending.Id).Should().NotBeNull("the restored preview stays approvable");
+    }
+
+    /// <summary>
+    /// The open operations of a person are the ones that a chat turn did not create: each one that awaits approval and
+    /// each approved one that did not run yet. A cancelled, a run or an expired operation is not open.
+    /// </summary>
+    [Fact]
+    public async Task GetOpenIdsAsync_HoldsTheAwaitingAndTheApprovedOperationsThatDidNotRun()
+    {
+        var capability = _catalogService.GetCapability(AgentCapabilityIds.HabitsBulkWrite)!;
+        PendingAgentOperation Create(string emoji)
+        {
+            var json = "{\"filter\":{\"all\":true},\"updates\":{\"emoji\":\"" + emoji + "\"}}";
+            return _store.Create(_userId, capability, "bulk_update_habits", json, "Update habits",
+                AgentOperationFingerprint.Compute("bulk_update_habits", json), AgentExecutionSurface.Chat);
+        }
+        var awaiting = Create("A");
+        var approved = Create("B");
+        var cancelled = Create("C");
+        var run = Create("D");
+        var expired = Create("E");
+        _store.Confirm(_userId, approved.Id).Should().NotBeNull();
+        _store.Cancel(_userId, cancelled.Id, AgentOperationFingerprint.Compute("bulk_update_habits",
+            "{\"filter\":{\"all\":true},\"updates\":{\"emoji\":\"C\"}}")).Should().BeTrue();
+        var token = _store.Confirm(_userId, run.Id)!.ConfirmationToken;
+        _store.TryConsumeFreshConfirmation(_userId, capability.Id, AgentOperationFingerprint.Compute("bulk_update_habits",
+            "{\"filter\":{\"all\":true},\"updates\":{\"emoji\":\"D\"}}"), token, requireStepUp: false).Should().BeTrue();
+        typeof(PendingAgentOperationState).GetProperty(nameof(PendingAgentOperationState.ExpiresAtUtc))!
+            .SetValue(_dbContext.PendingAgentOperations.Single(item => item.Id == expired.Id), DateTime.UtcNow.AddSeconds(-1));
+        await _dbContext.SaveChangesAsync();
+
+        var open = await _store.GetOpenIdsAsync(_userId);
+
+        open.Should().BeEquivalentTo([awaiting.Id, approved.Id]);
+        (await _store.GetOpenIdsAsync(Guid.NewGuid())).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Restore_LeavesAPreviewThatMovedOnAsItIs()
+    {
+        var capability = _catalogService.GetCapability(AgentCapabilityIds.HabitsBulkWrite)!;
+        const string earlierJson = "{\"filter\":{\"all\":true},\"updates\":{\"emoji\":\"A\"}}";
+        const string revisedJson = "{\"filter\":{\"all\":true},\"updates\":{\"emoji\":\"B\"}}";
+        var earlierFingerprint = AgentOperationFingerprint.Compute("bulk_update_habits", earlierJson);
+        var revisedFingerprint = AgentOperationFingerprint.Compute("bulk_update_habits", revisedJson);
+        var pending = _store.Create(_userId, capability, "bulk_update_habits", earlierJson,
+            "Update habits", earlierFingerprint, AgentExecutionSurface.Chat);
+        var earlier = _store.GetRevision(_userId, pending.Id)!;
+        _store.Revise(_userId, pending.Id, earlierFingerprint, revisedJson, revisedFingerprint, "revised-preview").Should().BeTrue();
+
+        _store.Restore(_userId, pending.Id, earlierFingerprint, earlier).Should().BeFalse("the row no longer holds that fingerprint");
+        _store.Confirm(_userId, pending.Id).Should().NotBeNull();
+        _store.Restore(_userId, pending.Id, revisedFingerprint, earlier).Should().BeFalse("an approved preview keeps its arguments");
+
+        _dbContext.ChangeTracker.Clear();
+        _store.GetExecution(_userId, pending.Id)!.Arguments.GetProperty("updates").GetProperty("emoji").GetString().Should().Be("B");
+    }
+
     [Fact]
     public void Revise_WithSameArgumentsRefreshesPreviewAndInvalidatesApproval()
     {
@@ -475,9 +561,9 @@ public partial class PendingAgentOperationStoreTests : IDisposable
             AgentOperationFingerprint.Compute("bulk_create_habits", json), AgentExecutionSurface.Chat);
 
         _store.GetPendingHabitCreations(_userId).Should().ContainSingle().Which.ParentHabitId.Should().BeNull();
-        _store.SupersedeHabitCreation(_userId, "Stretch", destination).Should().BeFalse();
+        _store.FindHabitCreationReplacement(_userId, "Stretch", destination).Should().BeEmpty();
         _store.GetExecution(_userId, pending.Id).Should().NotBeNull();
-        _store.SupersedeHabitCreation(_userId, "Stretch", null).Should().BeTrue();
+        _store.FindHabitCreationReplacement(_userId, "Stretch", null).Should().Equal(pending.Id);
     }
 
     [Fact]
@@ -510,7 +596,7 @@ public partial class PendingAgentOperationStoreTests : IDisposable
         var pending = _store.Create(_userId, capability, "bulk_create_habits", json, "Create children",
             AgentOperationFingerprint.Compute("bulk_create_habits", json), AgentExecutionSurface.Chat);
 
-        _store.SupersedeHabitCreation(_userId, "TREINO", parentId).Should().BeFalse();
+        _store.FindHabitCreationReplacement(_userId, "TREINO", parentId).Should().BeNull("the preview also creates other habits");
 
         _dbContext.ChangeTracker.Clear();
         var remaining = _store.GetExecution(_userId, pending.Id);
@@ -524,7 +610,7 @@ public partial class PendingAgentOperationStoreTests : IDisposable
     [Theory]
     [InlineData("create_habit", "{\"title\":\"Meditação\"}")]
     [InlineData("bulk_create_habits", "{\"habits\":[{\"title\":\"Meditação\"}]}")]
-    public void RoundFour_SupersedeSingleItem_CancelsOnlyMatchingProposal(string operationId, string json)
+    public void RoundFour_SupersedeSingleItem_FindsOnlyMatchingProposalAndChangesNothing(string operationId, string json)
     {
         var capability = _catalogService.GetCapabilityByChatTool(operationId)!
             with
@@ -532,14 +618,12 @@ public partial class PendingAgentOperationStoreTests : IDisposable
         var pending = _store.Create(_userId, capability, operationId, json, "Create",
             AgentOperationFingerprint.Compute(operationId, json), AgentExecutionSurface.Chat);
 
-        _store.SupersedeHabitCreation(Guid.NewGuid(), "MEDITACAO", null).Should().BeFalse();
-        _store.SupersedeHabitCreation(_userId, "MEDITACAO", Guid.NewGuid()).Should().BeFalse();
-        _store.IsAwaitingConfirmation(_userId, pending.Id).Should().BeTrue();
-        _store.SupersedeHabitCreation(_userId, "MEDITACAO", null).Should().BeTrue();
+        _store.FindHabitCreationReplacement(Guid.NewGuid(), "MEDITACAO", null).Should().BeEmpty();
+        _store.FindHabitCreationReplacement(_userId, "MEDITACAO", Guid.NewGuid()).Should().BeEmpty();
+        _store.FindHabitCreationReplacement(_userId, "MEDITACAO", null).Should().Equal(pending.Id);
 
         _dbContext.ChangeTracker.Clear();
-        _store.GetExecution(_userId, pending.Id).Should().BeNull();
-        _store.Confirm(_userId, pending.Id).Should().BeNull();
+        _store.IsAwaitingConfirmation(_userId, pending.Id).Should().BeTrue("the caller cancels the preview, not the lookup");
     }
 
     [Fact]

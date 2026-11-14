@@ -62,7 +62,16 @@ public interface IPendingAgentOperationStore
     IReadOnlyList<PendingHabitCreation> GetPendingHabitCreations(Guid userId);
     IReadOnlyList<PendingAgentOperationExecution> GetAwaiting(Guid userId);
     Task<IReadOnlyList<PendingAgentOperationExecution>> GetAwaitingAsync(Guid userId, CancellationToken cancellationToken = default);
-    bool SupersedeHabitCreation(Guid userId, string title, Guid? parentHabitId);
+    /// <summary>
+    /// The operations that did not run, were not cancelled and did not expire: each one that awaits approval and each
+    /// one that the person approved.
+    /// </summary>
+    Task<IReadOnlyList<Guid>> GetOpenIdsAsync(Guid userId, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// The awaiting creation previews of the habit that a new preview replaces, or null when one of them also creates
+    /// other habits. Nothing changes until the caller cancels them.
+    /// </summary>
+    IReadOnlyList<Guid>? FindHabitCreationReplacement(Guid userId, string title, Guid? parentHabitId);
     /// <summary>
     /// Binds new arguments and a new preview fingerprint. Pass <paramref name="revisedPreview"/> only for a revision or
     /// a refresh that the person asked for: it keeps the preview that the person approves and marks the preview revised.
@@ -71,6 +80,12 @@ public interface IPendingAgentOperationStore
     bool Revise(Guid userId, Guid pendingOperationId, string expectedFingerprint,
         string argumentsJson, string operationFingerprint, string previewFingerprint,
         PendingOperationChangePreview? revisedPreview = null);
+    PendingAgentOperationRevision? GetRevision(Guid userId, Guid pendingOperationId);
+    /// <summary>
+    /// Puts back the state from before a revision while the operation still holds <paramref name="expectedFingerprint"/>
+    /// and awaits approval.
+    /// </summary>
+    bool Restore(Guid userId, Guid pendingOperationId, string expectedFingerprint, PendingAgentOperationRevision revision);
     bool Cancel(Guid userId, Guid pendingOperationId, string expectedFingerprint);
     PendingAgentOperationExecution? GetConfirmedExecution(Guid userId, string capabilityId,
         string operationFingerprint, string confirmationToken);

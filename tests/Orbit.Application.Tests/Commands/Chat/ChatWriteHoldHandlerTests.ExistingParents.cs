@@ -93,8 +93,8 @@ public sealed partial class ChatWriteHoldHandlerTests
         var first = await CreateHandler().Handle(new(_userId, "Create a child under Before Bed. Post lunch: take vitamin D (once a week)"), default);
         var pending = first.Value.PendingOperations.Should().ContainSingle().Which;
 
-        _pendingOperationStore.SupersedeHabitCreation(_userId, "Take vitamin D", parents[0].Id).Should().BeTrue();
-        _pendingOperationStore.GetExecution(_userId, pending.Id).Should().BeNull();
+        _pendingOperationStore.FindHabitCreationReplacement(_userId, "Take vitamin D", parents[0].Id).Should().Equal(pending.Id);
+        _pendingOperationStore.FindHabitCreationReplacement(_userId, "Take vitamin D", parents[1].Id).Should().BeEmpty();
     }
 
     [Theory]

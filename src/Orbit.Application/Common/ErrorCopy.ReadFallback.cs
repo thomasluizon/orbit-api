@@ -7,6 +7,8 @@ public static partial class ErrorCopy
         ("chat.answer.empty", "I couldn't prepare an answer. Please try again.", "Não consegui preparar uma resposta. Tente novamente."),
         ("chat.answer.pendingPreview", "Review the proposed changes before approving.", "Revise as alterações propostas antes de aprovar."),
         ("chat.answer.toolFailure", "I couldn't complete that. Please try again.", "Não consegui concluir isso. Tente novamente."),
+        ("chat.answer.requestNotPrepared", "I couldn't prepare your whole request, so nothing is waiting for your approval. Please send it again.", "Não consegui preparar o seu pedido inteiro, então nada ficou esperando a sua aprovação. Mande de novo, por favor."),
+        ("chat.answer.requestNotPreparedEarlierKept", "I couldn't prepare your whole request, so I left your earlier changes as they were. They are still waiting for your approval. Please send the request again.", "Não consegui preparar o seu pedido inteiro, então deixei as alterações anteriores como estavam. Elas continuam esperando a sua aprovação. Mande o pedido de novo, por favor."),
         ("chat.answer.truncated", "This response was cut off before completion, so the result is partial.", "Esta resposta foi interrompida antes do fim e pode estar incompleta."),
         ("chat.answer.selectHabit", "Which habit would you like to choose?", "Qual hábito você quer escolher?"),
         ("chat.answer.selectHabitReference", "Which habit would you like to use for “{0}”?", "Qual hábito você quer usar para “{0}”?"),

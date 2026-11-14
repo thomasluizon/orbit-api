@@ -335,10 +335,12 @@ public partial class ProcessUserChatCommandHandlerTests
     /// The block as the server stores it after it completed a card for six same-titled records: one question that
     /// takes several selections, with one option for each record.
     /// </summary>
-    private IssuedAiBlock StoredRecordQuestion(Habit[] children, string prompt) =>
-        StoreAnsweredBlock(new AiBlockDefinition(AiBlockKinds.Question, string.Empty, [], [],
+    private IssuedAiBlock StoredRecordQuestion(Habit[] children, string prompt) => StoreAnsweredBlock(RecordQuestion(children, prompt));
+
+    private static AiBlockDefinition RecordQuestion(Habit[] children, string prompt) =>
+        new(AiBlockKinds.Question, string.Empty, [], [],
             Questions: [new AiQuestion("records", "multipleChoice", prompt,
-                [.. children.Select((child, index) => new AiQuestionOption(child.Id.ToString(), $"{child.Title} ({index + 1} of 6)"))])]));
+                [.. children.Select((child, index) => new AiQuestionOption(child.Id.ToString(), $"{child.Title} ({index + 1} of 6)"))])]);
 
     private static object DeleteHabitCompletes(Guid habitId) => new { habit_id = habitId, orbit_write_complete = true };
 

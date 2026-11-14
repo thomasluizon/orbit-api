@@ -60,6 +60,7 @@ public sealed partial class ChatWriteHoldHandlerTests : IDisposable
     private readonly IMediator _mediator = Substitute.For<IMediator>();
     private readonly IProductAnalytics _productAnalytics = Substitute.For<IProductAnalytics>();
     private readonly IHabitScheduleLogReader _scheduleLogReader = Substitute.For<IHabitScheduleLogReader>();
+    private readonly IAgentTargetOwnershipService _ownership = Substitute.For<IAgentTargetOwnershipService>();
     private readonly AgentCatalogService _catalogService;
     private readonly PendingAgentOperationStore _pendingOperationStore;
     private readonly AgentOperationExecutor _executor;
@@ -117,15 +118,14 @@ public sealed partial class ChatWriteHoldHandlerTests : IDisposable
         var stepUpBridge = Substitute.For<IAgentStepUpAuthorizationBridge>();
         stepUpBridge.GetRequiredConfirmationAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns((AgentConfirmationRequirement?)null);
-        var ownership = Substitute.For<IAgentTargetOwnershipService>();
-        ownership.GetDenialReasonAsync(Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<JsonElement>(),
+        _ownership.GetDenialReasonAsync(Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<JsonElement>(),
             Arg.Any<CancellationToken>()).Returns((string?)null);
         _executor = new AgentOperationExecutor(
             _catalogService,
             new AgentPolicyEvaluator(_dbContext, _catalogService, _pendingOperationStore, stepUpBridge,
                 new FeatureFlagService(_dbContext, _flagCache, Substitute.For<IHostEnvironment>(), new ConfigurationBuilder().Build())),
             Substitute.For<IAgentAuditService>(),
-            ownership,
+            _ownership,
             stepUpBridge,
             _toolRegistry,
             _previewer,

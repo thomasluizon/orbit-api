@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.EntityFrameworkCore;
 using Orbit.Application.Chat.Models;
 using Orbit.Application.Chat.Tools;
+using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Interfaces;
@@ -12,7 +13,7 @@ namespace Orbit.Application.Chat.Commands;
 
 public partial class ProcessUserChatCommandHandler
 {
-    private async Task<ToolLoopResult> RunToolCallLoopAsync(
+    private async Task<ToolLoopResult> RunToolRoundsAsync(
         AiResponse initialResponse,
         ProcessUserChatCommand request,
         ChatContext context,
@@ -30,18 +31,11 @@ public partial class ProcessUserChatCommandHandler
         var hadToolFailure = false;
         var hasUnexecutedCalls = aiResponse.HasToolCalls;
         var terminalAnswerCorrectionAttempted = false;
-        RejectedCallCorrection? correction = null;
+        ICallCorrection? correction = null;
         await RecordModelOfferDismissalsAsync(aiResponse, request, cancellationToken);
 
         if (tokenBudgetExceeded)
-        {
-            LogAiRequestTokenCeilingReached(
-                logger,
-                totalReportedTokens,
-                totalBudgetTokens,
-                AppConstants.MaxAiRequestTotalTokens,
-                iteration);
-        }
+            LogAiRequestTokenCeilingReached(logger, totalReportedTokens, totalBudgetTokens, AppConstants.MaxAiRequestTotalTokens, iteration);
 
         while ((aiResponse.HasToolCalls || RequiresTerminalAnswer(aiResponse, request, context, executionResults)) && !aiResponse.IsTruncated
             && iteration < ChatTurnLimits.MaxToolIterations && !tokenBudgetExceeded)
@@ -59,17 +53,8 @@ public partial class ProcessUserChatCommandHandler
             var roundResult = !aiResponse.HasToolCalls
                 ? await CorrectTerminalAnswerAsync(aiResponse, request, context, executionResults,
                     terminalAnswerCorrectionAttempted, iteration, totalBudgetTokens, cancellationToken)
-                : await ProcessToolCallsAsync(
-                aiResponse,
-                request,
-                context,
-                executionResults,
-                iteration,
-                totalBudgetTokens,
-                correction,
-                language,
-                aiStreamSink,
-                cancellationToken);
+                : await ProcessToolCallsAsync(aiResponse, request, context, executionResults, iteration, totalBudgetTokens,
+                    correction, language, aiStreamSink, cancellationToken);
             if (!aiResponse.HasToolCalls) terminalAnswerCorrectionAttempted = true;
 
             if (roundResult.ProviderError is not null)
@@ -89,14 +74,7 @@ public partial class ProcessUserChatCommandHandler
             totalBudgetTokens += roundResult.Response.RequestBudgetTokenCount ?? roundResult.Response.ReportedTokenCount;
             tokenBudgetExceeded = !unmetered && totalBudgetTokens > AppConstants.MaxAiRequestTotalTokens;
             if (tokenBudgetExceeded)
-            {
-                LogAiRequestTokenCeilingReached(
-                    logger,
-                    totalReportedTokens,
-                    totalBudgetTokens,
-                    AppConstants.MaxAiRequestTotalTokens,
-                    iteration);
-            }
+                LogAiRequestTokenCeilingReached(logger, totalReportedTokens, totalBudgetTokens, AppConstants.MaxAiRequestTotalTokens, iteration);
         }
 
         if (hasUnexecutedCalls && executionResults.EvalTrace is { } remainingTrace)
@@ -126,10 +104,14 @@ public partial class ProcessUserChatCommandHandler
         results.OperationResults.Any(operation => operation.Status == AgentOperationStatus.Succeeded
             && ai.ToolRegistry.GetTool(operation.OperationId) is { IsReadOnly: false });
 
+    /// <summary>
+    /// Keeps the current previews of a turn whose last continuation failed. The answer of a withdrawn turn is final, so
+    /// no recovery replaces it.
+    /// </summary>
     private ToolLoopResult RecoverOutcomeContinuation(ProcessUserChatCommand request,
         ToolExecutionAccumulator results, ToolLoopResult loop, string? language, CancellationToken cancellationToken)
     {
-        if (request.BlockAnswer is not null || results.RequiresCreationProposal)
+        if (request.BlockAnswer is not null || results.RequiresCreationProposal || results.RequestNotPrepared)
             return loop;
         if (loop.TokenBudgetExceeded && RecoverBudgetOutcome(request, results, language, cancellationToken) is { } recovery)
             return loop with { FinalResponse = recovery, ProviderError = null };
@@ -191,7 +173,7 @@ public partial class ProcessUserChatCommandHandler
         ToolExecutionAccumulator executionResults,
         int iteration,
         long totalBudgetTokens,
-        RejectedCallCorrection? correction,
+        ICallCorrection? correction,
         string? language,
         Func<AiStreamEvent, Task>? aiStreamSink,
         CancellationToken cancellationToken,
@@ -202,16 +184,21 @@ public partial class ProcessUserChatCommandHandler
         var orderedCalls = OrderCallsForAsk(aiResponse.ToolCalls!.Select(call => ProactiveProposal.KeepRequestedSchedule(
             ProactiveProposal.CompleteCreateReminder(call, request.ClientContext), request.Message)).ToArray(), context.UserHabits);
         await StartPlanCallsAsync(orderedCalls, request, executionResults);
-        var outcomesByCallId = correction is null
-            ? await ExecuteToolCallsAsync(orderedCalls, request, executionResults, language, cancellationToken)
-            : await ExecuteCorrectionsAsync(orderedCalls, correction, request, executionResults, cancellationToken);
+        var outcomesByCallId = correction switch
+        {
+            DeniedWriteCorrection deniedWrites => await ExecuteDeniedWriteCorrectionsAsync(orderedCalls, deniedWrites, request,
+                executionResults, language, cancellationToken),
+            RejectedCallCorrection rejected => await ExecuteCorrectionsAsync(orderedCalls, rejected, request, executionResults, cancellationToken),
+            _ => await ExecuteToolCallsAsync(orderedCalls, request, executionResults, language, cancellationToken)
+        };
+        if (correction is null)
+            ReplaceResentDeniedWrites(orderedCalls, outcomesByCallId, executionResults);
         await CompletePlanCallsAsync(outcomesByCallId, request, executionResults);
         var toolResults = RecordToolRound(aiResponse, orderedCalls, outcomesByCallId, executionResults, correction is not null);
         RecordReadOfferIntents(aiResponse, request, executionResults);
         executionResults.CapturePreviewDiscussionText(aiResponse.TextMessage);
-        var ownershipReadDenied = outcomesByCallId.Values.Any(IsOwnershipReadDenial);
-        var hadToolFailure = ownershipReadDenied || outcomesByCallId.Values.Any(outcome => outcome.OperationResult is { Status: AgentOperationStatus.Failed } operation
-            && operation.ErrorCode != ErrorCodes.HabitLimitReached);
+        var holdsPreparedWrite = HoldsPreparedWrite(executionResults);
+        var hadToolFailure = outcomesByCallId.Values.Any(outcome => IsToolFailure(outcome, holdsPreparedWrite));
 
         if (correction is not null)
             return correction.HasUnresolvedFailures
@@ -237,9 +224,10 @@ public partial class ProcessUserChatCommandHandler
             if (await TryRecoverFreshCreateAsync(aiResponse, orderedCalls, outcomesByCallId, toolResults,
                 request, context, executionResults, iteration, totalBudgetTokens, language, cancellationToken) is { } recovered)
                 return recovered;
-            if (!HasCorrectionAllowance(request, context, executionResults, iteration, totalBudgetTokens))
+            correction = HasCorrectionAllowance(request, context, iteration, totalBudgetTokens)
+                ? ChooseCorrection(request, executionResults.CorrectionOccurrences, holdsPreparedWrite) : null;
+            if (correction is null)
                 return new ToolRoundResult(MessageResponse(language), HadToolFailure: true);
-            correction = new RejectedCallCorrection(executionResults.CorrectionOccurrences);
             OfferCorrections(toolResults, outcomesByCallId);
         }
 
@@ -262,10 +250,10 @@ public partial class ProcessUserChatCommandHandler
                 continueResult.ErrorCode ?? ErrorMessages.AiUnavailable.Code, continueResult.Error));
         }
 
-        if (correction is { IsReadOnly: true } && !continueResult.Value.HasToolCalls && !continueResult.Value.IsTruncated
-            && correction.CanOmitReads(executionResults))
+        if (correction is RejectedCallCorrection { IsReadOnly: true } reads && !continueResult.Value.HasToolCalls
+            && !continueResult.Value.IsTruncated && reads.CanOmitReads(executionResults))
         {
-            correction.OmitReads(executionResults);
+            reads.OmitReads(executionResults);
             correction = null;
             hadToolFailure = false;
         }
@@ -274,6 +262,10 @@ public partial class ProcessUserChatCommandHandler
             HadToolFailure: hadToolFailure && correction is null,
             Correction: correction);
     }
+
+    private static bool IsToolFailure(ToolCallOutcome outcome, bool holdsPreparedWrite) =>
+        IsOwnershipReadDenial(outcome) || holdsPreparedWrite && IsOwnershipWriteDenial(outcome)
+        || outcome.OperationResult is { Status: AgentOperationStatus.Failed } operation && operation.ErrorCode != ErrorCodes.HabitLimitReached;
 
     private AiToolCall NormalizeExecutionArguments(AiToolCall call) => ai.ToolRegistry.GetTool(call.Name) is { } tool
         ? call with
@@ -408,19 +400,17 @@ public partial class ProcessUserChatCommandHandler
         return toolResults;
     }
 
-    private static bool HasCorrectionAllowance(ProcessUserChatCommand request, ChatContext context, ToolExecutionAccumulator results,
-        int iteration, long totalBudgetTokens) =>
+    private static bool HasCorrectionAllowance(ProcessUserChatCommand request, ChatContext context, int iteration, long totalBudgetTokens) =>
         iteration < ChatTurnLimits.MaxToolIterations
         && (context.EnabledFeatureFlags.Contains(FeatureFlagKeys.AiEvalUnmetered, StringComparer.Ordinal)
             || totalBudgetTokens < AppConstants.MaxAiRequestTotalTokens)
-        && request.BlockAnswer is null && request.ConfirmationToken is null
-        && RejectedCallCorrection.CanRecover(results.CorrectionOccurrences);
+        && request.ConfirmationToken is null;
 
     private sealed record ToolRoundResult(
         AiResponse Response,
         bool HadToolFailure = false,
         AppError? ProviderError = null,
-        RejectedCallCorrection? Correction = null);
+        ICallCorrection? Correction = null);
 
     private static AiResponse MessageResponse(string? language) => new()
     {
@@ -469,6 +459,7 @@ public partial class ProcessUserChatCommandHandler
 
         var excessReads = readOnlyCalls.Skip(ChatTurnLimits.MaxReadCallsPerRound).ToArray();
         readOnlyCalls = readOnlyCalls.Take(ChatTurnLimits.MaxReadCallsPerRound).ToList();
+        var earlierRevisions = executionResults.Previews.ReadRevisions(readOnlyCalls, request.UserId, execution.PendingOperationStore);
         var readOnlyTasks = readOnlyCalls
             .Select(call => ExecuteReadOnlyToolCallOnIsolatedScopeAsync(call, request, executionResults, cancellationToken))
             .ToList();
@@ -486,6 +477,8 @@ public partial class ProcessUserChatCommandHandler
         {
             outcomesByCallId[readOnlyCalls[index].Id] = readOnlyOutcomes[index];
             RecordSuccessfulAskRead(readOnlyCalls[index], readOnlyOutcomes[index], executionResults);
+            if (readOnlyOutcomes[index].OperationResult is { Status: AgentOperationStatus.Succeeded, Payload: PendingPreviewDiscard discard })
+                await DiscardPreviewAsync(readOnlyCalls[index], discard, request, executionResults, cancellationToken);
             if (readOnlyOutcomes[index].OperationResult is
                 {
                     Status: AgentOperationStatus.Succeeded,
@@ -498,6 +491,7 @@ public partial class ProcessUserChatCommandHandler
                     executionResults.SelectionCandidates.Add(selection);
             }
         }
+        executionResults.Previews.KeepRevisions(earlierRevisions, outcomesByCallId);
 
         RejectUnreadDuplicateTargets(writeCalls, resolvedWrites, executionResults, outcomesByCallId);
         var selectionScope = RejectUnansweredSelections(writeCalls, resolvedWrites, executionResults, outcomesByCallId,
@@ -541,7 +535,7 @@ public partial class ProcessUserChatCommandHandler
                 ? await ExecuteBlockWriteAsync(resolved, request, executionResults, claim, cancellationToken)
                 : await ExecuteSingleToolCallAsync(
                     resolved, request, executionResults, execution.OperationExecutor, execution.PendingClarificationStore, cancellationToken);
-            outcome = RecordHabitSetupDraft(call, outcome, executionResults);
+            outcome = DescribeUnownedTargets(resolved, RecordHabitSetupDraft(call, outcome, executionResults), executionResults);
             if (outcome.ToolResult.Success)
                 executionResults.PreviousWriteCalls.Add(call);
             else
@@ -711,7 +705,7 @@ public partial class ProcessUserChatCommandHandler
         var toolResult = BuildToolCallResult(call, operationResult);
         InvalidateTurnSnapshotIfMutated(request.UserId, tool, operationResult);
 
-        RegisterPendingWrite(request.UserId, tool, executionResponse, executionResults);
+        await RegisterPendingWriteAsync(request.UserId, tool, executionResponse, executionResults, cancellationToken);
 
         if (operationResult.Status == AgentOperationStatus.Succeeded
             && operationResult.Payload is NeedsClarificationPayload payload)
@@ -771,8 +765,12 @@ public partial class ProcessUserChatCommandHandler
             results.IsPreviewDiscussion = true;
     }
 
-    private void RegisterPendingWrite(Guid userId, IAiTool tool,
-        AgentExecuteOperationResponse response, ToolExecutionAccumulator results)
+    /// <summary>
+    /// Keeps a later write from preparing a change that an open preview already holds. The preview ledger of the turn
+    /// closes each preview that the later write covers.
+    /// </summary>
+    private async Task RegisterPendingWriteAsync(Guid userId, IAiTool tool,
+        AgentExecuteOperationResponse response, ToolExecutionAccumulator results, CancellationToken cancellationToken)
     {
         if (response.Operation.Status != AgentOperationStatus.PendingConfirmation
             || response.PendingOperation is not { } replacement)
@@ -800,8 +798,8 @@ public partial class ProcessUserChatCommandHandler
                 continue;
             var fingerprint = AgentOperationFingerprint.Compute(
                 stored.OperationId, stored.Arguments.GetRawText());
-            if (execution.PendingOperationStore.Cancel(userId, id, fingerprint))
-                results.SupersedePendingOperation(id);
+            await results.Previews.CloseAsync(id,
+                _ => Task.FromResult(execution.PendingOperationStore.Cancel(userId, id, fingerprint)), cancellationToken);
         }
         results.PendingWriteCalls[replacement.Id] = (tool.Name, replacement);
     }

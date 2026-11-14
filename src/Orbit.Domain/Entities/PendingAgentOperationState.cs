@@ -166,6 +166,28 @@ public class PendingAgentOperationState : Entity
         return true;
     }
 
+    public PendingAgentOperationRevision CurrentRevision() =>
+        new(ArgumentsJson, OperationFingerprint, PreviewFingerprint, RevisedPreviewJson, PreviewRevised, RevisionNumber);
+
+    /// <summary>
+    /// Puts back the state from before a revision, the revision number included, so the person approves the earlier
+    /// arguments and a reopened conversation shows the earlier outcome. An approved, used or expired operation stays
+    /// as it is.
+    /// </summary>
+    public bool Restore(PendingAgentOperationRevision revision, DateTime utcNow)
+    {
+        if (IsExpired(utcNow) || ConsumedAtUtc.HasValue || ConfirmedAtUtc.HasValue
+            || AgentOperationFingerprint.Compute(OperationId, revision.ArgumentsJson) != revision.OperationFingerprint)
+            return false;
+        ArgumentsJson = revision.ArgumentsJson;
+        OperationFingerprint = revision.OperationFingerprint;
+        PreviewFingerprint = revision.PreviewFingerprint;
+        RevisedPreviewJson = revision.RevisedPreviewJson;
+        PreviewRevised = revision.PreviewRevised;
+        RevisionNumber = revision.RevisionNumber;
+        return true;
+    }
+
     public bool Cancel(DateTime utcNow)
     {
         if (IsExpired(utcNow) || ConsumedAtUtc.HasValue)
