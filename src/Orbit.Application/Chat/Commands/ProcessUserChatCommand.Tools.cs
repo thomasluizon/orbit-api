@@ -126,6 +126,11 @@ public partial class ProcessUserChatCommandHandler
         return loop with { FinalResponse = new AiResponse(), ProviderError = null };
     }
 
+    /// <summary>
+    /// Answers a turn that <see cref="MustFailToolTurn"/> fails, with a fallback answer or with the failure. The selection
+    /// question shows no preview of the turn, so the turn first withdraws what it prepared, and no later turn finds it
+    /// open and unseen. Each earlier preview stays as it was.
+    /// </summary>
     private async Task<Result<ChatResponse>> CompleteFailedToolTurnAsync(ProcessUserChatCommand request,
         ChatContext context, ToolExecutionAccumulator results, ToolLoopResult loop, CancellationToken ct)
     {
@@ -135,6 +140,7 @@ public partial class ProcessUserChatCommandHandler
                 ? creationError : ErrorMessages.AiUnavailable);
         if (results.PendingSelection is { } selection && results.AskBlock is null)
         {
+            results.Previews.Withdraw(request.UserId, execution.PendingOperationStore);
             var cards = SelectionQuestion(selection, context.Language, request.ClientContext?.SupportsParts == true);
             return Result.Success(new ChatResponse(cards.AiMessage, [], results.OperationResults,
                 CorrelationId: request.CorrelationId, Parts: cards.Parts));

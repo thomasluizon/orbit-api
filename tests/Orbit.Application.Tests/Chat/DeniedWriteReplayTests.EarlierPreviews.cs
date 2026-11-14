@@ -377,21 +377,7 @@ public partial class ProcessUserChatCommandHandlerTests
     public async Task DeniedWrite_AnAnswerTurnThatAsksASelectionAfterItsCheckpointLeavesTheEarlierPreviewThatItsBulkWriteCovered(
         string language)
     {
-        var runs = new[] { new HabitListCardItem(Guid.NewGuid().ToString(), "Run", null, 0, false, "none"),
-            new HabitListCardItem(Guid.NewGuid().ToString(), "Run", null, 0, false, "none") };
-        var run = await RunDeniedAnswerTurnAsync(language, _ => [], children =>
-            {
-                ArrangeCoveredEarlierPreview(children);
-                _operationExecutor.ExecuteAsync(Arg.Is<AgentExecuteOperationRequest>(request => request.OperationId == "query_habits"),
-                        Arg.Any<CancellationToken>())
-                    .Returns(new AgentExecuteOperationResponse(new AgentOperationResult("query_habits", "query_habits",
-                        AgentRiskClass.Low, AgentConfirmationRequirement.None, AgentOperationStatus.Succeeded,
-                        Payload: new HabitListCard("all", runs) { Selection = new HabitSelectionCandidates("Run", runs, RequiresAnswer: true) })));
-            },
-            first: children => Calls(new AiToolCall("query_habits", "runs", JsonSerializer.SerializeToElement(new { search = "Run", for_selection = true })),
-                InspectEarlierPreview(), CorrectedRename(children), Run4Delete(children)),
-            lastReply: FailedReply("unavailable"),
-            tools: [ReadTool(ReviseTool, new ToolResult(true)), ReadTool("query_habits", new ToolResult(true))]);
+        var run = await RunSelectionAfterCheckpointAsync(language);
 
         run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
         run.Result.Value.AiMessage.Should().Be(SelectionQuestionFor("Run", language));
@@ -399,5 +385,54 @@ public partial class ProcessUserChatCommandHandlerTests
         await _blockStore.Received().CheckpointAnswerAsync(Arg.Any<Guid>(), UserId, Arg.Any<DateTime>(), Arg.Any<string>(),
             Arg.Any<CancellationToken>());
         _pendingOperationStore.DidNotReceive().Cancel(UserId, EarlierPreviewId, Arg.Any<string>());
+    }
+
+    /// <summary>
+    /// The answer turn of the selection tests: a read returns two "Run" records that need the person's choice, the same
+    /// bulk rename and, when <paramref name="delete"/> is true, the delete save the answer checkpoint, and the continuation
+    /// fails. <paramref name="store"/> runs before the earlier preview is arranged.
+    /// </summary>
+    private Task<DeniedWriteRun> RunSelectionAfterCheckpointAsync(string language, Action? store = null, bool delete = true)
+    {
+        var runs = new[] { new HabitListCardItem(Guid.NewGuid().ToString(), "Run", null, 0, false, "none"),
+            new HabitListCardItem(Guid.NewGuid().ToString(), "Run", null, 0, false, "none") };
+        return RunDeniedAnswerTurnAsync(language, _ => [], children =>
+            {
+                store?.Invoke();
+                ArrangeCoveredEarlierPreview(children);
+                _operationExecutor.ExecuteAsync(Arg.Is<AgentExecuteOperationRequest>(request => request.OperationId == "query_habits"),
+                        Arg.Any<CancellationToken>())
+                    .Returns(new AgentExecuteOperationResponse(new AgentOperationResult("query_habits", "query_habits",
+                        AgentRiskClass.Low, AgentConfirmationRequirement.None, AgentOperationStatus.Succeeded,
+                        Payload: new HabitListCard("all", runs) { Selection = new HabitSelectionCandidates("Run", runs, RequiresAnswer: true) })));
+            },
+            first: children => Calls([new AiToolCall("query_habits", "runs", JsonSerializer.SerializeToElement(new { search = "Run", for_selection = true })),
+                InspectEarlierPreview(), CorrectedRename(children), .. delete ? [Run4Delete(children)] : Array.Empty<AiToolCall>()]),
+            lastReply: FailedReply("unavailable"),
+            tools: [ReadTool(ReviseTool, new ToolResult(true)), ReadTool("query_habits", new ToolResult(true))]);
+    }
+
+    /// <summary>
+    /// The same selection answer with only the bulk rename, and a store that keeps each preview of the turn awaiting, as
+    /// the real store does. The question shows no preview of the turn, so the turn withdraws the rename that its checkpoint
+    /// holds, and no later turn finds it open and unseen. The earlier preview that the rename covers stays approvable.
+    /// </summary>
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task DeniedWrite_AnAnswerTurnThatAsksASelectionAfterItsCheckpointWithdrawsThePreviewOfTheTurn(string language)
+    {
+        var run = await RunSelectionAfterCheckpointAsync(language, StorePreparedPreviews, delete: false);
+
+        run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
+        run.Result.Value.AiMessage.Should().Be(SelectionQuestionFor("Run", language));
+        run.Result.Value.PendingOperations.Should().BeNullOrEmpty();
+        var (request, preview) = _heldPreviews.Values.Should()
+            .ContainSingle(held => held.Request.OperationId == "bulk_update_habits", "the bulk rename prepared").Subject;
+        _pendingOperationStore.Received(1).Withdraw(UserId, preview.Id,
+            AgentOperationFingerprint.Compute("bulk_update_habits", request.Arguments.GetRawText()));
+        _pendingOperationStore.IsAwaitingConfirmation(UserId, preview.Id).Should().BeFalse("no later turn finds it open");
+        _pendingOperationStore.DidNotReceive().Cancel(UserId, EarlierPreviewId, Arg.Any<string>());
+        _pendingOperationStore.IsAwaitingConfirmation(UserId, EarlierPreviewId).Should().BeTrue("the earlier preview stays approvable");
     }
 }
