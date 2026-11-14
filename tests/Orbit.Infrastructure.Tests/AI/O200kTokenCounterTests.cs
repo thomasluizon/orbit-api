@@ -73,6 +73,24 @@ public sealed class O200kTokenCounterTests
         }
     }
 
+    /// <summary>
+    /// A run of lowercase letters is one pre-token, so these pieces reach the heap merge above 256 bytes and
+    /// the scan merge below it. Few letters give many equal-rank pairs, which tests the leftmost tie rule.
+    /// </summary>
+    [Fact]
+    public void CountTokens_MatchesTheLibraryOnLongSinglePieces()
+    {
+        var random = new Random(2074);
+        foreach (var alphabet in new[] { "ab", "xyz", "abcdefghijklmnopqrstuvwxyz", "éçãßø" })
+        {
+            foreach (var length in new[] { 128, 255, 256, 257, 258, 1000 }.Concat(Enumerable.Range(0, 12).Select(_ => random.Next(200, 3000))))
+            {
+                var value = new string(Enumerable.Range(0, length).Select(_ => alphabet[random.Next(alphabet.Length)]).ToArray());
+                O200kTokenCounter.Shared.CountTokens(value).Should().Be(Reference.CountTokens(value), $"{alphabet} x {length}");
+            }
+        }
+    }
+
     [Fact]
     public void Vocabulary_HoldsEveryRankInFlatArraysOfAFewMegabytes()
     {
