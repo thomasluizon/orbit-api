@@ -215,7 +215,7 @@ public partial class ProcessUserChatCommandHandlerTests
             .SelectMany(call => JsonSerializer.Deserialize<ChatResponse>((string)call.GetArguments()[3]!,
                 ChatStreamEvent.SerializerOptions)!.PendingOperations ?? []).ToArray();
         var withdrawn = checkpointed.Should().ContainSingle("the answer checkpoint holds the delete-only preview").Subject;
-        _pendingOperationStore.Received(1).Cancel(UserId, withdrawn.Id,
+        _pendingOperationStore.Received(1).Withdraw(UserId, withdrawn.Id,
             AgentOperationFingerprint.Compute("bulk_delete_habits", Run4Delete(run.Children).Args.GetRawText()));
     }
 
@@ -508,6 +508,8 @@ public partial class ProcessUserChatCommandHandlerTests
         _pendingOperationStore.GetExecution(UserId, Arg.Any<Guid>()).Returns(call => Stored(call.ArgAt<Guid>(1)));
         _pendingOperationStore.Cancel(UserId, Arg.Any<Guid>(), Arg.Any<string>())
             .Returns(call => Stored(call.ArgAt<Guid>(1)) is not null && closed.Add(call.ArgAt<Guid>(1)));
+        _pendingOperationStore.Withdraw(UserId, Arg.Any<Guid>(), Arg.Any<string>())
+            .Returns(call => Stored(call.ArgAt<Guid>(1)) is not null && closed.Add(call.ArgAt<Guid>(1)));
     }
 
     /// <summary>
@@ -525,7 +527,7 @@ public partial class ProcessUserChatCommandHandlerTests
     {
         var (request, preview) = _heldPreviews.Values.Should()
             .ContainSingle(held => held.Request.OperationId == "bulk_delete_habits", "the sibling delete prepared").Subject;
-        _pendingOperationStore.Received(1).Cancel(UserId, preview.Id,
+        _pendingOperationStore.Received(1).Withdraw(UserId, preview.Id,
             AgentOperationFingerprint.Compute("bulk_delete_habits", request.Arguments.GetRawText()));
         _pendingOperationStore.IsAwaitingConfirmation(UserId, preview.Id).Should().BeFalse("no approval brings the delete back");
     }

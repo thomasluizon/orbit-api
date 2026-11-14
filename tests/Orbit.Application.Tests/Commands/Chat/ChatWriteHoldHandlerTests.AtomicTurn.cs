@@ -165,6 +165,42 @@ public sealed partial class ChatWriteHoldHandlerTests
     }
 
     /// <summary>
+    /// In one conversation, a turn shows the Zinc preview, and the next turn withdraws its Magnesium preview before the
+    /// person sees it. The turn after that lists the Zinc preview as the last proposal shown, never the Magnesium one.
+    /// </summary>
+    [Fact]
+    public async Task AtomicTurn_TheNextTurnDoesNotListThePreviewThatAWithdrawnTurnWithdrew()
+    {
+        var parents = ParentAccount("en");
+        var client = new AgentClientContext(ConversationId: Guid.NewGuid());
+        ScriptToolCall(JsonSerializer.Serialize(new { parent_habit_id = parents[0].Id, title = "Zinc", frequency_unit = "Day" }),
+            "create_sub_habit");
+        var shown = await CreateHandler().Handle(new(_userId, "Add Zinc under Post Lunch", ClientContext: client), default);
+        var zinc = shown.Value.PendingOperations.Should().ContainSingle().Subject;
+        _ownership.GetDenialReasonAsync("update_habit", _userId, Arg.Any<JsonElement>(), Arg.Any<CancellationToken>())
+            .Returns("target_not_owned:update_habit:habit");
+        ReplyToTurn(
+        [
+            new("create_sub_habit", "child", JsonSerializer.SerializeToElement(new { parent_habit_id = parents[0].Id, title = "Magnesium", frequency_unit = "Day" })),
+            new("update_habit", "edit", JsonSerializer.SerializeToElement(new { habit_id = UnknownHabitId, description = "Quiet time" }))
+        ], "Review.");
+        var withdrawn = await CreateHandler().Handle(new(_userId,
+            "Add Magnesium under Post Lunch and describe the other habit as quiet time.", ClientContext: client), default);
+        withdrawn.Value.PendingOperations.Should().BeNullOrEmpty("the turn withdrew its Magnesium preview");
+        var magnesium = _dbContext.PendingAgentOperations.AsEnumerable().Single(row => row.ArgumentsJson.Contains("Magnesium")).Id;
+        AiToolRequest? next = null;
+        _aiIntentService.SendWithToolsAsync(Arg.Do<AiToolRequest>(request => next = request), Arg.Any<Func<AiStreamEvent, Task>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AiResponse { TextMessage = "The Zinc preview still waits." }));
+
+        await CreateHandler().Handle(new(_userId, "What did you prepare?", ClientContext: client), default);
+
+        var lastShown = next!.DynamicContext!.Split(Environment.NewLine)
+            .Should().ContainSingle(line => line.Contains("conversation_last_previews")).Subject;
+        lastShown.Should().Contain(zinc.Id.ToString()).And.NotContain(magnesium.ToString(), "the person never saw the withdrawn preview");
+    }
+
+    /// <summary>
     /// The same revision in a turn that ends with its answer discards the earlier preview, and the model learns that
     /// the preview is discarded instead of reading a failure.
     /// </summary>

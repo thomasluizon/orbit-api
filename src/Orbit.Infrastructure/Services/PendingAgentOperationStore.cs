@@ -326,14 +326,21 @@ public class PendingAgentOperationStore(
         }
     }
 
-    public bool Cancel(Guid userId, Guid pendingOperationId, string expectedFingerprint)
+    public bool Cancel(Guid userId, Guid pendingOperationId, string expectedFingerprint) =>
+        Close(userId, pendingOperationId, expectedFingerprint, (entity, cancelledAtUtc) => entity.Cancel(cancelledAtUtc));
+
+    public bool Withdraw(Guid userId, Guid pendingOperationId, string expectedFingerprint) =>
+        Close(userId, pendingOperationId, expectedFingerprint, (entity, cancelledAtUtc) => entity.Withdraw(cancelledAtUtc));
+
+    private bool Close(Guid userId, Guid pendingOperationId, string expectedFingerprint,
+        Func<PendingAgentOperationState, DateTime, bool> close)
     {
         var entity = dbContext.PendingAgentOperations.FirstOrDefault(item =>
             item.Id == pendingOperationId && item.UserId == userId);
         var cancelledAtUtc = DateTime.UtcNow;
         if (entity is null || entity.OperationFingerprint != expectedFingerprint
             || HasChangeSetOwner(userId, pendingOperationId)
-            || !entity.Cancel(cancelledAtUtc))
+            || !close(entity, cancelledAtUtc))
             return false;
         if (entity.OperationId == AccountChangeSet.OperationName)
             CancelChangeSetMembers(entity, cancelledAtUtc);

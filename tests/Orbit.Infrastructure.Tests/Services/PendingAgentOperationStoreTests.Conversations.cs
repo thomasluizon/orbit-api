@@ -142,6 +142,27 @@ public partial class PendingAgentOperationStoreTests
         (await _store.GetLastConversationPreviewsAsync(Guid.Empty, id)).Should().BeEmpty();
     }
 
+    /// <summary>
+    /// A turn withdraws its preview before the person sees it. The row closes like a cancel, and the conversation lists
+    /// the batch that the turn before it showed, never the withdrawn row as a rejected proposal.
+    /// </summary>
+    [Fact]
+    public async Task Withdraw_ClosesTheRowAndKeepsItOutOfTheLastConversationBatch()
+    {
+        var id = Guid.NewGuid();
+        var nowAtUtc = DateTime.UtcNow;
+        var shown = ConversationProposal(new(id, nowAtUtc.AddMinutes(-1)), "Reservation");
+        var withdrawn = ConversationProposal(new(id, nowAtUtc), "Travel");
+        var state = await _dbContext.PendingAgentOperations.SingleAsync(item => item.Id == withdrawn.Id);
+
+        _store.Withdraw(_userId, withdrawn.Id, state.OperationFingerprint).Should().BeTrue();
+        _dbContext.ChangeTracker.Clear();
+
+        _store.GetExecution(_userId, withdrawn.Id).Should().BeNull("a withdrawn row never runs");
+        _store.Withdraw(_userId, withdrawn.Id, state.OperationFingerprint).Should().BeFalse("the row is already closed");
+        (await _store.GetLastConversationPreviewsAsync(_userId, id)).Select(item => item.Proposal.Id).Should().Equal(shown.Id);
+    }
+
     [Fact]
     public void Creation_DeduplicatesOnlyWithinTheSameConversationTurn()
     {

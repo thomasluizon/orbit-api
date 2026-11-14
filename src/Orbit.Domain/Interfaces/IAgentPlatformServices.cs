@@ -87,6 +87,11 @@ public interface IPendingAgentOperationStore
     /// </summary>
     bool Restore(Guid userId, Guid pendingOperationId, string expectedFingerprint, PendingAgentOperationRevision revision);
     bool Cancel(Guid userId, Guid pendingOperationId, string expectedFingerprint);
+    /// <summary>
+    /// Cancels a preview that its own chat turn withdrew before the person saw it, and detaches it from its
+    /// conversation, so <see cref="GetLastConversationPreviewsAsync"/> never lists it.
+    /// </summary>
+    bool Withdraw(Guid userId, Guid pendingOperationId, string expectedFingerprint);
     PendingAgentOperationExecution? GetConfirmedExecution(Guid userId, string capabilityId,
         string operationFingerprint, string confirmationToken);
     bool TryConsumeFreshConfirmation(

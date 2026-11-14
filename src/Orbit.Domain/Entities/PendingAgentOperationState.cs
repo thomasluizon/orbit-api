@@ -195,6 +195,18 @@ public class PendingAgentOperationState : Entity
         return CancelForAccountCleanup(UserId, utcNow);
     }
 
+    /// <summary>
+    /// Cancels a preview that its own chat turn withdrew before the person saw it, and detaches it from the
+    /// conversation, so the conversation never lists it among the proposals that it showed.
+    /// </summary>
+    public bool Withdraw(DateTime utcNow)
+    {
+        if (!Cancel(utcNow))
+            return false;
+        ConversationId = null;
+        return true;
+    }
+
     public bool CancelForAccountCleanup(Guid userId, DateTime cancelledAtUtc)
     {
         if (userId == Guid.Empty || userId != UserId || ConsumedAtUtc.HasValue)

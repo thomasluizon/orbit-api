@@ -169,8 +169,8 @@ public partial class ProcessUserChatCommandHandler
 
         /// <summary>
         /// Withdraws only what the turn prepared, so it changes nothing that the person had. A preview that a write of
-        /// this turn created is closed in the pending operation store too, so no approval, no replay of the answer
-        /// checkpoint and no later turn brings it back. An earlier preview that this turn revised gets its earlier
+        /// this turn created is withdrawn in the pending operation store too, so no approval, no replay of the answer
+        /// checkpoint and no later turn brings it back, and the conversation never lists it as shown. An earlier preview that this turn revised gets its earlier
         /// state back. An earlier preview that this turn read, or was to close at its end, stays as it was.
         /// </summary>
         public void Withdraw(Guid userId, IPendingAgentOperationStore store)
@@ -188,7 +188,7 @@ public partial class ProcessUserChatCommandHandler
                 if (_earlierRevisions.ContainsKey(pending.Id))
                     Restore(userId, store, pending.Id, pending.PreviewFingerprint);
                 else if (store.GetExecution(userId, pending.Id) is { } stored)
-                    store.Cancel(userId, pending.Id, AgentOperationFingerprint.Compute(stored.OperationId, stored.Arguments.GetRawText()));
+                    store.Withdraw(userId, pending.Id, AgentOperationFingerprint.Compute(stored.OperationId, stored.Arguments.GetRawText()));
                 results.SupersedePendingOperation(pending.Id);
             }
             KeepsEarlierPreview = earlierIds.Any(id => store.IsAwaitingConfirmation(userId, id));
