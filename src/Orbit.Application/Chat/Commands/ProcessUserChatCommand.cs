@@ -551,7 +551,7 @@ public partial class ProcessUserChatCommandHandler(
             RequiresExistingParent = RequestsExistingParent(request.Message, context.UserHabits),
             ParentHeadings = HabitHeadingParents.Read(request.Message, context.UserHabits)
         };
-        return await executionResults.Previews.SettleOnExitAsync(AnswerWithToolsAsync);
+        return await executionResults.Previews.SettleOnExitAsync(AnswerWithToolsAsync, execution.UnitOfWork);
 
         async Task<Result<ChatResponse>> AnswerWithToolsAsync()
         {

@@ -11,9 +11,9 @@ public partial class ProcessUserChatCommandHandler
 {
     /// <summary>
     /// Runs the tool rounds and decides the withdrawal once for every way out of them: a normal end, a provider error, the
-    /// round or token limit, and a cancellation. A turn that leaves part of the request withdraws its preview, and its
-    /// answer says so whatever the last round returned. A cancelled turn has no answer of its own, but it still closes
-    /// its preview, because a block answer replays its checkpoint.
+    /// round or token limit, a cancellation and any other exception. A turn that leaves part of the request withdraws its
+    /// preview, and its answer says so. A turn that ends with an exception still decides, because a block answer replays
+    /// its checkpoint, after it clears the changes that the exception left tracked, as the block answer recovery does.
     /// </summary>
     private async Task<ToolLoopResult> RunToolCallLoopAsync(
         AiResponse initialResponse,
@@ -29,12 +29,13 @@ public partial class ProcessUserChatCommandHandler
         {
             loop = await RunToolRoundsAsync(initialResponse, request, context, executionResults, language, aiStreamSink, cancellationToken);
         }
-        catch (OperationCanceledException)
+        catch (Exception exception)
         {
-            WithdrawPartialPreview(request.UserId, executionResults, language);
+            execution.UnitOfWork.ResetTracking();
+            WithdrawPartialPreview(request.UserId, executionResults, language, failed: exception is not OperationCanceledException);
             throw;
         }
-        WithdrawPartialPreview(request.UserId, executionResults, language);
+        WithdrawPartialPreview(request.UserId, executionResults, language, failed: false);
         return executionResults.RequestNotPrepared
             ? loop with
             {
@@ -47,12 +48,12 @@ public partial class ProcessUserChatCommandHandler
 
     /// <summary>
     /// A write that failed, that the ownership check turned down, or that a guard turned down and no prepared write of the
-    /// turn carries (<see cref="CarriesRefusedWrite"/>), beside a change of the turn leaves a part of the request that a
-    /// second send can prepare, so the turn withdraws and says so. A turn that ends with a question leaves a refusal to
-    /// the answer. A plan, feature or policy denial does not change on a second send: the turn keeps the prepared part.
+    /// turn carries (<see cref="CarriesRefusedWrite"/>), beside a change of the turn leaves part of the request. So does an
+    /// exception other than a cancellation (<paramref name="failed"/>), which can stop a round before the turn records it.
+    /// A turn that ends with a question leaves a refusal to the answer. A plan, feature or policy denial does not withdraw.
     /// </summary>
-    private bool LeavesPartOfTheRequest(ToolExecutionAccumulator results) =>
-        results.Previews.HoldsChange
+    private bool LeavesPartOfTheRequest(ToolExecutionAccumulator results, bool failed) =>
+        failed || results.Previews.HoldsChange
         && (results.OperationResults.Any(operation => IsOwnershipWriteDenial(operation)
                 || operation.Status == AgentOperationStatus.Failed && operation.ErrorCode != ErrorCodes.HabitLimitReached
                 && (operation.Access == "write" || ai.ToolRegistry.GetTool(operation.OperationId) is { IsReadOnly: false }))
@@ -72,9 +73,9 @@ public partial class ProcessUserChatCommandHandler
     /// The withdrawal decision of the turn. A turn that leaves part of the request withdraws what it prepared, and its
     /// answer says so. Either way the preview ledger records that the decision ran.
     /// </summary>
-    private void WithdrawPartialPreview(Guid userId, ToolExecutionAccumulator results, string? language)
+    private void WithdrawPartialPreview(Guid userId, ToolExecutionAccumulator results, string? language, bool failed)
     {
-        if (LeavesPartOfTheRequest(results))
+        if (LeavesPartOfTheRequest(results, failed))
         {
             results.Previews.Withdraw(userId, execution.PendingOperationStore);
             results.SanitizeFailedActions(RequestNotPreparedMessage(results, language));
@@ -187,10 +188,10 @@ public partial class ProcessUserChatCommandHandler
         }
 
         /// <summary>
-        /// Withdraws only what the turn prepared, so it changes nothing that the person had. A preview that a write of
-        /// this turn created is withdrawn in the pending operation store too, so no approval, no replay of the answer
-        /// checkpoint and no later turn brings it back, and the conversation never lists it as shown. An earlier preview that this turn revised gets its earlier
-        /// state back. An earlier preview that this turn read, or was to close at its end, stays as it was.
+        /// Withdraws only what the turn prepared, so it changes nothing that the person had. Each preview that a write of
+        /// this turn created, also one in the answer checkpoint that a round stopped by an exception never recorded, is
+        /// withdrawn in the store too, so no approval, replay or later turn brings it back. An earlier preview that this
+        /// turn revised gets its earlier state back; one that it read, or was to close at its end, stays as it was.
         /// </summary>
         public void Withdraw(Guid userId, IPendingAgentOperationStore store)
         {
@@ -202,7 +203,8 @@ public partial class ProcessUserChatCommandHandler
                     results.KeepPendingOperation(toolName, card);
             }
             _closes.Clear();
-            foreach (var pending in Prepared.ToArray())
+            var checkpointed = results.CommittedPendingOperations.Where(pending => !earlierIds.Contains(pending.Id));
+            foreach (var pending in Prepared.Concat(checkpointed).DistinctBy(pending => pending.Id).ToArray())
             {
                 if (_earlierRevisions.ContainsKey(pending.Id))
                     Restore(userId, store, pending.Id, pending.PreviewFingerprint);
@@ -234,11 +236,11 @@ public partial class ProcessUserChatCommandHandler
 
         /// <summary>
         /// Runs the answer of the turn and settles the held closes on its way out. The answer path commits them before it
-        /// composes the reply. An exit with no answer of its own, a failure or a cancellation, commits them when the
-        /// decision ran and the turn saved an answer checkpoint, because the block answer replays that checkpoint. Every
-        /// other exit drops them: an answer that shows no preview of the turn, or an exception after which no write is safe.
+        /// composes the reply. A failure result or an exception commits them when the decision ran and the turn saved an
+        /// answer checkpoint, because the block answer replays it; after an exception, it first clears the changes that the
+        /// exception left tracked, as the block answer recovery does. An answer that shows no preview of the turn drops them.
         /// </summary>
-        public async Task<Result<ChatResponse>> SettleOnExitAsync(Func<Task<Result<ChatResponse>>> answer)
+        public async Task<Result<ChatResponse>> SettleOnExitAsync(Func<Task<Result<ChatResponse>>> answer, IUnitOfWork unitOfWork)
         {
             try
             {
@@ -247,8 +249,9 @@ public partial class ProcessUserChatCommandHandler
                     await CommitReplayedClosesAsync();
                 return result;
             }
-            catch (OperationCanceledException)
+            catch
             {
+                unitOfWork.ResetTracking();
                 await CommitReplayedClosesAsync();
                 throw;
             }

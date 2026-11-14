@@ -255,6 +255,29 @@ public partial class ProcessUserChatCommandHandlerTests
                 : call.ArgAt<Func<CancellationToken, Task>>(0)(call.ArgAt<CancellationToken>(1)));
     }
 
+    /// <summary>An exception that is not a cancellation: a transaction timeout, or a block answer whose claim was lost.</summary>
+    private static Exception BlockWriteFailure(string failure) => failure == "timeout"
+        ? new TimeoutException("Transaction exceeded the timeout and was rolled back.")
+        : new InvalidOperationException("Block answer reservation was lost.");
+
+    /// <summary>
+    /// The transaction that saves the turn after its tool loop fails with <paramref name="exception"/>. It is the first
+    /// transaction after the two block writes of the turn.
+    /// </summary>
+    private void FailTheSaveAfterTheBlockWrites(Exception exception)
+    {
+        var writes = 0;
+        _unitOfWork.ExecuteOnceInTransactionAsync(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                writes++;
+                return call.ArgAt<Func<CancellationToken, Task>>(0)(call.ArgAt<CancellationToken>(1));
+            });
+        _unitOfWork.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
+            .Returns(call => writes == 2 ? Task.FromException(exception)
+                : call.ArgAt<Func<CancellationToken, Task>>(0)(call.ArgAt<CancellationToken>(1)));
+    }
+
     /// <summary>
     /// The same bulk rename in an answer turn saves the answer checkpoint, and the transaction of the delete after it
     /// fails with an exception that is not a cancellation. The turn never decides its withdrawal, and no store write is
@@ -271,9 +294,7 @@ public partial class ProcessUserChatCommandHandlerTests
         var run = await RunDeniedAnswerTurnAsync(language, _ => [Text(language)], children =>
             {
                 ArrangeCoveredEarlierPreview(children);
-                FailTheSecondBlockWrite(failure == "timeout"
-                    ? new TimeoutException("Transaction exceeded the timeout and was rolled back.")
-                    : new InvalidOperationException("Block answer reservation was lost."));
+                FailTheSecondBlockWrite(BlockWriteFailure(failure));
             },
             first: children => Calls(InspectEarlierPreview(), CorrectedRename(children), Run4Delete(children)),
             tools: [ReadTool(ReviseTool, new ToolResult(true))]);
@@ -282,6 +303,67 @@ public partial class ProcessUserChatCommandHandlerTests
         await _blockStore.Received(1).CheckpointAnswerAsync(Arg.Any<Guid>(), UserId, Arg.Any<DateTime>(), Arg.Any<string>(),
             Arg.Any<CancellationToken>());
         _pendingOperationStore.DidNotReceive().Cancel(UserId, EarlierPreviewId, Arg.Any<string>());
+    }
+
+    /// <summary>
+    /// The same answer turn as the person gets it from the block answer. The store keeps each preview of the turn
+    /// awaiting, as the real store does, and the block answer replays the answer checkpoint after the exception. The
+    /// delete never prepared, so the turn withdraws the bulk rename that the checkpoint holds: the replay shows no part
+    /// of the request, and the earlier preview that the rename covers stays approvable on its own.
+    /// </summary>
+    [Theory]
+    [InlineData("en", "timeout")]
+    [InlineData("pt-BR", "timeout")]
+    [InlineData("en", "lost")]
+    [InlineData("pt-BR", "lost")]
+    public async Task DeniedWrite_AnAnswerTurnThatThrowsAfterItsCheckpointReplaysNoPartOfTheRequest(string language, string failure)
+    {
+        var run = await RunDeniedAnswerTurnAsync(language, _ => [Text(language)], children =>
+            {
+                StorePreparedPreviews();
+                ArrangeCoveredEarlierPreview(children);
+                FailTheSecondBlockWrite(BlockWriteFailure(failure));
+            },
+            first: children => Calls(InspectEarlierPreview(), CorrectedRename(children), Run4Delete(children)),
+            tools: [ReadTool(ReviseTool, new ToolResult(true))]);
+
+        run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
+        run.Result.Value.PendingOperations.Should().BeNullOrEmpty("the checkpoint holds only the rename, and the turn withdrew it");
+        run.Result.Value.AiMessage.Should().Be(CommittedFor(language));
+        var (request, preview) = _heldPreviews.Values.Should()
+            .ContainSingle(held => held.Request.OperationId == "bulk_update_habits", "the bulk rename prepared").Subject;
+        _pendingOperationStore.Received(1).Withdraw(UserId, preview.Id,
+            AgentOperationFingerprint.Compute("bulk_update_habits", request.Arguments.GetRawText()));
+        _pendingOperationStore.DidNotReceive().Cancel(UserId, EarlierPreviewId, Arg.Any<string>());
+        _pendingOperationStore.IsAwaitingConfirmation(UserId, EarlierPreviewId).Should().BeTrue("the earlier preview stays approvable");
+    }
+
+    /// <summary>
+    /// The same bulk rename and delete in an answer turn both prepare and save the answer checkpoint, and the tool loop
+    /// ends with the whole request. The transaction that saves the turn then fails with an exception that is not a
+    /// cancellation, so the block answer replays the checkpoint with both previews. The earlier preview that the rename
+    /// covers closes too, so the person never sees two previews of one change.
+    /// </summary>
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task DeniedWrite_AnAnswerTurnThatThrowsAfterItsToolLoopClosesTheEarlierPreviewThatItsBulkWriteCovered(string language)
+    {
+        var run = await RunDeniedAnswerTurnAsync(language, _ => [Text(language)], children =>
+            {
+                ArrangeCoveredEarlierPreview(children);
+                FailTheSaveAfterTheBlockWrites(BlockWriteFailure("timeout"));
+            },
+            first: children => Calls(InspectEarlierPreview(), CorrectedRename(children), Run4Delete(children)),
+            tools: [ReadTool(ReviseTool, new ToolResult(true))]);
+
+        run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
+        run.Held.Should().Contain(request => request.OperationId == "bulk_update_habits", "the bulk rename prepared")
+            .And.Contain(request => request.OperationId == "bulk_delete_habits", "the delete prepared");
+        await _blockStore.Received(2).CheckpointAnswerAsync(Arg.Any<Guid>(), UserId, Arg.Any<DateTime>(), Arg.Any<string>(),
+            Arg.Any<CancellationToken>());
+        _pendingOperationStore.Received(1).Cancel(UserId, EarlierPreviewId,
+            AgentOperationFingerprint.Compute("update_habit", EarlierPreviewArguments(run.Children, RenameTitle).GetRawText()));
     }
 
     /// <summary>
