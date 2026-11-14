@@ -60,7 +60,9 @@ public partial class ProcessUserChatCommandHandler
 
     private static ToolCallOutcome SelectionRequiredOutcome(AiToolCall call) => new(
         new AiToolCallResult(call.Name, call.Id, false, null, null, SelectionRule),
-        null, null, null, null, FailureKey: "selection_unanswered");
+        null, null, null, null, FailureKey: SelectionUnansweredKey);
+
+    private const string SelectionUnansweredKey = "selection_unanswered";
 
     /// <summary>
     /// Holds each write whose selection is unanswered. A held write makes no change, so it covers no part of a split:

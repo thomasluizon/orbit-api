@@ -46,15 +46,26 @@ public partial class ProcessUserChatCommandHandler
     }
 
     /// <summary>
-    /// A write that failed, or that the ownership check turned down, beside a change of the turn leaves a part of the
-    /// request that a second send can prepare, so the turn withdraws its change and says so. A plan, feature or policy
-    /// denial does not change on a second send: the turn keeps the prepared part and the reason for the denial.
+    /// A write that failed, that the ownership check turned down, or that a guard of the handler turned down and no later
+    /// write carried, beside a change of the turn leaves a part of the request that a second send can prepare, so the
+    /// turn withdraws its change and says so. A turn that ends with a question leaves a guard's refusal to the answer. A
+    /// plan, feature or policy denial does not change on a second send: the turn keeps the prepared part and its reason.
     /// </summary>
     private bool LeavesPartOfTheRequest(ToolExecutionAccumulator results) =>
         HoldsPreparedWrite(results)
-        && results.OperationResults.Any(operation => IsOwnershipWriteDenial(operation)
-            || operation.Status == AgentOperationStatus.Failed && operation.ErrorCode != ErrorCodes.HabitLimitReached
-            && (operation.Access == "write" || ai.ToolRegistry.GetTool(operation.OperationId) is { IsReadOnly: false }));
+        && (results.OperationResults.Any(operation => IsOwnershipWriteDenial(operation)
+                || operation.Status == AgentOperationStatus.Failed && operation.ErrorCode != ErrorCodes.HabitLimitReached
+                && (operation.Access == "write" || ai.ToolRegistry.GetTool(operation.OperationId) is { IsReadOnly: false }))
+            || results.RefusedWrites.Count > 0 && results.PendingSelection is null && results.AskBlock is null);
+
+    /// <summary>
+    /// A write that a guard of the handler turned down before dispatch, so it has no operation result: repeated single
+    /// writes, unread duplicate targets, arguments that the handler rejected, or a restart plan that it rejected. A write
+    /// that waits for the person's choice belongs to the selection guard, which asks for it.
+    /// </summary>
+    private bool IsRefusedWrite(AiToolCall call, ToolCallOutcome outcome) =>
+        outcome is { OperationResult: null, ToolResult.Success: false } and not { FailureKey: SelectionUnansweredKey }
+        && ai.ToolRegistry.GetTool(call.Name) is { IsReadOnly: false };
 
     /// <summary>A turn that leaves part of the request withdraws what it prepared, and its answer says so.</summary>
     private void WithdrawPartialPreview(Guid userId, ToolExecutionAccumulator results, string? language)

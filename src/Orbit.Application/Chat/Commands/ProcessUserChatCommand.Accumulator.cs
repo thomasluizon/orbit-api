@@ -55,6 +55,12 @@ public partial class ProcessUserChatCommandHandler
         public HashSet<string> MergedCallIds { get; } = new(StringComparer.Ordinal);
         public List<AiToolCall> PreviousWriteCalls { get; } = [];
         internal List<CorrectionOccurrence> CorrectionOccurrences { get; } = [];
+
+        /// <summary>
+        /// The writes that a guard of the handler turned down with no operation result, until a write of a later round
+        /// carries them.
+        /// </summary>
+        internal List<CorrectionOccurrence> RefusedWrites { get; } = [];
         public Dictionary<Guid, (string ToolName, PendingAgentOperation Preview)> PendingWriteCalls { get; } = [];
 
         public DateTime? AnsweredAtUtc { get; init; }

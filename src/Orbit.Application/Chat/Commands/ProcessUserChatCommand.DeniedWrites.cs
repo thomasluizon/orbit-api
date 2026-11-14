@@ -74,21 +74,40 @@ public partial class ProcessUserChatCommandHandler
     /// <summary>
     /// After a denial with no prepared write beside it, the model can read and send the write again without a
     /// correction. A later write that prepares and sends the denied write again replaces the denial, so the end of the
-    /// loop does not count it as a missing part of the request, and the person sees no failure for it. A write for
-    /// another change or another record leaves the denial in place.
+    /// loop does not count it and the person sees no failure for it; a write for another change or record does not. A
+    /// write that carries a refusal of a guard from an earlier round settles it (<see cref="CarriesRefusedWrite"/>).
     /// </summary>
     private static void ReplaceResentDeniedWrites(IReadOnlyList<AiToolCall> calls,
         IReadOnlyDictionary<string, ToolCallOutcome> outcomes, ToolExecutionAccumulator results)
     {
         foreach (var call in calls)
         {
-            if (!outcomes.TryGetValue(call.Id, out var outcome) || !PreparesWrite(outcome)
-                || results.CorrectionOccurrences.FirstOrDefault(item => IsOwnershipWriteDenial(item.Outcome)
+            if (!outcomes.TryGetValue(call.Id, out var outcome) || !PreparesWrite(outcome))
+                continue;
+            results.RefusedWrites.RemoveAll(refused => calls.All(other => other.Id != refused.Call.Id)
+                && CarriesRefusedWrite(refused.Call, call, outcome));
+            if (results.CorrectionOccurrences.FirstOrDefault(item => IsOwnershipWriteDenial(item.Outcome)
                     && ResendsDeniedWrite(item.Call, call, results)) is not { } denied)
                 continue;
             results.CorrectionOccurrences.Remove(denied);
             DropDeniedWrite(denied.Outcome, results);
         }
+    }
+
+    /// <summary>
+    /// A later write carries a write that a guard of the handler turned down: the same operation in its single or bulk
+    /// form, whose targets or prepared preview hold each target of the refused write. The guard asked for other
+    /// arguments, so the change may differ, and a filter for every record carries each one through its preview.
+    /// </summary>
+    private static bool CarriesRefusedWrite(AiToolCall refused, AiToolCall candidate, ToolCallOutcome outcome)
+    {
+        if (refused.Name != candidate.Name && !BulkToolRepeatGuard.IsBulkAlternative(refused.Name, candidate.Name)
+            && !BulkToolRepeatGuard.IsBulkAlternative(candidate.Name, refused.Name))
+            return false;
+        var carried = TargetsOf(candidate.Args).Select(target => target.Value)
+            .Concat((outcome.PendingOperation?.Items ?? []).Select(item => item.EntityId?.ToString() ?? string.Empty))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return TargetsOf(refused.Args).All(target => carried.Contains(target.Value));
     }
 
     /// <summary>The write prepared a preview or ran. A call that repeats a prepared write prepares nothing.</summary>

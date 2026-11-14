@@ -393,6 +393,8 @@ public partial class ProcessUserChatCommandHandler
             if (!isCorrection && (ai.ToolRegistry.GetTool(call.Name)?.IsReadOnly != true
                 || IsStartingStepCall(call) || IsOwnershipReadDenial(outcome)))
                 executionResults.CorrectionOccurrences.Add(new CorrectionOccurrence(call, outcome));
+            if (IsRefusedWrite(call, outcome))
+                executionResults.RefusedWrites.Add(new CorrectionOccurrence(call, outcome));
         }
 
         CompleteCreationProposal(response, outcomesByCallId, executionResults);

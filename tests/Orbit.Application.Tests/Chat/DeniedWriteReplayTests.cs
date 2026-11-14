@@ -813,6 +813,50 @@ public partial class ProcessUserChatCommandHandlerTests
         run.Result.Value.AiMessage.Should().Be(NotPreparedFor(language));
     }
 
+    /// <summary>
+    /// The delete prepares, and the handler turns down three single renames in the same round because one bulk rename
+    /// must carry them. The model answers in words, so the renames never prepare and the turn holds no preview.
+    /// </summary>
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task DeniedWrite_AWriteThatAHandlerGuardTurnedDownBesideAPreparedWriteLeavesNoPreview(string language)
+    {
+        var run = await RunRequestTurnAsync(language, RequestMessage(language),
+            children => Calls(Run4Delete(children), Rename("rename-one", children[0].Id.ToString()),
+                Rename("rename-two", children[1].Id.ToString()), Rename("rename-three", children[2].Id.ToString())),
+            _ => [Text(language), Text(language)]);
+
+        run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
+        run.Held.Should().Contain(request => request.OperationId == "bulk_delete_habits", "the delete prepared");
+        run.ToolResults[0].Where(result => result.Id.StartsWith("rename", StringComparison.Ordinal))
+            .Should().NotBeEmpty().And.OnlyContain(result => !result.Success);
+        run.Result.Value.PendingOperations.Should().BeNullOrEmpty("the rename half of the request was not prepared");
+        run.Result.Value.AiMessage.Should().Be(NotPreparedFor(language));
+    }
+
+    /// <summary>
+    /// The same refused renames, and the next round sends the one bulk rename that carries them. It prepares, so the
+    /// turn holds the whole request.
+    /// </summary>
+    [Fact]
+    public async Task DeniedWrite_ABulkWriteThatCarriesTheRefusedSingleWritesKeepsThePreview()
+    {
+        var run = await RunRequestTurnAsync("en", RequestMessage("en"),
+            children => Calls(Run4Delete(children), Rename("rename-one", children[0].Id.ToString()),
+                Rename("rename-two", children[1].Id.ToString()), Rename("rename-three", children[2].Id.ToString())),
+            children => [Calls(new AiToolCall("bulk_update_habits", "rename-bulk", JsonSerializer.SerializeToElement(new
+            {
+                filter = new { all = false, habit_ids = children[..3].Select(child => child.Id), is_completed = false },
+                updates = new { title = RenameTitle }
+            }))), Text("en")]);
+
+        run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
+        run.Result.Value.AiMessage.Should().NotBe(NotPreparedFor("en"));
+        run.Result.Value.PendingOperations.Should().NotBeNullOrEmpty().And.Subject.SelectMany(operation => operation.Items!)
+            .Select(item => item.EntityId).Should().Contain([.. run.Children[..3].Select(child => child.Id), run.Children[4].Id]);
+    }
+
     private static string SameRenameMessage(string language) => language == "en"
         ? "rename Water 1 and Water 2 to Water - 1.18L"
         : "muda o nome do Water 1 e do Water 2 para Water - 1.18L";
