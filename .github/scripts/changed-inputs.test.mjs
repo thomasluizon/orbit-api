@@ -90,6 +90,15 @@ test('a path that carries the retired product name is an input of the legacy nam
   assert.equal(changedOnly(t, 'docs/Astra.md').tests, 'true')
 })
 
+for (const path of ['Directory.Build.props', 'Directory.Build.targets']) {
+  test(`${path} is an input of every C# build`, t => {
+    const flags = changedOnly(t, path)
+    assert.equal(flags.tests, 'true')
+    assert.equal(flags.docker, 'true')
+    assert.equal(flags.csharp, 'true')
+  })
+}
+
 test('a memory guard script selects the image job but not the C# analysis', t => {
   const flags = changedOnly(t, '.github/scripts/api-memory-soak.sh')
   assert.equal(flags.docker, 'true')

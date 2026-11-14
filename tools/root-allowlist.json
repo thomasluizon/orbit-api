@@ -12,6 +12,7 @@
     "CLAUDE.md",
     "CodeMetricsConfig.txt",
     "Directory.Build.props",
+    "Directory.Build.targets",
     "Dockerfile",
     "LICENSE",
     "Orbit.slnx",
