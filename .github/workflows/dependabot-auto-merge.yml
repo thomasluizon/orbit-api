@@ -36,8 +36,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # Auto-merge only the safe lanes (GitHub Actions + NuGet, patch/minor). npm is left
-      # for a human review — the mobile workspace is Expo-SDK-pinned. Build + Unit Tests
-      # still gate the merge.
+      # for a human review — the mobile workspace is Expo-SDK-pinned. Unit Tests and the
+      # other required checks still gate the merge.
       - name: Enable auto-merge for safe lanes
         if: ${{ steps.meta.outputs.package-ecosystem != 'npm' && (steps.meta.outputs.update-type == 'version-update:semver-patch' || steps.meta.outputs.update-type == 'version-update:semver-minor') }}
         run: gh pr merge --auto --squash "$PR_URL"
