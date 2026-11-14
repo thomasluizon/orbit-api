@@ -112,13 +112,15 @@ public partial class ProcessUserChatCommandHandler
     }
 
     /// <summary>
-    /// A creation names each habit that it makes by its title, because the habit has no id yet. Each refused title must be
-    /// a title, and the prepared previews must make it at least as often as the refused creation does. The previews count,
-    /// not the arguments, because the handler keeps one habit of a title under one parent and asks about the others.
+    /// A creation names each habit by its title, because the habit has no id yet. Each refused title must be a title, and
+    /// the prepared writes must make it at least as often as the refused creation does. A top-level habit counts by the
+    /// preview items, because the handler keeps one habit of a title under one parent. A sub-habit is a field of its
+    /// parent item, so it counts by the arguments of the prepared write.
     /// </summary>
     private static bool CarriesCreatedTitles(IReadOnlyList<string> refused, IEnumerable<CorrectionOccurrence> family)
     {
-        var carried = family.SelectMany(write => (write.Outcome.PendingOperation?.Items ?? []).Select(item => HabitNameMatcher.TitleKey(item.EntityName)))
+        var carried = family.SelectMany(write => (write.Outcome.PendingOperation?.Items ?? [])
+                .Select(item => HabitNameMatcher.TitleKey(item.EntityName)).Concat(SubHabitTitles(write.Call)))
             .CountBy(title => title, StringComparer.OrdinalIgnoreCase).ToDictionary(StringComparer.OrdinalIgnoreCase);
         return refused.Count > 0 && refused.All(title => title.Length > 0)
             && refused.CountBy(title => title, StringComparer.OrdinalIgnoreCase)
@@ -132,6 +134,11 @@ public partial class ProcessUserChatCommandHandler
     private static List<string> CreatedTitles(AiToolCall creation) =>
         creation.Name == "bulk_create_habits" ? Children(creation.Args, "habits").SelectMany(HabitTitles).ToList()
             : HabitTitles(creation.Args).ToList();
+
+    /// <summary>The title key of each sub-habit that a creation makes, at any depth.</summary>
+    private static IEnumerable<string> SubHabitTitles(AiToolCall creation) =>
+        (creation.Name == "bulk_create_habits" ? Children(creation.Args, "habits") : [creation.Args])
+            .SelectMany(habit => Children(habit, "sub_habits")).SelectMany(HabitTitles);
 
     private static IEnumerable<string> HabitTitles(JsonElement habit) =>
         Children(habit, "sub_habits").SelectMany(HabitTitles)

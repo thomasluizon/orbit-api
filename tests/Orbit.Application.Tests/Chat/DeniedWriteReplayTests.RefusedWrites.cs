@@ -159,6 +159,52 @@ public partial class ProcessUserChatCommandHandlerTests
         }
     }
 
+    /// <summary>
+    /// The proposal check turns down a creation of Morning with the sub-habit Stretch, and the next round sends the
+    /// corrected creation. The preview has one item for Morning and holds Stretch inside it, so the prepared creation
+    /// carries both refused titles and the turn keeps its preview. A corrected creation without Stretch carries no
+    /// refused Stretch.
+    /// </summary>
+    [Theory]
+    [InlineData(true, true)]
+    [InlineData(false, false)]
+    public async Task DeniedWrite_ARefusedCreationWithASubHabitIsCarriedByTheCreationOfBoth(bool laterSubHabit, bool carried)
+    {
+        SetupUserAndPayGate();
+        var create = RecoveryCreateHabitTool();
+        var handler = CreateHandler(create);
+        InstallCorrectionGateway(create, hold: true);
+        SetupAiResponse(Calls(new AiToolCall("create_habit", "create-morning", JsonSerializer.SerializeToElement(new
+        {
+            title = "Morning",
+            frequency_unit = "Day",
+            frequency_quantity = 1,
+            is_bad_habit = true,
+            is_general = true,
+            sub_habits = new[] { new { title = "Stretch" } }
+        }))));
+        _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
+                Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(Calls(new AiToolCall("create_habit", "created-morning", laterSubHabit
+                ? JsonSerializer.SerializeToElement(new
+                {
+                    title = "Morning",
+                    frequency_unit = "Day",
+                    frequency_quantity = 1,
+                    sub_habits = new[] { new { title = "Stretch" } }
+                })
+                : JsonSerializer.SerializeToElement(new { title = "Morning", frequency_unit = "Day", frequency_quantity = 1 })))),
+                Result.Success(Text("en")), Result.Success(Text("en")));
+
+        var result = await handler.Handle(new ProcessUserChatCommand(UserId, "Create Morning with the sub-habit Stretch."), default);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        if (carried)
+            result.Value.PendingOperations.Should().NotBeNullOrEmpty("the later creation makes Morning and Stretch");
+        else
+            result.Value.AiMessage.Should().Be(NotPreparedFor("en"));
+    }
+
     /// <summary>A bulk creation of <paramref name="count"/> Water habits.</summary>
     private static AiToolCall WaterCreations(string id, int count, bool refused) => new("bulk_create_habits", id,
         JsonSerializer.SerializeToElement(new
