@@ -57,10 +57,13 @@ public partial class ProcessUserChatCommandHandler
         internal List<CorrectionOccurrence> CorrectionOccurrences { get; } = [];
 
         /// <summary>
-        /// The writes that a guard of the handler turned down with no operation result, until a write of a later round
-        /// carries them.
+        /// The writes that a guard of the handler turned down with no operation result. The end of the tool loop compares
+        /// them with <see cref="PreparedWrites"/>.
         /// </summary>
         internal List<CorrectionOccurrence> RefusedWrites { get; } = [];
+
+        /// <summary>The writes of the turn that prepared a preview or ran, in every round.</summary>
+        internal List<CorrectionOccurrence> PreparedWrites { get; } = [];
         public Dictionary<Guid, (string ToolName, PendingAgentOperation Preview)> PendingWriteCalls { get; } = [];
 
         public DateTime? AnsweredAtUtc { get; init; }

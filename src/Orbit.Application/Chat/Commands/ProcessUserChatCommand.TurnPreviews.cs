@@ -46,17 +46,18 @@ public partial class ProcessUserChatCommandHandler
     }
 
     /// <summary>
-    /// A write that failed, that the ownership check turned down, or that a guard of the handler turned down and no later
-    /// write carried, beside a change of the turn leaves a part of the request that a second send can prepare, so the
-    /// turn withdraws its change and says so. A turn that ends with a question leaves a guard's refusal to the answer. A
-    /// plan, feature or policy denial does not change on a second send: the turn keeps the prepared part and its reason.
+    /// A write that failed, that the ownership check turned down, or that a guard turned down and no prepared write of the
+    /// turn carries (<see cref="CarriesRefusedWrite"/>), beside a change of the turn leaves a part of the request that a
+    /// second send can prepare, so the turn withdraws and says so. A turn that ends with a question leaves a refusal to
+    /// the answer. A plan, feature or policy denial does not change on a second send: the turn keeps the prepared part.
     /// </summary>
     private bool LeavesPartOfTheRequest(ToolExecutionAccumulator results) =>
         HoldsPreparedWrite(results)
         && (results.OperationResults.Any(operation => IsOwnershipWriteDenial(operation)
                 || operation.Status == AgentOperationStatus.Failed && operation.ErrorCode != ErrorCodes.HabitLimitReached
                 && (operation.Access == "write" || ai.ToolRegistry.GetTool(operation.OperationId) is { IsReadOnly: false }))
-            || results.RefusedWrites.Count > 0 && results.PendingSelection is null && results.AskBlock is null);
+            || results.PendingSelection is null && results.AskBlock is null
+            && results.RefusedWrites.Any(refused => !CarriesRefusedWrite(refused.Call, results.PreparedWrites)));
 
     /// <summary>
     /// A write that a guard of the handler turned down before dispatch, so it has no operation result: repeated single
