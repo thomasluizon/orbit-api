@@ -29,12 +29,11 @@ public partial class ProcessUserChatCommandHandler
         && reason.StartsWith("target_not_owned:", StringComparison.Ordinal);
 
     /// <summary>
-    /// The turn holds a prepared write, so a write that the ownership check turned down would leave half of the request
-    /// in the preview. Only then is the denial a tool failure with one correction. A denial with no prepared write
-    /// beside it keeps the base path: the model reads and sends the write again, or answers in its own words. An
-    /// earlier preview that the turn only read is not a prepared write of the turn.
+    /// The turn holds a change (<see cref="TurnPreviewLedger.HoldsChange"/>), so a write that the ownership check turned
+    /// down would leave half of the request. Only then is the denial a tool failure with one correction. A denial with
+    /// no change beside it keeps the base path: the model reads and sends the write again, or answers in its own words.
     /// </summary>
-    private static bool HoldsPreparedWrite(ToolExecutionAccumulator results) => results.Previews.Prepared.Any();
+    private static bool HoldsPreparedWrite(ToolExecutionAccumulator results) => results.Previews.HoldsChange;
 
     private static bool HasReadCorrectionCandidate(ToolExecutionAccumulator results) =>
         results.CorrectionOccurrences.Any(occurrence =>

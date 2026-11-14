@@ -46,12 +46,12 @@ public partial class ProcessUserChatCommandHandler
     }
 
     /// <summary>
-    /// A write that failed, or that the ownership check turned down, beside a prepared write leaves a part of the
-    /// request that a second send can prepare, so the turn holds no preview and says so. A plan, feature or policy
+    /// A write that failed, or that the ownership check turned down, beside a change of the turn leaves a part of the
+    /// request that a second send can prepare, so the turn withdraws its change and says so. A plan, feature or policy
     /// denial does not change on a second send: the turn keeps the prepared part and the reason for the denial.
     /// </summary>
     private bool LeavesPartOfTheRequest(ToolExecutionAccumulator results) =>
-        results.Previews.Prepared.Any()
+        HoldsPreparedWrite(results)
         && results.OperationResults.Any(operation => IsOwnershipWriteDenial(operation)
             || operation.Status == AgentOperationStatus.Failed && operation.ErrorCode != ErrorCodes.HabitLimitReached
             && (operation.Access == "write" || ai.ToolRegistry.GetTool(operation.OperationId) is { IsReadOnly: false }));
@@ -96,6 +96,12 @@ public partial class ProcessUserChatCommandHandler
 
         /// <summary>The turn withdrew its preview and an earlier preview still waits for the person's approval.</summary>
         public bool KeepsEarlierPreview { get; private set; }
+
+        /// <summary>
+        /// The turn changes something that a withdrawal takes back: a preview that it prepared, or an earlier preview
+        /// that it discards, covers or replaces when it ends with its answer.
+        /// </summary>
+        public bool HoldsChange => Prepared.Any() || _closes.Count > 0;
 
         /// <summary>
         /// The previews that this turn prepared: each one that its writes created, and each earlier one that it

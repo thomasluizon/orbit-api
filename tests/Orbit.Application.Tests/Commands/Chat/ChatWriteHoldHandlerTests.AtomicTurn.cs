@@ -87,6 +87,55 @@ public sealed partial class ChatWriteHoldHandlerTests
     }
 
     /// <summary>
+    /// The turn removes every item of the earlier Zinc preview and prepares nothing new, and a description of a habit
+    /// that is not the person's is turned down. The discard is half of the request, so the turn withdraws it: the Zinc
+    /// preview still awaits approval, and the answer says that it still waits.
+    /// </summary>
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task AtomicTurn_ADiscardBesideADenialWithNoNewPreviewKeepsTheEarlierPreview(string language)
+    {
+        var parents = ParentAccount(language);
+        var earlier = await PrepareEarlierZincAsync(parents);
+        _ownership.GetDenialReasonAsync("update_habit", _userId, Arg.Any<JsonElement>(), Arg.Any<CancellationToken>())
+            .Returns("target_not_owned:update_habit:habit");
+        ReplyToTurn(
+        [
+            RemoveEveryItem(earlier),
+            new("update_habit", "edit", JsonSerializer.SerializeToElement(new { habit_id = UnknownHabitId, description = "Quiet time" }))
+        ], "Review.");
+
+        var result = await CreateHandler().Handle(new(_userId, "Drop Zinc and describe the other habit as quiet time."), default);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        _pendingOperationStore.IsAwaitingConfirmation(_userId, earlier.Id).Should().BeTrue("the withdrawn turn discards nothing");
+        result.Value.AiMessage.Should().Be(EarlierKeptAnswer(language));
+    }
+
+    /// <summary>
+    /// The person asks for a new Zinc preview, and the new creation is turned down, so the turn prepares nothing. The
+    /// replacement of the earlier Zinc preview is half of the request, so the turn withdraws it.
+    /// </summary>
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task AtomicTurn_AReplacementWhoseNewPreviewIsDeniedKeepsTheEarlierCreation(string language)
+    {
+        var parents = ParentAccount(language);
+        var earlier = await PrepareEarlierZincAsync(parents);
+        _ownership.GetDenialReasonAsync("bulk_create_habits", _userId, Arg.Any<JsonElement>(), Arg.Any<CancellationToken>())
+            .Returns("target_not_owned:bulk_create_habits:habit");
+        ReplyToTurn([NewZinc(parents)], "Review.");
+
+        var result = await CreateHandler().Handle(NewZincPreviewRequest("Prepare a new preview for Zinc."), default);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        _pendingOperationStore.IsAwaitingConfirmation(_userId, earlier.Id).Should().BeTrue("the withdrawn turn replaces nothing");
+        result.Value.AiMessage.Should().Be(EarlierKeptAnswer(language));
+    }
+
+    /// <summary>
     /// The same revision in a turn that ends with its answer discards the earlier preview, and the model learns that
     /// the preview is discarded instead of reading a failure.
     /// </summary>
