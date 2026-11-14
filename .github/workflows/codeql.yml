@@ -59,8 +59,11 @@ jobs:
         with:
           fetch-depth: 2
 
+      # The javascript-typescript leg never runs on a pull request, so it has no inputs to
+      # select, and Initialize and Analyze run unless a selection says "false".
       - name: Select the inputs that changed
         id: inputs
+        if: matrix.language != 'javascript-typescript'
         env:
           LANGUAGE: ${{ matrix.language }}
         run: bash .github/scripts/changed-inputs.sh "$LANGUAGE"
@@ -80,7 +83,7 @@ jobs:
           restore-keys: nuget-${{ runner.os }}-
 
       - name: Initialize CodeQL
-        if: steps.inputs.outputs[matrix.language] == 'true'
+        if: steps.inputs.outputs[matrix.language] != 'false'
         uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         with:
           languages: ${{ matrix.language }}
@@ -93,7 +96,7 @@ jobs:
           dotnet build src/Orbit.Api/Orbit.Api.csproj --no-restore
 
       - name: Perform CodeQL Analysis
-        if: steps.inputs.outputs[matrix.language] == 'true'
+        if: steps.inputs.outputs[matrix.language] != 'false'
         uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         with:
           category: "/language:${{ matrix.language }}"

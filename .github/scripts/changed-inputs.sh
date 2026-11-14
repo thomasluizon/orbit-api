@@ -25,7 +25,6 @@ pattern() {
     # CodeQL legs, named after the matrix language.
     csharp) echo '^src/|^(Directory\.Build\.(props|targets)|global\.json)$|^\.github/(scripts/changed-inputs\.sh|workflows/codeql\.yml)$' ;;
     actions) echo '^\.github/(workflows|actions)/|^\.github/scripts/changed-inputs\.sh$' ;;
-    javascript-typescript) echo '\.(c|m)?(j|t)sx?$|^\.github/(scripts/changed-inputs\.sh|workflows/codeql\.yml)$' ;;
     *)
       echo "changed-inputs.sh: unknown input group: $1" >&2
       exit 2

@@ -7,7 +7,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const script = fileURLToPath(new URL('./changed-inputs.sh', import.meta.url))
-const groups = ['tests', 'docker', 'openapi', 'csharp', 'actions', 'javascript-typescript']
+const groups = ['tests', 'docker', 'openapi', 'csharp', 'actions']
 
 function write(root, path, text = 'content\n') {
   mkdirSync(dirname(join(root, path)), { recursive: true })
