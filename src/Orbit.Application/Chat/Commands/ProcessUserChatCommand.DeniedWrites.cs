@@ -1,9 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Orbit.Application.Chat.Tools;
-using Orbit.Application.Chat.Tools.Implementations;
-using Orbit.Application.Common;
-using Orbit.Domain.Common;
 using Orbit.Domain.Models;
 
 namespace Orbit.Application.Chat.Commands;
@@ -237,104 +234,5 @@ public partial class ProcessUserChatCommandHandler
                     Collect(property.Value);
             }
         }
-    }
-
-    /// <summary>
-    /// A write that failed, or that the ownership check turned down, beside a prepared write leaves a part of the
-    /// request that a second send can prepare, so the turn holds no preview and says so. A plan, feature or policy
-    /// denial does not change on a second send: the turn keeps the prepared part and the reason for the denial.
-    /// </summary>
-    private bool LeavesPartOfTheRequest(ToolExecutionAccumulator results) =>
-        results.PreparedPendingOperations.Any()
-        && results.OperationResults.Any(operation => IsOwnershipWriteDenial(operation)
-            || operation.Status == AgentOperationStatus.Failed && operation.ErrorCode != ErrorCodes.HabitLimitReached
-            && (operation.Access == "write" || ai.ToolRegistry.GetTool(operation.OperationId) is { IsReadOnly: false }));
-
-    /// <summary>
-    /// A turn that leaves part of the request withdraws only what it prepared, so it changes nothing that the person had.
-    /// A preview that a write of this turn created is closed in the pending operation store too, so no approval, no
-    /// replay of the answer checkpoint and no later turn brings it back. An earlier preview that this turn revised gets
-    /// its earlier state back. An earlier preview that this turn read, or was to close at its end, stays as it was.
-    /// </summary>
-    private void WithdrawPartialPreview(Guid userId, ToolExecutionAccumulator results, string? language)
-    {
-        if (!LeavesPartOfTheRequest(results))
-            return;
-        results.KeepsEarlierPreview = results.EarlierPreviewCloses.Count > 0
-            || results.PendingOperations.Any(pending => results.EarlierPendingIds.Contains(pending.Id));
-        foreach (var close in results.EarlierPreviewCloses)
-        {
-            if (results.RevisedEarlierPreviews.ContainsKey(close.Id))
-                RestoreEarlierPreview(userId, close.Id, close.Card?.Preview.PreviewFingerprint, results);
-            else if (close.Card is var (toolName, card))
-                results.KeepPendingOperation(toolName, card);
-        }
-        results.EarlierPreviewCloses.Clear();
-        foreach (var pending in results.PreparedPendingOperations.ToArray())
-        {
-            if (results.RevisedEarlierPreviews.ContainsKey(pending.Id))
-                RestoreEarlierPreview(userId, pending.Id, pending.PreviewFingerprint, results);
-            else if (execution.PendingOperationStore.GetExecution(userId, pending.Id) is { } stored)
-                execution.PendingOperationStore.Cancel(userId, pending.Id,
-                    AgentOperationFingerprint.Compute(stored.OperationId, stored.Arguments.GetRawText()));
-            results.SupersedePendingOperation(pending.Id);
-        }
-        results.SanitizeFailedActions(RequestNotPreparedMessage(results, language));
-        results.RequestNotPrepared = true;
-    }
-
-    /// <summary>
-    /// Puts back the state from before this turn's revision of an earlier preview, while the store still holds the
-    /// preview of that revision.
-    /// </summary>
-    private void RestoreEarlierPreview(Guid userId, Guid id, string? revisedFingerprint, ToolExecutionAccumulator results)
-    {
-        if (execution.PendingOperationStore.GetExecution(userId, id) is { } stored && stored.PreviewFingerprint == revisedFingerprint)
-            execution.PendingOperationStore.Restore(userId, id,
-                AgentOperationFingerprint.Compute(stored.OperationId, stored.Arguments.GetRawText()), results.RevisedEarlierPreviews[id]);
-    }
-
-    /// <summary>
-    /// Closes the earlier previews of a turn that ends with its answer. A preview that the store does not close stays
-    /// in the answer when the turn showed it.
-    /// </summary>
-    private static async Task CloseEarlierPreviewsAsync(ToolExecutionAccumulator results, CancellationToken ct)
-    {
-        foreach (var close in results.EarlierPreviewCloses)
-            if (!await close.Close(ct) && close.Card is var (toolName, card))
-                results.KeepPendingOperation(toolName, card);
-        results.EarlierPreviewCloses.Clear();
-    }
-
-    /// <summary>
-    /// The answer of a withdrawn turn. It says that nothing waits for approval only when no earlier preview that the
-    /// turn read or revised still waits.
-    /// </summary>
-    private static string RequestNotPreparedMessage(ToolExecutionAccumulator results, string? language) =>
-        ErrorCopy.Resolve(results.KeepsEarlierPreview ? "chat.answer.requestNotPreparedEarlierKept" : "chat.answer.requestNotPrepared",
-            LocaleHelper.IsPortuguese(language));
-
-    /// <summary>
-    /// Keeps the stored state of each earlier preview that a revision in this round changes, before the revision runs,
-    /// so a turn that ends without its whole request can put the preview back.
-    /// </summary>
-    private Dictionary<string, (Guid Id, PendingAgentOperationRevision Revision)> ReadEarlierRevisions(
-        IEnumerable<AiToolCall> calls, Guid userId, ToolExecutionAccumulator results)
-    {
-        var revisions = new Dictionary<string, (Guid, PendingAgentOperationRevision)>(StringComparer.Ordinal);
-        foreach (var call in calls.Where(call => call.Name == "revise_pending_changes" && !RevisePendingChangesTool.IsInspection(call.Args)))
-            if (Guid.TryParse(JsonArgumentParser.GetOptionalString(call.Args, "pending_operation_id"), out var id)
-                && results.EarlierPendingIds.Contains(id) && !results.RevisedEarlierPreviews.ContainsKey(id)
-                && execution.PendingOperationStore.GetRevision(userId, id) is { } revision)
-                revisions[call.Id] = (id, revision);
-        return revisions;
-    }
-
-    private static void KeepEarlierRevisions(IReadOnlyDictionary<string, (Guid Id, PendingAgentOperationRevision Revision)> revisions,
-        IReadOnlyDictionary<string, ToolCallOutcome> outcomes, ToolExecutionAccumulator results)
-    {
-        foreach (var (callId, (id, revision)) in revisions)
-            if (outcomes.TryGetValue(callId, out var outcome) && outcome.PendingOperation is not null)
-                results.RevisedEarlierPreviews.TryAdd(id, revision);
     }
 }

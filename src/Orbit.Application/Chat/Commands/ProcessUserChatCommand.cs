@@ -556,11 +556,10 @@ public partial class ProcessUserChatCommandHandler(
             return response.PropagateError<ChatResponse>();
 
         recording.UsedModel = true;
-        var executionResults = new ToolExecutionAccumulator
+        var executionResults = new ToolExecutionAccumulator(recording.AwaitingPreviewIds)
         {
             AnsweredAtUtc = answeredAtUtc,
             Recording = recording,
-            EarlierPendingIds = recording.AwaitingPreviewIds,
             EvalTrace = evalTrace,
             Habits = context.ActiveHabits,
             AllHabits = context.UserHabits,
@@ -609,7 +608,7 @@ public partial class ProcessUserChatCommandHandler(
         if (IsEmptyTokenBudgetResponse(toolLoopResult.TokenBudgetExceeded, aiResponse.TextMessage))
             return Result.Failure<ChatResponse>(ErrorMessages.AiUnavailable);
 
-        await CloseEarlierPreviewsAsync(executionResults, cancellationToken);
+        await executionResults.Previews.CommitAsync(cancellationToken);
         var (cards, followUps, facts) = await ComposeFinalReplyAsync(request, context, executionResults,
             toolLoopResult, aiResponse, groundingTurn, cancellationToken);
         var aiMessage = cards.AiMessage;

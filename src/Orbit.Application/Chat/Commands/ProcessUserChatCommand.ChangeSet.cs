@@ -8,7 +8,7 @@ public partial class ProcessUserChatCommandHandler
     /// </summary>
     private async Task CombinePendingChangesAsync(ProcessUserChatCommand request, ToolExecutionAccumulator results, CancellationToken ct)
     {
-        var prepared = results.PreparedPendingOperations.ToArray();
+        var prepared = results.Previews.Prepared.ToArray();
         if (prepared.Length < 2) return;
         var previewer = execution.PendingOperationPreviewer ?? new PendingOperationChangePreviewer(
             data.HabitRepository, data.GoalRepository, data.TagRepository, execution.UserDateService, ai.ToolRegistry);

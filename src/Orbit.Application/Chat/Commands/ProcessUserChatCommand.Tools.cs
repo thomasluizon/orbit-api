@@ -13,42 +13,6 @@ namespace Orbit.Application.Chat.Commands;
 
 public partial class ProcessUserChatCommandHandler
 {
-    /// <summary>
-    /// Runs the tool rounds and decides the withdrawal once for every way out of them: a normal end, a provider error, the
-    /// round or token limit, and a cancellation. A turn that leaves part of the request withdraws its preview, and its
-    /// answer says so whatever the last round returned. A cancelled turn has no answer of its own, but it still closes
-    /// its preview, because a block answer replays its checkpoint.
-    /// </summary>
-    private async Task<ToolLoopResult> RunToolCallLoopAsync(
-        AiResponse initialResponse,
-        ProcessUserChatCommand request,
-        ChatContext context,
-        ToolExecutionAccumulator executionResults,
-        string? language,
-        Func<AiStreamEvent, Task>? aiStreamSink,
-        CancellationToken cancellationToken)
-    {
-        ToolLoopResult loop;
-        try
-        {
-            loop = await RunToolRoundsAsync(initialResponse, request, context, executionResults, language, aiStreamSink, cancellationToken);
-        }
-        catch (OperationCanceledException)
-        {
-            WithdrawPartialPreview(request.UserId, executionResults, language);
-            throw;
-        }
-        WithdrawPartialPreview(request.UserId, executionResults, language);
-        return executionResults.RequestNotPrepared
-            ? loop with
-            {
-                FinalResponse = new AiResponse { TextMessage = RequestNotPreparedMessage(executionResults, language) },
-                HadToolFailure = false,
-                ProviderError = null
-            }
-            : loop;
-    }
-
     private async Task<ToolLoopResult> RunToolRoundsAsync(
         AiResponse initialResponse,
         ProcessUserChatCommand request,
@@ -495,7 +459,7 @@ public partial class ProcessUserChatCommandHandler
 
         var excessReads = readOnlyCalls.Skip(ChatTurnLimits.MaxReadCallsPerRound).ToArray();
         readOnlyCalls = readOnlyCalls.Take(ChatTurnLimits.MaxReadCallsPerRound).ToList();
-        var earlierRevisions = ReadEarlierRevisions(readOnlyCalls, request.UserId, executionResults);
+        var earlierRevisions = executionResults.Previews.ReadRevisions(readOnlyCalls, request.UserId, execution.PendingOperationStore);
         var readOnlyTasks = readOnlyCalls
             .Select(call => ExecuteReadOnlyToolCallOnIsolatedScopeAsync(call, request, executionResults, cancellationToken))
             .ToList();
@@ -527,7 +491,7 @@ public partial class ProcessUserChatCommandHandler
                     executionResults.SelectionCandidates.Add(selection);
             }
         }
-        KeepEarlierRevisions(earlierRevisions, outcomesByCallId, executionResults);
+        executionResults.Previews.KeepRevisions(earlierRevisions, outcomesByCallId);
 
         RejectUnreadDuplicateTargets(writeCalls, resolvedWrites, executionResults, outcomesByCallId);
         var selectionScope = RejectUnansweredSelections(writeCalls, resolvedWrites, executionResults, outcomesByCallId,
@@ -585,24 +549,6 @@ public partial class ProcessUserChatCommandHandler
             outcomesByCallId[askCall.Id] = await ExecuteAskCallAsync(askCall, request, executionResults, cancellationToken);
         LogRoundOutcomes(outcomesByCallId.Values, readOnlyCalls.Count, writeCalls.Count, excessReads.Length);
         return outcomesByCallId;
-    }
-
-    /// <summary>
-    /// A revision that removes every item of a preview discards it. A preview of this turn is discarded at once, and an
-    /// earlier preview when the turn ends with its answer, so a withdrawn turn leaves it as it was.
-    /// </summary>
-    private async Task DiscardPreviewAsync(AiToolCall call, PendingPreviewDiscard discard, ProcessUserChatCommand request,
-        ToolExecutionAccumulator results, CancellationToken cancellationToken)
-    {
-        var tool = (RevisePendingChangesTool)ai.ToolRegistry.GetTool(call.Name)!;
-        Task<bool> Discard(CancellationToken ct) => tool.DiscardAsync(request.UserId, discard, request.ClientContext, ct);
-        if (results.EarlierPendingIds.Contains(discard.PendingOperationId))
-        {
-            results.CloseWithTheTurn(discard.PendingOperationId, Discard);
-            return;
-        }
-        await Discard(cancellationToken);
-        results.SupersedePendingOperation(discard.PendingOperationId);
     }
 
     private async Task<ToolCallOutcome> ExecuteBlockWriteAsync(AiToolCall call, ProcessUserChatCommand request,
@@ -759,7 +705,7 @@ public partial class ProcessUserChatCommandHandler
         var toolResult = BuildToolCallResult(call, operationResult);
         InvalidateTurnSnapshotIfMutated(request.UserId, tool, operationResult);
 
-        RegisterPendingWrite(request.UserId, tool, executionResponse, executionResults);
+        await RegisterPendingWriteAsync(request.UserId, tool, executionResponse, executionResults, cancellationToken);
 
         if (operationResult.Status == AgentOperationStatus.Succeeded
             && operationResult.Payload is NeedsClarificationPayload payload)
@@ -820,11 +766,11 @@ public partial class ProcessUserChatCommandHandler
     }
 
     /// <summary>
-    /// Keeps a later write from preparing a change that an open preview already holds. A preview of this turn closes at
-    /// once. An earlier preview closes when the turn ends with its answer, so a withdrawn turn leaves it as it was.
+    /// Keeps a later write from preparing a change that an open preview already holds. The preview ledger of the turn
+    /// closes each preview that the later write covers.
     /// </summary>
-    private void RegisterPendingWrite(Guid userId, IAiTool tool,
-        AgentExecuteOperationResponse response, ToolExecutionAccumulator results)
+    private async Task RegisterPendingWriteAsync(Guid userId, IAiTool tool,
+        AgentExecuteOperationResponse response, ToolExecutionAccumulator results, CancellationToken cancellationToken)
     {
         if (response.Operation.Status != AgentOperationStatus.PendingConfirmation
             || response.PendingOperation is not { } replacement)
@@ -852,10 +798,8 @@ public partial class ProcessUserChatCommandHandler
                 continue;
             var fingerprint = AgentOperationFingerprint.Compute(
                 stored.OperationId, stored.Arguments.GetRawText());
-            if (results.EarlierPendingIds.Contains(id))
-                results.CloseWithTheTurn(id, _ => Task.FromResult(execution.PendingOperationStore.Cancel(userId, id, fingerprint)));
-            else if (execution.PendingOperationStore.Cancel(userId, id, fingerprint))
-                results.SupersedePendingOperation(id);
+            await results.Previews.CloseAsync(id,
+                _ => Task.FromResult(execution.PendingOperationStore.Cancel(userId, id, fingerprint)), cancellationToken);
         }
         results.PendingWriteCalls[replacement.Id] = (tool.Name, replacement);
     }

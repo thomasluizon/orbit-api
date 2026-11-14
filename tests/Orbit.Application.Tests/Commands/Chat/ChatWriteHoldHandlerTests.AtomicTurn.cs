@@ -1,9 +1,14 @@
 using System.Text.Json;
 using FluentAssertions;
 using NSubstitute;
+using Orbit.Application.Chat;
 using Orbit.Application.Chat.Commands;
+using Orbit.Application.Chat.Tools;
+using Orbit.Application.Chat.Tools.Implementations;
+using Orbit.Application.Chat.Validators;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 
 namespace Orbit.Application.Tests.Commands.Chat;
@@ -189,5 +194,105 @@ public sealed partial class ChatWriteHoldHandlerTests
         var replacement = result.Value.PendingOperations.Should().ContainSingle().Subject;
         replacement.Id.Should().NotBe(earlier.Id);
         _pendingOperationStore.IsAwaitingConfirmation(_userId, replacement.Id).Should().BeTrue();
+    }
+
+    private static string NothingWaitsAnswer(string language) => language == "en"
+        ? "I couldn't prepare your whole request, so nothing is waiting for your approval. Please send it again."
+        : "Não consegui preparar o seu pedido inteiro, então nada ficou esperando a sua aprovação. Mande de novo, por favor.";
+
+    /// <summary>
+    /// The tools of the handler, with a revision tool whose discard the store refuses, as it does when the preview
+    /// changed after the revision read it.
+    /// </summary>
+    private AiToolRegistry RefusedDiscardTools()
+    {
+        var store = Substitute.For<IPendingAgentOperationStore>();
+        store.GetExecution(_userId, Arg.Any<Guid>()).Returns(call => _pendingOperationStore.GetExecution(_userId, call.ArgAt<Guid>(1)));
+        var services = Substitute.For<IServiceProvider>();
+        services.GetService(typeof(PendingOperationRevisionService)).Returns(new PendingOperationRevisionService(store, _previewer,
+            new RevisePendingOperationRequestValidator(), _toolRegistry));
+        return new AiToolRegistry(_toolRegistry.GetAll().Select(tool => tool is RevisePendingChangesTool ? new RevisePendingChangesTool(services) : tool));
+    }
+
+    private static AiToolCall DescribeBeforeBed(Habit[] parents) => new("update_habit", "edit",
+        JsonSerializer.SerializeToElement(new { habit_id = parents[1].Id, description = "Quiet time" }));
+
+    /// <summary>
+    /// The turn sends <paramref name="first"/>, then the calls of <paramref name="second"/>, which read the previews that
+    /// the first round prepared, and then its answer.
+    /// </summary>
+    private void ReplyInTwoRounds(IReadOnlyList<AiToolCall> first, Func<AiToolCall[]> second, string answer)
+    {
+        _aiIntentService.SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AiResponse { ConversationContext = new(), ToolCalls = [.. first] }));
+        _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(),
+                Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(_ => Result.Success(new AiResponse { ConversationContext = new(), ToolCalls = second() }),
+                _ => Result.Success(new AiResponse { TextMessage = answer }));
+    }
+
+    /// <summary>The id of the description preview that the first round prepared, and a revision that removes its one item.</summary>
+    private (Guid Id, AiToolCall Discard) DiscardTheDescription(Habit[] parents)
+    {
+        var id = _dbContext.PendingAgentOperations.Single(row => row.UserId == _userId && row.OperationId == "update_habit").Id;
+        return (id, new("revise_pending_changes", "discard", JsonSerializer.SerializeToElement(new
+        {
+            pending_operation_id = id,
+            items = Array.Empty<object>(),
+            remove_item_ids = new[] { parents[1].Id.ToString() }
+        })));
+    }
+
+    /// <summary>
+    /// The turn prepares a description of Before Bed, and the next round removes every item of it beside a skip of a
+    /// habit that is not the person's. The store refuses the discard, so the description stays in the pending set:
+    /// the withdrawn turn cancels it, and no approval brings it back.
+    /// </summary>
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task AtomicTurn_AWithdrawnTurnCancelsItsPreviewWhoseDiscardTheStoreRefused(string language)
+    {
+        var parents = ParentAccount(language);
+        _ownership.GetDenialReasonAsync("skip_habit", _userId, Arg.Any<JsonElement>(), Arg.Any<CancellationToken>())
+            .Returns("target_not_owned:skip_habit:habit");
+        var description = Guid.Empty;
+        ReplyInTwoRounds([DescribeBeforeBed(parents)], () =>
+        {
+            (description, var discard) = DiscardTheDescription(parents);
+            return [discard, new("skip_habit", "skip", JsonSerializer.SerializeToElement(new { habit_id = UnknownHabitId }))];
+        }, "Review.");
+
+        var result = await CreateHandler(tools: RefusedDiscardTools()).Handle(new(_userId,
+            "Describe Before Bed as quiet time, then drop that and skip my walk today."), default);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        description.Should().NotBeEmpty("the first round prepared the description");
+        _pendingOperationStore.IsAwaitingConfirmation(_userId, description).Should().BeFalse("the withdrawn turn cancels its own preview");
+        result.Value.PendingOperations.Should().BeNullOrEmpty();
+        result.Value.AiMessage.Should().Be(NothingWaitsAnswer(language));
+    }
+
+    /// <summary>
+    /// The same refused discard in a turn that ends with its answer leaves the description in the answer, because it
+    /// still waits for the person's approval.
+    /// </summary>
+    [Fact]
+    public async Task AtomicTurn_APreviewWhoseDiscardTheStoreRefusedStaysInTheAnswer()
+    {
+        var parents = ParentAccount("en");
+        var description = Guid.Empty;
+        ReplyInTwoRounds([DescribeBeforeBed(parents)], () =>
+        {
+            (description, var discard) = DiscardTheDescription(parents);
+            return [discard];
+        }, "Review.");
+
+        var result = await CreateHandler(tools: RefusedDiscardTools()).Handle(new(_userId,
+            "Describe Before Bed as quiet time, then drop that."), default);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        _pendingOperationStore.IsAwaitingConfirmation(_userId, description).Should().BeTrue("the store refused the discard");
+        result.Value.PendingOperations.Should().ContainSingle().Which.Id.Should().Be(description);
     }
 }

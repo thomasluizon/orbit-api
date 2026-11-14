@@ -66,16 +66,15 @@ public partial class ProcessUserChatCommandHandler
 
     /// <summary>
     /// The earlier creation previews that a new preview of the turn replaces close when the turn ends with its answer,
-    /// so a withdrawn turn replaces nothing. A preview that a write of the turn shows again stays open.
+    /// so a withdrawn turn replaces nothing.
     /// </summary>
     private void ReplaceWithTheTurn(Guid userId, IEnumerable<Guid> replaced, ToolExecutionAccumulator results)
     {
-        foreach (var id in replaced.Where(id => results.EarlierPreviewCloses.All(close => close.Id != id)))
-            results.EarlierPreviewCloses.Add(new EarlierPreviewClose(id, null, _ => Task.FromResult(
-                results.PendingOperations.All(pending => pending.Id != id)
-                && execution.PendingOperationStore.GetExecution(userId, id) is { } stored
+        foreach (var id in replaced)
+            results.Previews.Replace(id, _ => Task.FromResult(
+                execution.PendingOperationStore.GetExecution(userId, id) is { } stored
                 && execution.PendingOperationStore.Cancel(userId, id,
-                    AgentOperationFingerprint.Compute(stored.OperationId, stored.Arguments.GetRawText())))));
+                    AgentOperationFingerprint.Compute(stored.OperationId, stored.Arguments.GetRawText()))));
     }
 
     private static bool HasResolutionQuestion(ToolExecutionAccumulator results) =>

@@ -34,7 +34,7 @@ public partial class ProcessUserChatCommandHandler
     /// beside it keeps the base path: the model reads and sends the write again, or answers in its own words. An
     /// earlier preview that the turn only read is not a prepared write of the turn.
     /// </summary>
-    private static bool HoldsPreparedWrite(ToolExecutionAccumulator results) => results.PreparedPendingOperations.Any();
+    private static bool HoldsPreparedWrite(ToolExecutionAccumulator results) => results.Previews.Prepared.Any();
 
     private static bool HasReadCorrectionCandidate(ToolExecutionAccumulator results) =>
         results.CorrectionOccurrences.Any(occurrence =>
