@@ -29,7 +29,6 @@ resource "render_static_site" "staging_landing" {
   auto_deploy    = false
 
   env_vars = {
-    NODE_VERSION               = { value = "22.22.3" }
     PUBLIC_APP_URL             = { value = "https://app-staging.useorbit.org" }
     PUBLIC_ANDROID_INSTALL_URL = { value = "https://play.google.com/store/apps/details?id=org.useorbit.app.staging" }
     PUBLIC_API_URL             = { value = "https://api-staging.useorbit.org" }
