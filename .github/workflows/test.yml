@@ -87,7 +87,7 @@ jobs:
   unit-tests:
     name: Unit Tests
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 25
     services:
       postgres:
         image: postgres:17
@@ -182,23 +182,30 @@ jobs:
       - name: Fail if committed OpenAPI documents are stale
         run: python3 .github/scripts/openapi_artifacts.py freshness
 
-      - name: Run Domain Tests
-        if: steps.inputs.outputs.tests == 'true'
-        run: dotnet test tests/Orbit.Domain.Tests --no-build --collect:"XPlat Code Coverage" --settings coverlet.runsettings --results-directory ./TestResults
-
-      - name: Run Application Tests
-        if: steps.inputs.outputs.tests == 'true'
-        run: dotnet test tests/Orbit.Application.Tests --no-build --collect:"XPlat Code Coverage" --settings coverlet.runsettings --results-directory ./TestResults
-
-      - name: Run Infrastructure Tests
+      # Infrastructure tests wait on Postgres, timers and single long cases, so the CPU-bound
+      # Domain, Application and Analyzer tests run beside them. Each line carries its project.
+      - name: Run the test projects
         if: steps.inputs.outputs.tests == 'true'
         env:
           ORBIT_POSTGRES_TEST_CONNECTION: Host=localhost;Port=5432;Database=postgres;Username=orbit_test
-        run: dotnet test tests/Orbit.Infrastructure.Tests --no-build --collect:"XPlat Code Coverage" --settings coverlet.runsettings --results-directory ./TestResults
-
-      - name: Run Analyzer Tests
-        if: steps.inputs.outputs.tests == 'true'
-        run: dotnet test tests/Orbit.Analyzers.Tests --no-build
+        run: |
+          set -uo pipefail
+          coverage=(--no-build --collect:"XPlat Code Coverage" --settings coverlet.runsettings --results-directory ./TestResults)
+          run() {
+            local name=$1
+            shift
+            dotnet test "$@" 2>&1 | sed -u "s/^/[$name] /"
+          }
+          run infrastructure tests/Orbit.Infrastructure.Tests "${coverage[@]}" &
+          infrastructure=$!
+          { run domain tests/Orbit.Domain.Tests "${coverage[@]}" &&
+            run application tests/Orbit.Application.Tests "${coverage[@]}" &&
+            run analyzers tests/Orbit.Analyzers.Tests --no-build; } &
+          others=$!
+          status=0
+          wait "$infrastructure" || { echo "::error::Orbit.Infrastructure.Tests failed"; status=1; }
+          wait "$others" || { echo "::error::Orbit.Domain.Tests, Orbit.Application.Tests or Orbit.Analyzers.Tests failed"; status=1; }
+          exit "$status"
 
       - name: Enforce line-coverage threshold
         if: steps.inputs.outputs.tests == 'true'
