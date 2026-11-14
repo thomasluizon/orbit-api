@@ -24,6 +24,9 @@ internal sealed partial class O200kTokenCounter
 
     private static readonly Lazy<O200kTokenCounter> SharedCounter = new(Load);
 
+    [ThreadStatic]
+    private static long _mergeVisits;
+
     private readonly byte[] _tokenBytes;
     private readonly int[] _tokenOffsets;
     private readonly int[] _slots;
@@ -50,6 +53,13 @@ internal sealed partial class O200kTokenCounter
 
     internal long RetainedBytes =>
         _tokenBytes.LongLength + ((long)_tokenOffsets.Length + _slots.Length) * sizeof(int);
+
+    /// <summary>
+    /// Counts the merge work on the calling thread: the pair ranks that each scan of the scan merge reads, and the
+    /// heap levels that each push or pop of the heap merge visits. A test reads it to prove that the merge work of
+    /// a long piece grows with n log n, not with n².
+    /// </summary>
+    internal static long MergeVisits => _mergeVisits;
 
     public int CountTokens(string text)
     {
@@ -154,6 +164,7 @@ internal sealed partial class O200kTokenCounter
 
     private static int LowestRank(int[] ranks, int parts)
     {
+        _mergeVisits += parts - 1;
         var lowest = NoRank;
         var at = -1;
         for (var index = 0; index < parts - 1; index++)
@@ -234,12 +245,15 @@ internal sealed partial class O200kTokenCounter
             return;
         var key = ((long)rank << 32) | (uint)start;
         var index = size++;
+        var visits = 1;
         while (index > 0 && heap[(index - 1) / 2] > key)
         {
             heap[index] = heap[(index - 1) / 2];
             index = (index - 1) / 2;
+            visits++;
         }
         heap[index] = key;
+        _mergeVisits += visits;
     }
 
     private static (int Rank, int Start) Pop(long[] heap, ref int size)
@@ -247,6 +261,7 @@ internal sealed partial class O200kTokenCounter
         var top = heap[0];
         var last = heap[--size];
         var index = 0;
+        var visits = 1;
         while (2 * index + 1 < size)
         {
             var child = 2 * index + 1;
@@ -256,8 +271,10 @@ internal sealed partial class O200kTokenCounter
                 break;
             heap[index] = heap[child];
             index = child;
+            visits++;
         }
         heap[index] = last;
+        _mergeVisits += visits;
         return ((int)(top >> 32), (int)(top & uint.MaxValue));
     }
 
