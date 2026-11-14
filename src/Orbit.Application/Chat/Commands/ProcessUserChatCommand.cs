@@ -540,7 +540,7 @@ public partial class ProcessUserChatCommandHandler(
             return response.PropagateError<ChatResponse>();
 
         recording.UsedModel = true;
-        var executionResults = new ToolExecutionAccumulator(recording.AwaitingPreviewIds)
+        var executionResults = new ToolExecutionAccumulator(recording.OpenPreviewIds)
         {
             AnsweredAtUtc = answeredAtUtc,
             Recording = recording,

@@ -56,6 +56,7 @@ public partial class ProcessUserChatCommandHandlerTests
             EarlierPreviewArguments(children, title), AgentExecutionSurface.Chat, AgentConfirmationRequirement.FreshConfirmation, preview);
         var earlier = Stored(EarlierTitle, "earlier-preview");
         _pendingOperationStore.GetAwaitingAsync(UserId, Arg.Any<CancellationToken>()).Returns([earlier]);
+        _pendingOperationStore.GetOpenIdsAsync(UserId, Arg.Any<CancellationToken>()).Returns([EarlierPreviewId]);
         _pendingOperationStore.GetRevision(UserId, EarlierPreviewId).Returns(EarlierRevision(children));
         _pendingOperationStore.GetExecution(UserId, EarlierPreviewId)
             .Returns(revised ? Stored(RevisedTitle, "revised-preview") : earlier);
@@ -144,6 +145,7 @@ public partial class ProcessUserChatCommandHandlerTests
             EarlierPreviewArguments(children, RenameTitle), AgentExecutionSurface.Chat,
             AgentConfirmationRequirement.FreshConfirmation, "earlier-preview");
         _pendingOperationStore.GetAwaitingAsync(UserId, Arg.Any<CancellationToken>()).Returns([stored]);
+        _pendingOperationStore.GetOpenIdsAsync(UserId, Arg.Any<CancellationToken>()).Returns([EarlierPreviewId]);
         _pendingOperationStore.GetExecution(UserId, EarlierPreviewId).Returns(stored);
         _pendingOperationStore.Cancel(UserId, EarlierPreviewId, Arg.Any<string>()).Returns(true);
         var title = new PendingOperationChange(children[2].Id, children[2].Title, "title", children[2].Title, RenameTitle, "string");
