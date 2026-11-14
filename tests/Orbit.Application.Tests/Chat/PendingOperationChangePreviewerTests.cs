@@ -276,6 +276,7 @@ public sealed partial class PendingOperationChangePreviewerTests
     [InlineData("〰️", "〽️", false)]
     [InlineData("‼️", "‼", true)]
     [InlineData("‼️", "!!", false)]
+    [InlineData("‼️!", "‼️", true)]
     [InlineData("#️⃣", "*️⃣", false)]
     [InlineData("👍", "👍🏻", false)]
     [InlineData("🏃", "🏃‍♀️", false)]
