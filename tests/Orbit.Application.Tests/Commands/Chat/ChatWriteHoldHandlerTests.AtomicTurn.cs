@@ -310,6 +310,37 @@ public sealed partial class ChatWriteHoldHandlerTests
         _pendingOperationStore.IsAwaitingConfirmation(_userId, replacement.Id).Should().BeTrue();
     }
 
+    /// <summary>
+    /// The person asks for a new Zinc preview. The turn revises the earlier Zinc preview in place beside a description
+    /// of Before Bed, so the two become one combined approval. The replacement of the earlier Zinc preview runs after the
+    /// combination and must not cancel a member of that approval, so the person can approve it.
+    /// </summary>
+    [Fact]
+    public async Task AtomicTurn_AReplacementNeverCancelsAMemberOfTheCombinedApproval()
+    {
+        var parents = ParentAccount("en");
+        var earlier = await PrepareEarlierZincAsync(parents);
+        ReplyToTurn(
+        [
+            new("revise_pending_changes", "revise", JsonSerializer.SerializeToElement(new
+            {
+                pending_operation_id = earlier.Id,
+                items = new[] { new { item_id = earlier.Items![0].ItemId, edits_json = JsonSerializer.Serialize(new { description = "With lunch" }) } },
+                answer_question = false
+            })),
+            DescribeBeforeBed(parents)
+        ], "Review.");
+
+        var result = await CreateHandler().Handle(NewZincPreviewRequest(
+            "Prepare a new preview for Zinc with lunch, and describe Before Bed as quiet time."), default);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        var combined = result.Value.PendingOperations.Should().ContainSingle().Subject;
+        combined.Id.Should().NotBe(earlier.Id, "the two previews became one combined approval");
+        _pendingOperationStore.GetExecution(_userId, earlier.Id).Should().NotBeNull("the earlier Zinc preview is a member of the approval");
+        _pendingOperationStore.Confirm(_userId, combined.Id).Should().NotBeNull("the person can approve the combined change");
+    }
+
     private static string NothingWaitsAnswer(string language) => language == "en"
         ? "I couldn't prepare your whole request, so nothing is waiting for your approval. Please send it again."
         : "Não consegui preparar o seu pedido inteiro, então nada ficou esperando a sua aprovação. Mande de novo, por favor.";
