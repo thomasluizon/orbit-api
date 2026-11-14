@@ -283,6 +283,26 @@ public sealed partial class PendingOperationChangePreviewerTests
         (HabitNameMatcher.TitleKey(title) == HabitNameMatcher.TitleKey(other)).Should().Be(same);
 
     /// <summary>
+    /// A title of only punctuation has no word and no emoji, so its punctuation is its key. Two such titles are one title
+    /// only when they hold the same punctuation, and such a title is never a missing title.
+    /// </summary>
+    [Theory]
+    [InlineData("?", "!", false)]
+    [InlineData("...", "?", false)]
+    [InlineData(" ? ", "?", true)]
+    [InlineData("?", null, false)]
+    [InlineData("?", "", false)]
+    public void RoundThree_PunctuationOnlyTitleKey_ComparesItsPunctuation(string title, string? other, bool same) =>
+        (HabitNameMatcher.TitleKey(title) == HabitNameMatcher.TitleKey(other)).Should().Be(same);
+
+    /// <summary>Punctuation in a message only separates its words, so no message names a title of only punctuation.</summary>
+    [Theory]
+    [InlineData("Is Stretch done?", "?")]
+    [InlineData("Add Stretch to !", "!")]
+    public void RoundThree_PunctuationOnlyTitle_IsNamedByNoMessage(string message, string title) =>
+        HabitNameMatcher.MentionsTitle(message, title).Should().BeFalse();
+
+    /// <summary>
     /// An exact name resolves the habit of its own title. An emoji-only name never resolves a habit with another
     /// emoji-only title, and a name without the emoji of a title still resolves that title.
     /// </summary>

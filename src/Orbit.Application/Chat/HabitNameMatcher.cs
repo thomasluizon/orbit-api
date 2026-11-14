@@ -20,19 +20,21 @@ public static class HabitNameMatcher
     }
 
     /// <summary>
-    /// The key that says two habit titles are one title. It is <see cref="Normalize"/>, so case, accents, punctuation and
-    /// spaces do not count. A title with no letter or digit, such as one of emoji only, normalizes to nothing, so its key
-    /// is its <see cref="SymbolText"/> and two titles with different emoji stay two. A missing title, or a title of only
-    /// punctuation and spaces, gives an empty key.
+    /// The key that says two habit titles are one title: <see cref="Normalize"/>, so case, accents, punctuation and
+    /// spaces do not count. A title with no letter or digit has its <see cref="SymbolText"/>, so different emoji stay
+    /// two, and a title of only punctuation has its <see cref="PunctuationText"/>. Only a missing or blank title, which
+    /// no habit has, gives the empty key.
     /// </summary>
     public static string TitleKey(string? title) =>
         title is null ? string.Empty
-        : Normalize(title) is { Length: > 0 } normalized ? normalized : SymbolText(title);
+        : Normalize(title) is { Length: > 0 } normalized ? normalized
+        : SymbolText(title) is { Length: > 0 } symbols ? symbols
+        : PunctuationText(title);
 
     /// <summary>
     /// The message names the title. A title with words is found in the normalized message. A title with no letter or
-    /// digit, such as one of emoji only, is found as whole emoji in the <see cref="SymbolText"/> of the message. A title
-    /// with no key is named by no message.
+    /// digit, such as one of emoji only, is found as whole emoji in the <see cref="SymbolText"/> of the message.
+    /// Punctuation in a message only separates words, so a title of only punctuation is named by no message.
     /// </summary>
     public static bool MentionsTitle(string message, string title)
     {
@@ -45,8 +47,8 @@ public static class HabitNameMatcher
 
     /// <summary>
     /// The message names the title right after a lead, a pattern over normalized words such as "under ". The title is
-    /// found as <see cref="MentionsTitle"/> finds it, and no letter, digit or other emoji joins it. A title with no key
-    /// is named by no message.
+    /// found as <see cref="MentionsTitle"/> finds it, and no letter, digit or other emoji joins it. A title of only
+    /// punctuation is named by no message.
     /// </summary>
     public static bool NamesTitleAfter(string message, string lead, string title)
     {
@@ -103,6 +105,17 @@ public static class HabitNameMatcher
 
     private static bool SeparatesTokens(char character) =>
         char.IsWhiteSpace(character) || char.IsPunctuation(character) && !PunctuationEmoji.Contains(character);
+
+    /// <summary>
+    /// The text of a title of only punctuation, where the punctuation is all the title holds and thus counts. A variation
+    /// selector or an accent does not count, and each run of spaces is one space. A blank text gives an empty text.
+    /// </summary>
+    private static string PunctuationText(string value)
+    {
+        var folded = value.Normalize(NormalizationForm.FormD)
+            .Where(character => CharUnicodeInfo.GetUnicodeCategory(character) != UnicodeCategory.NonSpacingMark);
+        return string.Join(' ', string.Concat(folded).Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+    }
 
     public static bool Matches(string title, string search)
     {

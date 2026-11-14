@@ -12,8 +12,8 @@ using Orbit.Domain.Models;
 namespace Orbit.Application.Tests.Commands.Chat;
 
 /// <summary>
-/// A habit title of emoji only has no letter or digit. Each check that compares, groups or finds a title keeps two
-/// different such titles apart, and a title with no key is never found in a message.
+/// A habit title of only emoji or only punctuation has no letter or digit. Each check that compares, groups or finds a
+/// title keeps two different such titles apart, and a title of only punctuation is never found in a message.
 /// </summary>
 public partial class ProcessUserChatCommandHandlerTests
 {
@@ -168,6 +168,7 @@ public partial class ProcessUserChatCommandHandlerTests
     [Theory]
     [InlineData("🏃", "📚", false)]
     [InlineData("Walk", "WALK", true)]
+    [InlineData("?", "!", false)]
     public void EmojiOnlyTitles_TwoOfThemAreNoSharedTarget(string first, string second, bool shared)
     {
         Habit[] habits = [CreateHabit(first), CreateHabit(second)];

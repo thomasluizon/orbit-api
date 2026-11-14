@@ -321,13 +321,16 @@ public partial class ProcessUserChatCommandHandlerTests
     }
 
     /// <summary>
-    /// A creation binds to the existing habit with its own emoji-only title, never to a habit with another emoji-only title.
+    /// A creation binds to the existing habit with its own title of only emoji or only punctuation, never to a habit with
+    /// another such title.
     /// </summary>
     [Theory]
     [InlineData("🏃", "📚", false)]
     [InlineData("🏃", "🏃", true)]
     [InlineData("‼️", "⁉️", false)]
     [InlineData("‼️", "‼️", true)]
+    [InlineData("?", "!", false)]
+    [InlineData("?", "?", true)]
     public async Task Replay_EmojiOnlyCreation_BindsOnlyToAnExistingHabitOfItsOwnTitle(string existingTitle, string proposed, bool bound)
     {
         SetupResolutionAccount();
