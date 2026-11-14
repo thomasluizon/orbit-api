@@ -146,6 +146,18 @@ jobs:
       - name: Restore local tools
         run: dotnet tool restore
 
+      - name: Restore
+        run: dotnet restore
+
+      - name: Fail on vulnerable production packages
+        run: |
+          report=$(dotnet list src/Orbit.Api/Orbit.Api.csproj package --vulnerable --include-transitive)
+          echo "$report"
+          if echo "$report" | grep -qE 'has the following vulnerable packages'; then
+            echo "::error::Vulnerable NuGet package detected in production dependencies"
+            exit 1
+          fi
+
       # The SonarCloud Code Analysis context stays required, so an outage of SonarCloud never
       # hides the test result of this job.
       - name: SonarScanner Begin
@@ -162,18 +174,6 @@ jobs:
             /d:sonar.exclusions="tools/**,**/Migrations/**,**/bin/**,**/obj/**,**/OAuth/OAuthLoginPage.cs,**/.claude/**,**/Email/Templates/**,**/load-tests/**,**/bench/**" \
             /d:sonar.cpd.exclusions="**/Chat/Tools/Implementations/CreateHabitTool.cs,**/Chat/Tools/Implementations/UpdateHabitTool.cs,**/Services/AgentCatalogService.UserDataCatalog.cs,**/Services/SlipAlertSchedulerService.cs,**/Services/ProactiveCheckinSchedulerService.cs" \
             /d:sonar.coverage.exclusions="**/Program.cs,**/Extensions/ServiceCollectionExtensions*.cs,**/Extensions/WebApplicationExtensions.cs,**/Middleware/**,**/OpenApi/**,**/OAuth/**,**/Persistence/OrbitDbContext.cs,**/Persistence/OrbitDbContextFactory.cs,**/Persistence/GenericRepository.cs,**/Persistence/UnitOfWork.cs,**/Persistence/AccountResetRepository.cs,**/Configuration/**,**/Services/ReminderSchedulerService.cs,**/Services/SlipAlertSchedulerService.cs,**/Services/GoalDeadlineNotificationService.cs,**/Services/HabitDueDateAdvancementService.cs,**/Services/DataEncryptionMigrationService.cs,**/Services/PushNotificationService.cs,**/Services/AccountDeletionService.cs,**/Services/GoogleTokenService.cs,**/Services/BackgroundServiceHealthCheck.cs,**/Services/StripeCouponRewardService.cs,**/Services/StripeBillingService.cs,**/Services/GooglePlayBillingService.cs,**/Services/Calendar/**,**/AI/AiCompletionClient.cs,**/AI/AudioTranscriptionService.cs,**/Services/GeoLocationService.cs,**/BackgroundJobs/HangfireRecurringJobRegistrar.cs,**/Orbit.Analyzers/**,**/Orbit.Analyzers.CodeFixes/**,**/.github/**,**/bench/**,**/Profile/Models/PublicProfileSettings.cs"
-
-      - name: Restore
-        run: dotnet restore
-
-      - name: Fail on vulnerable production packages
-        run: |
-          report=$(dotnet list src/Orbit.Api/Orbit.Api.csproj package --vulnerable --include-transitive)
-          echo "$report"
-          if echo "$report" | grep -qE 'has the following vulnerable packages'; then
-            echo "::error::Vulnerable NuGet package detected in production dependencies"
-            exit 1
-          fi
 
       # Roslyn ORBIT0001..0005 are silent in local builds and fail here.
       - name: Build
