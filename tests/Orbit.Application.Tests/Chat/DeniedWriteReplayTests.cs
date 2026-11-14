@@ -158,6 +158,29 @@ public partial class ProcessUserChatCommandHandlerTests
         run.Result.Value.Parts?.OfType<ChatBlockPart>().Should().BeEmpty();
     }
 
+    /// <summary>
+    /// The denied rename of run 4 named two of the unchosen records. A correction that renames the two chosen records,
+    /// the ones the delete removes, names a set of the selection but not the records of the denied rename, so it binds
+    /// to no denial and the turn holds no preview.
+    /// </summary>
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task DeniedWrite_Run4CorrectionOnTheChosenRecordsDoesNotReplaceTheRenameOfTheOthers(string language)
+    {
+        var run = await RunDeniedAnswerTurnAsync(language, children => [Calls(new AiToolCall("bulk_update_habits", "rename-chosen",
+            JsonSerializer.SerializeToElement(new
+            {
+                filter = new { all = false, habit_ids = children[4..].Select(child => child.Id), is_completed = false },
+                updates = new { title = RenameTitle }
+            }))), Text(language)]);
+
+        run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
+        run.Held.Should().NotContain(request => request.OperationId == "bulk_update_habits", "the candidate binds to no denial and never runs");
+        run.Result.Value.PendingOperations.Should().BeNullOrEmpty("the rename of the four other records was not prepared");
+        run.Result.Value.AiMessage.Should().Be(NotPreparedFor(language));
+    }
+
     [Theory]
     [InlineData("en")]
     [InlineData("pt-BR")]
