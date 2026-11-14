@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Orbit.Application.Chat.Tools;
+using Orbit.Application.Habits.Services;
 using Orbit.Domain.Models;
 
 namespace Orbit.Application.Chat.Commands;
@@ -201,7 +202,7 @@ public partial class ProcessUserChatCommandHandler
     private static Guid? CopiedFrom(string value, IReadOnlyCollection<Guid> owned)
     {
         var copy = value.Trim().ToLowerInvariant();
-        var sources = owned.Where(id => IsCutShort(copy, id.ToString()) || IsOneCharacterOff(copy, id.ToString())).Take(2).ToArray();
+        var sources = owned.Where(id => IsCutShort(copy, id.ToString()) || FuzzyMatcher.LevenshteinDistance(copy, id.ToString()) == 1).Take(2).ToArray();
         return sources.Length == 1 ? sources[0] : null;
     }
 
@@ -211,19 +212,6 @@ public partial class ProcessUserChatCommandHandler
         var source = id.Split('-');
         return copy.Length < id.Length && groups.Length <= source.Length && groups[0] == source[0]
             && groups.Zip(source).All(pair => pair.First.Length > 0 && pair.Second.StartsWith(pair.First, StringComparison.Ordinal));
-    }
-
-    private static bool IsOneCharacterOff(string copy, string id)
-    {
-        if (copy == id || Math.Abs(copy.Length - id.Length) > 1)
-            return false;
-        var (shorter, longer) = copy.Length <= id.Length ? (copy, id) : (id, copy);
-        var index = 0;
-        while (index < shorter.Length && shorter[index] == longer[index])
-            index++;
-        return shorter.Length == longer.Length
-            ? shorter[(index + 1)..] == longer[(index + 1)..]
-            : shorter[index..] == longer[(index + 1)..];
     }
 
     /// <summary>
