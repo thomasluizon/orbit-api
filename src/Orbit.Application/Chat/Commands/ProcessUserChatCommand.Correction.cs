@@ -69,53 +69,54 @@ public partial class ProcessUserChatCommandHandler
     }
 
     /// <summary>
+    /// The one correction that a round offers for its failed calls. The next round runs its candidates as the correction,
+    /// and the correction then tells whether a failed call is left.
+    /// </summary>
+    private interface ICallCorrection
+    {
+        bool HasUnresolvedFailures { get; }
+    }
+
+    /// <summary>
+    /// Chooses the correction of a round once. A write that the ownership check turned down beside a prepared write gets
+    /// only the <see cref="DeniedWriteCorrection"/>, in a request or an answer turn. A write denial with no prepared write
+    /// beside it takes no part, so it does not block the <see cref="RejectedCallCorrection"/> of a later failed write.
+    /// </summary>
+    private static ICallCorrection? ChooseCorrection(ProcessUserChatCommand request,
+        IReadOnlyList<CorrectionOccurrence> occurrences, bool holdsPreparedWrite) =>
+        holdsPreparedWrite && occurrences.Any(item => IsOwnershipWriteDenial(item.Outcome))
+            ? DeniedWriteCorrection.CanReplace(occurrences) ? new DeniedWriteCorrection(occurrences) : null
+            : request.BlockAnswer is null && RejectedCallCorrection.CanRecover(occurrences) ? new RejectedCallCorrection(occurrences) : null;
+
+    /// <summary>
     /// An isolated starting-step suggestion can consume one correction without account changes.
     /// A write must be rejected before dispatch and certify the same complete prepared intent
     /// across all original occurrences, including successful siblings. Dispatch uses the original preparation;
     /// a candidate cannot select its parent, change intent, replay an effect or claim an outcome.
     /// </summary>
-    private sealed class RejectedCallCorrection(IReadOnlyList<CorrectionOccurrence> occurrences, bool holdsPreparedWrite)
+    private sealed class RejectedCallCorrection(IReadOnlyList<CorrectionOccurrence> occurrences) : ICallCorrection
     {
         private readonly HashSet<CorrectionOccurrence> _unresolved = occurrences
-            .Where(item => item.Outcome.OperationResult?.Status == AgentOperationStatus.Failed || IsOwnershipReadDenial(item.Outcome)
-                || holdsPreparedWrite && IsOwnershipWriteDenial(item.Outcome)).ToHashSet();
+            .Where(item => item.Outcome.OperationResult?.Status == AgentOperationStatus.Failed || IsOwnershipReadDenial(item.Outcome)).ToHashSet();
         private bool _consumed;
 
         public bool HasUnresolvedFailures => _unresolved.Count > 0;
         public bool IsReadOnly => occurrences.Count > 0 && occurrences.All(item => IsOwnershipReadDenial(item.Outcome));
-        public bool ReplacesDeniedWrites => ReplacesDeniedWritesOf(occurrences, holdsPreparedWrite);
 
-        /// <summary>
-        /// The turn holds a prepared write, every write of the turn that did not prepare was turned down by the
-        /// ownership check, and every other write prepared. The correction then replaces each denied write with the
-        /// same operation on the right ids.
-        /// </summary>
-        public static bool ReplacesDeniedWritesOf(IReadOnlyList<CorrectionOccurrence> occurrences, bool holdsPreparedWrite) =>
-            holdsPreparedWrite && occurrences.Any(item => IsOwnershipWriteDenial(item.Outcome))
-            && occurrences.All(item => IsOwnershipWriteDenial(item.Outcome) || item.Outcome.ToolResult.Success);
-
-        /// <summary>
-        /// A write denial with no prepared write beside it takes no part in the decision, so it does not block the
-        /// repair of a write that failed in a later round.
-        /// </summary>
-        public static bool CanRecover(IReadOnlyList<CorrectionOccurrence> occurrences, bool holdsPreparedWrite) =>
+        public static bool CanRecover(IReadOnlyList<CorrectionOccurrence> occurrences) =>
             occurrences.Any(item => IsOwnershipReadDenial(item.Outcome))
             ? occurrences.All(item => IsOwnershipReadDenial(item.Outcome))
-            : holdsPreparedWrite && occurrences.Any(item => IsOwnershipWriteDenial(item.Outcome))
-            ? ReplacesDeniedWritesOf(occurrences, holdsPreparedWrite)
             : occurrences.Count == 1 && IsFailedStartingStep(occurrences[0])
             || occurrences.Any(item => item.Outcome.OperationResult?.Status == AgentOperationStatus.Failed)
             && occurrences.Where(item => item.Outcome.OperationResult?.Status == AgentOperationStatus.Failed)
                 .All(item => item.Outcome.ArgumentRepairAllowed || item.Outcome.PreparedResponse is RejectedBeforeDispatchResponse);
 
         public async Task<IReadOnlyList<(AiToolCall Candidate, CorrectionOccurrence Original)>> BindAsync(
-            IReadOnlyList<AiToolCall> candidates, AiToolRegistry registry, ToolExecutionAccumulator results, CancellationToken ct)
+            IReadOnlyList<AiToolCall> candidates, AiToolRegistry registry, CancellationToken ct)
         {
             if (_consumed)
                 return [];
             _consumed = true;
-            if (ReplacesDeniedWrites)
-                return BindDeniedWrites(candidates, registry, results);
             try
             {
                 return await PrepareBindingsAsync(candidates, registry, ct);
@@ -172,27 +173,6 @@ public partial class ProcessUserChatCommandHandler
             return bound;
         }
 
-        /// <summary>
-        /// Each candidate sends one denied write again: the same operation in its single or bulk form, with the same
-        /// change and the records that the denied write named correctly. A candidate for another change or another
-        /// delete binds to no denial, so the correction fails. Each candidate runs through every write guard of the
-        /// round again, so a corrected id must still be one the person owns.
-        /// </summary>
-        private IReadOnlyList<(AiToolCall, CorrectionOccurrence)> BindDeniedWrites(IReadOnlyList<AiToolCall> candidates,
-            AiToolRegistry registry, ToolExecutionAccumulator results)
-        {
-            var replacements = new List<(AiToolCall, CorrectionOccurrence)>();
-            foreach (var candidate in candidates)
-            {
-                var original = _unresolved.FirstOrDefault(item => ResendsDeniedWrite(item.Call, candidate, results)
-                    && replacements.All(replacement => replacement.Item2 != item));
-                if (registry.GetTool(candidate.Name)?.IsReadOnly != false || original is null)
-                    return [];
-                replacements.Add((candidate, original));
-            }
-            return replacements;
-        }
-
         private IReadOnlyList<(AiToolCall, CorrectionOccurrence)> BindArgumentRepairs(IReadOnlyList<AiToolCall> candidates)
         {
             var repairs = new List<(AiToolCall, CorrectionOccurrence)>();
@@ -231,7 +211,6 @@ public partial class ProcessUserChatCommandHandler
         {
             if (original.Outcome.ArgumentRepairAllowed && outcome.OperationResult?.Status == AgentOperationStatus.PendingConfirmation
                 || IsReadOnly && outcome.OperationResult?.Status == AgentOperationStatus.Succeeded
-                || IsOwnershipWriteDenial(original.Outcome) && PreparesWrite(outcome)
                 || IsFailedStartingStep(original)
                     && outcome.OperationResult is { Status: AgentOperationStatus.Succeeded, Payload: StartingStep }
                 || outcome.PreparedResponse?.Operation.Status is AgentOperationStatus.Succeeded or AgentOperationStatus.PendingConfirmation)
@@ -259,12 +238,10 @@ public partial class ProcessUserChatCommandHandler
 
     private async Task<IReadOnlyDictionary<string, ToolCallOutcome>> ExecuteCorrectionsAsync(
         IReadOnlyList<AiToolCall> candidates, RejectedCallCorrection correction,
-        ProcessUserChatCommand request, ToolExecutionAccumulator results, string? language, CancellationToken ct)
+        ProcessUserChatCommand request, ToolExecutionAccumulator results, CancellationToken ct)
     {
         var outcomes = new Dictionary<string, ToolCallOutcome>(StringComparer.Ordinal);
-        var bound = await correction.BindAsync(candidates, ai.ToolRegistry, results, ct);
-        if (correction.ReplacesDeniedWrites)
-            return await ExecuteDeniedWriteCorrectionsAsync(bound, correction, request, results, language, ct);
+        var bound = await correction.BindAsync(candidates, ai.ToolRegistry, ct);
         foreach (var (candidate, original) in bound)
         {
             ct.ThrowIfCancellationRequested();

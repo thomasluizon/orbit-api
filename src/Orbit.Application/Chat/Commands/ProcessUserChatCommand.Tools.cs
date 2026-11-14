@@ -67,7 +67,7 @@ public partial class ProcessUserChatCommandHandler
         var hadToolFailure = false;
         var hasUnexecutedCalls = aiResponse.HasToolCalls;
         var terminalAnswerCorrectionAttempted = false;
-        RejectedCallCorrection? correction = null;
+        ICallCorrection? correction = null;
         await RecordModelOfferDismissalsAsync(aiResponse, request, cancellationToken);
 
         if (tokenBudgetExceeded)
@@ -209,7 +209,7 @@ public partial class ProcessUserChatCommandHandler
         ToolExecutionAccumulator executionResults,
         int iteration,
         long totalBudgetTokens,
-        RejectedCallCorrection? correction,
+        ICallCorrection? correction,
         string? language,
         Func<AiStreamEvent, Task>? aiStreamSink,
         CancellationToken cancellationToken,
@@ -220,9 +220,13 @@ public partial class ProcessUserChatCommandHandler
         var orderedCalls = OrderCallsForAsk(aiResponse.ToolCalls!.Select(call => ProactiveProposal.KeepRequestedSchedule(
             ProactiveProposal.CompleteCreateReminder(call, request.ClientContext), request.Message)).ToArray(), context.UserHabits);
         await StartPlanCallsAsync(orderedCalls, request, executionResults);
-        var outcomesByCallId = correction is null
-            ? await ExecuteToolCallsAsync(orderedCalls, request, executionResults, language, cancellationToken)
-            : await ExecuteCorrectionsAsync(orderedCalls, correction, request, executionResults, language, cancellationToken);
+        var outcomesByCallId = correction switch
+        {
+            DeniedWriteCorrection deniedWrites => await ExecuteDeniedWriteCorrectionsAsync(orderedCalls, deniedWrites, request,
+                executionResults, language, cancellationToken),
+            RejectedCallCorrection rejected => await ExecuteCorrectionsAsync(orderedCalls, rejected, request, executionResults, cancellationToken),
+            _ => await ExecuteToolCallsAsync(orderedCalls, request, executionResults, language, cancellationToken)
+        };
         if (correction is null)
             ReplaceResentDeniedWrites(orderedCalls, outcomesByCallId, executionResults);
         await CompletePlanCallsAsync(outcomesByCallId, request, executionResults);
@@ -256,9 +260,10 @@ public partial class ProcessUserChatCommandHandler
             if (await TryRecoverFreshCreateAsync(aiResponse, orderedCalls, outcomesByCallId, toolResults,
                 request, context, executionResults, iteration, totalBudgetTokens, language, cancellationToken) is { } recovered)
                 return recovered;
-            if (!HasCorrectionAllowance(request, context, executionResults, iteration, totalBudgetTokens))
+            correction = HasCorrectionAllowance(request, context, iteration, totalBudgetTokens)
+                ? ChooseCorrection(request, executionResults.CorrectionOccurrences, holdsPreparedWrite) : null;
+            if (correction is null)
                 return new ToolRoundResult(MessageResponse(language), HadToolFailure: true);
-            correction = new RejectedCallCorrection(executionResults.CorrectionOccurrences, holdsPreparedWrite);
             OfferCorrections(toolResults, outcomesByCallId);
         }
 
@@ -281,10 +286,10 @@ public partial class ProcessUserChatCommandHandler
                 continueResult.ErrorCode ?? ErrorMessages.AiUnavailable.Code, continueResult.Error));
         }
 
-        if (correction is { IsReadOnly: true } && !continueResult.Value.HasToolCalls && !continueResult.Value.IsTruncated
-            && correction.CanOmitReads(executionResults))
+        if (correction is RejectedCallCorrection { IsReadOnly: true } reads && !continueResult.Value.HasToolCalls
+            && !continueResult.Value.IsTruncated && reads.CanOmitReads(executionResults))
         {
-            correction.OmitReads(executionResults);
+            reads.OmitReads(executionResults);
             correction = null;
             hadToolFailure = false;
         }
@@ -431,21 +436,17 @@ public partial class ProcessUserChatCommandHandler
         return toolResults;
     }
 
-    private static bool HasCorrectionAllowance(ProcessUserChatCommand request, ChatContext context, ToolExecutionAccumulator results,
-        int iteration, long totalBudgetTokens) =>
+    private static bool HasCorrectionAllowance(ProcessUserChatCommand request, ChatContext context, int iteration, long totalBudgetTokens) =>
         iteration < ChatTurnLimits.MaxToolIterations
         && (context.EnabledFeatureFlags.Contains(FeatureFlagKeys.AiEvalUnmetered, StringComparer.Ordinal)
             || totalBudgetTokens < AppConstants.MaxAiRequestTotalTokens)
-        && (request.BlockAnswer is null
-            || RejectedCallCorrection.ReplacesDeniedWritesOf(results.CorrectionOccurrences, HoldsPreparedWrite(results)))
-        && request.ConfirmationToken is null
-        && RejectedCallCorrection.CanRecover(results.CorrectionOccurrences, HoldsPreparedWrite(results));
+        && request.ConfirmationToken is null;
 
     private sealed record ToolRoundResult(
         AiResponse Response,
         bool HadToolFailure = false,
         AppError? ProviderError = null,
-        RejectedCallCorrection? Correction = null);
+        ICallCorrection? Correction = null);
 
     private static AiResponse MessageResponse(string? language) => new()
     {

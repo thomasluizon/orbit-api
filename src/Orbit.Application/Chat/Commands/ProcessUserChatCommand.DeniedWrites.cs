@@ -15,23 +15,65 @@ public partial class ProcessUserChatCommandHandler
         "notification_ids", "template_id", "key_id", "suggestion_id"];
 
     /// <summary>
+    /// The correction of the writes that the ownership check turned down beside a prepared write. The model sends each
+    /// denied write once more on the right ids, and a resend that prepares replaces its denial.
+    /// </summary>
+    private sealed class DeniedWriteCorrection(IReadOnlyList<CorrectionOccurrence> occurrences) : ICallCorrection
+    {
+        private readonly HashSet<CorrectionOccurrence> _unresolved = occurrences.Where(item => IsOwnershipWriteDenial(item.Outcome)).ToHashSet();
+
+        public bool HasUnresolvedFailures => _unresolved.Count > 0;
+
+        /// <summary>
+        /// Every write of the turn that did not prepare was turned down by the ownership check, and every other write
+        /// prepared. A failed write or a read denial beside them leaves nothing that this correction replaces.
+        /// </summary>
+        public static bool CanReplace(IReadOnlyList<CorrectionOccurrence> occurrences) =>
+            occurrences.Any(item => IsOwnershipWriteDenial(item.Outcome))
+            && occurrences.All(item => IsOwnershipWriteDenial(item.Outcome) || item.Outcome.ToolResult.Success);
+
+        /// <summary>
+        /// Each candidate sends one denied write again: the same operation in its single or bulk form, with the same
+        /// change and the records that the denied write named correctly. A candidate for another change or another
+        /// delete binds to no denial, so the correction fails. Each candidate runs through every write guard of the
+        /// round again, so a corrected id must still be one the person owns.
+        /// </summary>
+        public IReadOnlyList<(AiToolCall Candidate, CorrectionOccurrence Original)> Bind(IReadOnlyList<AiToolCall> candidates,
+            AiToolRegistry registry, ToolExecutionAccumulator results)
+        {
+            var replacements = new List<(AiToolCall, CorrectionOccurrence)>();
+            foreach (var candidate in candidates)
+            {
+                var original = _unresolved.FirstOrDefault(item => ResendsDeniedWrite(item.Call, candidate, results)
+                    && replacements.All(replacement => replacement.Item2 != item));
+                if (registry.GetTool(candidate.Name)?.IsReadOnly != false || original is null)
+                    return [];
+                replacements.Add((candidate, original));
+            }
+            return replacements;
+        }
+
+        public void Resolve(CorrectionOccurrence original) => _unresolved.Remove(original);
+    }
+
+    /// <summary>
     /// Runs each write that replaces a denied write through the same write guards as the original round, so the
     /// selection check, the unread-target check and the answer checkpoint apply to the corrected ids too.
     /// </summary>
     private async Task<IReadOnlyDictionary<string, ToolCallOutcome>> ExecuteDeniedWriteCorrectionsAsync(
-        IReadOnlyList<(AiToolCall Candidate, CorrectionOccurrence Original)> bound, RejectedCallCorrection correction,
+        IReadOnlyList<AiToolCall> candidates, DeniedWriteCorrection correction,
         ProcessUserChatCommand request, ToolExecutionAccumulator results, string? language, CancellationToken ct)
     {
+        var bound = correction.Bind(candidates, ai.ToolRegistry, results);
         if (bound.Count == 0)
             return new Dictionary<string, ToolCallOutcome>(StringComparer.Ordinal);
         var outcomes = await ExecuteToolCallsAsync([.. bound.Select(item => item.Candidate)], request, results, language, ct);
         foreach (var (candidate, original) in bound)
         {
-            if (!outcomes.TryGetValue(candidate.Id, out var outcome))
+            if (!outcomes.TryGetValue(candidate.Id, out var outcome) || !PreparesWrite(outcome))
                 continue;
-            correction.Accept(original, outcome);
-            if (PreparesWrite(outcome))
-                DropDeniedWrite(original.Outcome, results);
+            correction.Resolve(original);
+            DropDeniedWrite(original.Outcome, results);
         }
         return outcomes;
     }
