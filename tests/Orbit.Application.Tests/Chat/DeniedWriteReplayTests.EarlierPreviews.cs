@@ -1,6 +1,8 @@
 using System.Text.Json;
 using FluentAssertions;
 using NSubstitute;
+using Orbit.Application.Chat;
+using Orbit.Application.Chat.Tools;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -237,10 +239,83 @@ public partial class ProcessUserChatCommandHandlerTests
             first: children => Calls(InspectEarlierPreview(), CorrectedRename(children), Run4Delete(children)),
             lastReply: failure == "budget"
                 ? Task.FromResult(Result.Success(new AiResponse { RequestBudgetTokenCount = AppConstants.MaxAiRequestTotalTokens + 1 }))
-                : FailedReply(failure), revisions: true);
+                : FailedReply(failure), tools: [ReadTool(ReviseTool, new ToolResult(true))]);
 
         run.Held.Should().Contain(request => request.OperationId == "bulk_update_habits", "the bulk rename prepared");
         _pendingOperationStore.Received(1).Cancel(UserId, EarlierPreviewId,
             AgentOperationFingerprint.Compute("update_habit", EarlierPreviewArguments(run.Children, RenameTitle).GetRawText()));
+    }
+
+    /// <summary>The transaction of the second block write of the turn fails with <paramref name="exception"/>.</summary>
+    private void FailTheSecondBlockWrite(Exception exception)
+    {
+        var writes = 0;
+        _unitOfWork.ExecuteOnceInTransactionAsync(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
+            .Returns(call => ++writes == 2 ? Task.FromException(exception)
+                : call.ArgAt<Func<CancellationToken, Task>>(0)(call.ArgAt<CancellationToken>(1)));
+    }
+
+    /// <summary>
+    /// The same bulk rename in an answer turn saves the answer checkpoint, and the transaction of the delete after it
+    /// fails with an exception that is not a cancellation. The turn never decides its withdrawal, and no store write is
+    /// safe after that exception, so the earlier preview that the rename covers stays approvable.
+    /// </summary>
+    [Theory]
+    [InlineData("en", "timeout")]
+    [InlineData("pt-BR", "timeout")]
+    [InlineData("en", "lost")]
+    [InlineData("pt-BR", "lost")]
+    public async Task DeniedWrite_AnAnswerTurnThatThrowsAfterItsCheckpointLeavesTheEarlierPreviewThatItsBulkWriteCovered(
+        string language, string failure)
+    {
+        var run = await RunDeniedAnswerTurnAsync(language, _ => [Text(language)], children =>
+            {
+                ArrangeCoveredEarlierPreview(children);
+                FailTheSecondBlockWrite(failure == "timeout"
+                    ? new TimeoutException("Transaction exceeded the timeout and was rolled back.")
+                    : new InvalidOperationException("Block answer reservation was lost."));
+            },
+            first: children => Calls(InspectEarlierPreview(), CorrectedRename(children), Run4Delete(children)),
+            tools: [ReadTool(ReviseTool, new ToolResult(true))]);
+
+        run.Held.Should().Contain(request => request.OperationId == "bulk_update_habits", "the bulk rename prepared");
+        await _blockStore.Received(1).CheckpointAnswerAsync(Arg.Any<Guid>(), UserId, Arg.Any<DateTime>(), Arg.Any<string>(),
+            Arg.Any<CancellationToken>());
+        _pendingOperationStore.DidNotReceive().Cancel(UserId, EarlierPreviewId, Arg.Any<string>());
+    }
+
+    /// <summary>
+    /// A read of the turn returns two "Run" records that need the person's choice. The same bulk rename saves the answer
+    /// checkpoint, and the continuation fails. The turn answers with the selection question, which shows no preview of
+    /// the turn, so the earlier preview that the rename covers stays approvable.
+    /// </summary>
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task DeniedWrite_AnAnswerTurnThatAsksASelectionAfterItsCheckpointLeavesTheEarlierPreviewThatItsBulkWriteCovered(
+        string language)
+    {
+        var runs = new[] { new HabitListCardItem(Guid.NewGuid().ToString(), "Run", null, 0, false, "none"),
+            new HabitListCardItem(Guid.NewGuid().ToString(), "Run", null, 0, false, "none") };
+        var run = await RunDeniedAnswerTurnAsync(language, _ => [], children =>
+            {
+                ArrangeCoveredEarlierPreview(children);
+                _operationExecutor.ExecuteAsync(Arg.Is<AgentExecuteOperationRequest>(request => request.OperationId == "query_habits"),
+                        Arg.Any<CancellationToken>())
+                    .Returns(new AgentExecuteOperationResponse(new AgentOperationResult("query_habits", "query_habits",
+                        AgentRiskClass.Low, AgentConfirmationRequirement.None, AgentOperationStatus.Succeeded,
+                        Payload: new HabitListCard("all", runs) { Selection = new HabitSelectionCandidates("Run", runs, RequiresAnswer: true) })));
+            },
+            first: children => Calls(new AiToolCall("query_habits", "runs", JsonSerializer.SerializeToElement(new { search = "Run", for_selection = true })),
+                InspectEarlierPreview(), CorrectedRename(children), Run4Delete(children)),
+            lastReply: FailedReply("unavailable"),
+            tools: [ReadTool(ReviseTool, new ToolResult(true)), ReadTool("query_habits", new ToolResult(true))]);
+
+        run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
+        run.Result.Value.AiMessage.Should().Be(SelectionQuestionFor("Run", language));
+        run.Result.Value.PendingOperations.Should().BeNullOrEmpty();
+        await _blockStore.Received().CheckpointAnswerAsync(Arg.Any<Guid>(), UserId, Arg.Any<DateTime>(), Arg.Any<string>(),
+            Arg.Any<CancellationToken>());
+        _pendingOperationStore.DidNotReceive().Cancel(UserId, EarlierPreviewId, Arg.Any<string>());
     }
 }

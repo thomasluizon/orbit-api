@@ -68,14 +68,19 @@ public partial class ProcessUserChatCommandHandler
         outcome is { OperationResult: null, ToolResult.Success: false } and not { FailureKey: SelectionUnansweredKey }
         && ai.ToolRegistry.GetTool(call.Name) is { IsReadOnly: false };
 
-    /// <summary>A turn that leaves part of the request withdraws what it prepared, and its answer says so.</summary>
+    /// <summary>
+    /// The withdrawal decision of the turn. A turn that leaves part of the request withdraws what it prepared, and its
+    /// answer says so. Either way the preview ledger records that the decision ran.
+    /// </summary>
     private void WithdrawPartialPreview(Guid userId, ToolExecutionAccumulator results, string? language)
     {
-        if (!LeavesPartOfTheRequest(results))
-            return;
-        results.Previews.Withdraw(userId, execution.PendingOperationStore);
-        results.SanitizeFailedActions(RequestNotPreparedMessage(results, language));
-        results.RequestNotPrepared = true;
+        if (LeavesPartOfTheRequest(results))
+        {
+            results.Previews.Withdraw(userId, execution.PendingOperationStore);
+            results.SanitizeFailedActions(RequestNotPreparedMessage(results, language));
+            results.RequestNotPrepared = true;
+        }
+        results.Previews.Decide();
     }
 
     /// <summary>
@@ -98,13 +103,14 @@ public partial class ProcessUserChatCommandHandler
     /// <summary>
     /// The previews of one turn. The ledger knows which previews were open before the turn ran a tool, keeps the stored
     /// state of each earlier preview that the turn revises, and decides how each close runs. A preview of this turn
-    /// closes at once. An earlier preview closes when the person gets the previews of the turn (<see cref="SettleOnExit"/>),
+    /// closes at once. An earlier preview closes when the person gets the previews of the turn (<see cref="SettleOnExitAsync"/>),
     /// so a withdrawn turn leaves it as it was. A close that the store refuses leaves the card in the pending set.
     /// </summary>
     internal sealed class TurnPreviewLedger(ToolExecutionAccumulator results, IReadOnlySet<Guid> earlierIds)
     {
         private readonly Dictionary<Guid, PendingAgentOperationRevision> _earlierRevisions = [];
         private readonly List<DeferredClose> _closes = [];
+        private bool _decided;
 
         /// <summary>
         /// The turn withdrew its change and an earlier preview still waits for the person's approval in the store, read
@@ -221,22 +227,39 @@ public partial class ProcessUserChatCommandHandler
             }
         }
 
-        /// <summary>
-        /// Settles the held closes on every way out of the turn. The answer path commits them before it composes the
-        /// reply. Any other exit commits them only when the turn saved an answer checkpoint, because the block answer
-        /// then replays that checkpoint with the previews of the turn. With no checkpoint, the person gets nothing of
-        /// the turn, so each earlier preview stays as it was.
-        /// </summary>
-        public IAsyncDisposable SettleOnExit() => new Settlement(async () =>
-        {
-            if (results.CommittedPendingOperations.Count > 0 || results.CommittedActions.Count > 0)
-                await CommitAsync(CancellationToken.None);
-            _closes.Clear();
-        });
+        /// <summary>The withdrawal decision of the turn ran, so the previews that the turn still holds are final.</summary>
+        public void Decide() => _decided = true;
 
-        private sealed class Settlement(Func<Task> settle) : IAsyncDisposable
+        /// <summary>
+        /// Runs the answer of the turn and settles the held closes on its way out. The answer path commits them before it
+        /// composes the reply. An exit with no answer of its own, a failure or a cancellation, commits them when the
+        /// decision ran and the turn saved an answer checkpoint, because the block answer replays that checkpoint. Every
+        /// other exit drops them: an answer that shows no preview of the turn, or an exception after which no write is safe.
+        /// </summary>
+        public async Task<Result<ChatResponse>> SettleOnExitAsync(Func<Task<Result<ChatResponse>>> answer)
         {
-            public async ValueTask DisposeAsync() => await settle();
+            try
+            {
+                var result = await answer();
+                if (result.IsFailure)
+                    await CommitReplayedClosesAsync();
+                return result;
+            }
+            catch (OperationCanceledException)
+            {
+                await CommitReplayedClosesAsync();
+                throw;
+            }
+            finally
+            {
+                _closes.Clear();
+            }
+        }
+
+        private async Task CommitReplayedClosesAsync()
+        {
+            if (_decided && (results.CommittedPendingOperations.Count > 0 || results.CommittedActions.Count > 0))
+                await CommitAsync(CancellationToken.None);
         }
 
         /// <summary>

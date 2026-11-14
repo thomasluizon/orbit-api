@@ -94,11 +94,11 @@ public partial class ProcessUserChatCommandHandlerTests
     /// The answer turn of run 4: the stored <c>multipleChoice</c> card, the answer with the last two records, and the
     /// model rounds as recorded replies. The block store keeps the answer checkpoint and the answer, as the real store
     /// does, so a turn that fails replays its checkpoint. <paramref name="first"/> replaces the first reply of run 4,
-    /// and <paramref name="lastReply"/> follows the recorded replies. <paramref name="revisions"/> adds the revision tool.
+    /// and <paramref name="lastReply"/> follows the recorded replies. <paramref name="tools"/> adds tools to the turn.
     /// </summary>
     private async Task<DeniedWriteRun> RunDeniedAnswerTurnAsync(string language, Func<Habit[], AiResponse[]> continuations,
         Action<Habit[]>? arrange = null, Func<Habit[], AiResponse>? first = null, Task<Result<AiResponse>>? lastReply = null,
-        bool revisions = false)
+        IAiTool[]? tools = null)
     {
         var user = User.Create("Reader", "reader@example.test").Value;
         user.SetLanguage(language);
@@ -107,8 +107,8 @@ public partial class ProcessUserChatCommandHandlerTests
         var (parent, children) = SetupSameTitleChildren("Water - 710ml", 6);
         var delete = new BulkDeleteHabitsTool(_mediator, _habitRepo);
         var update = new BulkUpdateHabitsTool(_mediator);
-        var handler = revisions ? CreateHandler(delete, update, ReadTool(ReviseTool, new ToolResult(true))) : CreateHandler(delete, update);
-        var held = HoldReplayWrites(delete, update);
+        var handler = CreateHandler([delete, update, .. tools ?? []]);
+        var held = HoldReplayWrites([delete, update, .. (tools ?? []).Where(tool => !tool.IsReadOnly)]);
         DenyUnownedHabitTargets([parent, .. children]);
         var block = RetryBlock(RecordQuestion(children, language == "en"
             ? "There are 6 Water - 710ml, not 7. Which two do you want to delete?"

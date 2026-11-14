@@ -551,91 +551,95 @@ public partial class ProcessUserChatCommandHandler(
             RequiresExistingParent = RequestsExistingParent(request.Message, context.UserHabits),
             ParentHeadings = HabitHeadingParents.Read(request.Message, context.UserHabits)
         };
-        await using var previewSettlement = executionResults.Previews.SettleOnExit();
-        SeedAnsweredChoice(recording.ChoiceSelection, context.UserHabits, request.UserId, executionResults);
-        SeedProposedHabitNames(request, executionResults);
-        var actionsStopwatch = System.Diagnostics.Stopwatch.StartNew();
-        var toolLoopResult = await RunToolCallLoopAsync(
-            response.Value,
-            request,
-            context,
-            executionResults,
-            userLanguage,
-            aiStreamSink,
-            cancellationToken);
-        await CombinePendingChangesAsync(request, executionResults, cancellationToken);
-        await FinishPlanAsync(request, executionResults);
-        cancellationToken.ThrowIfCancellationRequested();
-        var recoveredPreviewOnly = toolLoopResult.ProviderError is not null && !HasSucceededWrite(executionResults);
-        toolLoopResult = RecoverOutcomeContinuation(request, executionResults, toolLoopResult, userLanguage, cancellationToken);
-        var aiResponse = toolLoopResult.FinalResponse;
-        var iterations = toolLoopResult.Iterations;
-        if (MustFailToolTurn(request, toolLoopResult))
-            return await CompleteFailedToolTurnAsync(request, context, executionResults, toolLoopResult, cancellationToken);
-        if (toolLoopResult.HadToolFailure)
-            executionResults.SanitizeFailedActions(ToolFailureMessage(userLanguage));
-        if (aiStreamFilter is not null)
-            await aiStreamFilter.FlushAsync();
-        if (executionResults.PendingOperations.Count == 0 && request.StreamSink is { } streamSink
-            && !HasOnlySupportedPeriodReads(request, context, executionResults)
-            && !ShouldComposeReadFallbacks(request, context, executionResults))
-            foreach (var item in bufferedStream) await streamSink(item);
-        actionsStopwatch.Stop();
-        LogToolExecutionCompleted(logger, actionsStopwatch.ElapsedMilliseconds, iterations, executionResults.ActionResults.Count);
+        return await executionResults.Previews.SettleOnExitAsync(AnswerWithToolsAsync);
 
-        LogSavingChanges(logger);
-        var saveStopwatch = System.Diagnostics.Stopwatch.StartNew();
-        if (!recoveredPreviewOnly)
-            await PersistExecutionResultsAsync(request.UserId, executionResults.ActionResults, cancellationToken);
-        saveStopwatch.Stop();
-        LogChangesSaved(logger, saveStopwatch.ElapsedMilliseconds);
-
-        if (IsEmptyTokenBudgetResponse(toolLoopResult.TokenBudgetExceeded, aiResponse.TextMessage))
-            return Result.Failure<ChatResponse>(ErrorMessages.AiUnavailable);
-
-        await executionResults.Previews.CommitAsync(cancellationToken);
-        var (cards, followUps, facts) = await ComposeFinalReplyAsync(request, context, executionResults,
-            toolLoopResult, aiResponse, groundingTurn, cancellationToken);
-        var aiMessage = cards.AiMessage;
-
-        if (GetShareableFaqAnswer(faqMatch, aiMessage, executionResults, cards) is { } faqToCache)
+        async Task<Result<ChatResponse>> AnswerWithToolsAsync()
         {
-            ChatFaqCache.StoreAnswer(faqToCache.Key, faqToCache.Locale, faqToCache.Answer);
+            SeedAnsweredChoice(recording.ChoiceSelection, context.UserHabits, request.UserId, executionResults);
+            SeedProposedHabitNames(request, executionResults);
+            var actionsStopwatch = System.Diagnostics.Stopwatch.StartNew();
+            var toolLoopResult = await RunToolCallLoopAsync(
+                response.Value,
+                request,
+                context,
+                executionResults,
+                userLanguage,
+                aiStreamSink,
+                cancellationToken);
+            await CombinePendingChangesAsync(request, executionResults, cancellationToken);
+            await FinishPlanAsync(request, executionResults);
+            cancellationToken.ThrowIfCancellationRequested();
+            var recoveredPreviewOnly = toolLoopResult.ProviderError is not null && !HasSucceededWrite(executionResults);
+            toolLoopResult = RecoverOutcomeContinuation(request, executionResults, toolLoopResult, userLanguage, cancellationToken);
+            var aiResponse = toolLoopResult.FinalResponse;
+            var iterations = toolLoopResult.Iterations;
+            if (MustFailToolTurn(request, toolLoopResult))
+                return await CompleteFailedToolTurnAsync(request, context, executionResults, toolLoopResult, cancellationToken);
+            if (toolLoopResult.HadToolFailure)
+                executionResults.SanitizeFailedActions(ToolFailureMessage(userLanguage));
+            if (aiStreamFilter is not null)
+                await aiStreamFilter.FlushAsync();
+            if (executionResults.PendingOperations.Count == 0 && request.StreamSink is { } streamSink
+                && !HasOnlySupportedPeriodReads(request, context, executionResults)
+                && !ShouldComposeReadFallbacks(request, context, executionResults))
+                foreach (var item in bufferedStream) await streamSink(item);
+            actionsStopwatch.Stop();
+            LogToolExecutionCompleted(logger, actionsStopwatch.ElapsedMilliseconds, iterations, executionResults.ActionResults.Count);
+
+            LogSavingChanges(logger);
+            var saveStopwatch = System.Diagnostics.Stopwatch.StartNew();
+            if (!recoveredPreviewOnly)
+                await PersistExecutionResultsAsync(request.UserId, executionResults.ActionResults, cancellationToken);
+            saveStopwatch.Stop();
+            LogChangesSaved(logger, saveStopwatch.ElapsedMilliseconds);
+
+            if (IsEmptyTokenBudgetResponse(toolLoopResult.TokenBudgetExceeded, aiResponse.TextMessage))
+                return Result.Failure<ChatResponse>(ErrorMessages.AiUnavailable);
+
+            await executionResults.Previews.CommitAsync(cancellationToken);
+            var (cards, followUps, facts) = await ComposeFinalReplyAsync(request, context, executionResults,
+                toolLoopResult, aiResponse, groundingTurn, cancellationToken);
+            var aiMessage = cards.AiMessage;
+
+            if (GetShareableFaqAnswer(faqMatch, aiMessage, executionResults, cards) is { } faqToCache)
+            {
+                ChatFaqCache.StoreAnswer(faqToCache.Key, faqToCache.Locale, faqToCache.Answer);
+            }
+
+            CaptureResponseCardEvents(request, context, cards);
+
+            CaptureChangePreviewEvents(request, context.User, executionResults.PendingOperations);
+            CaptureFollowUpsEmittedEvent(request, context.User, followUps);
+
+            totalStopwatch.Stop();
+            LogTotalRequestProcessingTime(logger, totalStopwatch.ElapsedMilliseconds);
+            LogContextLoadingTime(logger, context.ContextLoadMilliseconds);
+            LogAiServiceTime(logger, aiStopwatch.ElapsedMilliseconds);
+            LogToolExecutionTime(logger, actionsStopwatch.ElapsedMilliseconds, iterations);
+            LogSaveChangesTime(logger, saveStopwatch.ElapsedMilliseconds);
+
+            return Result.Success(new ChatResponse(
+                aiMessage,
+                executionResults.ActionResults,
+                executionResults.OperationResults,
+                executionResults.PendingOperations,
+                executionResults.PolicyDenials,
+                request.CorrelationId,
+                executionResults.RelatedSurfaces.Count > 0 ? executionResults.RelatedSurfaces : null,
+                cards.HabitList,
+                cards.GoalList,
+                cards.MetricsCard,
+                cards.PeriodInsight,
+                cards.DaySummary,
+                cards.Streak,
+                cards.Calendar,
+                cards.RecordLists,
+                cards.AccountRows,
+                followUps,
+                cards.Parts,
+                FollowUpContext: BuildFollowUpContext(request, context, executionResults, followUps))
+            { GroundingFacts = facts });
         }
-
-        CaptureResponseCardEvents(request, context, cards);
-
-        CaptureChangePreviewEvents(request, context.User, executionResults.PendingOperations);
-        CaptureFollowUpsEmittedEvent(request, context.User, followUps);
-
-        totalStopwatch.Stop();
-        LogTotalRequestProcessingTime(logger, totalStopwatch.ElapsedMilliseconds);
-        LogContextLoadingTime(logger, context.ContextLoadMilliseconds);
-        LogAiServiceTime(logger, aiStopwatch.ElapsedMilliseconds);
-        LogToolExecutionTime(logger, actionsStopwatch.ElapsedMilliseconds, iterations);
-        LogSaveChangesTime(logger, saveStopwatch.ElapsedMilliseconds);
-
-        return Result.Success(new ChatResponse(
-            aiMessage,
-            executionResults.ActionResults,
-            executionResults.OperationResults,
-            executionResults.PendingOperations,
-            executionResults.PolicyDenials,
-            request.CorrelationId,
-            executionResults.RelatedSurfaces.Count > 0 ? executionResults.RelatedSurfaces : null,
-            cards.HabitList,
-            cards.GoalList,
-            cards.MetricsCard,
-            cards.PeriodInsight,
-            cards.DaySummary,
-            cards.Streak,
-            cards.Calendar,
-            cards.RecordLists,
-            cards.AccountRows,
-            followUps,
-            cards.Parts,
-            FollowUpContext: BuildFollowUpContext(request, context, executionResults, followUps))
-        { GroundingFacts = facts });
     }
 
     private void CaptureMessageAnalytics(Guid userId, string? plan, AiTurnTelemetry telemetry)
