@@ -86,8 +86,8 @@ public partial class ProcessUserChatCommandHandler
     /// <summary>
     /// The previews of one turn. The ledger knows which previews were open before the turn ran a tool, keeps the stored
     /// state of each earlier preview that the turn revises, and decides how each close runs. A preview of this turn
-    /// closes at once. An earlier preview closes when the turn ends with its answer, so a withdrawn turn leaves it as it
-    /// was. A close that the store refuses leaves the card in the pending set.
+    /// closes at once. An earlier preview closes when the person gets the previews of the turn (<see cref="SettleOnExit"/>),
+    /// so a withdrawn turn leaves it as it was. A close that the store refuses leaves the card in the pending set.
     /// </summary>
     internal sealed class TurnPreviewLedger(ToolExecutionAccumulator results, IReadOnlySet<Guid> earlierIds)
     {
@@ -196,14 +196,35 @@ public partial class ProcessUserChatCommandHandler
 
         /// <summary>
         /// Closes the earlier previews of a turn that ends with its answer. A preview that the store does not close
-        /// stays in the answer when the turn showed it.
+        /// stays in the answer when the turn showed it. Each close runs once, even when a later one throws.
         /// </summary>
         public async Task CommitAsync(CancellationToken ct)
         {
-            foreach (var close in _closes)
+            while (_closes.Count > 0)
+            {
+                var close = _closes[0];
+                _closes.RemoveAt(0);
                 if (!await close.Close(ct) && close.Card is var (toolName, card))
                     results.KeepPendingOperation(toolName, card);
+            }
+        }
+
+        /// <summary>
+        /// Settles the held closes on every way out of the turn. The answer path commits them before it composes the
+        /// reply. Any other exit commits them only when the turn saved an answer checkpoint, because the block answer
+        /// then replays that checkpoint with the previews of the turn. With no checkpoint, the person gets nothing of
+        /// the turn, so each earlier preview stays as it was.
+        /// </summary>
+        public IAsyncDisposable SettleOnExit() => new Settlement(async () =>
+        {
+            if (results.CommittedPendingOperations.Count > 0 || results.CommittedActions.Count > 0)
+                await CommitAsync(CancellationToken.None);
             _closes.Clear();
+        });
+
+        private sealed class Settlement(Func<Task> settle) : IAsyncDisposable
+        {
+            public async ValueTask DisposeAsync() => await settle();
         }
 
         /// <summary>

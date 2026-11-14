@@ -551,6 +551,7 @@ public partial class ProcessUserChatCommandHandler(
             RequiresExistingParent = RequestsExistingParent(request.Message, context.UserHabits),
             ParentHeadings = HabitHeadingParents.Read(request.Message, context.UserHabits)
         };
+        await using var previewSettlement = executionResults.Previews.SettleOnExit();
         SeedAnsweredChoice(recording.ChoiceSelection, context.UserHabits, request.UserId, executionResults);
         SeedProposedHabitNames(request, executionResults);
         var actionsStopwatch = System.Diagnostics.Stopwatch.StartNew();

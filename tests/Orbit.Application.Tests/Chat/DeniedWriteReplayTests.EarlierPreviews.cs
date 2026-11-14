@@ -220,4 +220,27 @@ public partial class ProcessUserChatCommandHandlerTests
         run.Held.Should().Contain(request => request.OperationId == "bulk_update_habits", "the bulk rename prepared");
         _pendingOperationStore.DidNotReceive().Cancel(UserId, EarlierPreviewId, Arg.Any<string>());
     }
+
+    /// <summary>
+    /// The same bulk rename in an answer turn, whose writes save the answer checkpoint. The continuation fails, is
+    /// cancelled, or ends empty at the token budget, so the block answer replays the checkpoint with the rename. The
+    /// earlier preview that the rename covers closes too, so the person never sees two previews of one change.
+    /// </summary>
+    [Theory]
+    [InlineData("en", "unavailable")]
+    [InlineData("pt-BR", "cancel")]
+    [InlineData("en", "budget")]
+    public async Task DeniedWrite_AnAnswerTurnThatFailsAfterItsCheckpointClosesTheEarlierPreviewThatItsBulkWriteCovered(
+        string language, string failure)
+    {
+        var run = await RunDeniedAnswerTurnAsync(language, _ => [], ArrangeCoveredEarlierPreview,
+            first: children => Calls(InspectEarlierPreview(), CorrectedRename(children), Run4Delete(children)),
+            lastReply: failure == "budget"
+                ? Task.FromResult(Result.Success(new AiResponse { RequestBudgetTokenCount = AppConstants.MaxAiRequestTotalTokens + 1 }))
+                : FailedReply(failure), revisions: true);
+
+        run.Held.Should().Contain(request => request.OperationId == "bulk_update_habits", "the bulk rename prepared");
+        _pendingOperationStore.Received(1).Cancel(UserId, EarlierPreviewId,
+            AgentOperationFingerprint.Compute("update_habit", EarlierPreviewArguments(run.Children, RenameTitle).GetRawText()));
+    }
 }
