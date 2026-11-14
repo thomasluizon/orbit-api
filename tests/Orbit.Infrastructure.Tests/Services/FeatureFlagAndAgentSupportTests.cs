@@ -114,6 +114,28 @@ public class FeatureFlagAndAgentSupportTests : IDisposable
         (await service.GetDenialReasonAsync("import_calendar_event", suggestion.UserId, args)).Should().BeNull();
     }
 
+    /// <summary>
+    /// The ownership check and the chat correction of a denied write read one catalog. Each of its fields names a
+    /// record of no one here, so the check turns each one down with the resource of its catalog entry.
+    /// </summary>
+    [Fact]
+    public async Task Ownership_ChecksEveryFieldOfTheTargetCatalog()
+    {
+        var service = new AgentTargetOwnershipService(_dbContext);
+
+        foreach (var resource in AgentTargets.Resources)
+            foreach (var field in resource.Fields)
+            {
+                var id = Guid.NewGuid().ToString();
+                var args = JsonSerializer.SerializeToElement(new Dictionary<string, object>
+                {
+                    [field] = field.EndsWith("_ids", StringComparison.Ordinal) ? new[] { id } : (object)id
+                });
+                (await service.GetDenialReasonAsync("operation", Guid.NewGuid(), args))
+                    .Should().Be($"target_not_owned:operation:{resource.Name}", field);
+            }
+    }
+
     [Fact]
     public async Task FeatureFlagService_ResolvesTargetsAndPlansAndInvalidatesWrites()
     {

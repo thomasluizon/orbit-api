@@ -7,10 +7,6 @@ namespace Orbit.Application.Chat.Commands;
 
 public partial class ProcessUserChatCommandHandler
 {
-    private static readonly string[] HabitTargetFields = ["habit_id", "habit_ids", "parent_habit_id", "new_parent_id", "parent_id"];
-    private static readonly string[] OtherTargetFields = ["tag_id", "tag_ids", "goal_id", "goal_ids", "notification_id",
-        "notification_ids", "template_id", "key_id", "suggestion_id"];
-
     /// <summary>
     /// The correction of the writes that the ownership check turned down beside a prepared write. The model sends each
     /// denied write once more on the right ids, and a resend that prepares replaces its denial.
@@ -169,8 +165,7 @@ public partial class ProcessUserChatCommandHandler
         JsonValueKind.Object => new JsonObject(node.EnumerateObject()
             .Where(property => property.Value.ValueKind != JsonValueKind.Null
                 && !property.Name.StartsWith("orbit_", StringComparison.Ordinal)
-                && !HabitTargetFields.Contains(property.Name, StringComparer.Ordinal)
-                && !OtherTargetFields.Contains(property.Name, StringComparer.Ordinal))
+                && !AgentTargets.IsTargetField(property.Name))
             .Select(property => KeyValuePair.Create(property.Name, WithoutTargets(property.Value)))),
         JsonValueKind.Array => new JsonArray([.. node.EnumerateArray().Select(WithoutTargets)]),
         _ => JsonValue.Create(node)
@@ -209,30 +204,13 @@ public partial class ProcessUserChatCommandHandler
     private static List<(string Value, bool Habit)> TargetsOf(JsonElement args)
     {
         var targets = new List<(string Value, bool Habit)>();
-        Collect(args);
-        return targets;
-
-        void Collect(JsonElement node)
+        foreach (var field in AgentTargets.Collect(args))
         {
-            if (node.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var item in node.EnumerateArray()) Collect(item);
-                return;
-            }
-            if (node.ValueKind != JsonValueKind.Object)
-                return;
-            foreach (var property in node.EnumerateObject())
-            {
-                var habit = HabitTargetFields.Contains(property.Name, StringComparer.Ordinal);
-                if (habit || OtherTargetFields.Contains(property.Name, StringComparer.Ordinal))
-                {
-                    var values = property.Value.ValueKind == JsonValueKind.Array ? property.Value.EnumerateArray().ToArray() : [property.Value];
-                    foreach (var value in values.Where(value => value.ValueKind != JsonValueKind.Null))
-                        targets.Add((value.ValueKind == JsonValueKind.String ? value.GetString() ?? string.Empty : value.GetRawText(), habit));
-                }
-                else if (property.Name is "positions" or "habits" or "sub_habits" or "filter")
-                    Collect(property.Value);
-            }
+            var values = field.Value.ValueKind == JsonValueKind.Array ? field.Value.EnumerateArray().ToArray() : [field.Value];
+            foreach (var value in values.Where(value => value.ValueKind != JsonValueKind.Null))
+                targets.Add((value.ValueKind == JsonValueKind.String ? value.GetString() ?? string.Empty : value.GetRawText(),
+                    field.Resource == AgentTargets.Habit));
         }
+        return targets;
     }
 }

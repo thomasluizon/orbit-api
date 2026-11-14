@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Orbit.Domain.Interfaces;
+using Orbit.Domain.Models;
 using Orbit.Infrastructure.Persistence;
 
 namespace Orbit.Infrastructure.Services;
@@ -13,16 +14,11 @@ public class AgentTargetOwnershipService(OrbitDbContext dbContext) : IAgentTarge
         JsonElement arguments,
         CancellationToken cancellationToken = default)
     {
-        var ownershipChecks = new[]
-        {
-            CreateCheck("habit", await AllOwnedAsync(dbContext.Habits.IgnoreQueryFilters(), userId, CollectGuids(arguments, operationId, "habit_id", "habit_ids", "parent_habit_id", "new_parent_id", "parent_id"), cancellationToken)),
-            CreateCheck("tag", await AllOwnedAsync(dbContext.Tags, userId, CollectGuids(arguments, operationId, "tag_id", "tag_ids"), cancellationToken)),
-            CreateCheck("goal", await AllOwnedAsync(dbContext.Goals.IgnoreQueryFilters(), userId, CollectGuids(arguments, operationId, "goal_id", "goal_ids"), cancellationToken)),
-            CreateCheck("notification", await AllOwnedAsync(dbContext.Notifications, userId, CollectGuids(arguments, operationId, "notification_id", "notification_ids"), cancellationToken)),
-            CreateCheck("template", await AllOwnedAsync(dbContext.ChecklistTemplates, userId, CollectGuids(arguments, operationId, "template_id"), cancellationToken)),
-            CreateCheck("api_key", await AllOwnedAsync(dbContext.ApiKeys, userId, CollectGuids(arguments, operationId, "key_id"), cancellationToken)),
-            CreateCheck("calendar_suggestion", await AllOwnedAsync(dbContext.GoogleCalendarSyncSuggestions, userId, CollectGuids(arguments, operationId, "suggestion_id"), cancellationToken))
-        };
+        var targets = AgentTargets.Collect(arguments);
+        var ownershipChecks = new List<OwnershipCheck>(AgentTargets.Resources.Count);
+        foreach (var resource in AgentTargets.Resources)
+            ownershipChecks.Add(CreateCheck(resource.Name,
+                await AllOwnedAsync(resource, userId, TargetIdsOf(targets, resource, operationId), cancellationToken)));
 
         var failedCheck = ownershipChecks.FirstOrDefault(check => check is { HasTargets: true, IsOwned: false });
         return failedCheck is null
@@ -32,6 +28,21 @@ public class AgentTargetOwnershipService(OrbitDbContext dbContext) : IAgentTarge
 
     private static OwnershipCheck CreateCheck(string resourceName, OwnershipResult result)
         => new(resourceName, result.HasTargets, result.IsOwned);
+
+    /// <summary>
+    /// The table of each resource in <see cref="AgentTargets.Resources"/>. A resource with no table here fails every
+    /// check, so a new resource in the catalog cannot pass without its own ownership check.
+    /// </summary>
+    private Task<OwnershipResult> AllOwnedAsync(AgentTargetResource resource, Guid userId, TargetIds targets,
+        CancellationToken cancellationToken) =>
+        resource == AgentTargets.Habit ? AllOwnedAsync(dbContext.Habits.IgnoreQueryFilters(), userId, targets, cancellationToken)
+        : resource == AgentTargets.Tag ? AllOwnedAsync(dbContext.Tags, userId, targets, cancellationToken)
+        : resource == AgentTargets.Goal ? AllOwnedAsync(dbContext.Goals.IgnoreQueryFilters(), userId, targets, cancellationToken)
+        : resource == AgentTargets.Notification ? AllOwnedAsync(dbContext.Notifications, userId, targets, cancellationToken)
+        : resource == AgentTargets.Template ? AllOwnedAsync(dbContext.ChecklistTemplates, userId, targets, cancellationToken)
+        : resource == AgentTargets.ApiKey ? AllOwnedAsync(dbContext.ApiKeys, userId, targets, cancellationToken)
+        : resource == AgentTargets.CalendarSuggestion ? AllOwnedAsync(dbContext.GoogleCalendarSyncSuggestions, userId, targets, cancellationToken)
+        : throw new InvalidOperationException($"The {resource.Name} target has no ownership check.");
 
     private static async Task<OwnershipResult> AllOwnedAsync<TEntity>(
         IQueryable<TEntity> queryable,
@@ -53,7 +64,7 @@ public class AgentTargetOwnershipService(OrbitDbContext dbContext) : IAgentTarge
         return new OwnershipResult(true, ownedCount == ids.Count);
     }
 
-    private static TargetIds CollectGuids(JsonElement arguments, string operationId, params string[] propertyNames)
+    private static TargetIds TargetIdsOf(IEnumerable<AgentTargetField> targets, AgentTargetResource resource, string operationId)
     {
         var values = new HashSet<Guid>();
         var valid = true;
@@ -64,33 +75,18 @@ public class AgentTargetOwnershipService(OrbitDbContext dbContext) : IAgentTarge
             else
                 valid = false;
         }
-        void Walk(JsonElement node, bool root = false)
+        foreach (var target in targets.Where(target => target.Resource == resource))
         {
-            if (node.ValueKind == JsonValueKind.Array)
+            if (target.Name.EndsWith("_ids", StringComparison.Ordinal))
             {
-                foreach (var item in node.EnumerateArray()) Walk(item);
-                return;
+                if (target.Value.ValueKind != JsonValueKind.Array) valid = false;
+                else foreach (var item in target.Value.EnumerateArray()) Add(item);
             }
-            if (node.ValueKind != JsonValueKind.Object) return;
-            foreach (var property in node.EnumerateObject())
-            {
-                if (propertyNames.Contains(property.Name, StringComparer.Ordinal))
-                {
-                    if (property.Name.EndsWith("_ids", StringComparison.Ordinal))
-                    {
-                        if (property.Value.ValueKind != JsonValueKind.Array) valid = false;
-                        else foreach (var item in property.Value.EnumerateArray()) Add(item);
-                    }
-                    else if (!(root && property.Value.ValueKind == JsonValueKind.Null
-                        && (operationId == "move_habit_parent" && property.Name == "parent_id"
-                            || operationId == "move_habit" && property.Name == "new_parent_id")))
-                        Add(property.Value);
-                }
-                else if (property.Name is "positions" or "habits" or "sub_habits" or "filter")
-                    Walk(property.Value);
-            }
+            else if (!(target.AtRoot && target.Value.ValueKind == JsonValueKind.Null
+                && (operationId == "move_habit_parent" && target.Name == "parent_id"
+                    || operationId == "move_habit" && target.Name == "new_parent_id")))
+                Add(target.Value);
         }
-        Walk(arguments, root: true);
         return new TargetIds(values, valid);
     }
 
