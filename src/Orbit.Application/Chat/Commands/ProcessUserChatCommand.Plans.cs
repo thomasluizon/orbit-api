@@ -12,7 +12,7 @@ public partial class ProcessUserChatCommandHandler
 {
     private async Task<ToolRoundResult> ProcessToolCallsAsync(AiResponse response, ProcessUserChatCommand request,
         ChatContext context, ToolExecutionAccumulator results, int iteration, long totalBudgetTokens,
-        RejectedCallCorrection? correction, string? language, Func<AiStreamEvent, Task>? streamSink, CancellationToken ct)
+        ICallCorrection? correction, string? language, Func<AiStreamEvent, Task>? streamSink, CancellationToken ct)
     {
         var plans = await AcceptPlanAsync(response, request, results);
         TracePlanCalls(response, plans, results);

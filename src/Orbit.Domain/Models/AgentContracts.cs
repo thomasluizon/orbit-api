@@ -228,6 +228,13 @@ public record PendingAgentOperationExecution(
     public bool RequiresReproposal => ArgumentSchemaVersion != Orbit.Domain.Entities.PendingAgentOperationState.CurrentArgumentSchemaVersion;
 }
 
+/// <summary>
+/// The stored state of a pending operation that a revision replaces: its arguments, its fingerprints, the preview that
+/// the person saw and its revision number. A chat turn keeps it to put the operation back when the turn changes nothing.
+/// </summary>
+public sealed record PendingAgentOperationRevision(string ArgumentsJson, string OperationFingerprint,
+    string? PreviewFingerprint, string? RevisedPreviewJson, bool? PreviewRevised, int RevisionNumber);
+
 public record AgentStepUpChallenge(
     Guid ChallengeId,
     Guid PendingOperationId,

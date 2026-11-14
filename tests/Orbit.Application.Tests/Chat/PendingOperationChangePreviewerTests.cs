@@ -246,6 +246,74 @@ public sealed partial class PendingOperationChangePreviewerTests
     public void RoundThree_NameMatching_UsesNormalizedWordPrefixes(string title, string search, bool matches) =>
         HabitNameMatcher.Matches(title, search).Should().Be(matches);
 
+    /// <summary>
+    /// An emoji-only title is named only by whole emoji: a longer emoji sequence, a skin tone or another flag that holds
+    /// its characters does not name it, also at its end. Punctuation around it and a variation selector do not count, and
+    /// an emoji with a punctuation category is an emoji.
+    /// </summary>
+    [Theory]
+    [InlineData("Add Stretch to 🏃‍♀️", "🏃", false)]
+    [InlineData("Add Stretch to 👨‍👩‍👧", "👧", false)]
+    [InlineData("Add Stretch to 👍🏻", "👍", false)]
+    [InlineData("Add Stretch to 🇧🇷🇵🇹", "🇷🇵", false)]
+    [InlineData("Add Stretch to 🇧🇷🇵🇹", "🇵🇹", true)]
+    [InlineData("Add Stretch to \"🏃\".", "🏃", true)]
+    [InlineData("Add Stretch to ❤️", "❤", true)]
+    [InlineData("Add Stretch to ‼️", "‼️", true)]
+    [InlineData("Add Stretch to ⁉️", "‼️", false)]
+    public void RoundThree_EmojiOnlyTitle_IsNamedOnlyByWholeEmoji(string message, string title, bool named) =>
+        HabitNameMatcher.MentionsTitle(message, title).Should().Be(named);
+
+    /// <summary>
+    /// Two emoji-only titles are one title when they hold the same emoji. Punctuation does not count, as in a title with
+    /// words, and a variation selector does not count. A keycap, a skin tone or a longer sequence is another emoji. An
+    /// emoji with a punctuation category is an emoji, not punctuation.
+    /// </summary>
+    [Theory]
+    [InlineData("🏃!", "🏃", true)]
+    [InlineData("❤️", "❤", true)]
+    [InlineData("‼️", "⁉️", false)]
+    [InlineData("〰️", "〽️", false)]
+    [InlineData("‼️", "‼", true)]
+    [InlineData("‼️", "!!", false)]
+    [InlineData("‼️!", "‼️", true)]
+    [InlineData("#️⃣", "*️⃣", false)]
+    [InlineData("👍", "👍🏻", false)]
+    [InlineData("🏃", "🏃‍♀️", false)]
+    public void RoundThree_EmojiOnlyTitleKey_ComparesWholeEmojiWithoutPunctuation(string title, string other, bool same) =>
+        (HabitNameMatcher.TitleKey(title) == HabitNameMatcher.TitleKey(other)).Should().Be(same);
+
+    /// <summary>
+    /// A title of only punctuation has no word and no emoji, so its punctuation is its key. Two such titles are one title
+    /// only when they hold the same punctuation, and such a title is never a missing title.
+    /// </summary>
+    [Theory]
+    [InlineData("?", "!", false)]
+    [InlineData("...", "?", false)]
+    [InlineData(" ? ", "?", true)]
+    [InlineData("?", null, false)]
+    [InlineData("?", "", false)]
+    public void RoundThree_PunctuationOnlyTitleKey_ComparesItsPunctuation(string title, string? other, bool same) =>
+        (HabitNameMatcher.TitleKey(title) == HabitNameMatcher.TitleKey(other)).Should().Be(same);
+
+    /// <summary>Punctuation in a message only separates its words, so no message names a title of only punctuation.</summary>
+    [Theory]
+    [InlineData("Is Stretch done?", "?")]
+    [InlineData("Add Stretch to !", "!")]
+    public void RoundThree_PunctuationOnlyTitle_IsNamedByNoMessage(string message, string title) =>
+        HabitNameMatcher.MentionsTitle(message, title).Should().BeFalse();
+
+    /// <summary>
+    /// An exact name resolves the habit of its own title. An emoji-only name never resolves a habit with another
+    /// emoji-only title, and a name without the emoji of a title still resolves that title.
+    /// </summary>
+    [Theory]
+    [InlineData("📚", null)]
+    [InlineData("🏃", "🏃")]
+    [InlineData("RUN", "🏃 Run")]
+    public void RoundThree_ExactName_ResolvesOnlyAHabitOfItsOwnTitle(string name, string? resolved) =>
+        (HabitNameMatcher.Resolve([CreateHabit("🏃", null), CreateHabit("🏃 Run", null)], name)?.Title).Should().Be(resolved);
+
     [Fact]
     public async Task PreviewAsync_Create_JsonPropertyOrderDoesNotChangeApproval()
     {

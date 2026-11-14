@@ -429,8 +429,18 @@ public partial class ProcessUserChatCommandHandlerTests
     /// A turn that reads the habits with a declared list search and then sends each round of writes in its own
     /// model response.
     /// </summary>
+    private Task<(Result<ChatResponse> Result, List<AgentExecuteOperationRequest> Held)> RunSelectionTurnAsync(
+        string message, string search, string language, Habit[] habits, params AiToolCall[][] rounds) =>
+        RunSelectionTurnAsync(message, new AiToolCall("query_habits", "lookup", JsonSerializer.SerializeToElement(new
+        {
+            search,
+            for_selection = false,
+            orbit_read_complete = false
+        })), language, habits, rounds);
+
+    /// <summary>A turn that sends the read, then each round of writes in its own model response.</summary>
     private async Task<(Result<ChatResponse> Result, List<AgentExecuteOperationRequest> Held)> RunSelectionTurnAsync(
-        string message, string search, string language, Habit[] habits, params AiToolCall[][] rounds)
+        string message, AiToolCall read, string language, Habit[] habits, params AiToolCall[][] rounds)
     {
         var user = User.Create("Reader", "reader@example.test").Value;
         user.SetLanguage(language);
@@ -443,14 +453,7 @@ public partial class ProcessUserChatCommandHandlerTests
         var updateOne = new UpdateHabitTool(_habitRepo, _userDateService, _mediator);
         var handler = CreateHandler(query, delete, deleteOne, update, updateOne);
         var held = HoldSelectionReplayWrites(query, delete, deleteOne, update, updateOne);
-        SetupAiResponse(new AiResponse
-        {
-            ConversationContext = TestConversationContext,
-            ToolCalls = [new(query.Name, "lookup", JsonSerializer.SerializeToElement(new
-            {
-                search, for_selection = false, orbit_read_complete = false
-            }))]
-        });
+        SetupAiResponse(new AiResponse { ConversationContext = TestConversationContext, ToolCalls = [read] });
         var replies = rounds.Select(round => Result.Success(new AiResponse { ConversationContext = TestConversationContext, ToolCalls = round }))
             .Append(Result.Success(new AiResponse { TextMessage = "Review the changes." })).ToArray();
         _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),

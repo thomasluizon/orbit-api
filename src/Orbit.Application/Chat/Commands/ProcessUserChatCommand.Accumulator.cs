@@ -18,11 +18,27 @@ public partial class ProcessUserChatCommandHandler
         private readonly HashSet<(Guid Id, AgentOperationStatus Status)> _reportedPendingOutcomes = [];
         private readonly SemaphoreSlim _toolStepGate = new(1, 1);
 
+        /// <summary>A turn that started with no open preview.</summary>
+        public ToolExecutionAccumulator() : this(new HashSet<Guid>())
+        {
+        }
+
+        /// <param name="earlierPendingIds">
+        /// The previews that were open before this turn ran a tool, approved or not. A write of the turn that the store
+        /// hands one of them did not create it, so the turn never withdraws or cancels it.
+        /// </param>
+        public ToolExecutionAccumulator(IReadOnlySet<Guid> earlierPendingIds) =>
+            Previews = new TurnPreviewLedger(this, earlierPendingIds);
+
+        /// <summary>The previews of this turn and how each one closes.</summary>
+        public TurnPreviewLedger Previews { get; }
+
         public ChatTurnState? Recording { get; init; }
         public SemaphoreSlim PlanGate => _toolStepGate;
         public IReadOnlyList<Orbit.Domain.Entities.Habit> Habits { get; set; } = [];
         public IReadOnlyList<Orbit.Domain.Entities.Habit> AllHabits { get; set; } = [];
         public bool HasMutationContext { get; set; }
+        public bool RequestNotPrepared { get; set; }
         public bool RequiresCreationProposal { get; set; }
         public bool RequiresExistingParent { get; init; }
         public IReadOnlyList<HabitHeadingParents.Heading> ParentHeadings { get; init; } = [];
@@ -39,6 +55,15 @@ public partial class ProcessUserChatCommandHandler
         public HashSet<string> MergedCallIds { get; } = new(StringComparer.Ordinal);
         public List<AiToolCall> PreviousWriteCalls { get; } = [];
         internal List<CorrectionOccurrence> CorrectionOccurrences { get; } = [];
+
+        /// <summary>
+        /// The writes that a guard of the handler turned down with no operation result. The end of the tool loop compares
+        /// them with <see cref="PreparedWrites"/>.
+        /// </summary>
+        internal List<CorrectionOccurrence> RefusedWrites { get; } = [];
+
+        /// <summary>The writes of the turn that prepared a preview or ran, in every round.</summary>
+        internal List<CorrectionOccurrence> PreparedWrites { get; } = [];
         public Dictionary<Guid, (string ToolName, PendingAgentOperation Preview)> PendingWriteCalls { get; } = [];
 
         public DateTime? AnsweredAtUtc { get; init; }
@@ -71,6 +96,17 @@ public partial class ProcessUserChatCommandHandler
         public Dictionary<string, QueryReadBlock> QueryReads { get; } = new(StringComparer.Ordinal);
         public Dictionary<Guid, string> ReadOfferIntents { get; } = [];
         public List<PendingAgentOperation> PendingOperations { get; } = [];
+
+        /// <summary>Puts a card back in the answer, after the turn took it out to close it.</summary>
+        public void KeepPendingOperation(string toolName, PendingAgentOperation pending)
+        {
+            _supersededPendingIds.Remove(pending.Id);
+            PendingWriteCalls[pending.Id] = (toolName, pending);
+            PendingOperations.RemoveAll(item => item.Id == pending.Id);
+            if (pending.ChangeTargetCount != 0 && pending.Items is not { Count: 0 })
+                PendingOperations.Add(pending);
+        }
+
         public List<AgentPolicyDenial> PolicyDenials { get; } = [];
         public List<AiToolCallResult> ToolResults { get; } = [];
         public List<IReadOnlyList<AiToolCall>> CompositionRounds { get; } = [];

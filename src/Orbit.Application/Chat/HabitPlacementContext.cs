@@ -8,8 +8,7 @@ public static class HabitPlacementContext
     public static string Build(IReadOnlyList<Habit> habits, string message)
     {
         var active = habits.Where(habit => !habit.IsDeleted && !habit.IsCompleted).ToArray();
-        var normalized = HabitNameMatcher.Normalize(message);
-        var destinations = active.Where(habit => normalized.Contains(HabitNameMatcher.Normalize(habit.Title), StringComparison.Ordinal))
+        var destinations = active.Where(habit => HabitNameMatcher.MentionsTitle(message, habit.Title))
             .Select(habit => new
             {
                 habit_id = habit.Id,

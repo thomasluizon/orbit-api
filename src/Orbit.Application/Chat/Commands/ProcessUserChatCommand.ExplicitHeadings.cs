@@ -35,7 +35,7 @@ public partial class ProcessUserChatCommandHandler
     private static bool HasActionableHeadingCall(Result<AiResponse> response, IReadOnlyList<HabitHeadingParents.Heading> headings) =>
         response.IsSuccess && response.Value.HasToolCalls && response.Value.ToolCalls!.Any(call =>
             call.Name != "create_habit" || call.Args.TryGetProperty("title", out var title)
-                && headings.All(heading => HabitNameMatcher.Normalize(heading.Name) != HabitNameMatcher.Normalize(title.ToString())));
+                && headings.All(heading => HabitNameMatcher.TitleKey(heading.Name) != HabitNameMatcher.TitleKey(title.ToString())));
 
     private static JsonArray? ExplicitHeadingItems(IReadOnlyList<HabitHeadingParents.Heading> headings)
     {

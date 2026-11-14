@@ -2,6 +2,7 @@ using static Orbit.Application.Chat.Tools.ToolArgumentNames;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Text.Json.Nodes;
+using Orbit.Domain.Common;
 using Orbit.Domain.Models;
 using Orbit.Domain.Entities;
 using Orbit.Application.Habits.Commands;
@@ -27,12 +28,9 @@ public partial class ProcessUserChatCommandHandler
             return true;
         var asksForChildren = Regex.IsMatch(normalized, @"\b(sub habitos?|subhabitos?|children|child)\b",
             RegexOptions.None, TimeSpan.FromSeconds(1));
-        return habits.Any(habit => Regex.IsMatch(normalized,
-            @"\b(under|dentro d[oa]|sob [oa]|n[oa] habito|ao habito)\s+" + Regex.Escape(HabitNameMatcher.Normalize(habit.Title)) + @"\b",
-            RegexOptions.None, TimeSpan.FromSeconds(1))
-            || asksForChildren && Regex.IsMatch(normalized,
-                @"\b(no|na|ao|do|da|of|em)\s+(?:habito\s+)?" + Regex.Escape(HabitNameMatcher.Normalize(habit.Title)) + @"\b",
-                RegexOptions.None, TimeSpan.FromSeconds(1)));
+        return habits.Any(habit =>
+            HabitNameMatcher.NamesTitleAfter(message, @"\b(under|dentro d[oa]|sob [oa]|n[oa] habito|ao habito)\s+", habit.Title)
+            || asksForChildren && HabitNameMatcher.NamesTitleAfter(message, @"\b(no|na|ao|do|da|of|em)\s+(?:habito\s+)?", habit.Title));
     }
 
     private void SeedProposedHabitNames(ProcessUserChatCommand request, ToolExecutionAccumulator results)
@@ -48,15 +46,32 @@ public partial class ProcessUserChatCommandHandler
             var named = HabitNameMatcher.Matches(request.Message, name.Title);
             if (asksForReplacement && (named || proposals.Count == 1))
             {
-                if (execution.PendingOperationStore.SupersedeHabitCreation(request.UserId, name.Title, name.ParentHabitId))
+                if (execution.PendingOperationStore.FindHabitCreationReplacement(request.UserId, name.Title, name.ParentHabitId)
+                    is { Count: > 0 } replaced)
+                {
+                    ReplaceWithTheTurn(request.UserId, replaced, results);
                     continue;
+                }
                 results.BlockedReplacementNames.Add(name.Title);
                 results.PendingDuplicateNames.Add(name.Title);
             }
-            var key = (name.ParentHabitId, HabitNameMatcher.Normalize(name.Title));
+            var key = (name.ParentHabitId, HabitNameMatcher.TitleKey(name.Title));
             results.ProposedHabitNames.Add(key);
             results.PendingHabitNames[key] = name.Title;
         }
+    }
+
+    /// <summary>
+    /// The earlier creation previews that a new preview of the turn replaces close when the turn ends with its answer,
+    /// or when a failed answer turn replays its checkpoint, so a withdrawn turn replaces nothing.
+    /// </summary>
+    private void ReplaceWithTheTurn(Guid userId, IEnumerable<Guid> replaced, ToolExecutionAccumulator results)
+    {
+        foreach (var id in replaced)
+            results.Previews.Replace(id, _ => Task.FromResult(
+                execution.PendingOperationStore.GetExecution(userId, id) is { } stored
+                && execution.PendingOperationStore.Cancel(userId, id,
+                    AgentOperationFingerprint.Compute(stored.OperationId, stored.Arguments.GetRawText()))));
     }
 
     private static bool HasResolutionQuestion(ToolExecutionAccumulator results) =>
@@ -260,7 +275,7 @@ public partial class ProcessUserChatCommandHandler
             var name = item["title"]!.GetValue<string>();
             var itemParentId = Guid.TryParse(item[ParentHabitId]?.ToString(), out var itemParent) ? itemParent : parentId;
             BindExistingHabit(item, name, itemParentId, results);
-            var key = (itemParentId, HabitNameMatcher.Normalize(name));
+            var key = (itemParentId, HabitNameMatcher.TitleKey(name));
             if (!results.ProposedHabitNames.Add(key))
             {
                 results.PendingDuplicateNames.Add(results.PendingHabitNames.GetValueOrDefault(key, name));
@@ -282,7 +297,7 @@ public partial class ProcessUserChatCommandHandler
                 item["title"] = target.Title;
             return;
         }
-        var matches = results.Habits.Where(habit => HabitNameMatcher.Normalize(habit.Title) == HabitNameMatcher.Normalize(name)
+        var matches = results.Habits.Where(habit => HabitNameMatcher.TitleKey(habit.Title) == HabitNameMatcher.TitleKey(name)
             && (parentId is null || habit.ParentHabitId == parentId)).ToArray();
         if (matches.Length > 1)
         {

@@ -104,7 +104,7 @@ public sealed class HabitSuggestionService(IGenericRepository<Habit> habits, IGe
             }
             else
             {
-                var matches = request.Habits.Where(habit => HabitNameMatcher.Normalize(habit.Title) == HabitNameMatcher.Normalize(candidate.Title ?? string.Empty)).ToArray();
+                var matches = request.Habits.Where(habit => HabitNameMatcher.TitleKey(habit.Title) == HabitNameMatcher.TitleKey(candidate.Title)).ToArray();
                 if (matches.Length > 1) return Invalid("Choose an unambiguous existing habit.");
                 if (matches is [var match])
                     candidate = candidate with { ExistingHabitId = match.Id, Title = match.Title };
@@ -159,7 +159,7 @@ public sealed class HabitSuggestionService(IGenericRepository<Habit> habits, IGe
                 && draft.DueEndTime > habit.DueTime));
     }
     private static bool SameSuggestion(HabitSuggestionDraft other, HabitSuggestionDraft candidate) =>
-        other.Id == candidate.Id || HabitNameMatcher.Normalize(other.Title) == HabitNameMatcher.Normalize(candidate.Title)
+        other.Id == candidate.Id || HabitNameMatcher.TitleKey(other.Title) == HabitNameMatcher.TitleKey(candidate.Title)
         || candidate.ExistingHabitId.HasValue && other.ExistingHabitId == candidate.ExistingHabitId;
     internal static string Unavailable(string language) => ErrorCopy.Resolve("HABIT_SUGGESTION_UNAVAILABLE", LocaleHelper.IsPortuguese(language));
 }

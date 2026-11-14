@@ -83,8 +83,7 @@ public partial class ProcessUserChatCommandHandler
             .Where(message => message.Role == "user").Select(message => message.Content));
         var headings = sources.Select(source => HabitHeadingParents.Read(source, context.UserHabits))
             .FirstOrDefault(values => values.Count > 0 && items.OfType<JsonObject>().All(item => HabitHeadingParents.ForItem(item, values) is not null));
-        var named = context.UserHabits.Where(habit => HabitNameMatcher.Normalize(request.Message)
-            .Contains(HabitNameMatcher.Normalize(habit.Title), StringComparison.Ordinal)).ToArray();
+        var named = context.UserHabits.Where(habit => HabitNameMatcher.MentionsTitle(request.Message, habit.Title)).ToArray();
         foreach (var item in items.OfType<JsonObject>())
         {
             if (headings is not null && HabitHeadingParents.ForItem(item, headings) is { } heading)

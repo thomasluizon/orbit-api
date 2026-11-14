@@ -114,6 +114,49 @@ public class FeatureFlagAndAgentSupportTests : IDisposable
         (await service.GetDenialReasonAsync("import_calendar_event", suggestion.UserId, args)).Should().BeNull();
     }
 
+    /// <summary>
+    /// The ownership check and the chat correction of a denied write read one catalog. Each of its fields names a
+    /// record of no one here, so the check turns each one down with the resource of its catalog entry.
+    /// </summary>
+    [Fact]
+    public async Task Ownership_ChecksEveryFieldOfTheTargetCatalog()
+    {
+        var service = new AgentTargetOwnershipService(_dbContext);
+
+        foreach (var resource in AgentTargets.Resources)
+            foreach (var field in resource.Fields)
+            {
+                var id = Guid.NewGuid().ToString();
+                var args = JsonSerializer.SerializeToElement(new Dictionary<string, object>
+                {
+                    [field] = field.EndsWith("_ids", StringComparison.Ordinal) ? new[] { id } : (object)id
+                });
+                (await service.GetDenialReasonAsync("operation", Guid.NewGuid(), args))
+                    .Should().Be($"target_not_owned:operation:{resource.Name}", field);
+            }
+    }
+
+    /// <summary>
+    /// A revision of a pending preview names the preview and its items, never a target field of the catalog, so the
+    /// ownership check cannot turn it down and no read correction of a revision ever runs.
+    /// </summary>
+    [Fact]
+    public async Task Ownership_NeverTurnsDownARevisionOfAPendingPreview()
+    {
+        var foreign = Guid.NewGuid().ToString();
+        var args = JsonSerializer.SerializeToElement(new
+        {
+            pending_operation_id = Guid.NewGuid(),
+            items = new[] { new { item_id = foreign, edits_json = JsonSerializer.Serialize(new { habit_id = foreign, goal_ids = new[] { foreign } }) } },
+            remove_item_ids = new[] { foreign },
+            answer_question = false
+        });
+
+        AgentTargets.Collect(args).Should().BeEmpty();
+        (await new AgentTargetOwnershipService(_dbContext).GetDenialReasonAsync("revise_pending_changes", Guid.NewGuid(), args))
+            .Should().BeNull();
+    }
+
     [Fact]
     public async Task FeatureFlagService_ResolvesTargetsAndPlansAndInvalidatesWrites()
     {

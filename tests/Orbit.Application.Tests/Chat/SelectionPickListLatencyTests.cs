@@ -59,7 +59,7 @@ public partial class ProcessUserChatCommandHandlerTests
         var yesterday = Today.AddDays(-1);
         SetupDatedPickListTurn(language, SelectionReadOn("read-yesterday", yesterday));
         IssuedAiBlock? stored = null;
-        _blockStore.AddAsync(Arg.Do<IssuedAiBlock>(block => stored = block), Arg.Any<CancellationToken>());
+        _ = _blockStore.AddAsync(Arg.Do<IssuedAiBlock>(block => stored = block), Arg.Any<CancellationToken>());
 
         var result = await PickListTurnAsync(message, language);
 

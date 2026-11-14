@@ -12,9 +12,9 @@ internal static class HabitTargetContext
     public static (string Context, bool HasSharedTargets) Build(IReadOnlyList<Habit> indexedHabits, IReadOnlyList<Habit> allHabits)
     {
         var sharedTitles = allHabits.Where(habit => !habit.IsCompleted)
-            .GroupBy(habit => HabitNameMatcher.Normalize(habit.Title))
+            .GroupBy(habit => HabitNameMatcher.TitleKey(habit.Title))
             .Where(group => group.Count() > 1).Select(group => group.Key).ToHashSet(StringComparer.Ordinal);
-        var targets = indexedHabits.Where(habit => !habit.IsCompleted && sharedTitles.Contains(HabitNameMatcher.Normalize(habit.Title)))
+        var targets = indexedHabits.Where(habit => !habit.IsCompleted && sharedTitles.Contains(HabitNameMatcher.TitleKey(habit.Title)))
             .Select(habit => new HabitTarget(habit.Id, habit.Title, true)).ToArray();
         return (JsonSerializer.Serialize(new
         {

@@ -5,6 +5,16 @@ using Orbit.Domain.Models;
 
 namespace Orbit.Application.Chat.Tools.Implementations;
 
+/// <summary>
+/// A revision in a chat turn that removes every item of a preview. The preview ledger of the turn runs the discard: at
+/// once for a preview of this turn, and when the turn ends with its answer, or when a failed answer turn replays its
+/// checkpoint, for an earlier preview.
+/// </summary>
+public sealed record PendingPreviewDiscard(Guid PendingOperationId, string PreviewFingerprint)
+{
+    public const string Instruction = "The preview is discarded when your answer reaches the person. Say so in one short sentence.";
+}
+
 public sealed class RevisePendingChangesTool(IServiceProvider services) : IAiTool
 {
     public const string CompletionArgumentDescription = "True for a complete pending-preview revision, on the first call; false when a question, read or fresh write still needs another tool call. A successful complete revision ends the turn with the revised preview; never repeat it to signal completion.";
@@ -37,7 +47,13 @@ public sealed class RevisePendingChangesTool(IServiceProvider services) : IAiToo
     public Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct) =>
         ExecuteAsync(args, userId, ct, null);
 
-    public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct, AgentClientContext? clientContext)
+    /// <summary>
+    /// Revises a pending preview. A revision that removes every item discards the preview. With
+    /// <paramref name="holdDiscard"/>, the chat turn gets the discard and its preview ledger runs it, so a withdrawn turn
+    /// discards no earlier preview.
+    /// </summary>
+    public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct, AgentClientContext? clientContext,
+        bool holdDiscard = false)
     {
         if (!Guid.TryParse(JsonArgumentParser.GetOptionalString(args, "pending_operation_id"), out var id))
             return new(false, Error: "pending_operation_not_found");
@@ -70,6 +86,8 @@ public sealed class RevisePendingChangesTool(IServiceProvider services) : IAiToo
         var selected = offered.Where(item => !removed.Contains(item.ItemId)).Select(item =>
             new RevisedPendingOperationItem(item.ItemId, edits.TryGetValue(item.ItemId, out var change) ? change : null,
                 RemoveSuggestedFields: removedFields.GetValueOrDefault(item.ItemId))).ToArray();
+        if (holdDiscard && selected.Length == 0)
+            return new(true, Payload: new PendingPreviewDiscard(id, original.Value.PreviewFingerprint!));
         var revision = await services.GetRequiredService<PendingOperationRevisionService>().ReviseAsync(userId, id,
             new(original.Value.PreviewFingerprint!, selected, clientContext), ct);
         if (!revision.IsSuccess || revision.Preview is not { } preview) return new(false, Error: revision.Error ?? "invalid_revision");
@@ -86,6 +104,11 @@ public sealed class RevisePendingChangesTool(IServiceProvider services) : IAiToo
                 value.PreviewFingerprint, stored.ActionKey));
         }
     }
+
+    /// <summary>Runs a discard that a chat turn held. The preview must still be the one that the revision emptied.</summary>
+    public async Task<bool> DiscardAsync(Guid userId, PendingPreviewDiscard discard, AgentClientContext? clientContext, CancellationToken ct) =>
+        (await services.GetRequiredService<PendingOperationRevisionService>().ReviseAsync(userId, discard.PendingOperationId,
+            new(discard.PreviewFingerprint, [], clientContext), ct)).Cancelled;
 
     internal static bool IsInspection(JsonElement args) =>
         args.TryGetProperty("items", out var items) && items.ValueKind == JsonValueKind.Array && items.GetArrayLength() == 0

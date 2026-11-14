@@ -93,8 +93,8 @@ public sealed partial class ChatWriteHoldHandlerTests
         var first = await CreateHandler().Handle(new(_userId, "Create a child under Before Bed. Post lunch: take vitamin D (once a week)"), default);
         var pending = first.Value.PendingOperations.Should().ContainSingle().Which;
 
-        _pendingOperationStore.SupersedeHabitCreation(_userId, "Take vitamin D", parents[0].Id).Should().BeTrue();
-        _pendingOperationStore.GetExecution(_userId, pending.Id).Should().BeNull();
+        _pendingOperationStore.FindHabitCreationReplacement(_userId, "Take vitamin D", parents[0].Id).Should().Equal(pending.Id);
+        _pendingOperationStore.FindHabitCreationReplacement(_userId, "Take vitamin D", parents[1].Id).Should().BeEmpty();
     }
 
     [Theory]
@@ -172,6 +172,34 @@ public sealed partial class ChatWriteHoldHandlerTests
         await _habitRepo.Received(1).AddAsync(Arg.Is<Habit>(habit => habit.Title == "Take vitamin D"
             && habit.ParentHabitId == parents[0].Id && habit.Description == "Keep with food"
             && habit.FrequencyUnit == FrequencyUnit.Week && habit.DueTime == new TimeOnly(13, 0)), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// A correction that names one existing habit puts the previewed habits under it. A habit with an emoji-only title
+    /// is named only by its symbols, so it never joins the habits that every message names.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExistingParents_CorrectionNamingOneParentIgnoresAnEmojiOnlyHabitItDoesNotName(bool emojiHabit)
+    {
+        var parents = ParentAccount("en");
+        if (emojiHabit)
+            UseParentHabits([.. parents, Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, _userId, "🏃",
+                FrequencyUnit.Day, 1, Today)).Value]);
+        ScriptParentBatch();
+        var handler = CreateHandler();
+        var first = await handler.Handle(new(_userId, "Create two habits, take vitamin D weekly and take rovustatina daily."), default);
+        first.Value.PendingOperations.Should().ContainSingle();
+
+        var reply = await handler.Handle(new(_userId, "make them sub-habits of Post Lunch",
+            History: [new("user", "Create two habits, take vitamin D weekly and take rovustatina daily.")],
+            ClientContext: new AgentClientContext(SupportsParts: true)), default);
+
+        reply.IsSuccess.Should().BeTrue(reply.Error);
+        var revised = reply.Value.PendingOperations.Should().ContainSingle().Which;
+        _pendingOperationStore.GetExecution(_userId, revised.Id)!.Arguments.GetProperty("habits").EnumerateArray()
+            .Select(item => item.GetProperty("parent_habit_id").GetGuid()).Should().Equal(parents[0].Id, parents[0].Id);
     }
 
     [Theory]

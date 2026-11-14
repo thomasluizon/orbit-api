@@ -354,6 +354,40 @@ public partial class HabitSuggestionTests
             await payGate.DidNotReceive().TryConsumeAiMessage(Arg.Any<Guid>(), Arg.Any<IUnitOfWork>(), Arg.Any<CancellationToken>());
     }
 
+    /// <summary>
+    /// Two drafts with different emoji-only titles propose two habits, and the same emoji-only title twice proposes one.
+    /// </summary>
+    [Theory]
+    [InlineData("🏃", "📚", true)]
+    [InlineData("🏃", " 🏃 ", false)]
+    public void DraftSet_KeepsDraftsWithDifferentEmojiOnlyTitlesDistinct(string first, string second, bool accepted)
+    {
+        var drafts = new[] { Draft(first), Draft(second) with { DueTime = new(21, 0), DueEndTime = new(21, 15) } };
+        var request = new HabitSuggestionRequest(_userId, "ideas", "en", 2, _today, [], []);
+
+        HabitSuggestionService.Normalize(drafts, request).IsSuccess.Should().Be(accepted);
+    }
+
+    /// <summary>
+    /// A draft becomes an adjustment of the existing habit with its own title. A draft with another emoji-only title
+    /// stays a new habit.
+    /// </summary>
+    [Theory]
+    [InlineData("📚", false)]
+    [InlineData("🏃", true)]
+    public void DraftSet_AdjustsOnlyTheExistingHabitOfTheDraftsOwnEmojiOnlyTitle(string title, bool adjustment)
+    {
+        var existing = Draft("🏃") with { DueTime = new(8, 0), DueEndTime = new(8, 15) };
+        var habit = existing.ToHabit(_userId).Value;
+        var request = new HabitSuggestionRequest(_userId, "ideas", "en", 1, _today, [habit], []);
+
+        var result = HabitSuggestionService.Normalize([Draft(title)], request);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        result.Value.Drafts[0].ExistingHabitId.Should().Be(adjustment ? habit.Id : null);
+        result.Value.Drafts[0].Title.Should().Be(title);
+    }
+
     [Theory]
     [InlineData(1)]
     [InlineData(5)]

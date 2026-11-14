@@ -182,6 +182,14 @@ public class PendingAgentOperationStore(
         return AwaitingExecutions(pending);
     }
 
+    public async Task<IReadOnlyList<Guid>> GetOpenIdsAsync(Guid userId, CancellationToken cancellationToken = default)
+    {
+        var checkedAtUtc = TimeProvider.System.GetUtcNow().UtcDateTime;
+        return await dbContext.PendingAgentOperations.AsNoTracking()
+            .Where(item => item.UserId == userId && item.ConsumedAtUtc == null && item.ExpiresAtUtc > checkedAtUtc)
+            .Select(item => item.Id).ToListAsync(cancellationToken);
+    }
+
     private static IReadOnlyList<PendingAgentOperationExecution> AwaitingExecutions(IReadOnlyList<PendingAgentOperationState> pending)
     {
         var members = pending.Where(item => item.OperationId == AccountChangeSet.OperationName)
@@ -213,28 +221,28 @@ public class PendingAgentOperationStore(
         return names;
     }
 
-    public bool SupersedeHabitCreation(Guid userId, string title, Guid? parentHabitId)
+    public IReadOnlyList<Guid>? FindHabitCreationReplacement(Guid userId, string title, Guid? parentHabitId)
     {
         var checkedAtUtc = TimeProvider.System.GetUtcNow().UtcDateTime;
-        var pending = dbContext.PendingAgentOperations.Where(item => item.UserId == userId
+        var pending = dbContext.PendingAgentOperations.AsNoTracking().Where(item => item.UserId == userId
             && item.ConsumedAtUtc == null && item.ConfirmedAtUtc == null && item.ExpiresAtUtc > checkedAtUtc
             && (item.OperationId == "create_habit" || item.OperationId == "bulk_create_habits" || item.OperationId == "create_sub_habit"))
             .ToList();
-        var matching = new List<PendingAgentOperationState>();
+        var matching = new List<Guid>();
         foreach (var item in pending)
         {
             var args = ParseArguments(item.ArgumentsJson);
             if (args.ValueKind != JsonValueKind.Object)
                 continue;
             if (HabitCreations(args).Any(item => item.ParentHabitId == parentHabitId
-                && HabitNameMatcher.Normalize(item.Title) == HabitNameMatcher.Normalize(title)))
+                && HabitNameMatcher.TitleKey(item.Title) == HabitNameMatcher.TitleKey(title)))
             {
                 if (HabitCreations(args).Count > 1)
-                    return false;
-                matching.Add(item);
+                    return null;
+                matching.Add(item.Id);
             }
         }
-        return matching.Count > 0 && matching.All(item => Cancel(userId, item.Id, item.OperationFingerprint));
+        return matching;
     }
 
     private static IReadOnlyList<PendingHabitCreation> HabitCreations(JsonElement arguments)
@@ -294,17 +302,18 @@ public class PendingAgentOperationStore(
         }
     }
 
-    public bool Cancel(Guid userId, Guid pendingOperationId, string expectedFingerprint)
+    public PendingAgentOperationRevision? GetRevision(Guid userId, Guid pendingOperationId) =>
+        dbContext.PendingAgentOperations.AsNoTracking()
+            .FirstOrDefault(item => item.Id == pendingOperationId && item.UserId == userId)?.CurrentRevision();
+
+    public bool Restore(Guid userId, Guid pendingOperationId, string expectedFingerprint, PendingAgentOperationRevision revision)
     {
         var entity = dbContext.PendingAgentOperations.FirstOrDefault(item =>
             item.Id == pendingOperationId && item.UserId == userId);
-        var cancelledAtUtc = DateTime.UtcNow;
-        if (entity is null || entity.OperationFingerprint != expectedFingerprint
-            || HasChangeSetOwner(userId, pendingOperationId)
-            || !entity.Cancel(cancelledAtUtc))
+        var checkedAtUtc = DateTime.UtcNow;
+        if (entity is null || entity.OperationFingerprint != expectedFingerprint || !entity.Restore(revision, checkedAtUtc))
             return false;
-        if (entity.OperationId == AccountChangeSet.OperationName)
-            CancelChangeSetMembers(entity, cancelledAtUtc);
+
         try
         {
             SaveChangesWithConversationOutcomes();
@@ -312,6 +321,40 @@ public class PendingAgentOperationStore(
         }
         catch (DbUpdateConcurrencyException)
         {
+            ResetFailedOutcomeChanges(entity);
+            return false;
+        }
+    }
+
+    public bool Cancel(Guid userId, Guid pendingOperationId, string expectedFingerprint) =>
+        Close(userId, pendingOperationId, expectedFingerprint, (entity, cancelledAtUtc) => entity.Cancel(cancelledAtUtc), []);
+
+    public bool Withdraw(Guid userId, Guid pendingOperationId, string expectedFingerprint,
+        IReadOnlyCollection<Guid>? releasedMemberIds = null) =>
+        Close(userId, pendingOperationId, expectedFingerprint, (entity, cancelledAtUtc) => entity.Withdraw(cancelledAtUtc),
+            releasedMemberIds ?? []);
+
+    private bool Close(Guid userId, Guid pendingOperationId, string expectedFingerprint,
+        Func<PendingAgentOperationState, DateTime, bool> close, IReadOnlyCollection<Guid> releasedMemberIds)
+    {
+        var entity = dbContext.PendingAgentOperations.FirstOrDefault(item =>
+            item.Id == pendingOperationId && item.UserId == userId);
+        var cancelledAtUtc = DateTime.UtcNow;
+        if (entity is null || entity.OperationFingerprint != expectedFingerprint
+            || HasChangeSetOwner(userId, pendingOperationId)
+            || !close(entity, cancelledAtUtc))
+            return false;
+        var closedMembers = entity.OperationId == AccountChangeSet.OperationName
+            ? CloseChangeSetMembers(entity, cancelledAtUtc, close, releasedMemberIds) : [];
+        try
+        {
+            SaveChangesWithConversationOutcomes();
+            return true;
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            foreach (var member in closedMembers)
+                ResetFailedOutcomeChanges(member);
             ResetFailedOutcomeChanges(entity);
             return false;
         }
@@ -326,13 +369,23 @@ public class PendingAgentOperationStore(
             .Any(json => AccountChangeSet.Reservations(ParseArguments(json)).Any(member => member.PendingOperationId == pendingOperationId));
     }
 
-    private void CancelChangeSetMembers(PendingAgentOperationState owner, DateTime cancelledAtUtc)
+    /// <summary>
+    /// Closes each member that a closed change set still reserves in the same way as the change set: a cancel cancels it,
+    /// and a withdrawal withdraws it. A released member stays open on its own. Returns the members that it closed, so a
+    /// failed save can drop their closes with the close of the change set.
+    /// </summary>
+    private List<PendingAgentOperationState> CloseChangeSetMembers(PendingAgentOperationState owner, DateTime cancelledAtUtc,
+        Func<PendingAgentOperationState, DateTime, bool> close, IReadOnlyCollection<Guid> releasedMemberIds)
     {
-        var reservations = AccountChangeSet.Reservations(ParseArguments(owner.ArgumentsJson)).ToDictionary(member => member.PendingOperationId);
+        var reservations = AccountChangeSet.Reservations(ParseArguments(owner.ArgumentsJson))
+            .Where(member => !releasedMemberIds.Contains(member.PendingOperationId)).ToDictionary(member => member.PendingOperationId);
         var ids = reservations.Keys.ToArray();
+        var closed = new List<PendingAgentOperationState>();
         foreach (var member in dbContext.PendingAgentOperations.Where(item => item.UserId == owner.UserId
             && ids.Contains(item.Id) && item.ConsumedAtUtc == null))
-            if (member.OperationFingerprint == reservations[member.Id].Fingerprint) member.Cancel(cancelledAtUtc);
+            if (member.OperationFingerprint == reservations[member.Id].Fingerprint && close(member, cancelledAtUtc))
+                closed.Add(member);
+        return closed;
     }
 
     public PendingAgentOperationExecution? GetConfirmedExecution(Guid userId, string capabilityId,

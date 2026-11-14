@@ -269,7 +269,7 @@ public partial class ProcessUserChatCommandHandler
             return definition;
         var options = definition.Options.ToArray();
         var records = options.Where(option => results.ReadHabitItems.ContainsKey(option.Id))
-            .GroupBy(option => HabitNameMatcher.Normalize(results.ReadHabitItems[option.Id].Title));
+            .GroupBy(option => HabitNameMatcher.TitleKey(results.ReadHabitItems[option.Id].Title));
         foreach (var group in records.Where(group => group.Count() > 1))
         {
             var candidates = group.Select(option => results.ReadHabitItems[option.Id]).ToArray();
@@ -340,8 +340,8 @@ public partial class ProcessUserChatCommandHandler
 
     private static bool MatchesAskRecord(string? id, string? label, Habit habit) =>
         Guid.TryParse(id, out var parsed) && parsed == habit.Id
-        || string.Equals(HabitNameMatcher.Normalize(id ?? string.Empty), HabitNameMatcher.Normalize(habit.Title), StringComparison.Ordinal)
-        || label is not null && string.Equals(HabitNameMatcher.Normalize(label), HabitNameMatcher.Normalize(habit.Title), StringComparison.Ordinal);
+        || string.Equals(HabitNameMatcher.TitleKey(id), HabitNameMatcher.TitleKey(habit.Title), StringComparison.Ordinal)
+        || label is not null && string.Equals(HabitNameMatcher.TitleKey(label), HabitNameMatcher.TitleKey(habit.Title), StringComparison.Ordinal);
 
     private static string AskRecoveryInstruction(ProcessUserChatCommand request, ToolExecutionAccumulator results) =>
         " A failed ask did not issue a question. Continue the original request with the appropriate tools when its inputs are clear; no ask is needed for an actionable request."

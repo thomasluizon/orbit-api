@@ -1,0 +1,438 @@
+using System.Text.Json;
+using FluentAssertions;
+using NSubstitute;
+using Orbit.Application.Chat;
+using Orbit.Application.Chat.Tools;
+using Orbit.Application.Common;
+using Orbit.Domain.Common;
+using Orbit.Domain.Entities;
+using Orbit.Domain.Models;
+
+namespace Orbit.Application.Tests.Commands.Chat;
+
+/// <summary>
+/// A preview from an earlier turn awaits approval when a turn with a denied write starts (thomasluizon/orbit-tickets#2129).
+/// The turn reads it, revises it in place or covers it with a bulk write, and a withdrawn turn leaves it as it was.
+/// </summary>
+public partial class ProcessUserChatCommandHandlerTests
+{
+    private const string ReviseTool = "revise_pending_changes";
+    private static readonly Guid EarlierPreviewId = Guid.Parse("7b3e9f21-4c8a-4d6e-b1f0-2a9c5d7e3f84");
+    private const string EarlierTitle = "Water - 750ml";
+    private const string RevisedTitle = "Water - 1L";
+
+    private static JsonElement EarlierPreviewArguments(Habit[] children, string title) =>
+        JsonSerializer.SerializeToElement(new { habit_id = children[2].Id, title });
+
+    private static PendingAgentOperationRevision EarlierRevision(Habit[] children)
+    {
+        var arguments = EarlierPreviewArguments(children, EarlierTitle).GetRawText();
+        return new(arguments, AgentOperationFingerprint.Compute("update_habit", arguments), "earlier-preview", null, false, 1);
+    }
+
+    private static string EarlierKeptFor(string language) => language == "en"
+        ? "I couldn't prepare your whole request, so I left your earlier changes as they were. They are still waiting for your approval. Please send the request again."
+        : "Não consegui preparar o seu pedido inteiro, então deixei as alterações anteriores como estavam. Elas continuam esperando a sua aprovação. Mande o pedido de novo, por favor.";
+
+    private static AiToolCall InspectEarlierPreview() => new(ReviseTool, "inspect", JsonSerializer.SerializeToElement(new
+    {
+        pending_operation_id = EarlierPreviewId,
+        items = Array.Empty<object>(),
+        answer_question = true
+    }));
+
+    private static AiToolCall ReviseEarlierPreview() => new(ReviseTool, "revise", JsonSerializer.SerializeToElement(new
+    {
+        pending_operation_id = EarlierPreviewId,
+        items = new[] { new { item_id = "0", edits_json = JsonSerializer.Serialize(new { title = RevisedTitle }) } },
+        answer_question = false
+    }));
+
+    /// <summary>
+    /// A preview from an earlier turn renames Water 3 and awaits approval when the turn starts. A revision in this turn
+    /// changes its title in place and keeps its id; an inspection returns it as it is.
+    /// </summary>
+    private void ArrangeEarlierPreview(Habit[] children, bool revised)
+    {
+        PendingAgentOperationExecution Stored(string title, string preview) => new(EarlierPreviewId, "habits.update", "update_habit",
+            EarlierPreviewArguments(children, title), AgentExecutionSurface.Chat, AgentConfirmationRequirement.FreshConfirmation, preview);
+        var earlier = Stored(EarlierTitle, "earlier-preview");
+        _pendingOperationStore.GetAwaitingAsync(UserId, Arg.Any<CancellationToken>()).Returns([earlier]);
+        _pendingOperationStore.GetOpenIdsAsync(UserId, Arg.Any<CancellationToken>()).Returns([EarlierPreviewId]);
+        _pendingOperationStore.IsAwaitingConfirmation(UserId, EarlierPreviewId).Returns(true);
+        _pendingOperationStore.GetRevision(UserId, EarlierPreviewId).Returns(EarlierRevision(children));
+        _pendingOperationStore.GetExecution(UserId, EarlierPreviewId)
+            .Returns(revised ? Stored(RevisedTitle, "revised-preview") : earlier);
+        var preview = new PendingAgentOperation(EarlierPreviewId, "habits.update", "update_habit", "update_habit", AgentRiskClass.Low,
+            AgentConfirmationRequirement.FreshConfirmation, DateTime.UtcNow.AddMinutes(10), ChangeTargetCount: 1,
+            Items: [new PendingOperationItem("0", children[2].Id, children[2].Title, [], "state")],
+            PreviewFingerprint: revised ? "revised-preview" : "earlier-preview");
+        _operationExecutor.ExecuteAsync(Arg.Is<AgentExecuteOperationRequest>(request => request.OperationId == ReviseTool),
+                Arg.Any<CancellationToken>())
+            .Returns(new AgentExecuteOperationResponse(new AgentOperationResult(ReviseTool, ReviseTool, AgentRiskClass.Low,
+                AgentConfirmationRequirement.None, AgentOperationStatus.Succeeded, Payload: preview)));
+    }
+
+    /// <summary>
+    /// The turn only reads an earlier preview beside a rename that the ownership check turns down. The earlier preview
+    /// is not a prepared write of the turn: the denial keeps the base path, and the preview stays approvable.
+    /// </summary>
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task DeniedWrite_AnEarlierPreviewThatTheTurnOnlyReadIsNotAPreparedWriteOfTheTurn(string language)
+    {
+        var run = await RunRequestTurnAsync(language, RenameOneMessage(language),
+            children => Calls(InspectEarlierPreview(), RenameOneUnknown(children)), _ => [Text(language), Text(language)],
+            children => ArrangeEarlierPreview(children, revised: false));
+
+        run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
+        _pendingOperationStore.DidNotReceive().Cancel(UserId, EarlierPreviewId, Arg.Any<string>());
+        var denied = run.ToolResults[0].Should().ContainSingle(result => result.Id == "rename-one").Subject;
+        JsonSerializer.Serialize(denied.Payload).Should().NotContain("correction_allowed", "no write of the turn prepared");
+        run.Result.Value.AiMessage.Should().NotBe(NotPreparedFor(language)).And.NotBe(ToolFailureFor(language));
+        run.Result.Value.PendingOperations.Should().ContainSingle().Which.Id.Should().Be(EarlierPreviewId);
+    }
+
+    /// <summary>
+    /// The turn revises an earlier preview in place beside a rename that the ownership check turns down, and the
+    /// correction never comes. The earlier preview gets its state from before the turn back, is never cancelled, and
+    /// the answer says that it still waits.
+    /// </summary>
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task DeniedWrite_AnEarlierPreviewThatTheTurnRevisedGetsItsEarlierStateBack(string language)
+    {
+        var run = await RunRequestTurnAsync(language, RenameOneMessage(language),
+            children => Calls(ReviseEarlierPreview(), RenameOneUnknown(children)), _ => [Text(language), Text(language)],
+            children => ArrangeEarlierPreview(children, revised: true));
+
+        run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
+        _pendingOperationStore.DidNotReceive().Cancel(UserId, EarlierPreviewId, Arg.Any<string>());
+        _pendingOperationStore.Received(1).Restore(UserId, EarlierPreviewId,
+            AgentOperationFingerprint.Compute("update_habit", EarlierPreviewArguments(run.Children, RevisedTitle).GetRawText()),
+            EarlierRevision(run.Children));
+        run.Result.Value.PendingOperations.Should().BeNullOrEmpty("the revised card is not what the store holds");
+        run.Result.Value.AiMessage.Should().Be(EarlierKeptFor(language));
+    }
+
+    /// <summary>
+    /// The turn reads an earlier preview, prepares a delete and gets a rename turned down, and the correction never
+    /// comes. The turn withdraws only its own delete. The earlier preview stays in the answer, and the answer says
+    /// that it still waits instead of saying that nothing waits.
+    /// </summary>
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task DeniedWrite_AWithdrawnTurnKeepsTheEarlierPreviewItReadAndSaysItStillWaits(string language)
+    {
+        var run = await RunRequestTurnAsync(language, RequestMessage(language),
+            children => Calls(InspectEarlierPreview(), Run4Delete(children), RenameOneUnknown(children)),
+            _ => [Text(language), Text(language)], children => ArrangeEarlierPreview(children, revised: false));
+
+        run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
+        run.Held.Should().Contain(request => request.OperationId == "bulk_delete_habits", "the delete prepared");
+        _pendingOperationStore.DidNotReceive().Cancel(UserId, EarlierPreviewId, Arg.Any<string>());
+        run.Result.Value.PendingOperations.Should().ContainSingle("the turn withdrew its own delete").Which.Id.Should().Be(EarlierPreviewId);
+        run.Result.Value.AiMessage.Should().Be(EarlierKeptFor(language));
+    }
+
+    /// <summary>
+    /// A preview from an earlier turn renames Water 3 to the title of the request and awaits approval when the turn
+    /// starts. The turn reads it, and a bulk rename of the turn covers it.
+    /// </summary>
+    private void ArrangeCoveredEarlierPreview(Habit[] children)
+    {
+        var stored = new PendingAgentOperationExecution(EarlierPreviewId, "habits.update", "update_habit",
+            EarlierPreviewArguments(children, RenameTitle), AgentExecutionSurface.Chat,
+            AgentConfirmationRequirement.FreshConfirmation, "earlier-preview");
+        _pendingOperationStore.GetAwaitingAsync(UserId, Arg.Any<CancellationToken>()).Returns([stored]);
+        _pendingOperationStore.GetOpenIdsAsync(UserId, Arg.Any<CancellationToken>()).Returns([EarlierPreviewId]);
+        _pendingOperationStore.IsAwaitingConfirmation(UserId, EarlierPreviewId).Returns(true);
+        _pendingOperationStore.GetExecution(UserId, EarlierPreviewId).Returns(stored);
+        _pendingOperationStore.Cancel(UserId, EarlierPreviewId, Arg.Any<string>()).Returns(true);
+        var title = new PendingOperationChange(children[2].Id, children[2].Title, "title", children[2].Title, RenameTitle, "string");
+        var preview = new PendingAgentOperation(EarlierPreviewId, "habits.update", "update_habit", "update_habit", AgentRiskClass.Low,
+            AgentConfirmationRequirement.FreshConfirmation, DateTime.UtcNow.AddMinutes(10), [title], ChangeTargetCount: 1,
+            Items: [new PendingOperationItem("0", children[2].Id, children[2].Title, [title], "state")],
+            PreviewFingerprint: "earlier-preview");
+        _operationExecutor.ExecuteAsync(Arg.Is<AgentExecuteOperationRequest>(request => request.OperationId == ReviseTool),
+                Arg.Any<CancellationToken>())
+            .Returns(new AgentExecuteOperationResponse(new AgentOperationResult(ReviseTool, ReviseTool, AgentRiskClass.Low,
+                AgentConfirmationRequirement.None, AgentOperationStatus.Succeeded, Payload: preview)));
+    }
+
+    private static AiToolCall DeleteUnknown() => new("delete_habit", "delete-unknown",
+        JsonSerializer.SerializeToElement(new { habit_id = UnknownHabitId }));
+
+    /// <summary>
+    /// The bulk rename of the turn covers the earlier rename of Water 3, and a delete is turned down. The withdrawn turn
+    /// closes nothing that the person had: the earlier preview stays approvable and stays in the answer.
+    /// </summary>
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task DeniedWrite_AWithdrawnTurnLeavesTheEarlierPreviewThatItsBulkWriteCovered(string language)
+    {
+        var run = await RunRequestTurnAsync(language, RequestMessage(language),
+            children => Calls(InspectEarlierPreview(), CorrectedRename(children), DeleteUnknown()),
+            _ => [Text(language), Text(language)], ArrangeCoveredEarlierPreview);
+
+        run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
+        run.Held.Should().Contain(request => request.OperationId == "bulk_update_habits", "the bulk rename prepared");
+        _pendingOperationStore.DidNotReceive().Cancel(UserId, EarlierPreviewId, Arg.Any<string>());
+        run.Result.Value.PendingOperations.Should().ContainSingle("the turn withdrew its own rename").Which.Id.Should().Be(EarlierPreviewId);
+        run.Result.Value.AiMessage.Should().Be(EarlierKeptFor(language));
+    }
+
+    /// <summary>
+    /// The same bulk rename in a turn that ends with its answer still closes the earlier preview that it covers, so the
+    /// person never approves the rename of Water 3 twice.
+    /// </summary>
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task DeniedWrite_ATurnThatEndsWithItsAnswerClosesTheEarlierPreviewThatItsBulkWriteCovered(string language)
+    {
+        var run = await RunRequestTurnAsync(language, RequestMessage(language),
+            children => Calls(InspectEarlierPreview(), CorrectedRename(children), Run4Delete(children)),
+            _ => [Text(language), Text(language)], ArrangeCoveredEarlierPreview);
+
+        run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
+        _pendingOperationStore.Received(1).Cancel(UserId, EarlierPreviewId,
+            AgentOperationFingerprint.Compute("update_habit", EarlierPreviewArguments(run.Children, RenameTitle).GetRawText()));
+        run.Result.Value.PendingOperations.Should().NotBeNullOrEmpty().And.NotContain(pending => pending.Id == EarlierPreviewId);
+    }
+
+    /// <summary>
+    /// The same bulk rename, but the continuation after it fails and the turn ends with the provider error instead of
+    /// its answer. The earlier preview that the rename covers stays approvable.
+    /// </summary>
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task DeniedWrite_ATurnThatEndsWithAProviderErrorLeavesTheEarlierPreviewThatItsBulkWriteCovered(string language)
+    {
+        var run = await RunRequestTurnAsync(language, RequestMessage(language),
+            children => Calls(InspectEarlierPreview(), CorrectedRename(children), Run4Delete(children)),
+            _ => [], ArrangeCoveredEarlierPreview, lastReply: FailedReply("unavailable"));
+
+        run.Result.ErrorCode.Should().Be(ErrorCodes.AiUnavailable, "the turn ends with the provider error");
+        run.Held.Should().Contain(request => request.OperationId == "bulk_update_habits", "the bulk rename prepared");
+        _pendingOperationStore.DidNotReceive().Cancel(UserId, EarlierPreviewId, Arg.Any<string>());
+    }
+
+    /// <summary>
+    /// The same bulk rename in an answer turn, whose writes save the answer checkpoint. The continuation fails, is
+    /// cancelled, or ends empty at the token budget, so the block answer replays the checkpoint with the rename. The
+    /// earlier preview that the rename covers closes too, so the person never sees two previews of one change.
+    /// </summary>
+    [Theory]
+    [InlineData("en", "unavailable")]
+    [InlineData("pt-BR", "cancel")]
+    [InlineData("en", "budget")]
+    public async Task DeniedWrite_AnAnswerTurnThatFailsAfterItsCheckpointClosesTheEarlierPreviewThatItsBulkWriteCovered(
+        string language, string failure)
+    {
+        var run = await RunDeniedAnswerTurnAsync(language, _ => [], ArrangeCoveredEarlierPreview,
+            first: children => Calls(InspectEarlierPreview(), CorrectedRename(children), Run4Delete(children)),
+            lastReply: failure == "budget"
+                ? Task.FromResult(Result.Success(new AiResponse { RequestBudgetTokenCount = AppConstants.MaxAiRequestTotalTokens + 1 }))
+                : FailedReply(failure), tools: [ReadTool(ReviseTool, new ToolResult(true))]);
+
+        run.Held.Should().Contain(request => request.OperationId == "bulk_update_habits", "the bulk rename prepared");
+        _pendingOperationStore.Received(1).Cancel(UserId, EarlierPreviewId,
+            AgentOperationFingerprint.Compute("update_habit", EarlierPreviewArguments(run.Children, RenameTitle).GetRawText()));
+    }
+
+    /// <summary>The transaction of the second block write of the turn fails with <paramref name="exception"/>.</summary>
+    private void FailTheSecondBlockWrite(Exception exception)
+    {
+        var writes = 0;
+        _unitOfWork.ExecuteOnceInTransactionAsync(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
+            .Returns(call => ++writes == 2 ? Task.FromException(exception)
+                : call.ArgAt<Func<CancellationToken, Task>>(0)(call.ArgAt<CancellationToken>(1)));
+    }
+
+    /// <summary>An exception that is not a cancellation: a transaction timeout, or a block answer whose claim was lost.</summary>
+    private static Exception BlockWriteFailure(string failure) => failure == "timeout"
+        ? new TimeoutException("Transaction exceeded the timeout and was rolled back.")
+        : new InvalidOperationException("Block answer reservation was lost.");
+
+    /// <summary>
+    /// The transaction that saves the turn after its tool loop fails with <paramref name="exception"/>. It is the first
+    /// transaction after the two block writes of the turn.
+    /// </summary>
+    private void FailTheSaveAfterTheBlockWrites(Exception exception)
+    {
+        var writes = 0;
+        _unitOfWork.ExecuteOnceInTransactionAsync(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                writes++;
+                return call.ArgAt<Func<CancellationToken, Task>>(0)(call.ArgAt<CancellationToken>(1));
+            });
+        _unitOfWork.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
+            .Returns(call => writes == 2 ? Task.FromException(exception)
+                : call.ArgAt<Func<CancellationToken, Task>>(0)(call.ArgAt<CancellationToken>(1)));
+    }
+
+    /// <summary>
+    /// The same bulk rename in an answer turn saves the answer checkpoint, and the transaction of the delete after it
+    /// fails with an exception that is not a cancellation. The turn never decides its withdrawal, and no store write is
+    /// safe after that exception, so the earlier preview that the rename covers stays approvable.
+    /// </summary>
+    [Theory]
+    [InlineData("en", "timeout")]
+    [InlineData("pt-BR", "timeout")]
+    [InlineData("en", "lost")]
+    [InlineData("pt-BR", "lost")]
+    public async Task DeniedWrite_AnAnswerTurnThatThrowsAfterItsCheckpointLeavesTheEarlierPreviewThatItsBulkWriteCovered(
+        string language, string failure)
+    {
+        var run = await RunDeniedAnswerTurnAsync(language, _ => [Text(language)], children =>
+            {
+                ArrangeCoveredEarlierPreview(children);
+                FailTheSecondBlockWrite(BlockWriteFailure(failure));
+            },
+            first: children => Calls(InspectEarlierPreview(), CorrectedRename(children), Run4Delete(children)),
+            tools: [ReadTool(ReviseTool, new ToolResult(true))]);
+
+        run.Held.Should().Contain(request => request.OperationId == "bulk_update_habits", "the bulk rename prepared");
+        await _blockStore.Received(1).CheckpointAnswerAsync(Arg.Any<Guid>(), UserId, Arg.Any<DateTime>(), Arg.Any<string>(),
+            Arg.Any<CancellationToken>());
+        _pendingOperationStore.DidNotReceive().Cancel(UserId, EarlierPreviewId, Arg.Any<string>());
+    }
+
+    /// <summary>
+    /// The same answer turn as the person gets it from the block answer. The store keeps each preview of the turn
+    /// awaiting, as the real store does, and the block answer replays the answer checkpoint after the exception. The
+    /// delete never prepared, so the turn withdraws the bulk rename that the checkpoint holds: the replay shows no part
+    /// of the request, and the earlier preview that the rename covers stays approvable on its own.
+    /// </summary>
+    [Theory]
+    [InlineData("en", "timeout")]
+    [InlineData("pt-BR", "timeout")]
+    [InlineData("en", "lost")]
+    [InlineData("pt-BR", "lost")]
+    public async Task DeniedWrite_AnAnswerTurnThatThrowsAfterItsCheckpointReplaysNoPartOfTheRequest(string language, string failure)
+    {
+        var run = await RunDeniedAnswerTurnAsync(language, _ => [Text(language)], children =>
+            {
+                StorePreparedPreviews();
+                ArrangeCoveredEarlierPreview(children);
+                FailTheSecondBlockWrite(BlockWriteFailure(failure));
+            },
+            first: children => Calls(InspectEarlierPreview(), CorrectedRename(children), Run4Delete(children)),
+            tools: [ReadTool(ReviseTool, new ToolResult(true))]);
+
+        run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
+        run.Result.Value.PendingOperations.Should().BeNullOrEmpty("the checkpoint holds only the rename, and the turn withdrew it");
+        run.Result.Value.AiMessage.Should().Be(CommittedFor(language));
+        var (request, preview) = _heldPreviews.Values.Should()
+            .ContainSingle(held => held.Request.OperationId == "bulk_update_habits", "the bulk rename prepared").Subject;
+        _pendingOperationStore.Received(1).Withdraw(UserId, preview.Id,
+            AgentOperationFingerprint.Compute("bulk_update_habits", request.Arguments.GetRawText()));
+        _pendingOperationStore.DidNotReceive().Cancel(UserId, EarlierPreviewId, Arg.Any<string>());
+        _pendingOperationStore.IsAwaitingConfirmation(UserId, EarlierPreviewId).Should().BeTrue("the earlier preview stays approvable");
+    }
+
+    /// <summary>
+    /// The same bulk rename and delete in an answer turn both prepare and save the answer checkpoint, and the tool loop
+    /// ends with the whole request. The transaction that saves the turn then fails with an exception that is not a
+    /// cancellation, so the block answer replays the checkpoint with both previews. The earlier preview that the rename
+    /// covers closes too, so the person never sees two previews of one change.
+    /// </summary>
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task DeniedWrite_AnAnswerTurnThatThrowsAfterItsToolLoopClosesTheEarlierPreviewThatItsBulkWriteCovered(string language)
+    {
+        var run = await RunDeniedAnswerTurnAsync(language, _ => [Text(language)], children =>
+            {
+                ArrangeCoveredEarlierPreview(children);
+                FailTheSaveAfterTheBlockWrites(BlockWriteFailure("timeout"));
+            },
+            first: children => Calls(InspectEarlierPreview(), CorrectedRename(children), Run4Delete(children)),
+            tools: [ReadTool(ReviseTool, new ToolResult(true))]);
+
+        run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
+        run.Held.Should().Contain(request => request.OperationId == "bulk_update_habits", "the bulk rename prepared")
+            .And.Contain(request => request.OperationId == "bulk_delete_habits", "the delete prepared");
+        await _blockStore.Received(2).CheckpointAnswerAsync(Arg.Any<Guid>(), UserId, Arg.Any<DateTime>(), Arg.Any<string>(),
+            Arg.Any<CancellationToken>());
+        _pendingOperationStore.Received(1).Cancel(UserId, EarlierPreviewId,
+            AgentOperationFingerprint.Compute("update_habit", EarlierPreviewArguments(run.Children, RenameTitle).GetRawText()));
+    }
+
+    /// <summary>
+    /// A read of the turn returns two "Run" records that need the person's choice. The same bulk rename saves the answer
+    /// checkpoint, and the continuation fails. The turn answers with the selection question, which shows no preview of
+    /// the turn, so the earlier preview that the rename covers stays approvable.
+    /// </summary>
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task DeniedWrite_AnAnswerTurnThatAsksASelectionAfterItsCheckpointLeavesTheEarlierPreviewThatItsBulkWriteCovered(
+        string language)
+    {
+        var run = await RunSelectionAfterCheckpointAsync(language);
+
+        run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
+        run.Result.Value.AiMessage.Should().Be(SelectionQuestionFor("Run", language));
+        run.Result.Value.PendingOperations.Should().BeNullOrEmpty();
+        await _blockStore.Received().CheckpointAnswerAsync(Arg.Any<Guid>(), UserId, Arg.Any<DateTime>(), Arg.Any<string>(),
+            Arg.Any<CancellationToken>());
+        _pendingOperationStore.DidNotReceive().Cancel(UserId, EarlierPreviewId, Arg.Any<string>());
+    }
+
+    /// <summary>
+    /// The answer turn of the selection tests: a read returns two "Run" records that need the person's choice, the same
+    /// bulk rename and, when <paramref name="delete"/> is true, the delete save the answer checkpoint, and the continuation
+    /// fails. <paramref name="store"/> runs before the earlier preview is arranged.
+    /// </summary>
+    private Task<DeniedWriteRun> RunSelectionAfterCheckpointAsync(string language, Action? store = null, bool delete = true)
+    {
+        var runs = new[] { new HabitListCardItem(Guid.NewGuid().ToString(), "Run", null, 0, false, "none"),
+            new HabitListCardItem(Guid.NewGuid().ToString(), "Run", null, 0, false, "none") };
+        return RunDeniedAnswerTurnAsync(language, _ => [], children =>
+            {
+                store?.Invoke();
+                ArrangeCoveredEarlierPreview(children);
+                _operationExecutor.ExecuteAsync(Arg.Is<AgentExecuteOperationRequest>(request => request.OperationId == "query_habits"),
+                        Arg.Any<CancellationToken>())
+                    .Returns(new AgentExecuteOperationResponse(new AgentOperationResult("query_habits", "query_habits",
+                        AgentRiskClass.Low, AgentConfirmationRequirement.None, AgentOperationStatus.Succeeded,
+                        Payload: new HabitListCard("all", runs) { Selection = new HabitSelectionCandidates("Run", runs, RequiresAnswer: true) })));
+            },
+            first: children => Calls([new AiToolCall("query_habits", "runs", JsonSerializer.SerializeToElement(new { search = "Run", for_selection = true })),
+                InspectEarlierPreview(), CorrectedRename(children), .. delete ? [Run4Delete(children)] : Array.Empty<AiToolCall>()]),
+            lastReply: FailedReply("unavailable"),
+            tools: [ReadTool(ReviseTool, new ToolResult(true)), ReadTool("query_habits", new ToolResult(true))]);
+    }
+
+    /// <summary>
+    /// The same selection answer with only the bulk rename, and a store that keeps each preview of the turn awaiting, as
+    /// the real store does. The question shows no preview of the turn, so the turn withdraws the rename that its checkpoint
+    /// holds, and no later turn finds it open and unseen. The earlier preview that the rename covers stays approvable.
+    /// </summary>
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task DeniedWrite_AnAnswerTurnThatAsksASelectionAfterItsCheckpointWithdrawsThePreviewOfTheTurn(string language)
+    {
+        var run = await RunSelectionAfterCheckpointAsync(language, StorePreparedPreviews, delete: false);
+
+        run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
+        run.Result.Value.AiMessage.Should().Be(SelectionQuestionFor("Run", language));
+        run.Result.Value.PendingOperations.Should().BeNullOrEmpty();
+        var (request, preview) = _heldPreviews.Values.Should()
+            .ContainSingle(held => held.Request.OperationId == "bulk_update_habits", "the bulk rename prepared").Subject;
+        _pendingOperationStore.Received(1).Withdraw(UserId, preview.Id,
+            AgentOperationFingerprint.Compute("bulk_update_habits", request.Arguments.GetRawText()));
+        _pendingOperationStore.IsAwaitingConfirmation(UserId, preview.Id).Should().BeFalse("no later turn finds it open");
+        _pendingOperationStore.DidNotReceive().Cancel(UserId, EarlierPreviewId, Arg.Any<string>());
+        _pendingOperationStore.IsAwaitingConfirmation(UserId, EarlierPreviewId).Should().BeTrue("the earlier preview stays approvable");
+    }
+}

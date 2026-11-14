@@ -76,6 +76,7 @@ public partial class ProcessUserChatCommandHandler
                     instruction = SelectionRule
                 },
                 HabitMonthCard month => HabitMonthModelPayload.From(month),
+                PendingPreviewDiscard => new { status = "discarded", instruction = PendingPreviewDiscard.Instruction },
                 IReadOnlyList<ChecklistTemplateResponse> templates when !ModelPayloadBudget.Fits(templates) => ChecklistTemplateModelPayload.From(templates),
                 HabitRankingResponse ranking when !ModelPayloadBudget.Fits(ranking) => HabitRankingModelPayload.From(ranking),
                 _ => operationResult.Payload

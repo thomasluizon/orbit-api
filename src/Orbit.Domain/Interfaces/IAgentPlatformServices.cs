@@ -62,7 +62,16 @@ public interface IPendingAgentOperationStore
     IReadOnlyList<PendingHabitCreation> GetPendingHabitCreations(Guid userId);
     IReadOnlyList<PendingAgentOperationExecution> GetAwaiting(Guid userId);
     Task<IReadOnlyList<PendingAgentOperationExecution>> GetAwaitingAsync(Guid userId, CancellationToken cancellationToken = default);
-    bool SupersedeHabitCreation(Guid userId, string title, Guid? parentHabitId);
+    /// <summary>
+    /// The operations that did not run, were not cancelled and did not expire: each one that awaits approval and each
+    /// one that the person approved.
+    /// </summary>
+    Task<IReadOnlyList<Guid>> GetOpenIdsAsync(Guid userId, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// The awaiting creation previews of the habit that a new preview replaces, or null when one of them also creates
+    /// other habits. Nothing changes until the caller cancels them.
+    /// </summary>
+    IReadOnlyList<Guid>? FindHabitCreationReplacement(Guid userId, string title, Guid? parentHabitId);
     /// <summary>
     /// Binds new arguments and a new preview fingerprint. Pass <paramref name="revisedPreview"/> only for a revision or
     /// a refresh that the person asked for: it keeps the preview that the person approves and marks the preview revised.
@@ -71,7 +80,20 @@ public interface IPendingAgentOperationStore
     bool Revise(Guid userId, Guid pendingOperationId, string expectedFingerprint,
         string argumentsJson, string operationFingerprint, string previewFingerprint,
         PendingOperationChangePreview? revisedPreview = null);
+    PendingAgentOperationRevision? GetRevision(Guid userId, Guid pendingOperationId);
+    /// <summary>
+    /// Puts back the state from before a revision while the operation still holds <paramref name="expectedFingerprint"/>
+    /// and awaits approval.
+    /// </summary>
+    bool Restore(Guid userId, Guid pendingOperationId, string expectedFingerprint, PendingAgentOperationRevision revision);
     bool Cancel(Guid userId, Guid pendingOperationId, string expectedFingerprint);
+    /// <summary>
+    /// Cancels a preview that its own chat turn withdrew before the person saw it, and detaches it from its
+    /// conversation, so <see cref="GetLastConversationPreviewsAsync"/> never lists it. A change set withdraws each member
+    /// that it still reserves the same way, except each one in <paramref name="releasedMemberIds"/>, which stays open.
+    /// </summary>
+    bool Withdraw(Guid userId, Guid pendingOperationId, string expectedFingerprint,
+        IReadOnlyCollection<Guid>? releasedMemberIds = null);
     PendingAgentOperationExecution? GetConfirmedExecution(Guid userId, string capabilityId,
         string operationFingerprint, string confirmationToken);
     bool TryConsumeFreshConfirmation(

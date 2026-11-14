@@ -11,6 +11,7 @@ using Microsoft.Extensions.Options;
 using Orbit.Domain.Entities;
 using Orbit.Infrastructure.Configuration;
 using Orbit.Infrastructure.Services;
+using Orbit.Infrastructure.Tests.Persistence;
 
 namespace Orbit.Infrastructure.Tests.Services;
 
@@ -140,6 +141,101 @@ public partial class PendingAgentOperationStoreTests
         (await _store.GetLastConversationPreviewsAsync(_userId, Guid.NewGuid())).Should().BeEmpty();
         (await _store.GetLastConversationPreviewsAsync(_userId, Guid.Empty)).Should().BeEmpty();
         (await _store.GetLastConversationPreviewsAsync(Guid.Empty, id)).Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// A turn withdraws its preview before the person sees it. The row closes like a cancel, and the conversation lists
+    /// the batch that the turn before it showed, never the withdrawn row as a rejected proposal.
+    /// </summary>
+    [Fact]
+    public async Task Withdraw_ClosesTheRowAndKeepsItOutOfTheLastConversationBatch()
+    {
+        var id = Guid.NewGuid();
+        var nowAtUtc = DateTime.UtcNow;
+        var shown = ConversationProposal(new(id, nowAtUtc.AddMinutes(-1)), "Reservation");
+        var withdrawn = ConversationProposal(new(id, nowAtUtc), "Travel");
+        var state = await _dbContext.PendingAgentOperations.SingleAsync(item => item.Id == withdrawn.Id);
+
+        _store.Withdraw(_userId, withdrawn.Id, state.OperationFingerprint).Should().BeTrue();
+        _dbContext.ChangeTracker.Clear();
+
+        _store.GetExecution(_userId, withdrawn.Id).Should().BeNull("a withdrawn row never runs");
+        _store.Withdraw(_userId, withdrawn.Id, state.OperationFingerprint).Should().BeFalse("the row is already closed");
+        (await _store.GetLastConversationPreviewsAsync(_userId, id)).Select(item => item.Proposal.Id).Should().Equal(shown.Id);
+    }
+
+    /// <summary>
+    /// A turn combines a preview that the person saw and a write of its own into a change set, then withdraws the change
+    /// set. The write is withdrawn with it, the released earlier preview stays open on its own, and the conversation lists
+    /// the batch that the person saw, never the withdrawn write as a rejected proposal.
+    /// </summary>
+    [Fact]
+    public async Task Withdraw_AChangeSetWithdrawsTheMembersItReservesAndKeepsAReleasedMemberOpen()
+    {
+        var id = Guid.NewGuid();
+        var nowAtUtc = DateTime.UtcNow;
+        var shown = ConversationProposal(new(id, nowAtUtc.AddMinutes(-1)), "Reservation");
+        var batch = new PendingOperationConversation(id, nowAtUtc);
+        var created = ConversationProposal(batch, "Travel");
+        var arguments = AccountChangeSet.BuildArguments([
+            _store.GetExecution(_userId, shown.Id)!, _store.GetExecution(_userId, created.Id)!]);
+        var fingerprint = AgentOperationFingerprint.Compute(AccountChangeSet.OperationName, arguments.GetRawText());
+        var combined = _store.Create(_userId, _catalogService.GetCapability(AccountChangeSet.CapabilityId)!,
+            AccountChangeSet.OperationName, arguments.GetRawText(), "Review changes", fingerprint, AgentExecutionSurface.Chat, batch);
+        _store.Revise(_userId, combined.Id, fingerprint, arguments.GetRawText(), fingerprint, "combined-preview").Should().BeTrue();
+        _store.Confirm(_userId, shown.Id).Should().BeNull("the change set reserves the earlier preview");
+
+        _store.Withdraw(_userId, combined.Id, fingerprint, [shown.Id]).Should().BeTrue();
+        _dbContext.ChangeTracker.Clear();
+
+        _store.GetExecution(_userId, created.Id).Should().BeNull("the change set withdraws the write that it reserves");
+        _store.IsAwaitingConfirmation(_userId, shown.Id).Should().BeTrue("a released member stays open");
+        (await _store.GetLastConversationPreviewsAsync(_userId, id)).Select(item => item.Proposal.Id).Should().Equal(shown.Id);
+        _store.Confirm(_userId, shown.Id).Should().NotBeNull("no change set holds the released member");
+    }
+
+    /// <summary>
+    /// A concurrent write makes the save of a change set close fail after the store closed its members in memory. The
+    /// store drops those member closes too, so a later save of the same context never closes a member of an open change
+    /// set. SQLite rolls back the failed save as a whole, as the production database does.
+    /// </summary>
+    [Fact]
+    public void Withdraw_AFailedChangeSetSaveNeverClosesItsMembersOnALaterSave()
+    {
+        using var database = new SqliteOrbitDbContextFactory();
+        var user = User.Create("Alex", "alex@example.com").Value;
+        database.Context.Users.Add(user);
+        database.Context.SaveChanges();
+        var store = new PendingAgentOperationStore(database.Context, Options.Create(new AgentPlatformSettings()));
+        PendingAgentOperation Held(string title)
+        {
+            var arguments = JsonSerializer.Serialize(new { title, frequency_unit = "OneTime", due_date = "2026-12-31" });
+            var fingerprint = AgentOperationFingerprint.Compute("create_habit", arguments);
+            var pending = store.Create(user.Id, _catalogService.GetCapabilityByChatTool("create_habit")!, "create_habit",
+                arguments, title, fingerprint, AgentExecutionSurface.Chat);
+            store.Revise(user.Id, pending.Id, fingerprint, arguments, fingerprint, "preview").Should().BeTrue();
+            return pending;
+        }
+        var first = Held("Reservation");
+        var second = Held("Travel");
+        var arguments = AccountChangeSet.BuildArguments([store.GetExecution(user.Id, first.Id)!, store.GetExecution(user.Id, second.Id)!]);
+        var fingerprint = AgentOperationFingerprint.Compute(AccountChangeSet.OperationName, arguments.GetRawText());
+        var combined = store.Create(user.Id, _catalogService.GetCapability(AccountChangeSet.CapabilityId)!,
+            AccountChangeSet.OperationName, arguments.GetRawText(), "Review changes", fingerprint, AgentExecutionSurface.Chat);
+        store.Revise(user.Id, combined.Id, fingerprint, arguments.GetRawText(), fingerprint, "combined-preview").Should().BeTrue();
+        using (var concurrent = database.CreateContext())
+        {
+            var stored = concurrent.PendingAgentOperations.Single(item => item.Id == combined.Id);
+            stored.Revise(stored.ArgumentsJson, stored.OperationFingerprint, "concurrent-preview", DateTime.UtcNow).Should().BeTrue();
+            concurrent.SaveChanges();
+        }
+
+        store.Withdraw(user.Id, combined.Id, fingerprint).Should().BeFalse("the concurrent write changed the change set first");
+        database.Context.SaveChanges();
+
+        store.IsAwaitingConfirmation(user.Id, combined.Id).Should().BeTrue("the change set stays open");
+        store.IsAwaitingConfirmation(user.Id, first.Id).Should().BeTrue("a member of an open change set stays open");
+        store.IsAwaitingConfirmation(user.Id, second.Id).Should().BeTrue("a member of an open change set stays open");
     }
 
     [Fact]

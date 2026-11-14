@@ -69,6 +69,42 @@ public sealed partial class ChatWriteHoldHandlerTests
         AccountChangeSet.Reservations(stored.Arguments).Should().HaveCount(2);
     }
 
+    /// <summary>
+    /// A chat turn holds the discard of a revision that removes every item: the preview still awaits approval until the
+    /// turn runs the discard, and another surface discards at once.
+    /// </summary>
+    [Fact]
+    public async Task RevisionTool_RemovingEveryItemHoldsTheDiscardForAChatTurn()
+    {
+        var pending = await HoldTwoChangesAsync();
+        using var services = RevisionToolServices();
+        var tool = new RevisePendingChangesTool(services);
+        var arguments = JsonSerializer.SerializeToElement(new
+        {
+            pending_operation_id = pending.Id,
+            items = Array.Empty<object>(),
+            remove_item_ids = pending.Items!.Select(item => item.ItemId)
+        });
+
+        var held = await tool.ExecuteAsync(arguments, _userId, default, null, holdDiscard: true);
+
+        held.Success.Should().BeTrue(held.Error);
+        var discard = held.Payload.Should().BeOfType<PendingPreviewDiscard>().Subject;
+        discard.PendingOperationId.Should().Be(pending.Id);
+        _pendingOperationStore.IsAwaitingConfirmation(_userId, pending.Id).Should().BeTrue("the turn has not ended");
+        (await tool.DiscardAsync(_userId, discard, null, default)).Should().BeTrue();
+        _pendingOperationStore.GetExecution(_userId, pending.Id).Should().BeNull();
+
+        var other = await HoldTwoChangesAsync();
+        await tool.ExecuteAsync(JsonSerializer.SerializeToElement(new
+        {
+            pending_operation_id = other.Id,
+            items = Array.Empty<object>(),
+            remove_item_ids = other.Items!.Select(item => item.ItemId)
+        }), _userId, default);
+        _pendingOperationStore.GetExecution(_userId, other.Id).Should().BeNull("only a chat turn holds the discard");
+    }
+
     [Theory]
     [InlineData("malformed_json", "invalid_revision")]
     [InlineData("duplicate", "invalid_revision")]

@@ -141,12 +141,12 @@ public partial class ProcessUserChatCommandHandler
     /// <summary>
     /// The records of the turn that share the title, in the order the reads returned them.
     /// </summary>
-    private static HabitListCardItem[] SameTitleRecords(string normalizedTitle, ToolExecutionAccumulator results) =>
-        [.. TurnRecords(results).Where(record => HabitNameMatcher.Normalize(record.Title) == normalizedTitle)];
+    private static HabitListCardItem[] SameTitleRecords(string titleKey, ToolExecutionAccumulator results) =>
+        [.. TurnRecords(results).Where(record => HabitNameMatcher.TitleKey(record.Title) == titleKey)];
 
     private static HabitListCardItem[][] SameTitleGroups(IEnumerable<HabitListCardItem> candidates) => [.. candidates
         .DistinctBy(candidate => candidate.Id, StringComparer.OrdinalIgnoreCase)
-        .GroupBy(candidate => HabitNameMatcher.Normalize(candidate.Title)).Where(group => group.Count() > 1)
+        .GroupBy(candidate => HabitNameMatcher.TitleKey(candidate.Title)).Where(group => group.Count() > 1)
         .Select(group => group.ToArray())];
 
     private static AiBlockDefinition TakeSeveral(AiBlockDefinition definition) => definition.Form == AiBlockKinds.Question

@@ -17,27 +17,78 @@ public partial class ProcessUserChatCommandHandler
         outcome.OperationResult is { Status: AgentOperationStatus.Denied, Access: "read", PolicyReason: { } reason }
         && reason.StartsWith("target_not_owned:", StringComparison.Ordinal);
 
+    /// <summary>
+    /// A write that the ownership check turned down names a target id that is not one of the person's records. Beside a
+    /// change of the turn, the model gets one correction with the right ids, the same allowance that an ownership
+    /// denial of a read gets.
+    /// </summary>
+    private static bool IsOwnershipWriteDenial(ToolCallOutcome outcome) => IsOwnershipWriteDenial(outcome.OperationResult);
+
+    private static bool IsOwnershipWriteDenial(AgentOperationResult? operation) =>
+        operation is { Status: AgentOperationStatus.Denied, Access: "write", PolicyReason: { } reason }
+        && reason.StartsWith("target_not_owned:", StringComparison.Ordinal);
+
     private static bool HasReadCorrectionCandidate(ToolExecutionAccumulator results) =>
         results.CorrectionOccurrences.Any(occurrence =>
             IsOwnershipReadDenial(occurrence.Outcome) || IsFailedStartingStep(occurrence));
 
-    private static void OfferCorrections(List<AiToolCallResult> results, IReadOnlyDictionary<string, ToolCallOutcome> outcomes)
+    /// <summary>
+    /// Offers the chosen correction only to the calls that it can bind. The <see cref="DeniedWriteCorrection"/> binds
+    /// the writes that the ownership check turned down. The <see cref="RejectedCallCorrection"/> binds the reads that the
+    /// ownership check turned down, and the writes rejected before dispatch or open to an argument repair. Any other call
+    /// keeps its result with no offer, so the model never gets an instruction to send a call that the round rejects.
+    /// </summary>
+    private static void OfferCorrections(List<AiToolCallResult> results, IReadOnlyDictionary<string, ToolCallOutcome> outcomes,
+        ICallCorrection correction)
     {
         for (var index = 0; index < results.Count; index++)
-            if (outcomes.TryGetValue(results[index].Id, out var outcome))
-            {
-                if (IsOwnershipReadDenial(outcome))
-                    results[index] = results[index] with
-                    {
-                        Payload = new
-                        {
-                            correction_allowed = true,
-                            instruction = "Correct only this read once using an owned ID from the appropriate account index, or omit it if successful reads already answer the request. Do not add writes or repeat successful reads."
-                        }
-                    };
-                else if (outcome.ArgumentRepairAllowed || outcome.PreparedResponse is RejectedBeforeDispatchResponse { Operation.Status: AgentOperationStatus.Failed })
-                    results[index] = results[index] with { Payload = new { correction_allowed = true } };
-            }
+            if (outcomes.TryGetValue(results[index].Id, out var outcome) && CorrectionOffer(correction, outcome) is { } offer)
+                results[index] = results[index] with { Payload = offer };
+    }
+
+    private static object? CorrectionOffer(ICallCorrection correction, ToolCallOutcome outcome) => correction switch
+    {
+        RejectedCallCorrection when IsOwnershipReadDenial(outcome) => new
+        {
+            correction_allowed = true,
+            instruction = "Correct only this read once using an owned ID from the appropriate account index, or omit it if successful reads already answer the request. Do not add writes or repeat successful reads."
+        },
+        DeniedWriteCorrection when IsOwnershipWriteDenial(outcome) => new
+        {
+            correction_allowed = true,
+            instruction = "Send this write once more with each target ID copied exactly from the Active Habit Index, a read result or the validated choice selection of this turn, and keep its change and every record the request names for it. This correction accepts no read; when none of these sources holds an ID, send no call. Do not repeat the writes that were prepared."
+        },
+        RejectedCallCorrection when outcome.ArgumentRepairAllowed
+            || outcome.PreparedResponse is RejectedBeforeDispatchResponse { Operation.Status: AgentOperationStatus.Failed } =>
+            new { correction_allowed = true },
+        _ => null
+    };
+
+    /// <summary>
+    /// The one correction that a round offers for its failed calls. The next round runs its candidates as the correction,
+    /// and the correction then tells whether a failed call is left.
+    /// </summary>
+    private interface ICallCorrection
+    {
+        bool HasUnresolvedFailures { get; }
+    }
+
+    /// <summary>
+    /// Chooses the correction of a round once. Beside a change of the turn, a write denial gets only the
+    /// <see cref="DeniedWriteCorrection"/>, in a request or an answer turn. Otherwise the <see cref="RejectedCallCorrection"/>
+    /// gets the calls without the write denials: they get no offer, and a resend of one binds to no call, so it fails. A read
+    /// correction ends the turn after its reads and accepts no write, so a round with a write denial beside it fails at once.
+    /// </summary>
+    private static ICallCorrection? ChooseCorrection(ProcessUserChatCommand request,
+        IReadOnlyList<CorrectionOccurrence> occurrences, bool holdsChange)
+    {
+        if (holdsChange && occurrences.Any(item => IsOwnershipWriteDenial(item.Outcome)))
+            return DeniedWriteCorrection.CanReplace(occurrences) ? new DeniedWriteCorrection(occurrences) : null;
+        var calls = occurrences.Where(item => !IsOwnershipWriteDenial(item.Outcome)).ToArray();
+        if (request.BlockAnswer is not null || !RejectedCallCorrection.CanRecover(calls))
+            return null;
+        var correction = new RejectedCallCorrection(calls);
+        return correction.IsReadOnly && calls.Length < occurrences.Count ? null : correction;
     }
 
     /// <summary>
@@ -46,7 +97,7 @@ public partial class ProcessUserChatCommandHandler
     /// across all original occurrences, including successful siblings. Dispatch uses the original preparation;
     /// a candidate cannot select its parent, change intent, replay an effect or claim an outcome.
     /// </summary>
-    private sealed class RejectedCallCorrection(IReadOnlyList<CorrectionOccurrence> occurrences)
+    private sealed class RejectedCallCorrection(IReadOnlyList<CorrectionOccurrence> occurrences) : ICallCorrection
     {
         private readonly HashSet<CorrectionOccurrence> _unresolved = occurrences
             .Where(item => item.Outcome.OperationResult?.Status == AgentOperationStatus.Failed || IsOwnershipReadDenial(item.Outcome)).ToHashSet();
