@@ -664,6 +664,43 @@ public partial class ProcessUserChatCommandHandlerTests
         result.Value.AiMessage.Should().Be(NotPreparedFor("en"));
     }
 
+    /// <summary>
+    /// A lone denial of a creation in the first round, and a creation that the argument check turned down before dispatch
+    /// in the next round. Both use the same tool, and the denied creation was never prepared, so it binds no repair.
+    /// </summary>
+    [Fact]
+    public async Task DeniedWrite_ALoneDenialOfTheSameToolDoesNotBlockTheRepairOfALaterRejectedWrite()
+    {
+        SetupUserAndPayGate();
+        var create = RecoveryCreateHabitTool();
+        var handler = CreateHandler(create);
+        var gateway = InstallCorrectionGateway(create, hold: true);
+        _operationExecutor.ExecuteAsync(Arg.Is<AgentExecuteOperationRequest>(request => request.OperationId == create.Name
+                && request.Arguments.GetRawText().Contains("goal_ids")), Arg.Any<CancellationToken>())
+            .Returns(new AgentExecuteOperationResponse(new AgentOperationResult(create.Name, create.Name, AgentRiskClass.Low,
+                AgentConfirmationRequirement.FreshConfirmation, AgentOperationStatus.Denied,
+                PolicyReason: "target_not_owned:create_habit:goal", Access: "write")));
+        SetupAiResponse(Calls(new AiToolCall(create.Name, "denied", JsonSerializer.SerializeToElement(new
+        {
+            title = "Water",
+            frequency_unit = "Day",
+            goal_ids = new[] { UnknownHabitId }
+        }))));
+        _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
+                Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(Calls(new AiToolCall(create.Name, "rejected", ParseArguments(WithMinuteSeconds(ProductionAdaptationArguments))))),
+                Result.Success(Calls(new AiToolCall(create.Name, "repaired", ParseArguments(ProductionAdaptationArguments)))),
+                Result.Success(Text("en")));
+
+        var result = await handler.Handle(new ProcessUserChatCommand(UserId,
+            "Create Water for my hydration goal and create the adaptation habit at 21:00."), default);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        gateway.Requests.Should().HaveCount(2, "the rejected create gets its repair");
+        result.Value.PendingOperations.Should().BeNullOrEmpty("the Water half of the request was not prepared");
+        result.Value.AiMessage.Should().Be(NotPreparedFor("en"));
+    }
+
     private static string TwoRenamesMessage(string language) => language == "en"
         ? "rename Water 1 to Water - 1.18L and Water 2 to Water - 2L"
         : "muda o nome do Water 1 para Water - 1.18L e do Water 2 para Water - 2L";

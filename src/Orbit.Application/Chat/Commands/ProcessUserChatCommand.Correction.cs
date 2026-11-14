@@ -83,15 +83,18 @@ public partial class ProcessUserChatCommandHandler
 
     /// <summary>
     /// Chooses the correction of a round once. Beside a prepared write, a write that the ownership check turned down gets
-    /// only the <see cref="DeniedWriteCorrection"/>, in a request or an answer turn. With no prepared write, a write denial
-    /// is not part of the <see cref="RejectedCallCorrection"/> of its round or a later round: it does not stop it and gets
-    /// no correction offer. A resend of the denied write binds to no failed call, so that correction fails.
+    /// only the <see cref="DeniedWriteCorrection"/>, in a request or an answer turn. With no prepared write, the
+    /// <see cref="RejectedCallCorrection"/> gets the calls of the turn without its write denials, so a denial of any tool
+    /// neither stops nor joins it and gets no offer. A resend of the denied write binds to no call, so that correction fails.
     /// </summary>
     private static ICallCorrection? ChooseCorrection(ProcessUserChatCommand request,
-        IReadOnlyList<CorrectionOccurrence> occurrences, bool holdsPreparedWrite) =>
-        holdsPreparedWrite && occurrences.Any(item => IsOwnershipWriteDenial(item.Outcome))
-            ? DeniedWriteCorrection.CanReplace(occurrences) ? new DeniedWriteCorrection(occurrences) : null
-            : request.BlockAnswer is null && RejectedCallCorrection.CanRecover(occurrences) ? new RejectedCallCorrection(occurrences) : null;
+        IReadOnlyList<CorrectionOccurrence> occurrences, bool holdsPreparedWrite)
+    {
+        if (holdsPreparedWrite && occurrences.Any(item => IsOwnershipWriteDenial(item.Outcome)))
+            return DeniedWriteCorrection.CanReplace(occurrences) ? new DeniedWriteCorrection(occurrences) : null;
+        var calls = occurrences.Where(item => !IsOwnershipWriteDenial(item.Outcome)).ToArray();
+        return request.BlockAnswer is null && RejectedCallCorrection.CanRecover(calls) ? new RejectedCallCorrection(calls) : null;
+    }
 
     /// <summary>
     /// An isolated starting-step suggestion can consume one correction without account changes.
