@@ -195,7 +195,7 @@ if ! grep -Fq 'environment: staging' <<< "$staging_release" ||
   ! grep -Fq 'RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}' <<< "$staging_release" ||
   ! grep -Fq '/deploys/$deploy_id' <<< "$staging_release" ||
   ! grep -Fq 'live) exit 0' <<< "$staging_release" ||
-  ! grep -Fq 'returned no deploy ID' <<< "$staging_release" ||
+  ! grep -Fq 'did not identify a deploy of the requested image' <<< "$staging_release" ||
   grep -Fq 'createdAfter' <<< "$staging_release" ||
   grep -Fq 'RENDER_STAGING_DEPLOY_HOOK_URL' <<< "$staging_release"; then
   echo 'Staging release must wait for its Render deploy before recording success' >&2
