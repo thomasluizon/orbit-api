@@ -12,8 +12,11 @@ name: CodeQL
 #
 # The language set matches what default setup covered: csharp,
 # javascript-typescript and actions. The javascript-typescript leg analyzes
-# only tools/, infra/ and .github/scripts/, so it runs on main and on the
-# weekly schedule and not on pull requests. C# is analyzed with a real build
+# the Node tools, scripts, hooks and tests in tools/, infra/ (with its
+# workers), .github/scripts/, .claude/ and load-tests/, and the three OAuth
+# page script tests in tests/Orbit.Infrastructure.Tests/. No JavaScript file
+# is under src/. The leg runs on main and on the weekly schedule and not on
+# pull requests. C# is analyzed with a real build
 # rather than buildless extraction, because this repository generates code at
 # build time (LoggerMessage source generators, openapi.json) and because a
 # GitHub-side feature flag can turn build-mode "none" into "autobuild" without
