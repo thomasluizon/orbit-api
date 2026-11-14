@@ -248,25 +248,34 @@ public sealed partial class PendingOperationChangePreviewerTests
 
     /// <summary>
     /// An emoji-only title is named only by whole emoji: a longer emoji sequence, a skin tone or another flag that holds
-    /// its characters does not name it. Punctuation around it and a variation selector do not count.
+    /// its characters does not name it, also at its end. Punctuation around it and a variation selector do not count, and
+    /// an emoji with a punctuation category is an emoji.
     /// </summary>
     [Theory]
     [InlineData("Add Stretch to 🏃‍♀️", "🏃", false)]
+    [InlineData("Add Stretch to 👨‍👩‍👧", "👧", false)]
     [InlineData("Add Stretch to 👍🏻", "👍", false)]
     [InlineData("Add Stretch to 🇧🇷🇵🇹", "🇷🇵", false)]
     [InlineData("Add Stretch to 🇧🇷🇵🇹", "🇵🇹", true)]
     [InlineData("Add Stretch to \"🏃\".", "🏃", true)]
     [InlineData("Add Stretch to ❤️", "❤", true)]
+    [InlineData("Add Stretch to ‼️", "‼️", true)]
+    [InlineData("Add Stretch to ⁉️", "‼️", false)]
     public void RoundThree_EmojiOnlyTitle_IsNamedOnlyByWholeEmoji(string message, string title, bool named) =>
         HabitNameMatcher.MentionsTitle(message, title).Should().Be(named);
 
     /// <summary>
     /// Two emoji-only titles are one title when they hold the same emoji. Punctuation does not count, as in a title with
-    /// words, and a variation selector does not count. A keycap, a skin tone or a longer sequence is another emoji.
+    /// words, and a variation selector does not count. A keycap, a skin tone or a longer sequence is another emoji. An
+    /// emoji with a punctuation category is an emoji, not punctuation.
     /// </summary>
     [Theory]
     [InlineData("🏃!", "🏃", true)]
     [InlineData("❤️", "❤", true)]
+    [InlineData("‼️", "⁉️", false)]
+    [InlineData("〰️", "〽️", false)]
+    [InlineData("‼️", "‼", true)]
+    [InlineData("‼️", "!!", false)]
     [InlineData("#️⃣", "*️⃣", false)]
     [InlineData("👍", "👍🏻", false)]
     [InlineData("🏃", "🏃‍♀️", false)]

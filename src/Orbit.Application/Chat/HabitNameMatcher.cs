@@ -22,7 +22,8 @@ public static class HabitNameMatcher
     /// <summary>
     /// The key that says two habit titles are one title. It is <see cref="Normalize"/>, so case, accents, punctuation and
     /// spaces do not count. A title with no letter or digit, such as one of emoji only, normalizes to nothing, so its key
-    /// is its <see cref="SymbolText"/> and two different such titles stay two. A missing title gives an empty key.
+    /// is its <see cref="SymbolText"/> and two titles with different emoji stay two. A missing title, or a title of only
+    /// punctuation and spaces, gives an empty key.
     /// </summary>
     public static string TitleKey(string? title) =>
         title is null ? string.Empty
@@ -62,7 +63,8 @@ public static class HabitNameMatcher
     /// <summary>
     /// The text as tokens one space apart: each word of letters and digits, folded as <see cref="Normalize"/> folds it,
     /// and each other text element (a whole emoji with its skin tone, joiners and keycap) as a token of its own. A
-    /// variation selector or an accent does not count. Punctuation and spaces only separate the tokens.
+    /// variation selector or an accent does not count. Punctuation and spaces only separate the tokens, but an emoji in
+    /// <see cref="PunctuationEmoji"/> is a token.
     /// </summary>
     private static string SymbolText(string value)
     {
@@ -84,13 +86,23 @@ public static class HabitNameMatcher
             if (word.Length > 0)
                 tokens.Add(word.ToString());
             word.Clear();
-            if (!text.All(character => char.IsWhiteSpace(character) || char.IsPunctuation(character)))
+            if (!text.All(SeparatesTokens))
                 tokens.Add(text);
         }
         if (word.Length > 0)
             tokens.Add(word.ToString());
         return string.Join(' ', tokens);
     }
+
+    /// <summary>
+    /// The emoji that the Unicode emoji data puts in a punctuation category: ‼ ⁉ 〰 〽. Each is an emoji token, with or
+    /// without a variation selector. "#" and "*" are not here, because they are emoji only in a keycap, which keeps its
+    /// enclosing mark.
+    /// </summary>
+    private const string PunctuationEmoji = "‼⁉〰〽";
+
+    private static bool SeparatesTokens(char character) =>
+        char.IsWhiteSpace(character) || char.IsPunctuation(character) && !PunctuationEmoji.Contains(character);
 
     public static bool Matches(string title, string search)
     {

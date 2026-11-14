@@ -324,12 +324,14 @@ public partial class ProcessUserChatCommandHandlerTests
     /// A creation binds to the existing habit with its own emoji-only title, never to a habit with another emoji-only title.
     /// </summary>
     [Theory]
-    [InlineData("📚", false)]
-    [InlineData("🏃", true)]
-    public async Task Replay_EmojiOnlyCreation_BindsOnlyToAnExistingHabitOfItsOwnTitle(string proposed, bool bound)
+    [InlineData("🏃", "📚", false)]
+    [InlineData("🏃", "🏃", true)]
+    [InlineData("‼️", "⁉️", false)]
+    [InlineData("‼️", "‼️", true)]
+    public async Task Replay_EmojiOnlyCreation_BindsOnlyToAnExistingHabitOfItsOwnTitle(string existingTitle, string proposed, bool bound)
     {
         SetupResolutionAccount();
-        var existing = CreateHabit("🏃");
+        var existing = CreateHabit(existingTitle);
         _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>()).Returns([existing]);
         _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>()).Returns([existing]);
         var bulk = new BulkCreateHabitsTool(_mediator);
