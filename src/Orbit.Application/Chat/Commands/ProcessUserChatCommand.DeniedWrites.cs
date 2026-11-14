@@ -118,7 +118,7 @@ public partial class ProcessUserChatCommandHandler
     /// </summary>
     private static bool CarriesCreatedTitles(IReadOnlyList<string> refused, IEnumerable<CorrectionOccurrence> family)
     {
-        var carried = family.SelectMany(write => (write.Outcome.PendingOperation?.Items ?? []).Select(item => TitleKey(item.EntityName)))
+        var carried = family.SelectMany(write => (write.Outcome.PendingOperation?.Items ?? []).Select(item => HabitNameMatcher.TitleKey(item.EntityName)))
             .CountBy(title => title, StringComparer.OrdinalIgnoreCase).ToDictionary(StringComparer.OrdinalIgnoreCase);
         return refused.Count > 0 && refused.All(title => title.Length > 0)
             && refused.CountBy(title => title, StringComparer.OrdinalIgnoreCase)
@@ -135,19 +135,11 @@ public partial class ProcessUserChatCommandHandler
 
     private static IEnumerable<string> HabitTitles(JsonElement habit) =>
         Children(habit, "sub_habits").SelectMany(HabitTitles)
-            .Prepend(habit.ValueKind == JsonValueKind.Object ? TitleKey(JsonArgumentParser.GetOptionalString(habit, "title")) : string.Empty);
+            .Prepend(habit.ValueKind == JsonValueKind.Object ? HabitNameMatcher.TitleKey(JsonArgumentParser.GetOptionalString(habit, "title")) : string.Empty);
 
     private static IEnumerable<JsonElement> Children(JsonElement item, string field) =>
         item.ValueKind == JsonValueKind.Object && item.TryGetProperty(field, out var children) && children.ValueKind == JsonValueKind.Array
             ? children.EnumerateArray() : [];
-
-    /// <summary>
-    /// The normalized title. A title that normalizes to nothing, such as one of emoji only, keeps its text as written, so
-    /// it never matches another such title.
-    /// </summary>
-    private static string TitleKey(string? title) =>
-        title is null ? string.Empty
-        : HabitNameMatcher.Normalize(title) is { Length: > 0 } normalized ? normalized : title.Trim();
 
     /// <summary>The two writes run one operation: the same tool, or its single and its bulk form.</summary>
     private static bool IsSameOperation(string name, string other) => name == other

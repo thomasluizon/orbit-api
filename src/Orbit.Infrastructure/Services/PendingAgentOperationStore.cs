@@ -235,7 +235,7 @@ public class PendingAgentOperationStore(
             if (args.ValueKind != JsonValueKind.Object)
                 continue;
             if (HabitCreations(args).Any(item => item.ParentHabitId == parentHabitId
-                && HabitNameMatcher.Normalize(item.Title) == HabitNameMatcher.Normalize(title)))
+                && HabitNameMatcher.TitleKey(item.Title) == HabitNameMatcher.TitleKey(title)))
             {
                 if (HabitCreations(args).Count > 1)
                     return null;

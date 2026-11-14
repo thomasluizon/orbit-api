@@ -58,7 +58,7 @@ public partial class ProcessUserChatCommandHandler
                 results.BlockedReplacementNames.Add(name.Title);
                 results.PendingDuplicateNames.Add(name.Title);
             }
-            var key = (name.ParentHabitId, HabitNameMatcher.Normalize(name.Title));
+            var key = (name.ParentHabitId, HabitNameMatcher.TitleKey(name.Title));
             results.ProposedHabitNames.Add(key);
             results.PendingHabitNames[key] = name.Title;
         }
@@ -278,7 +278,7 @@ public partial class ProcessUserChatCommandHandler
             var name = item["title"]!.GetValue<string>();
             var itemParentId = Guid.TryParse(item[ParentHabitId]?.ToString(), out var itemParent) ? itemParent : parentId;
             BindExistingHabit(item, name, itemParentId, results);
-            var key = (itemParentId, HabitNameMatcher.Normalize(name));
+            var key = (itemParentId, HabitNameMatcher.TitleKey(name));
             if (!results.ProposedHabitNames.Add(key))
             {
                 results.PendingDuplicateNames.Add(results.PendingHabitNames.GetValueOrDefault(key, name));
@@ -300,7 +300,7 @@ public partial class ProcessUserChatCommandHandler
                 item["title"] = target.Title;
             return;
         }
-        var matches = results.Habits.Where(habit => HabitNameMatcher.Normalize(habit.Title) == HabitNameMatcher.Normalize(name)
+        var matches = results.Habits.Where(habit => HabitNameMatcher.TitleKey(habit.Title) == HabitNameMatcher.TitleKey(name)
             && (parentId is null || habit.ParentHabitId == parentId)).ToArray();
         if (matches.Length > 1)
         {

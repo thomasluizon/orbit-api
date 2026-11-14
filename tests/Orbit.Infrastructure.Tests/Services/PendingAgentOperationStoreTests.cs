@@ -626,6 +626,21 @@ public partial class PendingAgentOperationStoreTests : IDisposable
         _store.IsAwaitingConfirmation(_userId, pending.Id).Should().BeTrue("the caller cancels the preview, not the lookup");
     }
 
+    [Theory]
+    [InlineData("📚", false)]
+    [InlineData(" 🏃 ", true)]
+    public void RoundFour_SupersedeEmojiOnlyTitle_FindsOnlyAProposalOfThatTitle(string title, bool found)
+    {
+        var capability = _catalogService.GetCapabilityByChatTool("create_habit")!
+            with
+        { ConfirmationRequirement = AgentConfirmationRequirement.FreshConfirmation };
+        const string json = "{\"title\":\"🏃\"}";
+        var pending = _store.Create(_userId, capability, "create_habit", json, "Create",
+            AgentOperationFingerprint.Compute("create_habit", json), AgentExecutionSurface.Chat);
+
+        _store.FindHabitCreationReplacement(_userId, title, null).Should().Equal(found ? new[] { pending.Id } : []);
+    }
+
     [Fact]
     public void Revise_RejectsFingerprintThatDoesNotMatchPayload()
     {

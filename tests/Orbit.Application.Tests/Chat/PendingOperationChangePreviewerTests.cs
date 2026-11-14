@@ -246,6 +246,17 @@ public sealed partial class PendingOperationChangePreviewerTests
     public void RoundThree_NameMatching_UsesNormalizedWordPrefixes(string title, string search, bool matches) =>
         HabitNameMatcher.Matches(title, search).Should().Be(matches);
 
+    /// <summary>
+    /// An exact name resolves the habit of its own title. An emoji-only name never resolves a habit with another
+    /// emoji-only title, and a name without the emoji of a title still resolves that title.
+    /// </summary>
+    [Theory]
+    [InlineData("📚", null)]
+    [InlineData("🏃", "🏃")]
+    [InlineData("RUN", "🏃 Run")]
+    public void RoundThree_ExactName_ResolvesOnlyAHabitOfItsOwnTitle(string name, string? resolved) =>
+        (HabitNameMatcher.Resolve([CreateHabit("🏃", null), CreateHabit("🏃 Run", null)], name)?.Title).Should().Be(resolved);
+
     [Fact]
     public async Task PreviewAsync_Create_JsonPropertyOrderDoesNotChangeApproval()
     {

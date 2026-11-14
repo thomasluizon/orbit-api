@@ -6,14 +6,26 @@ namespace Orbit.Application.Chat;
 
 public static class HabitNameMatcher
 {
-    public static string Normalize(string value)
+    public static string Normalize(string value) => Fold(value, keepSymbols: false);
+
+    /// <summary>
+    /// The key that says two habit titles are one title. It is <see cref="Normalize"/>, so case, accents, punctuation and
+    /// spaces do not count. A title with no letter or digit, such as one of emoji only, normalizes to nothing, so its key
+    /// keeps its symbols and two different such titles stay two. A missing title gives an empty key.
+    /// </summary>
+    public static string TitleKey(string? title) =>
+        title is null ? string.Empty
+        : Normalize(title) is { Length: > 0 } normalized ? normalized : Fold(title, keepSymbols: true);
+
+    private static string Fold(string value, bool keepSymbols)
     {
         var result = new StringBuilder();
         foreach (var character in value.Normalize(NormalizationForm.FormD))
         {
             if (CharUnicodeInfo.GetUnicodeCategory(character) == UnicodeCategory.NonSpacingMark)
                 continue;
-            result.Append(char.IsLetterOrDigit(character) ? char.ToLowerInvariant(character) : ' ');
+            result.Append(char.IsLetterOrDigit(character) ? char.ToLowerInvariant(character)
+                : keepSymbols && !char.IsWhiteSpace(character) ? character : ' ');
         }
         return string.Join(' ', result.ToString().Split(' ', StringSplitOptions.RemoveEmptyEntries));
     }
@@ -30,11 +42,10 @@ public static class HabitNameMatcher
     public static Habit? Resolve(IEnumerable<Habit> habits, string name)
     {
         var candidates = habits.ToList();
-        var exact = candidates.Where(habit => Normalize(habit.Title) == Normalize(name)).ToList();
+        var exact = candidates.Where(habit => TitleKey(habit.Title) == TitleKey(name)).ToList();
         if (exact.Count > 0)
             return exact.Count == 1 ? exact[0] : null;
         var matches = candidates.Where(habit => Matches(habit.Title, name)).ToList();
         return matches.Count == 1 ? matches[0] : null;
     }
-
 }

@@ -267,6 +267,88 @@ public partial class ProcessUserChatCommandHandlerTests
         held.Should().ContainSingle();
     }
 
+    /// <summary>
+    /// A title of emoji only has no letter or digit, so its key is its text as written: two different such titles under
+    /// one parent are two titles, and the same title written twice, with other spaces, is one.
+    /// </summary>
+    [Theory]
+    [InlineData("🏃", "📚", new[] { "🏃", "📚" })]
+    [InlineData("🏃", " 🏃 ", new[] { "🏃" })]
+    public async Task Replay_EmojiOnlyTitlesUnderOneParent_CountAsTheirOwnTitles(string first, string second, string[] created)
+    {
+        var habits = SetupResolutionAccount();
+        var bulk = new BulkCreateHabitsTool(_mediator);
+        var handler = CreateHandler(bulk);
+        var held = HoldReplayWrites(bulk);
+        _aiIntentService.SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(ReplayCall("bulk_create_habits", JsonSerializer.Serialize(new
+            {
+                parent_habit_id = habits[2].Id,
+                habits = new[] { new { title = first }, new { title = second } }
+            })));
+        ReplyToReplay("Revise a prévia.");
+
+        var result = await handler.Handle(new(UserId, "Crie os dois hábitos dentro de Academia."), default);
+
+        held.Should().ContainSingle();
+        held[0].Arguments.GetProperty("habits").EnumerateArray().Select(item => item.GetProperty("title").GetString())
+            .Should().Equal(created);
+        result.Value.PendingOperations.Should().ContainSingle().Which.Items.Should().HaveCount(created.Length);
+    }
+
+    /// <summary>
+    /// A waiting preview of an emoji-only title refuses a new creation of that title only. A creation of another
+    /// emoji-only title is a new habit.
+    /// </summary>
+    [Theory]
+    [InlineData("🏃", "📚", true)]
+    [InlineData("🏃", "🏃", false)]
+    public async Task Replay_WaitingEmojiOnlyPreview_RefusesOnlyItsOwnTitle(string waiting, string proposed, bool prepared)
+    {
+        SetupResolutionAccount();
+        var bulk = new BulkCreateHabitsTool(_mediator);
+        var handler = CreateHandler(bulk);
+        var held = HoldReplayWrites(bulk);
+        _pendingOperationStore.GetPendingHabitCreations(UserId).Returns([new PendingHabitCreation(waiting)]);
+        _aiIntentService.SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(ReplayCall("bulk_create_habits", JsonSerializer.Serialize(new { habits = new[] { new { title = proposed } } })));
+        ReplyToReplay("Revise a prévia.");
+
+        var result = await handler.Handle(new(UserId, "Crie o hábito.", History: [new ChatHistoryMessage("user", "Crie o hábito da prévia.")]), default);
+
+        held.Should().HaveCount(prepared ? 1 : 0);
+        result.Value.PendingOperations.Should().HaveCount(prepared ? 1 : 0);
+    }
+
+    /// <summary>
+    /// A creation binds to the existing habit with its own emoji-only title, never to a habit with another emoji-only title.
+    /// </summary>
+    [Theory]
+    [InlineData("📚", false)]
+    [InlineData("🏃", true)]
+    public async Task Replay_EmojiOnlyCreation_BindsOnlyToAnExistingHabitOfItsOwnTitle(string proposed, bool bound)
+    {
+        SetupResolutionAccount();
+        var existing = CreateHabit("🏃");
+        _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>()).Returns([existing]);
+        _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>()).Returns([existing]);
+        var bulk = new BulkCreateHabitsTool(_mediator);
+        var handler = CreateHandler(bulk);
+        var held = HoldReplayWrites(bulk);
+        _aiIntentService.SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(ReplayCall("bulk_create_habits", JsonSerializer.Serialize(new { habits = new[] { new { title = proposed } } })));
+        ReplyToReplay("Revise a prévia.");
+
+        await handler.Handle(new(UserId, "Crie o hábito."), default);
+
+        held.Should().ContainSingle();
+        var item = held[0].Arguments.GetProperty("habits")[0];
+        item.GetProperty("title").GetString().Should().Be(proposed);
+        item.TryGetProperty("habit_id", out var habitId).Should().Be(bound);
+        if (bound)
+            habitId.GetString().Should().Be(existing.Id.ToString());
+    }
+
     [Theory]
     [InlineData("Crie Rotina com aquecimento.", "Rotina", "Rotina da manhã")]
     [InlineData("Crie Rotina com sub-hábitos de aquecimento.", "Rotina", "Rotina da manhã")]
