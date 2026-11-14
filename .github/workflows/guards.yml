@@ -1,12 +1,14 @@
 name: Guards
 
-# These repository gates apply to every contributor through CI.
+# These repository gates apply to every contributor through CI. Each step runs even when an
+# earlier one fails, so one run reports every broken gate. The pull request title and body are
+# checked by pr-text.yml: a body edit must never post a new Guards check run on the head.
 
 on:
   workflow_dispatch:
   pull_request:
     branches: [main]
-    types: [opened, synchronize, reopened, edited]
+    types: [opened, synchronize, reopened]
   push:
     branches: [main]
 
@@ -16,16 +18,20 @@ concurrency:
 
 permissions:
   contents: read
-  pull-requests: read
 
 jobs:
   guards:
     name: Guards
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     defaults:
       run:
         shell: bash
+    env:
+      ACTIONLINT_VERSION: 1.7.12
+      ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
     steps:
+      # fetch-depth 0 fetches every branch, so origin/<base> is present for the diff-based steps.
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
@@ -33,14 +39,28 @@ jobs:
         with:
           node-version: 22
 
+      # Pull request runs read the binary that main saves and never save one.
+      - name: Restore actionlint
+        id: actionlint-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/actionlint
+          key: actionlint-${{ env.ACTIONLINT_VERSION }}-${{ runner.os }}-${{ runner.arch }}
+
+      - name: Install actionlint
+        if: steps.actionlint-cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/actionlint.tar.gz"
+          curl --proto '=https' --tlsv1.2 -fsSL "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" -o "$archive"
+          echo "$ACTIONLINT_SHA256  $archive" | sha256sum --check --strict
+          mkdir -p ~/.cache/actionlint
+          tar -xzf "$archive" -C ~/.cache/actionlint actionlint
+
       - name: Workflow Syntax
         if: ${{ !cancelled() }}
         # https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#concurrency documents queue, which actionlint does not recognize.
-        run: |
-          lint_dir="$(mktemp -d)"
-          curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.12/scripts/download-actionlint.bash -o "$lint_dir/download-actionlint.bash"
-          bash "$lint_dir/download-actionlint.bash" 1.7.12 "$lint_dir"
-          "$lint_dir/actionlint" -color -ignore '^unexpected key "queue" for "concurrency" section\. expected one of "cancel-in-progress", "group"$'
+        run: ~/.cache/actionlint/actionlint -color -ignore '^unexpected key "queue" for "concurrency" section\. expected one of "cancel-in-progress", "group"$'
 
       - name: Timeless Text
         if: ${{ !cancelled() }}
@@ -59,27 +79,12 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           BASE_REF: ${{ github.base_ref }}
-          PR_AUTHOR_TYPE: ${{ github.event.pull_request.user.type }}
-          PR_TITLE: ${{ github.event.pull_request.title }}
-          PR_BODY: ${{ github.event.pull_request.body }}
         run: |
           if [ "$EVENT_NAME" = pull_request ]; then
             git diff --name-only --diff-filter=ACMR "origin/$BASE_REF...HEAD" -z \
               | xargs -0 --no-run-if-empty node tools/check-dashes.mjs --files
           fi
           node tools/check-dashes.mjs --check-baseline
-          if [ "$EVENT_NAME" = pull_request ] && [ "$PR_AUTHOR_TYPE" != Bot ]; then
-            node tools/check-dashes.mjs --text "$PR_TITLE $PR_BODY"
-          fi
-
-      - name: Attribution Lines
-        if: ${{ !cancelled() && github.event_name == 'pull_request' }}
-        env:
-          PULL_REQUEST_RANGE: ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}
-          PR_BODY: ${{ github.event.pull_request.body }}
-        run: |
-          printf '%s' "$PR_BODY" > "$RUNNER_TEMP/pull-request-body.md"
-          node tools/check-attribution.mjs --range "$PULL_REQUEST_RANGE" --body-file "$RUNNER_TEMP/pull-request-body.md"
 
       - name: Skill and Agent Frontmatter
         if: ${{ !cancelled() }}
@@ -88,3 +93,81 @@ jobs:
       - name: Root Allowlist
         if: ${{ !cancelled() }}
         run: node tools/check-root-allowlist.mjs
+
+      # The closed allowlist makes every analyzer suppression visible in the diff.
+      - name: Every analyzer suppression under src/ is declared in the closed allowlist
+        if: ${{ !cancelled() }}
+        run: node tools/check-suppression-allowlist.mjs
+
+      - name: Tool tests
+        if: ${{ !cancelled() }}
+        run: node --test tools/__tests__/*.test.mjs
+
+      - name: API release admission tests
+        if: ${{ !cancelled() }}
+        run: node --test .github/scripts/release-admission.test.mjs .github/scripts/release-admission-security.test.mjs
+
+      - name: CI input selection tests
+        if: ${{ !cancelled() }}
+        run: node --test .github/scripts/changed-inputs.test.mjs
+
+      - name: OpenAPI publication guard tests
+        if: ${{ !cancelled() }}
+        run: python3 -m unittest discover -s .github/scripts -p 'test_openapi_artifacts.py'
+
+      - name: Ban permissive CORS
+        if: ${{ !cancelled() }}
+        run: |
+          violations=$(grep -rnE '\.AllowAnyHeader\(|\.AllowAnyMethod\(' src --include='*.cs' || true)
+          if [ -n "$violations" ]; then
+            echo "::error::CORS must enumerate explicit headers and methods. AllowAnyHeader()/AllowAnyMethod() are banned."
+            echo "$violations"
+            exit 1
+          fi
+          echo "OK: no permissive CORS calls."
+
+      - name: Stripe key set only at startup
+        if: ${{ !cancelled() }}
+        run: |
+          violations=$(grep -rnE 'StripeConfiguration\.ApiKey[[:space:]]*=' src --include='*.cs' | grep -v 'ServiceCollectionExtensions.Infrastructure.cs' || true)
+          if [ -n "$violations" ]; then
+            echo "::error::StripeConfiguration.ApiKey may only be assigned once at startup in ServiceCollectionExtensions.Infrastructure.cs. Never set it per-request."
+            echo "$violations"
+            exit 1
+          fi
+          echo "OK: StripeConfiguration.ApiKey assigned only at startup."
+
+      - name: Ban TODO/FIXME/HACK markers
+        if: ${{ !cancelled() }}
+        run: |
+          violations=$(grep -rnE '\b(TODO|FIXME|HACK)\b' src --include='*.cs' | grep -v '/Migrations/' || true)
+          if [ -n "$violations" ]; then
+            echo "::error::TODO/FIXME/HACK markers are banned in committed source. Resolve the work or track it in a GitHub issue."
+            echo "$violations"
+            exit 1
+          fi
+          echo "OK: no TODO/FIXME/HACK markers in source."
+
+      - name: Capability inventory matches the reviewed snapshot
+        if: ${{ !cancelled() }}
+        run: node tools/capability-inventory.mjs --check
+
+      - name: Gating matrix generation is deterministic
+        if: ${{ !cancelled() }}
+        run: |
+          set -euo pipefail
+          node tools/gating-matrix.mjs
+          cp gating-matrix.json "$RUNNER_TEMP/first-gating-matrix.json"
+          node tools/gating-matrix.mjs > /dev/null
+          if ! cmp -s gating-matrix.json "$RUNNER_TEMP/first-gating-matrix.json"; then
+            echo "::error::gating-matrix.json differs between two runs over the same tree"
+            diff "$RUNNER_TEMP/first-gating-matrix.json" gating-matrix.json | head -40 || true
+            exit 1
+          fi
+
+      - name: Save actionlint
+        if: github.event_name != 'pull_request' && steps.actionlint-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/actionlint
+          key: ${{ steps.actionlint-cache.outputs.cache-primary-key }}

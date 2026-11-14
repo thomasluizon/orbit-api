@@ -2,10 +2,10 @@
   "version": 1,
   "isRoot": true,
   "tools": {
-    "dotnet-stryker": {
-      "version": "4.16.0",
+    "dotnet-sonarscanner": {
+      "version": "12.1.0",
       "commands": [
-        "dotnet-stryker"
+        "dotnet-sonarscanner"
       ],
       "rollForward": false
     }

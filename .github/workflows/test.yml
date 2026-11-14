@@ -1,5 +1,9 @@
 name: API Tests
 
+# Every job reports its context on every pull request. A job skips only the steps whose inputs
+# the pull request did not change (.github/scripts/changed-inputs.sh), so a required context is
+# never missing. A push to main or a dispatch runs every step: release admission reads that run.
+
 on:
   workflow_dispatch:
   pull_request:
@@ -18,38 +22,72 @@ jobs:
   docker-bundle:
     name: Docker migration bundle
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
-      - run: docker build --platform linux/amd64 -t orbit-api-bundle-test .
-      - run: docker run --rm --platform linux/amd64 --entrypoint /app/efbundle orbit-api-bundle-test --help
+        with:
+          fetch-depth: 2
+
+      - name: Select the inputs that changed
+        id: inputs
+        run: bash .github/scripts/changed-inputs.sh docker
+
+      - name: Set up Docker Buildx
+        if: steps.inputs.outputs.docker == 'true'
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      # Pull request runs read the layer cache that main writes and never write one.
+      - name: Build the API image
+        if: steps.inputs.outputs.docker == 'true'
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          provenance: false
+          tags: orbit-api-bundle-test
+          cache-from: type=gha,scope=api-image
+          cache-to: ${{ github.event_name != 'pull_request' && 'type=gha,scope=api-image,mode=max' || '' }}
+
+      - name: Run the migration bundle
+        if: steps.inputs.outputs.docker == 'true'
+        run: docker run --rm --platform linux/amd64 --entrypoint /app/efbundle orbit-api-bundle-test --help
+
       - name: Guard API container memory at 512 MiB
+        if: steps.inputs.outputs.docker == 'true'
         run: bash .github/scripts/api-memory-container.sh orbit-api-bundle-test
 
-  build:
-    name: Build
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v7
-
       - name: Setup .NET
+        if: steps.inputs.outputs.docker == 'true'
         uses: actions/setup-dotnet@v6
         with:
           dotnet-version: "10.0.x"
 
-      - name: Restore
-        run: dotnet restore
+      - name: Restore the NuGet package cache
+        if: steps.inputs.outputs.docker == 'true'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.Packages.props', 'Directory.Build.props', 'global.json', '.config/dotnet-tools.json') }}
+          restore-keys: nuget-${{ runner.os }}-
 
-      - name: Build
-        run: dotnet build --no-restore
+      - name: Build API memory workload
+        if: steps.inputs.outputs.docker == 'true'
+        run: dotnet build tests/Orbit.Memory.Tests
 
-      - name: Fail if committed OpenAPI documents are stale
-        run: python3 .github/scripts/openapi_artifacts.py freshness
+      - name: Guard API memory headroom
+        if: steps.inputs.outputs.docker == 'true'
+        env:
+          ORBIT_MEMORY_GUARD: "1"
+          DOTNET_gcServer: "0"
+          DOTNET_GCHeapHardLimit: "10000000"
+          DOTNET_GCConserveMemory: "7"
+        run: dotnet test tests/Orbit.Memory.Tests --no-build --no-restore --filter FullyQualifiedName~ApiMemoryLoadTests --logger "console;verbosity=detailed"
 
   unit-tests:
     name: Unit Tests
-    needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     services:
       postgres:
         image: postgres:17
@@ -66,57 +104,64 @@ jobs:
           --health-retries 5
 
     steps:
+      # The full history serves RollingMigrationGateTests (it reads the default remote branch)
+      # and the SonarCloud new-code blame.
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v6
-        with:
-          dotnet-version: "10.0.x"
-
-      - name: Restore
-        run: dotnet restore
-
-      - name: Run Domain Tests
-        run: dotnet test tests/Orbit.Domain.Tests --no-restore --collect:"XPlat Code Coverage" --settings coverlet.runsettings --results-directory ./TestResults
-
-      - name: Run Application Tests
-        run: dotnet test tests/Orbit.Application.Tests --no-restore --collect:"XPlat Code Coverage" --settings coverlet.runsettings --results-directory ./TestResults
-
-      - name: Run Infrastructure Tests
-        env:
-          ORBIT_POSTGRES_TEST_CONNECTION: Host=localhost;Port=5432;Database=postgres;Username=orbit_test
-        run: dotnet test tests/Orbit.Infrastructure.Tests --no-restore --collect:"XPlat Code Coverage" --settings coverlet.runsettings --results-directory ./TestResults
-
-      - name: Build API memory workload
-        run: dotnet build tests/Orbit.Memory.Tests --no-restore
-
-      - name: Guard API memory headroom
-        env:
-          ORBIT_MEMORY_GUARD: "1"
-          DOTNET_gcServer: "0"
-          DOTNET_GCHeapHardLimit: "10000000"
-          DOTNET_GCConserveMemory: "7"
-        run: dotnet test tests/Orbit.Memory.Tests --no-build --no-restore --filter FullyQualifiedName~ApiMemoryLoadTests --logger "console;verbosity=detailed"
-
-      - name: Run Analyzer Tests
-        run: dotnet test tests/Orbit.Analyzers.Tests --no-restore
-
-      - name: Enforce line-coverage threshold
-        run: python3 .github/scripts/check_coverage.py ./TestResults 78
-
-  dependency-scan:
-    name: Dependency Scan
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v7
+      - name: Select the inputs that changed
+        id: inputs
+        run: bash .github/scripts/changed-inputs.sh tests
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:
           dotnet-version: "10.0.x"
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: infra/package-lock.json
+
+      - name: Restore the NuGet package cache
+        id: nuget-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.Packages.props', 'Directory.Build.props', 'global.json', '.config/dotnet-tools.json') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      # The scanner provisions its own Java runtime and analyzer plugins into ~/.sonar/cache.
+      - name: Restore the SonarScanner cache
+        id: sonar-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.sonar/cache
+          key: sonar-${{ runner.os }}-${{ hashFiles('.config/dotnet-tools.json') }}
+          restore-keys: sonar-${{ runner.os }}-
+
+      - name: Restore local tools
+        run: dotnet tool restore
+
+      # The SonarCloud Code Analysis context stays required, so an outage of SonarCloud never
+      # hides the test result of this job.
+      - name: SonarScanner Begin
+        continue-on-error: true
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          dotnet sonarscanner begin \
+            /k:"thomasluizon_orbit-api" \
+            /o:"thomasluizon" \
+            /d:sonar.token="${SONAR_TOKEN}" \
+            /d:sonar.cs.opencover.reportsPaths="**/coverage.opencover.xml" \
+            /d:sonar.javascript.lcov.reportPaths="coverage/web-plan.lcov,coverage/staging-pinger.lcov,coverage/production-plan.lcov" \
+            /d:sonar.exclusions="tools/**,**/Migrations/**,**/bin/**,**/obj/**,**/OAuth/OAuthLoginPage.cs,**/.claude/**,**/Email/Templates/**,**/load-tests/**,**/bench/**" \
+            /d:sonar.cpd.exclusions="**/Chat/Tools/Implementations/CreateHabitTool.cs,**/Chat/Tools/Implementations/UpdateHabitTool.cs,**/Services/AgentCatalogService.UserDataCatalog.cs,**/Services/SlipAlertSchedulerService.cs,**/Services/ProactiveCheckinSchedulerService.cs" \
+            /d:sonar.coverage.exclusions="**/Program.cs,**/Extensions/ServiceCollectionExtensions*.cs,**/Extensions/WebApplicationExtensions.cs,**/Middleware/**,**/OpenApi/**,**/OAuth/**,**/Persistence/OrbitDbContext.cs,**/Persistence/OrbitDbContextFactory.cs,**/Persistence/GenericRepository.cs,**/Persistence/UnitOfWork.cs,**/Persistence/AccountResetRepository.cs,**/Configuration/**,**/Services/ReminderSchedulerService.cs,**/Services/SlipAlertSchedulerService.cs,**/Services/GoalDeadlineNotificationService.cs,**/Services/HabitDueDateAdvancementService.cs,**/Services/DataEncryptionMigrationService.cs,**/Services/PushNotificationService.cs,**/Services/AccountDeletionService.cs,**/Services/GoogleTokenService.cs,**/Services/BackgroundServiceHealthCheck.cs,**/Services/StripeCouponRewardService.cs,**/Services/StripeBillingService.cs,**/Services/GooglePlayBillingService.cs,**/Services/Calendar/**,**/AI/AiCompletionClient.cs,**/AI/AudioTranscriptionService.cs,**/Services/GeoLocationService.cs,**/BackgroundJobs/HangfireRecurringJobRegistrar.cs,**/Orbit.Analyzers/**,**/Orbit.Analyzers.CodeFixes/**,**/.github/**,**/bench/**,**/Profile/Models/PublicProfileSettings.cs"
 
       - name: Restore
         run: dotnet restore
@@ -130,17 +175,72 @@ jobs:
             exit 1
           fi
 
-      - name: Report vulnerable test/dev packages (non-blocking)
-        if: always()
-        run: dotnet list package --vulnerable --include-transitive || true
+      # Roslyn ORBIT0001..0005 are silent in local builds and fail here.
+      - name: Build
+        run: dotnet build --no-restore
+
+      - name: Fail if committed OpenAPI documents are stale
+        run: python3 .github/scripts/openapi_artifacts.py freshness
+
+      - name: Run Domain Tests
+        if: steps.inputs.outputs.tests == 'true'
+        run: dotnet test tests/Orbit.Domain.Tests --no-build --collect:"XPlat Code Coverage" --settings coverlet.runsettings --results-directory ./TestResults
+
+      - name: Run Application Tests
+        if: steps.inputs.outputs.tests == 'true'
+        run: dotnet test tests/Orbit.Application.Tests --no-build --collect:"XPlat Code Coverage" --settings coverlet.runsettings --results-directory ./TestResults
+
+      - name: Run Infrastructure Tests
+        if: steps.inputs.outputs.tests == 'true'
+        env:
+          ORBIT_POSTGRES_TEST_CONNECTION: Host=localhost;Port=5432;Database=postgres;Username=orbit_test
+        run: dotnet test tests/Orbit.Infrastructure.Tests --no-build --collect:"XPlat Code Coverage" --settings coverlet.runsettings --results-directory ./TestResults
+
+      - name: Run Analyzer Tests
+        if: steps.inputs.outputs.tests == 'true'
+        run: dotnet test tests/Orbit.Analyzers.Tests --no-build
+
+      - name: Enforce line-coverage threshold
+        if: steps.inputs.outputs.tests == 'true'
+        run: python3 .github/scripts/check_coverage.py ./TestResults 78
+
+      - name: Test infra scripts with coverage
+        run: |
+          npm ci --prefix infra --ignore-scripts
+          mkdir -p coverage
+          node --experimental-test-coverage --test --test-coverage-include=infra/check-web-plan.mjs --test-reporter=lcov --test-reporter-destination=coverage/web-plan.lcov infra/check-web-plan.test.mjs
+          node --experimental-test-coverage --test --test-coverage-include=infra/check-production-plan.mjs --test-reporter=lcov --test-reporter-destination=coverage/production-plan.lcov infra/check-production-plan.test.mjs
+          node --experimental-test-coverage --test --test-coverage-include=infra/workers/staging-pinger.mjs --test-coverage-include=infra/workers/production-health.mjs --test-reporter=lcov --test-reporter-destination=coverage/staging-pinger.lcov infra/staging-pinger.test.mjs infra/production-health.test.mjs
+
+      - name: SonarScanner End
+        continue-on-error: true
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: dotnet sonarscanner end /d:sonar.token="${SONAR_TOKEN}"
+
+      - name: Save the NuGet package cache
+        if: github.event_name != 'pull_request' && steps.nuget-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.nuget/packages
+          key: ${{ steps.nuget-cache.outputs.cache-primary-key }}
+
+      - name: Save the SonarScanner cache
+        if: github.event_name != 'pull_request' && steps.sonar-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.sonar/cache
+          key: ${{ steps.sonar-cache.outputs.cache-primary-key }}
 
   migration-guard:
     name: Guard Migrations
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     # Diffs HEAD against github.base_ref, which is empty on a push event.
     if: github.event_name == 'pull_request'
 
     steps:
+      # fetch-depth 0 fetches every branch, so origin/<base> is present.
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
@@ -149,7 +249,6 @@ jobs:
         env:
           BASE_REF: ${{ github.base_ref }}
         run: |
-          git fetch origin "$BASE_REF"
           # https://github.com/thomasluizon/orbit-tickets/issues/1555 records that this migration never applied in any environment.
           unapplied_migration=src/Orbit.Infrastructure/Migrations/20261023054236_CascadeRetiredFeatureParents.cs
           violations=$(git diff --name-status --diff-filter=MDR "origin/$BASE_REF...HEAD" -- ':(glob)**/Migrations/**' ':(glob,exclude)**/*ModelSnapshot.cs' |
@@ -172,7 +271,6 @@ jobs:
         env:
           BASE_REF: ${{ github.base_ref }}
         run: |
-          git fetch origin "$BASE_REF"
           echo "Changed migration files:"
           git diff --name-only --diff-filter=d "origin/$BASE_REF...HEAD" -- ':(glob)**/Migrations/*.cs'
           git diff --name-only -z --diff-filter=d "origin/$BASE_REF...HEAD" -- ':(glob)**/Migrations/*.cs' \
@@ -202,140 +300,76 @@ jobs:
         with:
           dotnet-version: "10.0.x"
 
+      - name: Restore the NuGet package cache
+        if: steps.contract-inputs.outputs.changed == 'true'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.Packages.props', 'Directory.Build.props', 'global.json', '.config/dotnet-tools.json') }}
+          restore-keys: nuget-${{ runner.os }}-
+
       - name: Require deployment barriers for schema contractions
         if: steps.contract-inputs.outputs.changed == 'true'
         env:
           ORBIT_MIGRATION_GUARD_BASE: origin/${{ github.base_ref }}
         run: dotnet test tests/Orbit.Infrastructure.Tests --filter "FullyQualifiedName~RollingMigrationGateTests|FullyQualifiedName~MigrationLockGateTests" --nologo
 
-  convention-guard:
-    name: Guard Conventions
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-
-      # The closed allowlist makes every analyzer suppression visible in the diff.
-      - name: Every analyzer suppression under src/ is declared in the closed allowlist
-        run: node tools/check-suppression-allowlist.mjs
-
-      - name: The allowlist checker's own coverage
-        run: node --test tools/__tests__/*.test.mjs
-
-      - name: API release admission tests
-        run: node --test .github/scripts/release-admission.test.mjs .github/scripts/release-admission-security.test.mjs
-
-      - name: OpenAPI publication guard tests
-        run: python3 -m unittest discover -s .github/scripts -p 'test_openapi_artifacts.py'
-
-      - name: Ban permissive CORS
-        run: |
-          violations=$(grep -rnE '\.AllowAnyHeader\(|\.AllowAnyMethod\(' src --include='*.cs' || true)
-          if [ -n "$violations" ]; then
-            echo "::error::CORS must enumerate explicit headers and methods. AllowAnyHeader()/AllowAnyMethod() are banned."
-            echo "$violations"
-            exit 1
-          fi
-          echo "OK: no permissive CORS calls."
-
-      - name: Stripe key set only at startup
-        run: |
-          violations=$(grep -rnE 'StripeConfiguration\.ApiKey[[:space:]]*=' src --include='*.cs' | grep -v 'ServiceCollectionExtensions.Infrastructure.cs' || true)
-          if [ -n "$violations" ]; then
-            echo "::error::StripeConfiguration.ApiKey may only be assigned once at startup in ServiceCollectionExtensions.Infrastructure.cs. Never set it per-request."
-            echo "$violations"
-            exit 1
-          fi
-          echo "OK: StripeConfiguration.ApiKey assigned only at startup."
-
-      - name: Ban TODO/FIXME/HACK markers
-        run: |
-          violations=$(grep -rnE '\b(TODO|FIXME|HACK)\b' src --include='*.cs' | grep -v '/Migrations/' || true)
-          if [ -n "$violations" ]; then
-            echo "::error::TODO/FIXME/HACK markers are banned in committed source. Resolve the work or track it in a GitHub issue."
-            echo "$violations"
-            exit 1
-          fi
-          echo "OK: no TODO/FIXME/HACK markers in source."
-
   openapi-breaking:
     name: OpenAPI Breaking-Change Gate
-    needs: [openapi-plan, openapi-streams]
     runs-on: ubuntu-latest
-    if: always() && github.event_name == 'pull_request'
-
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
-      - name: Require every supported stream comparison
-        env:
-          PLAN_RESULT: ${{ needs.openapi-plan.result }}
-          STREAM_RESULT: ${{ needs.openapi-streams.result }}
-        run: test "$PLAN_RESULT" = success && test "$STREAM_RESULT" = success
-
-      - name: Fetch base branch
-        run: git fetch origin "${{ github.base_ref }}"
-
-      - name: Check base spec exists
-        id: base-spec
-        run: |
-          git cat-file -e "origin/${{ github.base_ref }}:src/Orbit.Api/openapi.json"
-          echo "exists=true" >> "$GITHUB_OUTPUT"
-
-      - name: Detect breaking API changes
-        if: steps.base-spec.outputs.exists == 'true'
-        uses: oasdiff/oasdiff-action/breaking@17214aea5113d728707fdd7d84bc811f4850fe3a # v0.1.22
-        with:
-          base: "origin/${{ github.base_ref }}:src/Orbit.Api/openapi.json"
-          revision: "src/Orbit.Api/openapi.json"
-          fail-on: ERR
-          review: false
-
-  openapi-plan:
-    name: OpenAPI artifact inventory
+    timeout-minutes: 5
+    # Compares the candidate with github.base_ref, which is empty on a push event.
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    outputs:
-      streams: ${{ steps.catalog.outputs.streams }}
+
     steps:
+      # fetch-depth 0 fetches every branch, so origin/<base> is present.
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
-      - name: Fetch target branch
-        run: git fetch origin "${{ github.base_ref }}"
+      - name: Select the inputs that changed
+        id: inputs
+        run: bash .github/scripts/changed-inputs.sh openapi
 
-      - name: Validate every published stream and plan comparisons
-        id: catalog
+      # The same oasdiff release as the oasdiff-action image, pinned by its published checksum.
+      - name: Install oasdiff
+        if: steps.inputs.outputs.openapi == 'true'
+        env:
+          OASDIFF_VERSION: 1.36.0
+          OASDIFF_SHA256: dba65661f6d0f178a3e4884c309f19527a849388bb9df0e81545db76dbb697d6
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/oasdiff.tar.gz"
+          curl --proto '=https' --tlsv1.2 -fsSL "https://github.com/oasdiff/oasdiff/releases/download/v${OASDIFF_VERSION}/oasdiff_${OASDIFF_VERSION}_linux_amd64.tar.gz" -o "$archive"
+          echo "$OASDIFF_SHA256  $archive" | sha256sum --check --strict
+          mkdir -p "$RUNNER_TEMP/oasdiff"
+          tar -xzf "$archive" -C "$RUNNER_TEMP/oasdiff" oasdiff
+          echo "$RUNNER_TEMP/oasdiff" >> "$GITHUB_PATH"
+
+      # openapi_artifacts.py validates every published stream and plans one comparison for each
+      # stream with a prior same-stream artifact; the v1 document is compared on its own path.
+      - name: Detect breaking changes in every published stream
+        if: steps.inputs.outputs.openapi == 'true'
         env:
           BASE_REF: origin/${{ github.base_ref }}
         run: |
-          streams=$(python3 .github/scripts/openapi_artifacts.py plan --base "$BASE_REF")
-          echo "streams=$streams" >> "$GITHUB_OUTPUT"
-
-  openapi-streams:
-    name: OpenAPI compatibility (${{ matrix.id }})
-    needs: openapi-plan
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.openapi-plan.outputs.streams) }}
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
-      - name: Detect breaking changes against the same target stream
-        uses: oasdiff/oasdiff-action/breaking@17214aea5113d728707fdd7d84bc811f4850fe3a # v0.1.22
-        with:
-          base: ${{ matrix.base }}
-          revision: ${{ matrix.revision }}
-          fail-on: ERR
-          review: false
+          set -euo pipefail
+          plan=$(python3 .github/scripts/openapi_artifacts.py plan --base "$BASE_REF")
+          git cat-file -e "$BASE_REF:src/Orbit.Api/openapi.json"
+          comparisons=$(jq -r --arg base "$BASE_REF:src/Orbit.Api/openapi.json" \
+            '[{id: "orbit-http-v1-r1", base: $base, revision: "src/Orbit.Api/openapi.json"}] + .include | .[] | [.id, .base, .revision] | @tsv' <<< "$plan")
+          failed=0
+          while IFS=$'\t' read -r id base revision; do
+            echo "::group::$id: $base against $revision"
+            status=0
+            oasdiff breaking "$base" "$revision" --allow-external-refs=false --composed=false --fail-on ERR || status=$?
+            if [ "$status" -eq 1 ]; then
+              oasdiff breaking "$base" "$revision" --allow-external-refs=false --composed=false --format githubactions --template= || true
+            fi
+            echo "::endgroup::"
+            if [ "$status" -ne 0 ]; then
+              echo "::error::$id: oasdiff exited $status (1 is a breaking change at level ERR)"
+              failed=1
+            fi
+          done <<< "$comparisons"
+          exit "$failed"
