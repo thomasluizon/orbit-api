@@ -56,4 +56,4 @@ dotnet test --filter "FullyQualifiedName~CreateHabit_Should_Succeed"
 
 ## Benchmarks (not part of `dotnet test`)
 
-`bench/Orbit.Benchmarks` (BenchmarkDotNet, `net10.0`) measures the pure hot paths and runs nightly via `benchmark.yml` against `bench/baseline.json` (report-only). It is intentionally excluded from the test/coverage/Stryker surface — never add it to a `dotnet test` step. Enumerate with `dotnet run -c Release --project bench/Orbit.Benchmarks -- --list flat`.
+`bench/Orbit.Benchmarks` (BenchmarkDotNet, `net10.0`) measures the pure hot paths when you run it locally; no CI job runs it. It is intentionally excluded from the test and coverage surface — never add it to a `dotnet test` step. Enumerate with `dotnet run -c Release --project bench/Orbit.Benchmarks -- --list flat`.
