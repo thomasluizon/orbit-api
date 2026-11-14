@@ -71,7 +71,7 @@ public partial class ProcessUserChatCommandHandler
 
     /// <summary>
     /// The withdrawal decision of the turn. A turn that leaves part of the request withdraws what it prepared, and its
-    /// answer says so. Either way the preview ledger records that the decision ran.
+    /// answer says so.
     /// </summary>
     private void WithdrawPartialPreview(Guid userId, ToolExecutionAccumulator results, string? language, bool failed)
     {
@@ -81,7 +81,6 @@ public partial class ProcessUserChatCommandHandler
             results.SanitizeFailedActions(RequestNotPreparedMessage(results, language));
             results.RequestNotPrepared = true;
         }
-        results.Previews.Decide();
     }
 
     /// <summary>
@@ -111,7 +110,6 @@ public partial class ProcessUserChatCommandHandler
     {
         private readonly Dictionary<Guid, PendingAgentOperationRevision> _earlierRevisions = [];
         private readonly List<DeferredClose> _closes = [];
-        private bool _decided;
 
         /// <summary>
         /// The turn withdrew its change and an earlier preview still waits for the person's approval in the store, read
@@ -231,13 +229,10 @@ public partial class ProcessUserChatCommandHandler
             }
         }
 
-        /// <summary>The withdrawal decision of the turn ran, so the previews that the turn still holds are final.</summary>
-        public void Decide() => _decided = true;
-
         /// <summary>
         /// Runs the answer of the turn and settles the held closes on its way out. The answer path commits them before it
-        /// composes the reply. A failure result or an exception commits them when the decision ran and the turn saved an
-        /// answer checkpoint, because the block answer replays it; after an exception, it first clears the changes that the
+        /// composes the reply. A failure result or an exception commits them when the turn saved an answer checkpoint,
+        /// because the block answer replays it; after an exception, it first clears the changes that the
         /// exception left tracked, as the block answer recovery does. An answer that shows no preview of the turn drops them.
         /// </summary>
         public async Task<Result<ChatResponse>> SettleOnExitAsync(Func<Task<Result<ChatResponse>>> answer, IUnitOfWork unitOfWork)
@@ -263,7 +258,7 @@ public partial class ProcessUserChatCommandHandler
 
         private async Task CommitReplayedClosesAsync()
         {
-            if (_decided && (results.CommittedPendingOperations.Count > 0 || results.CommittedActions.Count > 0))
+            if (results.CommittedPendingOperations.Count > 0 || results.CommittedActions.Count > 0)
                 await CommitAsync(CancellationToken.None);
         }
 
