@@ -7,7 +7,8 @@ namespace Orbit.Application.Chat.Tools.Implementations;
 
 /// <summary>
 /// A revision in a chat turn that removes every item of a preview. The preview ledger of the turn runs the discard: at
-/// once for a preview of this turn, and when the turn ends with its answer for an earlier preview.
+/// once for a preview of this turn, and when the turn ends with its answer, or when a failed answer turn replays its
+/// checkpoint, for an earlier preview.
 /// </summary>
 public sealed record PendingPreviewDiscard(Guid PendingOperationId, string PreviewFingerprint)
 {

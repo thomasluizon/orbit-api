@@ -66,7 +66,7 @@ public partial class ProcessUserChatCommandHandler
 
     /// <summary>
     /// The earlier creation previews that a new preview of the turn replaces close when the turn ends with its answer,
-    /// so a withdrawn turn replaces nothing.
+    /// or when a failed answer turn replays its checkpoint, so a withdrawn turn replaces nothing.
     /// </summary>
     private void ReplaceWithTheTurn(Guid userId, IEnumerable<Guid> replaced, ToolExecutionAccumulator results)
     {

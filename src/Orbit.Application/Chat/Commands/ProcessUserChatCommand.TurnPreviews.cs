@@ -120,7 +120,8 @@ public partial class ProcessUserChatCommandHandler
 
         /// <summary>
         /// The turn changes something that a withdrawal takes back: a preview that it prepared, or an earlier preview
-        /// that it discards, covers or replaces when it ends with its answer.
+        /// that it discards, covers or replaces when it ends with its answer, or when a failed answer turn replays its
+        /// checkpoint.
         /// </summary>
         public bool HoldsChange => Prepared.Any() || _closes.Count > 0;
 
@@ -135,7 +136,7 @@ public partial class ProcessUserChatCommandHandler
         /// <summary>
         /// Closes a preview that a write or a revision of the turn replaced or emptied. A preview of this turn closes
         /// at once and leaves the answer when the store closes it. An earlier preview leaves the answer now and closes
-        /// when the turn ends with its answer.
+        /// when the turn ends with its answer, or when a failed answer turn replays its checkpoint.
         /// </summary>
         public async Task CloseAsync(Guid id, Func<CancellationToken, Task<bool>> close, CancellationToken ct)
         {
@@ -150,8 +151,8 @@ public partial class ProcessUserChatCommandHandler
 
         /// <summary>
         /// Closes an earlier creation preview that a new preview of the turn replaces, when the turn ends with its
-        /// answer. The turn finds it before any tool runs, so it has no card yet. A preview that a write of the turn
-        /// shows again stays open.
+        /// answer, or when a failed answer turn replays its checkpoint. The turn finds it before any tool runs, so it
+        /// has no card yet. A preview that a write of the turn shows again stays open.
         /// </summary>
         public void Replace(Guid id, Func<CancellationToken, Task<bool>> close)
         {
@@ -213,8 +214,9 @@ public partial class ProcessUserChatCommandHandler
         }
 
         /// <summary>
-        /// Closes the earlier previews of a turn that ends with its answer. A preview that the store does not close
-        /// stays in the answer when the turn showed it. Each close runs once, even when a later one throws.
+        /// Closes the earlier previews of a turn that ends with its answer, or of a failed answer turn that replays its
+        /// checkpoint. A preview that the store does not close stays in the answer when the turn showed it. Each close
+        /// runs once, even when a later one throws.
         /// </summary>
         public async Task CommitAsync(CancellationToken ct)
         {
@@ -274,8 +276,9 @@ public partial class ProcessUserChatCommandHandler
         }
 
         /// <summary>
-        /// An earlier preview that this turn closes when it ends with its answer. <paramref name="Card"/> is its card in
-        /// the answer of this turn, when a call of the turn returned it, and <paramref name="Close"/> closes it in the store.
+        /// An earlier preview that this turn closes when it ends with its answer, or when a failed answer turn replays its
+        /// checkpoint. <paramref name="Card"/> is its card in the answer of this turn, when a call of the turn returned it,
+        /// and <paramref name="Close"/> closes it in the store.
         /// </summary>
         private sealed record DeferredClose(Guid Id, (string ToolName, PendingAgentOperation Preview)? Card,
             Func<CancellationToken, Task<bool>> Close);
