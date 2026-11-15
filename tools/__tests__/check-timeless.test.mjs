@@ -496,3 +496,23 @@ test("a long comment that gets shorter but stays over the limit fails staged and
     }
   } finally { rmSync(root, { recursive: true, force: true }) }
 })
+
+test("an Edit hook with replace_all scans every replaced occurrence", () => {
+  const root = make("sample.js", 'const word = "clean";\n// clean\n')
+  try {
+    const input = JSON.stringify({ tool_input: { file_path: join(root, "sample.js"), old_string: "clean", new_string: date, replace_all: true } })
+    const result = run(root, ["--hook"], input)
+    assert.equal(result.status, 2)
+    assert.ok(result.stderr.includes(`sample.js:2: dated-anecdote: ${date}`), result.stderr)
+  } finally { rmSync(root, { recursive: true, force: true }) }
+})
+
+test("an Edit hook keeps a dollar pattern in the replacement literal", () => {
+  const root = make("sample.md", `${owner} clean\n`)
+  try {
+    const edit = (new_string) => run(root, ["--hook"], JSON.stringify({ tool_input: { file_path: join(root, "sample.md"), old_string: "clean", new_string } }))
+    assert.equal(edit("$`").status, 0)
+    writeFileSync(join(root, "sample.md"), `clean ${owner}\n`)
+    assert.equal(edit("$'").status, 0)
+  } finally { rmSync(root, { recursive: true, force: true }) }
+})
