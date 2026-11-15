@@ -1,12 +1,14 @@
 #!/usr/bin/env node
 import { spawnSync } from "node:child_process"
-import { existsSync, readFileSync, realpathSync } from "node:fs"
+import { existsSync, lstatSync, readFileSync, readlinkSync, realpathSync } from "node:fs"
 import { createRequire } from "node:module"
 import { dirname, extname, join, relative, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..")
-const SELF = fileURLToPath(import.meta.url)
+const ALLOWLIST = "tools/timeless-allowlist.json"
+const CHECKER = "tools/check-timeless.mjs"
+const SCANNED_MODES = new Set(["100644", "100755", "120000"])
 const USAGE = "usage: check-timeless.mjs --all | --base <ref> | --staged | --hook"
 const machine = new RegExp([
   "/" + "Users/", "[A-Za-z]:\\\\+Users", "/private/" + "tmp", "/private/" + "var", "/var/" + "folders",
@@ -22,10 +24,28 @@ const html = new Set([".html", ".htm", ".svg", ".xml", ".astro", ".csproj", ".fs
 const hash = new Set([".yml", ".yaml", ".sh", ".bash", ".zsh", ".toml", ".properties", ".editorconfig", ".gitignore"])
 const parsers = new Map()
 
-function git(args, cwd = ROOT) {
-  const result = spawnSync("git", args, { cwd, encoding: "utf8", maxBuffer: 32 * 1024 * 1024 })
-  if (result.error || result.status !== 0) throw new Error(result.stderr?.trim() || result.error?.message || `git exited ${result.status}`)
+function git(args, options = {}) {
+  const result = spawnSync("git", args, { cwd: ROOT, encoding: "utf8", maxBuffer: 32 * 1024 * 1024, ...options })
+  if (result.error || result.status !== 0) throw new Error(result.stderr?.toString().trim() || result.error?.message || `git exited ${result.status}`)
   return result.stdout
+}
+
+function blobs(specs, root = ROOT) {
+  const output = git(["cat-file", "--batch", "-Z"], { cwd: root, input: Buffer.from(specs.map((spec) => `${spec}\0`).join("")), encoding: "buffer", maxBuffer: 1024 * 1024 * 1024 })
+  const contents = []
+  let offset = 0
+  for (const spec of specs) {
+    const headerEnd = output.indexOf(0, offset)
+    const header = output.toString("utf8", offset, Math.max(headerEnd, offset)).split(" ")
+    if (headerEnd >= 0 && header.at(-1) === "missing") { contents.push(null); offset = headerEnd + 1; continue }
+    const end = headerEnd + 1 + Number(header[2])
+    if (headerEnd < 0 || header.length !== 3 || header[1] !== "blob" || !/^\d+$/.test(header[2]) || output[end] !== 0) {
+      throw new Error(`git cat-file returned an unexpected record for ${JSON.stringify(spec)}`)
+    }
+    contents.push(output.toString("utf8", headerEnd + 1, end))
+    offset = end + 1
+  }
+  return contents
 }
 
 function typescript(root) {
@@ -204,51 +224,29 @@ function findings(path, content, root = ROOT) {
 }
 
 function changedPaths(args) {
-  const parts = git(["diff", "--no-renames", "--name-status", "-z", "--diff-filter=ACMT", ...args]).split("\0")
+  const parts = git(["diff", "--no-renames", "--raw", "-z", ...args]).split("\0")
   const paths = []
   for (let index = 0; index + 1 < parts.length; index += 2) {
-    if (parts[index]) paths.push({ status: parts[index], path: parts[index + 1] })
+    if (!parts[index]) continue
+    const [oldMode, newMode] = parts[index].slice(1).split(" ")
+    paths.push({ path: parts[index + 1], oldMode, newMode })
   }
   return paths
 }
 
 function newFindings(path, before, after, root = ROOT) {
-  const previous = findings(path, before, root)
-  const current = findings(path, after, root)
-  const counts = new Map(), lengths = []
-  for (const item of previous) {
-    if (item.rule === "comment-length") lengths.push(Number.parseInt(item.match, 10))
-    else {
-      const key = JSON.stringify([item.rule, item.match])
-      counts.set(key, (counts.get(key) ?? 0) + 1)
-    }
-  }
-  lengths.sort((left, right) => left - right)
-  const added = []
-  const ordered = [
-    ...current.filter((item) => item.rule !== "comment-length"),
-    ...current.filter((item) => item.rule === "comment-length")
-      .sort((left, right) => Number.parseInt(right.match, 10) - Number.parseInt(left.match, 10)),
-  ]
-  for (const item of ordered) {
-    if (item.rule === "comment-length") {
-      const length = Number.parseInt(item.match, 10)
-      const index = lengths.findIndex((previousLength) => previousLength >= length)
-      if (index < 0) added.push(item)
-      else lengths.splice(index, 1)
-    } else {
-      const key = JSON.stringify([item.rule, item.match])
-      const count = counts.get(key) ?? 0
-      if (count) counts.set(key, count - 1)
-      else added.push(item)
-    }
-  }
-  return added
+  const key = (item) => JSON.stringify([item.rule, item.match])
+  const counts = new Map()
+  for (const item of findings(path, before, root)) counts.set(key(item), (counts.get(key(item)) ?? 0) + 1)
+  return findings(path, after, root).filter((item) => {
+    const count = counts.get(key(item)) ?? 0
+    if (count) counts.set(key(item), count - 1)
+    return !count
+  })
 }
 
-function allowlist(root) {
-  const path = join(root, "tools", "timeless-allowlist.json")
-  const entries = existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : []
+function allowlist(text) {
+  const entries = text === null ? [] : JSON.parse(text)
   if (!Array.isArray(entries) || entries.some((entry) =>
     !entry || typeof entry.path !== "string" || !entry.path || typeof entry.reason !== "string" || !entry.reason ||
     !["machine-path", "owner-name", "dated-anecdote", "comment-length"].includes(entry.rule) ||
@@ -262,18 +260,33 @@ function allowlist(root) {
   return entries
 }
 
-function report(results, allowed, checkUnused) {
-  const used = new Set(), failures = []
-  for (const item of results) {
-    const index = allowed.findIndex((entry) => entry.rule === item.rule && (entry.scope === "directory"
-      ? item.path.startsWith(entry.path) && !(entry.exclude ?? []).some((prefix) => item.path.startsWith(prefix))
-      : entry.path === item.path && item.match.includes(entry.match)))
-    if (index < 0) failures.push(`${item.path}:${item.line}: ${item.rule}: ${item.match}`)
-    else used.add(index)
+function covers(entry, path) {
+  return entry.scope === "directory"
+    ? path.startsWith(entry.path) && !(entry.exclude ?? []).some((prefix) => path.startsWith(prefix))
+    : entry.path === path
+}
+
+function allowedIndex(allowed, item) {
+  return allowed.findIndex((entry) => entry.rule === item.rule && covers(entry, item.path) &&
+    (entry.scope === "directory" || item.match.includes(entry.match)))
+}
+
+function report(results, allowed, checked, usage = results) {
+  const failures = results.filter((item) => allowedIndex(allowed, item) < 0)
+    .map((item) => `${item.path}:${item.line}: ${item.rule}: ${item.match}`)
+  const used = new Set(usage.map((item) => allowedIndex(allowed, item)))
+  for (const index of checked) {
+    const entry = allowed[index]
+    if (!used.has(index)) failures.push(`unused allowlist: ${entry.path} ${entry.rule} ${entry.match}`)
   }
-  if (checkUnused) allowed.forEach((entry, index) => { if (!used.has(index)) failures.push(`unused allowlist: ${entry.path} ${entry.rule} ${entry.match}`) })
   failures.forEach((failure) => console.error(failure))
   return failures.length ? 1 : 0
+}
+
+function changedEntryUsage(allowed, touched, tracked, scan) {
+  const checked = [...allowed.keys()].filter((index) => touched.some((path) => covers(allowed[index], path)))
+  if (!checked.length) return { checked, usage: [] }
+  return { checked, usage: scan(tracked().filter((path) => checked.some((index) => covers(allowed[index], path)))) }
 }
 
 function hook() {
@@ -289,32 +302,24 @@ function hook() {
   }
   const input = fileInput(payload)
   if (!input) return 0
-  const absoluteTarget = resolve(process.cwd(), input.file_path)
+  const landed = payload.hook_event_name === "PostToolUse"
+  if (!landed && typeof input.content !== "string") return 0
+  const absoluteTarget = resolve(process.cwd(), input.file_path), exists = existsSync(absoluteTarget)
   let directory = dirname(absoluteTarget)
   while (!existsSync(directory) && dirname(directory) !== directory) directory = dirname(directory)
-  const rootResult = spawnSync("git", ["-C", directory, "rev-parse", "--show-toplevel"], { encoding: "utf8" })
+  const target = exists ? realpathSync.native(absoluteTarget) : resolve(realpathSync.native(directory), relative(directory, absoluteTarget))
+  const rootResult = spawnSync("git", ["-C", exists ? dirname(target) : realpathSync.native(directory), "rev-parse", "--show-toplevel"], { encoding: "utf8" })
   if (rootResult.status !== 0) return 0
-  const root = rootResult.stdout.trim(), checker = join(root, "tools", "check-timeless.mjs")
-  if (!existsSync(checker)) return 0
-  if (checker !== SELF) {
-    const result = spawnSync(process.execPath, [checker, "--hook"], { input: JSON.stringify(payload), encoding: "utf8" })
-    if (result.stderr) process.stderr.write(result.stderr)
-    return result.status ?? 2
-  }
-  const canonicalTarget = existsSync(absoluteTarget) ? realpathSync(absoluteTarget)
-    : resolve(realpathSync(directory), relative(directory, absoluteTarget))
-  const path = relative(realpathSync(root), canonicalTarget).replaceAll("\\", "/")
-  const current = existsSync(absoluteTarget) ? readFileSync(absoluteTarget, "utf8") : ""
-  const pairs = (value) => {
-    if (!value || typeof value !== "object") return []
-    if (typeof value.old_string === "string" && typeof value.new_string === "string") return [value]
-    return Object.values(value).flatMap(pairs)
-  }
-  const isWrite = typeof input.content === "string"
-  const edits = isWrite ? [{ old_string: current, new_string: input.content }] : pairs(input)
-  const proposed = isWrite ? input.content
-    : edits.reduce((body, edit) => body.replace(String(edit.old_string ?? ""), String(edit.new_string ?? "")), current)
-  return report(newFindings(path, current, proposed, root), allowlist(root), false) ? 2 : 0
+  const root = realpathSync.native(rootResult.stdout.trim())
+  if (!existsSync(join(root, CHECKER))) return 0
+  const path = relative(root, target).replaceAll("\\", "/")
+  if (spawnSync("git", ["-C", root, "check-ignore", "-q", "--", path]).status === 0) return 0
+  const current = exists ? readFileSync(absoluteTarget, "utf8") : ""
+  const lineFeeds = (text) => text.replaceAll("\r\n", "\n")
+  const [before, after] = landed ? [lineFeeds(blobs([`HEAD:${path}`], root)[0] ?? ""), lineFeeds(current)] : [current, input.content]
+  const allowlistPath = join(root, ALLOWLIST)
+  const allowed = allowlist(existsSync(allowlistPath) ? readFileSync(allowlistPath, "utf8") : null)
+  return report(newFindings(path, before, after, root), allowed, []) ? 2 : 0
 }
 
 try {
@@ -324,27 +329,39 @@ try {
   if (!((args.length === 1 && ["--all", "--staged"].includes(args[0])) || (args.length === 2 && args[0] === "--base"))) {
     console.error(USAGE); process.exit(2)
   }
-  let selected, oldRef
-  if (args[0] === "--all") selected = null
-  else if (args[0] === "--staged") {
+  let changes = null, oldRef
+  if (args[0] === "--staged") {
     oldRef = "HEAD"
-    selected = changedPaths(["--cached"])
+    changes = changedPaths(["--cached"])
   }
-  else {
+  else if (args[0] === "--base") {
     oldRef = git(["merge-base", args[1], "HEAD"]).trim()
-    selected = changedPaths([oldRef, "HEAD"])
+    changes = changedPaths([oldRef, "HEAD"])
   }
-  const paths = selected ?? git(["ls-files", "-z"]).split("\0").filter(Boolean).map((path) => ({ path }))
+  const state = args[0] === "--staged" ? ":" : "HEAD:"
+  const contents = (paths) => changes ? blobs(paths.map((path) => state + path))
+    : paths.map((path) => {
+      const absolute = join(ROOT, path), stat = lstatSync(absolute, { throwIfNoEntry: false })
+      if (stat?.isSymbolicLink()) return readlinkSync(absolute, "utf8")
+      return stat?.isFile() ? readFileSync(absolute, "utf8") : null
+    })
+  const scan = (paths) => {
+    const texts = contents(paths)
+    return paths.flatMap((path, index) => texts[index] === null ? [] : findings(path, texts[index]))
+  }
+  const tracked = () => changes
+    ? (args[0] === "--base" ? git(["ls-tree", "-r", "-z", "HEAD"]) : git(["ls-files", "-s", "-z"])).split("\0")
+      .filter((entry) => SCANNED_MODES.has(entry.slice(0, entry.indexOf(" ")))).map((entry) => entry.slice(entry.indexOf("\t") + 1))
+    : git(["ls-files", "-z"]).split("\0").filter(Boolean)
+  const allowed = allowlist(contents([ALLOWLIST])[0])
+  if (!changes || changes.some(({ path }) => path === ALLOWLIST || path === CHECKER)) process.exit(report(scan(tracked()), allowed, allowed.keys()))
   const results = []
-  for (const { path, status } of paths) {
-    const absolute = join(ROOT, path)
-    if (!selected && !existsSync(absolute)) continue
-    const content = !selected ? readFileSync(absolute, "utf8")
-      : args[0] === "--staged" ? git(["show", `:${path}`]) : git(["show", `HEAD:${path}`])
-    const before = selected && status !== "A" ? git(["show", `${oldRef}:${path}`]) : ""
-    results.push(...(selected ? newFindings(path, before, content) : findings(path, content)))
+  for (const { path, oldMode } of changes.filter(({ newMode }) => SCANNED_MODES.has(newMode))) {
+    const before = SCANNED_MODES.has(oldMode) ? git(["show", `${oldRef}:${path}`]) : ""
+    results.push(...newFindings(path, before, git(["show", state + path])))
   }
-  process.exit(report(results, allowlist(ROOT), !selected))
+  const { checked, usage } = changedEntryUsage(allowed, changes.map(({ path }) => path), tracked, scan)
+  process.exit(report(results, allowed, checked, usage))
 } catch (error) {
   console.error(error.message)
   process.exit(2)
