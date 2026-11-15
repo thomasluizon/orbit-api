@@ -516,3 +516,37 @@ test("an Edit hook keeps a dollar pattern in the replacement literal", () => {
     assert.equal(edit("$'").status, 0)
   } finally { rmSync(root, { recursive: true, force: true }) }
 })
+
+test("an edit with an empty old_string is checked as the new file content, with or without replace_all", () => {
+  const root = make("sample.md")
+  try {
+    const finding = `new.md:1: machine-path: ${["/", "Users/"].join("")}`
+    const file_path = join(root, "new.md")
+    const step = (replace_all) => ({ old_string: "", new_string: `Read ${machine}.\n`, replace_all })
+    const payloads = [
+      { tool_name: "Edit", tool_input: { file_path, ...step(true) } },
+      { tool_name: "Edit", tool_input: { file_path, ...step(false) } },
+      { tool_name: "MultiEdit", tool_input: { file_path, edits: [step(true)] } },
+      { tool_name: "MultiEdit", tool_input: { file_path, edits: [step(false)] } },
+    ]
+    for (const payload of payloads) {
+      const result = run(root, ["--hook"], JSON.stringify(payload))
+      assert.equal(result.status, 2, JSON.stringify(payload))
+      assert.equal(result.stderr.trim(), finding)
+    }
+    writeFileSync(file_path, "")
+    const empty = run(root, ["--hook"], JSON.stringify(payloads[0]))
+    assert.equal(empty.status, 2)
+    assert.equal(empty.stderr.trim(), finding)
+  } finally { rmSync(root, { recursive: true, force: true }) }
+})
+
+test("an edit with an empty new_string also removes the line break after old_string", () => {
+  const block = (count, tag) => Array.from({ length: count }, (_, index) => `// ${tag} ${index}`).join("\n") + "\n"
+  const root = make("sample.js", `${block(3, "first")}const x = 1\n${block(4, "second")}`)
+  try {
+    const result = run(root, ["--hook"], JSON.stringify({ tool_name: "Edit", tool_input: { file_path: join(root, "sample.js"), old_string: "const x = 1", new_string: "" } }))
+    assert.equal(result.status, 2)
+    assert.equal(result.stderr.trim(), "sample.js:1: comment-length: 7 lines")
+  } finally { rmSync(root, { recursive: true, force: true }) }
+})
