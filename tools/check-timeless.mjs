@@ -312,22 +312,37 @@ function trailingBackslashes(text, end) {
   return count
 }
 
+function escapedAt(search, content, at) {
+  for (let index = 0, position = at; index < search.length; index++) {
+    const code = search.charCodeAt(index)
+    if (code < 128) {
+      if (content[position] !== search[index]) return false
+      position += 1
+      continue
+    }
+    if (content[position] !== "\\" || content[position + 1] !== "u") return false
+    const digits = code.toString(16).padStart(4, "0")
+    for (let digit = 0; digit < 4; digit++) {
+      const actual = content[position + 2 + digit], expected = digits[digit]
+      if (actual !== expected && !(expected >= "a" && actual === expected.toUpperCase())) return false
+    }
+    position += 6
+  }
+  return true
+}
+
 function escapedMatch(search, content) {
   if (trailingBackslashes(search, search.length) % 2 === 1) return null
   const starts = search[0] === "\\" ? [0] : []
-  let source = "", offset = 0
-  for (let index = 0; index < search.length; index++) {
-    const code = search.charCodeAt(index)
-    if (code < 128) { source += search[index].replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); offset += 1; continue }
-    starts.push(offset)
-    offset += 6
-    source += "\\\\u"
-    for (const digit of code.toString(16).padStart(4, "0")) source += digit >= "a" ? `[${digit}${digit.toUpperCase()}]` : digit
+  for (let index = 0, offset = 0; index < search.length; index++) {
+    if (search.charCodeAt(index) >= 128) starts.push(offset)
+    offset += search.charCodeAt(index) >= 128 ? 6 : 1
   }
-  const pattern = new RegExp(source, "g")
-  for (let found = pattern.exec(content); found !== null; found = pattern.exec(content)) {
-    if (starts.every((start) => trailingBackslashes(content, found.index + start) % 2 === 0)) return content.indexOf(found[0]) === found.index ? found[0] : null
-    pattern.lastIndex = found.index + 1
+  const length = escapedLength(search)
+  for (let at = 0; at + length <= content.length; at++) {
+    if (!escapedAt(search, content, at) || starts.some((start) => trailingBackslashes(content, at + start) % 2 === 1)) continue
+    const found = content.slice(at, at + length)
+    return content.indexOf(found) === at ? found : null
   }
   return null
 }

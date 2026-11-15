@@ -615,3 +615,43 @@ test("an unrelated edit in a CRLF file does not report a finding the file alread
     assert.equal(result.status, 0, result.stderr)
   } finally { rmSync(root, { recursive: true, force: true }) }
 })
+
+test("an edit matches straight double quotes in old_string to curly double quotes in the file", () => {
+  const root = make("notes.md", "Say \u201Chi\u201D.\n")
+  try {
+    const result = edit(root, "notes.md", 'Say "hi".', `Say "hi". Read ${machine}.`)
+    assert.equal(result.status, 2)
+    assert.equal(result.stderr.trim(), machineFinding("notes.md", 1))
+  } finally { rmSync(root, { recursive: true, force: true }) }
+})
+
+test("an edit writes the straight double quotes of new_string in the curly style of the matched text", () => {
+  const root = make("Sample.cs", "var text = \u201Cx\u201D;\n")
+  try {
+    const result = edit(root, "Sample.cs", '"x"', `"// ${date}"`)
+    assert.equal(result.status, 2)
+    assert.equal(result.stderr.trim(), `Sample.cs:1: dated-anecdote: ${date}`)
+  } finally { rmSync(root, { recursive: true, force: true }) }
+})
+
+test("an edit writes non-ASCII new_string text as \\uXXXX escapes when the matched text is escaped", () => {
+  const root = make("notes.md", "caf\\u00e9\n")
+  try {
+    const result = edit(root, "notes.md", "caf\u00e9", `caf\u00e9${date}`)
+    assert.equal(result.status, 0, result.stderr)
+    assert.equal(result.stderr, "")
+  } finally { rmSync(root, { recursive: true, force: true }) }
+})
+
+test("an escaped match longer than the regular expression size limit is found and checked", () => {
+  const count = 5462
+  const root = make("i18n.json", `{"text": "${"\\u00e9".repeat(count)}"}\n`)
+  try {
+    const clean = edit(root, "i18n.json", "\u00e9".repeat(count), "\u00e8".repeat(count))
+    assert.equal(clean.status, 0, clean.stderr.slice(0, 200))
+    assert.equal(clean.stderr, "")
+    const planted = edit(root, "i18n.json", "\u00e9".repeat(count), `${"\u00e8".repeat(count)} ${machine}`)
+    assert.equal(planted.status, 2, planted.stderr.slice(0, 200))
+    assert.equal(planted.stderr.trim(), machineFinding("i18n.json", 1))
+  } finally { rmSync(root, { recursive: true, force: true }) }
+})
