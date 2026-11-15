@@ -86,8 +86,9 @@ test("six comments and dates in literals or JSON pass; a seventh comment fails",
 test("the entry point rejects a planted edit and ignores scratchpad files", () => {
   const root = make("sample.md")
   try {
-    const edit = { file_path: join(root, "sample.md"), old_string: "clean", new_string: owner }
-    const input = JSON.stringify({ tool_name: "Edit", tool_input: edit })
+    writeFileSync(join(root, "sample.md"), `Ask ${owner}.\n`)
+    const edit = { file_path: join(root, "sample.md"), old_string: "clean", new_string: `Ask ${owner}.` }
+    const input = JSON.stringify({ hook_event_name: "PostToolUse", tool_name: "Edit", tool_input: edit, tool_response: {} })
     const entry = ".claude/hooks/forbid-stale-text.mjs"
     assert.equal(spawnSync(process.execPath, [join(root, entry)], { cwd: root, input, encoding: "utf8" }).status, 2)
     const scratch = join(tmpdir(), "orbit-timeless-scratchpad.txt")
@@ -497,161 +498,77 @@ test("a long comment that gets shorter but stays over the limit fails staged and
   } finally { rmSync(root, { recursive: true, force: true }) }
 })
 
-test("an Edit hook with replace_all scans every replaced occurrence", () => {
-  const root = make("sample.js", 'const word = "clean";\n// clean\n')
-  try {
-    const input = JSON.stringify({ tool_input: { file_path: join(root, "sample.js"), old_string: "clean", new_string: date, replace_all: true } })
-    const result = run(root, ["--hook"], input)
-    assert.equal(result.status, 2)
-    assert.ok(result.stderr.includes(`sample.js:2: dated-anecdote: ${date}`), result.stderr)
-  } finally { rmSync(root, { recursive: true, force: true }) }
-})
+const landedEdit = (root, name, written) => {
+  writeFileSync(join(root, name), written)
+  const tool_input = { file_path: join(root, name), old_string: "unrelated", new_string: "unrelated" }
+  return run(root, ["--hook"], JSON.stringify({ hook_event_name: "PostToolUse", tool_name: "Edit", tool_input, tool_response: {} }))
+}
 
-test("an Edit hook keeps a dollar pattern in the replacement literal", () => {
-  const root = make("sample.md", `${owner} clean\n`)
-  try {
-    const edit = (new_string) => run(root, ["--hook"], JSON.stringify({ tool_input: { file_path: join(root, "sample.md"), old_string: "clean", new_string } }))
-    assert.equal(edit("$`").status, 0)
-    writeFileSync(join(root, "sample.md"), `clean ${owner}\n`)
-    assert.equal(edit("$'").status, 0)
-  } finally { rmSync(root, { recursive: true, force: true }) }
-})
-
-test("an edit with an empty old_string is checked as the new file content, with or without replace_all", () => {
+test("a landed Edit is checked on the bytes in the file, not on its old_string and new_string", () => {
   const root = make("sample.md")
   try {
-    const finding = `new.md:1: machine-path: ${["/", "Users/"].join("")}`
-    const file_path = join(root, "new.md")
-    const step = (replace_all) => ({ old_string: "", new_string: `Read ${machine}.\n`, replace_all })
-    const payloads = [
-      { tool_name: "Edit", tool_input: { file_path, ...step(true) } },
-      { tool_name: "Edit", tool_input: { file_path, ...step(false) } },
-      { tool_name: "MultiEdit", tool_input: { file_path, edits: [step(true)] } },
-      { tool_name: "MultiEdit", tool_input: { file_path, edits: [step(false)] } },
-    ]
-    for (const payload of payloads) {
-      const result = run(root, ["--hook"], JSON.stringify(payload))
-      assert.equal(result.status, 2, JSON.stringify(payload))
-      assert.equal(result.stderr.trim(), finding)
-    }
-    writeFileSync(file_path, "")
-    const empty = run(root, ["--hook"], JSON.stringify(payloads[0]))
-    assert.equal(empty.status, 2)
-    assert.equal(empty.stderr.trim(), finding)
+    const planted = landedEdit(root, "sample.md", `Ask ${owner}.\n`)
+    assert.equal(planted.status, 2)
+    assert.equal(planted.stderr.trim(), `sample.md:1: owner-name: ${owner}`)
+    writeFileSync(join(root, "sample.md"), "clean\n")
+    const tool_input = { file_path: join(root, "sample.md"), old_string: "clean", new_string: `Ask ${owner}.` }
+    const claimed = run(root, ["--hook"], JSON.stringify({ hook_event_name: "PostToolUse", tool_name: "Edit", tool_input, tool_response: {} }))
+    assert.equal(claimed.status, 0, claimed.stderr)
   } finally { rmSync(root, { recursive: true, force: true }) }
 })
 
-test("an edit with an empty new_string also removes the line break after old_string", () => {
-  const block = (count, tag) => Array.from({ length: count }, (_, index) => `// ${tag} ${index}`).join("\n") + "\n"
-  const root = make("sample.js", `${block(3, "first")}const x = 1\n${block(4, "second")}`)
+test("an Edit before it lands is not checked", () => {
+  const root = make("sample.md")
   try {
-    const result = run(root, ["--hook"], JSON.stringify({ tool_name: "Edit", tool_input: { file_path: join(root, "sample.js"), old_string: "const x = 1", new_string: "" } }))
-    assert.equal(result.status, 2)
-    assert.equal(result.stderr.trim(), "sample.js:1: comment-length: 7 lines")
+    const tool_input = { file_path: join(root, "sample.md"), old_string: "clean", new_string: `Ask ${owner}.` }
+    const result = run(root, ["--hook"], JSON.stringify({ hook_event_name: "PreToolUse", tool_name: "Edit", tool_input }))
+    assert.equal(result.status, 0, result.stderr)
   } finally { rmSync(root, { recursive: true, force: true }) }
 })
 
-const edit = (root, name, old_string, new_string) =>
-  run(root, ["--hook"], JSON.stringify({ tool_name: "Edit", tool_input: { file_path: join(root, name), old_string, new_string } }))
-const machineFinding = (name, line) => `${name}:${line}: machine-path: ${["/", "Users/"].join("")}`
-
-test("an edit matches a CRLF file after its line breaks become LF", () => {
-  const root = make("notes.md", "alpha\r\nbeta\r\n")
+test("a landed Edit is judged against HEAD, as the staged check judges the file", () => {
+  const root = make("sample.mjs", `// ${date}\nconst other = 1\n`)
   try {
-    const result = edit(root, "notes.md", "alpha\nbeta", `alpha\nRead ${machine}.\nbeta`)
-    assert.equal(result.status, 2)
-    assert.equal(result.stderr.trim(), machineFinding("notes.md", 2))
+    assert.equal(landedEdit(root, "sample.mjs", `const other = 2\n// ${date}\n`).status, 0)
+    writeFileSync(join(root, "sample.md"), `Ask ${owner}.\n`)
+    git(root, "add", "sample.md")
+    const staged = landedEdit(root, "sample.md", `Ask ${owner}.\nmore\n`)
+    assert.equal(staged.status, 2)
+    assert.equal(staged.stderr.trim(), `sample.md:1: owner-name: ${owner}`)
   } finally { rmSync(root, { recursive: true, force: true }) }
 })
 
-test("an edit with an empty new_string removes the CRLF line break after old_string", () => {
-  const block = (count, tag) => Array.from({ length: count }, (_, index) => `// ${tag} ${index}`).join("\r\n") + "\r\n"
-  const root = make("Sample.cs", `${block(3, "first")}var x = 1;\r\n${block(4, "second")}`)
+test("a landed Edit in a CRLF checkout of an LF blob does not report a finding the blob already has", () => {
+  const marker = ["ses", "sion"].join("")
+  const root = make("Sample.cs", `/* ${marker}\n   abcdef1234 */\nvar x = 1;\n`)
   try {
-    const result = edit(root, "Sample.cs", "var x = 1;", "")
-    assert.equal(result.status, 2)
-    assert.equal(result.stderr.trim(), "Sample.cs:1: comment-length: 7 lines")
+    const result = landedEdit(root, "Sample.cs", `/* ${marker}\r\n   abcdef1234 */\r\nvar x = 2;\r\n`)
+    assert.equal(result.status, 0, result.stderr)
   } finally { rmSync(root, { recursive: true, force: true }) }
 })
 
-test("an edit matches straight quotes in old_string to curly quotes in the file", () => {
-  const root = make("notes.md", "It\u2019s ready.\n")
+test("a path git ignores or a path outside the repository is not checked", () => {
+  const root = make("sample.md")
+  const outside = mkdtempSync(join(tmpdir(), "orbit-timeless-outside-"))
   try {
-    const result = edit(root, "notes.md", "It's ready.", `It's ready. Read ${machine}.`)
-    assert.equal(result.status, 2)
-    assert.equal(result.stderr.trim(), machineFinding("notes.md", 1))
-  } finally { rmSync(root, { recursive: true, force: true }) }
-})
-
-test("an edit writes the straight quotes of new_string in the curly style of the matched text", () => {
-  const root = make("Sample.cs", "var text = \u2018x\u2019;\n")
-  try {
-    const result = edit(root, "Sample.cs", "'x'", `'// ${date}'`)
-    assert.equal(result.status, 2)
-    assert.equal(result.stderr.trim(), `Sample.cs:1: dated-anecdote: ${date}`)
-  } finally { rmSync(root, { recursive: true, force: true }) }
-})
-
-test("an edit matches and writes \\uXXXX escapes in both directions", () => {
-  const decoded = make("notes.md", "caf\u00e9\n")
-  const escaped = make("notes.md", "caf\\u00e9\n")
-  try {
-    const decodedResult = edit(decoded, "notes.md", "caf\\u00e9", "caf\\u00e9 \\u002FUsers/example")
-    assert.equal(decodedResult.status, 2)
-    assert.equal(decodedResult.stderr.trim(), machineFinding("notes.md", 1))
-    const escapedResult = edit(escaped, "notes.md", "caf\u00e9", `caf\u00e9 Read ${machine}.`)
-    assert.equal(escapedResult.status, 2)
-    assert.equal(escapedResult.stderr.trim(), machineFinding("notes.md", 1))
+    writeFileSync(join(root, ".gitignore"), "local/\n")
+    mkdirSync(join(root, "local"))
+    assert.equal(hook(root, "local/new.md", `Ask ${owner}.\n`).status, 0)
+    assert.equal(landedEdit(root, "local/notes.md", `Ask ${owner}.\n`).status, 0)
+    writeFileSync(join(outside, "target.md"), "clean\n")
+    symlinkSync(join(outside, "target.md"), join(root, "outside.md"))
+    assert.equal(landedEdit(root, "outside.md", `Ask ${owner}.\n`).status, 0)
   } finally {
-    rmSync(decoded, { recursive: true, force: true })
-    rmSync(escaped, { recursive: true, force: true })
+    rmSync(root, { recursive: true, force: true })
+    rmSync(outside, { recursive: true, force: true })
   }
 })
 
-test("an unrelated edit in a CRLF file does not report a finding the file already has", () => {
-  const root = make("Sample.cs", `/* ${["ses", "sion"].join("")}\r\n   abcdef1234 */\r\nvar x = 1;\r\n`)
-  try {
-    const result = edit(root, "Sample.cs", "var x = 1;", "var x = 2;")
-    assert.equal(result.status, 0, result.stderr)
-  } finally { rmSync(root, { recursive: true, force: true }) }
-})
-
-test("an edit matches straight double quotes in old_string to curly double quotes in the file", () => {
-  const root = make("notes.md", "Say \u201Chi\u201D.\n")
-  try {
-    const result = edit(root, "notes.md", 'Say "hi".', `Say "hi". Read ${machine}.`)
-    assert.equal(result.status, 2)
-    assert.equal(result.stderr.trim(), machineFinding("notes.md", 1))
-  } finally { rmSync(root, { recursive: true, force: true }) }
-})
-
-test("an edit writes the straight double quotes of new_string in the curly style of the matched text", () => {
-  const root = make("Sample.cs", "var text = \u201Cx\u201D;\n")
-  try {
-    const result = edit(root, "Sample.cs", '"x"', `"// ${date}"`)
-    assert.equal(result.status, 2)
-    assert.equal(result.stderr.trim(), `Sample.cs:1: dated-anecdote: ${date}`)
-  } finally { rmSync(root, { recursive: true, force: true }) }
-})
-
-test("an edit writes non-ASCII new_string text as \\uXXXX escapes when the matched text is escaped", () => {
-  const root = make("notes.md", "caf\\u00e9\n")
-  try {
-    const result = edit(root, "notes.md", "caf\u00e9", `caf\u00e9${date}`)
-    assert.equal(result.status, 0, result.stderr)
-    assert.equal(result.stderr, "")
-  } finally { rmSync(root, { recursive: true, force: true }) }
-})
-
-test("an escaped match longer than the regular expression size limit is found and checked", () => {
-  const count = 5462
-  const root = make("i18n.json", `{"text": "${"\\u00e9".repeat(count)}"}\n`)
-  try {
-    const clean = edit(root, "i18n.json", "\u00e9".repeat(count), "\u00e8".repeat(count))
-    assert.equal(clean.status, 0, clean.stderr.slice(0, 200))
-    assert.equal(clean.stderr, "")
-    const planted = edit(root, "i18n.json", "\u00e9".repeat(count), `${"\u00e8".repeat(count)} ${machine}`)
-    assert.equal(planted.status, 2, planted.stderr.slice(0, 200))
-    assert.equal(planted.stderr.trim(), machineFinding("i18n.json", 1))
-  } finally { rmSync(root, { recursive: true, force: true }) }
+test("the settings check Write before it lands and Edit after it lands", () => {
+  const settings = JSON.parse(readFileSync(join(project, ".claude/settings.json"), "utf8"))
+  const matchers = (event) => (settings.hooks[event] ?? [])
+    .filter(({ hooks }) => hooks.some(({ command }) => command.includes("forbid-stale-text.mjs")))
+    .map(({ matcher }) => matcher)
+  assert.deepEqual(matchers("PreToolUse"), ["Write"])
+  assert.deepEqual(matchers("PostToolUse"), ["Edit|MultiEdit"])
 })
