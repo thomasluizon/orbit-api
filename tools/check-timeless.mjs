@@ -11,6 +11,8 @@ const ALLOWLIST = "tools/timeless-allowlist.json"
 const CHECKER = "tools/check-timeless.mjs"
 const SCANNED_MODES = new Set(["100644", "100755", "120000"])
 const USAGE = "usage: check-timeless.mjs --all | --base <ref> | --staged | --hook"
+const [LEFT_SINGLE, RIGHT_SINGLE, LEFT_DOUBLE, RIGHT_DOUBLE] = ["\u2018", "\u2019", "\u201C", "\u201D"]
+const ESCAPE = /\\u[0-9a-fA-F]{4}/, NON_ASCII = /[\u0080-\uffff]/
 const machine = new RegExp([
   "/" + "Users/", "[A-Za-z]:\\\\+Users", "/private/" + "tmp", "/private/" + "var", "/var/" + "folders",
   "(?:^|[\\s'\"=(])/home/[a-z][^/\\s.]+/", "~/" + "Developer/",
@@ -290,6 +292,109 @@ function changedEntryUsage(allowed, touched, tracked, scan) {
   return { checked, usage: scan(tracked().filter((path) => checked.some((index) => covers(allowed[index], path)))) }
 }
 
+function straightQuotes(text) {
+  return text.replaceAll(LEFT_SINGLE, "'").replaceAll(RIGHT_SINGLE, "'").replaceAll(LEFT_DOUBLE, '"').replaceAll(RIGHT_DOUBLE, '"')
+}
+
+function decodeEscapes(text) {
+  return text.replace(/(\\\\)|\\u([0-9a-fA-F]{4})/g, (whole, backslashes, hex) => backslashes === undefined ? String.fromCharCode(Number.parseInt(hex, 16)) : whole)
+}
+
+function escapedLength(text) {
+  let nonAscii = 0
+  for (let index = 0; index < text.length; index++) if (text.charCodeAt(index) >= 128) nonAscii++
+  return text.length + 5 * nonAscii
+}
+
+function trailingBackslashes(text, end) {
+  let count = 0
+  while (text[end - 1 - count] === "\\") count++
+  return count
+}
+
+function escapedMatch(search, content) {
+  if (trailingBackslashes(search, search.length) % 2 === 1) return null
+  const starts = search[0] === "\\" ? [0] : []
+  let source = "", offset = 0
+  for (let index = 0; index < search.length; index++) {
+    const code = search.charCodeAt(index)
+    if (code < 128) { source += search[index].replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); offset += 1; continue }
+    starts.push(offset)
+    offset += 6
+    source += "\\\\u"
+    for (const digit of code.toString(16).padStart(4, "0")) source += digit >= "a" ? `[${digit}${digit.toUpperCase()}]` : digit
+  }
+  const pattern = new RegExp(source, "g")
+  for (let found = pattern.exec(content); found !== null; found = pattern.exec(content)) {
+    if (starts.every((start) => trailingBackslashes(content, found.index + start) % 2 === 0)) return content.indexOf(found[0]) === found.index ? found[0] : null
+    pattern.lastIndex = found.index + 1
+  }
+  return null
+}
+
+function actualOldString(content, search) {
+  if (content.includes(search)) return search
+  const at = straightQuotes(content).indexOf(straightQuotes(search))
+  if (at !== -1) return content.substring(at, at + search.length)
+  if (ESCAPE.test(search)) {
+    const decoded = decodeEscapes(search)
+    if (decoded !== search && content.includes(decoded)) return decoded
+  }
+  if (!NON_ASCII.test(search) || escapedLength(search) > content.length || !content.includes("\\u")) return null
+  return escapedMatch(search, content)
+}
+
+function opensQuote(characters, index) {
+  return index === 0 || [" ", "\t", "\n", "\r", "(", "[", "{", "\u2014", "\u2013"].includes(characters[index - 1])
+}
+
+function quoteStyle(search, actual, replacement) {
+  if (search === actual) return replacement
+  let characters = [...replacement]
+  if (actual.includes(LEFT_DOUBLE) || actual.includes(RIGHT_DOUBLE)) {
+    characters = characters.map((character, index, all) => character !== '"' ? character : opensQuote(all, index) ? LEFT_DOUBLE : RIGHT_DOUBLE)
+  }
+  if (actual.includes(LEFT_SINGLE) || actual.includes(RIGHT_SINGLE)) {
+    characters = characters.map((character, index, all) => {
+      if (character !== "'") return character
+      if (/\p{L}/u.test(all[index - 1] ?? "") && /\p{L}/u.test(all[index + 1] ?? "")) return RIGHT_SINGLE
+      return opensQuote(all, index) ? LEFT_SINGLE : RIGHT_SINGLE
+    })
+  }
+  return characters.join("")
+}
+
+function escapeStyle(search, actual, replacement) {
+  if (search === actual) return replacement
+  if (NON_ASCII.test(search) && escapedLength(search) === actual.length && escapedMatch(search, actual) !== null) {
+    const digits = new Map()
+    let upper = 0, lower = 0
+    for (let index = 0, offset = 0; index < search.length; index++) {
+      if (search.charCodeAt(index) < 128) { offset += 1; continue }
+      const hex = actual.slice(offset + 2, offset + 6)
+      digits.set(search.charCodeAt(index), hex)
+      for (const digit of hex) {
+        if (digit >= "a" && digit <= "f") lower++
+        else if (digit >= "A" && digit <= "F") upper++
+      }
+      offset += 6
+    }
+    return replacement.replace(/[\u0080-\uffff]/g, (character) => {
+      const kept = digits.get(character.charCodeAt(0)), hex = character.charCodeAt(0).toString(16).padStart(4, "0")
+      return `\\u${kept ?? (upper > lower ? hex.toUpperCase() : hex)}`
+    })
+  }
+  return ESCAPE.test(search) && decodeEscapes(search) === actual ? decodeEscapes(replacement) : replacement
+}
+
+function applyEdit(content, { old_string: search, new_string: replacement, replace_all: all }) {
+  const actual = actualOldString(content, search) || search
+  const written = escapeStyle(search, actual, quoteStyle(search, actual, replacement))
+  if (!actual) return written
+  const target = !written && !actual.endsWith("\n") && content.includes(`${actual}\n`) ? `${actual}\n` : actual
+  return all ? content.split(target).join(written) : content.replace(target, () => written)
+}
+
 function hook() {
   const payload = JSON.parse(readFileSync(0, "utf8"))
   const fileInput = (value) => {
@@ -324,12 +429,10 @@ function hook() {
     if (typeof value.old_string === "string" && typeof value.new_string === "string") return [value]
     return Object.values(value).flatMap(pairs)
   }
-  const apply = (body, { old_string: before, new_string: after, replace_all: all }) => {
-    if (!before) return after
-    const target = !after && !before.endsWith("\n") && body.includes(`${before}\n`) ? `${before}\n` : before
-    return all ? body.split(target).join(after) : body.replace(target, () => after)
-  }
-  const proposed = typeof input.content === "string" ? input.content : pairs(input).reduce(apply, current)
+  const sample = current.slice(0, 4096), crlf = sample.split("\r\n").length - 1
+  const edited = pairs(input).reduce(applyEdit, current.replaceAll("\r\n", "\n"))
+  const proposed = typeof input.content === "string" ? input.content
+    : crlf > sample.split("\n").length - 1 - crlf ? edited.replaceAll("\r\n", "\n").split("\n").join("\r\n") : edited
   const allowlistPath = join(root, ALLOWLIST)
   const allowed = allowlist(existsSync(allowlistPath) ? readFileSync(allowlistPath, "utf8") : null)
   return report(newFindings(path, current, proposed, root), allowed, []) ? 2 : 0

@@ -550,3 +550,68 @@ test("an edit with an empty new_string also removes the line break after old_str
     assert.equal(result.stderr.trim(), "sample.js:1: comment-length: 7 lines")
   } finally { rmSync(root, { recursive: true, force: true }) }
 })
+
+const edit = (root, name, old_string, new_string) =>
+  run(root, ["--hook"], JSON.stringify({ tool_name: "Edit", tool_input: { file_path: join(root, name), old_string, new_string } }))
+const machineFinding = (name, line) => `${name}:${line}: machine-path: ${["/", "Users/"].join("")}`
+
+test("an edit matches a CRLF file after its line breaks become LF", () => {
+  const root = make("notes.md", "alpha\r\nbeta\r\n")
+  try {
+    const result = edit(root, "notes.md", "alpha\nbeta", `alpha\nRead ${machine}.\nbeta`)
+    assert.equal(result.status, 2)
+    assert.equal(result.stderr.trim(), machineFinding("notes.md", 2))
+  } finally { rmSync(root, { recursive: true, force: true }) }
+})
+
+test("an edit with an empty new_string removes the CRLF line break after old_string", () => {
+  const block = (count, tag) => Array.from({ length: count }, (_, index) => `// ${tag} ${index}`).join("\r\n") + "\r\n"
+  const root = make("Sample.cs", `${block(3, "first")}var x = 1;\r\n${block(4, "second")}`)
+  try {
+    const result = edit(root, "Sample.cs", "var x = 1;", "")
+    assert.equal(result.status, 2)
+    assert.equal(result.stderr.trim(), "Sample.cs:1: comment-length: 7 lines")
+  } finally { rmSync(root, { recursive: true, force: true }) }
+})
+
+test("an edit matches straight quotes in old_string to curly quotes in the file", () => {
+  const root = make("notes.md", "It\u2019s ready.\n")
+  try {
+    const result = edit(root, "notes.md", "It's ready.", `It's ready. Read ${machine}.`)
+    assert.equal(result.status, 2)
+    assert.equal(result.stderr.trim(), machineFinding("notes.md", 1))
+  } finally { rmSync(root, { recursive: true, force: true }) }
+})
+
+test("an edit writes the straight quotes of new_string in the curly style of the matched text", () => {
+  const root = make("Sample.cs", "var text = \u2018x\u2019;\n")
+  try {
+    const result = edit(root, "Sample.cs", "'x'", `'// ${date}'`)
+    assert.equal(result.status, 2)
+    assert.equal(result.stderr.trim(), `Sample.cs:1: dated-anecdote: ${date}`)
+  } finally { rmSync(root, { recursive: true, force: true }) }
+})
+
+test("an edit matches and writes \\uXXXX escapes in both directions", () => {
+  const decoded = make("notes.md", "caf\u00e9\n")
+  const escaped = make("notes.md", "caf\\u00e9\n")
+  try {
+    const decodedResult = edit(decoded, "notes.md", "caf\\u00e9", "caf\\u00e9 \\u002FUsers/example")
+    assert.equal(decodedResult.status, 2)
+    assert.equal(decodedResult.stderr.trim(), machineFinding("notes.md", 1))
+    const escapedResult = edit(escaped, "notes.md", "caf\u00e9", `caf\u00e9 Read ${machine}.`)
+    assert.equal(escapedResult.status, 2)
+    assert.equal(escapedResult.stderr.trim(), machineFinding("notes.md", 1))
+  } finally {
+    rmSync(decoded, { recursive: true, force: true })
+    rmSync(escaped, { recursive: true, force: true })
+  }
+})
+
+test("an unrelated edit in a CRLF file does not report a finding the file already has", () => {
+  const root = make("Sample.cs", `/* ${["ses", "sion"].join("")}\r\n   abcdef1234 */\r\nvar x = 1;\r\n`)
+  try {
+    const result = edit(root, "Sample.cs", "var x = 1;", "var x = 2;")
+    assert.equal(result.status, 0, result.stderr)
+  } finally { rmSync(root, { recursive: true, force: true }) }
+})
