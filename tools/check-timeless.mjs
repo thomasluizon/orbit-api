@@ -6,7 +6,6 @@ import { dirname, extname, join, relative, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..")
-const SELF = fileURLToPath(import.meta.url)
 const ALLOWLIST = "tools/timeless-allowlist.json"
 const CHECKER = "tools/check-timeless.mjs"
 const SCANNED_MODES = new Set(["100644", "100755", "120000"])
@@ -31,8 +30,8 @@ function git(args, options = {}) {
   return result.stdout
 }
 
-function blobs(specs) {
-  const output = git(["cat-file", "--batch", "-Z"], { input: Buffer.from(specs.map((spec) => `${spec}\0`).join("")), encoding: "buffer", maxBuffer: 1024 * 1024 * 1024 })
+function blobs(specs, root = ROOT) {
+  const output = git(["cat-file", "--batch", "-Z"], { cwd: root, input: Buffer.from(specs.map((spec) => `${spec}\0`).join("")), encoding: "buffer", maxBuffer: 1024 * 1024 * 1024 })
   const contents = []
   let offset = 0
   for (const spec of specs) {
@@ -303,27 +302,21 @@ function hook() {
   }
   const input = fileInput(payload)
   if (!input) return 0
-  const absoluteTarget = resolve(process.cwd(), input.file_path)
-  let directory = dirname(absoluteTarget)
-  while (!existsSync(directory) && dirname(directory) !== directory) directory = dirname(directory)
-  const rootResult = spawnSync("git", ["-C", directory, "rev-parse", "--show-toplevel"], { encoding: "utf8" })
-  if (rootResult.status !== 0) return 0
-  const root = rootResult.stdout.trim(), checker = join(root, CHECKER)
-  if (!existsSync(checker)) return 0
-  if (checker !== SELF) {
-    const result = spawnSync(process.execPath, [checker, "--hook"], { input: JSON.stringify(payload), encoding: "utf8" })
-    if (result.stderr) process.stderr.write(result.stderr)
-    return result.status ?? 2
-  }
   const landed = payload.hook_event_name === "PostToolUse"
   if (!landed && typeof input.content !== "string") return 0
-  const canonicalTarget = existsSync(absoluteTarget) ? realpathSync(absoluteTarget)
-    : resolve(realpathSync(directory), relative(directory, absoluteTarget))
-  const path = relative(realpathSync(root), canonicalTarget).replaceAll("\\", "/")
-  if (path.startsWith("../") || spawnSync("git", ["-C", root, "check-ignore", "-q", "--", path]).status === 0) return 0
-  const current = existsSync(absoluteTarget) ? readFileSync(absoluteTarget, "utf8") : ""
+  const absoluteTarget = resolve(process.cwd(), input.file_path), exists = existsSync(absoluteTarget)
+  let directory = dirname(absoluteTarget)
+  while (!existsSync(directory) && dirname(directory) !== directory) directory = dirname(directory)
+  const target = exists ? realpathSync.native(absoluteTarget) : resolve(realpathSync.native(directory), relative(directory, absoluteTarget))
+  const rootResult = spawnSync("git", ["-C", exists ? dirname(target) : realpathSync.native(directory), "rev-parse", "--show-toplevel"], { encoding: "utf8" })
+  if (rootResult.status !== 0) return 0
+  const root = realpathSync.native(rootResult.stdout.trim())
+  if (!existsSync(join(root, CHECKER))) return 0
+  const path = relative(root, target).replaceAll("\\", "/")
+  if (spawnSync("git", ["-C", root, "check-ignore", "-q", "--", path]).status === 0) return 0
+  const current = exists ? readFileSync(absoluteTarget, "utf8") : ""
   const lineFeeds = (text) => text.replaceAll("\r\n", "\n")
-  const [before, after] = landed ? [lineFeeds(blobs([`HEAD:${path}`])[0] ?? ""), lineFeeds(current)] : [current, input.content]
+  const [before, after] = landed ? [lineFeeds(blobs([`HEAD:${path}`], root)[0] ?? ""), lineFeeds(current)] : [current, input.content]
   const allowlistPath = join(root, ALLOWLIST)
   const allowed = allowlist(existsSync(allowlistPath) ? readFileSync(allowlistPath, "utf8") : null)
   return report(newFindings(path, before, after, root), allowed, []) ? 2 : 0

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import { spawnSync } from "node:child_process"
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { dirname, isAbsolute, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
@@ -498,10 +498,10 @@ test("a long comment that gets shorter but stays over the limit fails staged and
   } finally { rmSync(root, { recursive: true, force: true }) }
 })
 
-const landedEdit = (root, name, written) => {
+const landedEdit = (root, name, written, session = root, filePath = join(root, name)) => {
   writeFileSync(join(root, name), written)
-  const tool_input = { file_path: join(root, name), old_string: "unrelated", new_string: "unrelated" }
-  return run(root, ["--hook"], JSON.stringify({ hook_event_name: "PostToolUse", tool_name: "Edit", tool_input, tool_response: {} }))
+  const tool_input = { file_path: filePath, old_string: "unrelated", new_string: "unrelated" }
+  return run(session, ["--hook"], JSON.stringify({ hook_event_name: "PostToolUse", tool_name: "Edit", tool_input, tool_response: {} }))
 }
 
 test("a landed Edit is checked on the bytes in the file, not on its old_string and new_string", () => {
@@ -547,7 +547,61 @@ test("a landed Edit in a CRLF checkout of an LF blob does not report a finding t
   } finally { rmSync(root, { recursive: true, force: true }) }
 })
 
-test("a path git ignores or a path outside the repository is not checked", () => {
+test("a landed Edit on a CRLF blob does not report a finding the blob already has", () => {
+  const marker = ["ses", "sion"].join("")
+  const root = make("Sample.cs")
+  try {
+    git(root, "config", "core.autocrlf", "false")
+    writeFileSync(join(root, "Sample.cs"), `/* ${marker}\r\n   abcdef1234 */\r\nvar x = 1;\r\n`)
+    git(root, "add", "Sample.cs")
+    git(root, "commit", "-qm", "crlf")
+    assert.ok(git(root, "cat-file", "-p", "HEAD:Sample.cs").includes(`${marker}\r\n`))
+    const result = landedEdit(root, "Sample.cs", `/* ${marker}\r\n   abcdef1234 */\r\nvar x = 2;\r\n`)
+    assert.equal(result.status, 0, result.stderr)
+  } finally { rmSync(root, { recursive: true, force: true }) }
+})
+
+for (const [session, other] of [["orbit-api", "orbit-ui-mobile"], ["orbit-ui-mobile", "orbit-api"]]) {
+  test(`a hook in ${session} judges a file of ${other} against the HEAD and allowlist of ${other}, not through its checker`, () => {
+    const sessionRoot = make("sample.md"), otherRoot = make("kept.md", `Ask ${owner}.\n`)
+    try {
+      writeFileSync(join(otherRoot, "tools/check-timeless.mjs"), "process.exit(0)\n")
+      writeFileSync(join(otherRoot, ".gitignore"), "local/\n")
+      assert.equal(landedEdit(otherRoot, "kept.md", `Ask ${owner}.\nmore\n`, sessionRoot).status, 0)
+      const planted = landedEdit(otherRoot, "sample.md", `Ask ${owner}.\n`, sessionRoot)
+      assert.equal(planted.status, 2)
+      assert.equal(planted.stderr.trim(), `sample.md:1: owner-name: ${owner}`)
+      const written = hook(sessionRoot, join(otherRoot, "new.md"), `Ask ${owner}.\n`)
+      assert.equal(written.status, 2)
+      assert.equal(written.stderr.trim(), `new.md:1: owner-name: ${owner}`)
+      mkdirSync(join(otherRoot, "local"))
+      assert.equal(landedEdit(otherRoot, "local/notes.md", `Ask ${owner}.\n`, sessionRoot).status, 0)
+      writeAllowlist(otherRoot, [{ path: "sample.md", rule: "owner-name", match: owner, reason: "reviewed" }])
+      assert.equal(landedEdit(otherRoot, "sample.md", `Ask ${owner}.\n`, sessionRoot).status, 0)
+    } finally {
+      rmSync(sessionRoot, { recursive: true, force: true })
+      rmSync(otherRoot, { recursive: true, force: true })
+    }
+  })
+}
+
+test("a mis-cased path is judged at the case the file system stores", (t) => {
+  const root = make("README.md", `Ask ${owner}.\n`)
+  try {
+    const misCased = root.replace(/[^/\\]+$/, (name) => name.toUpperCase())
+    if (!existsSync(join(misCased, "readme.md"))) { t.skip("the file system is case-sensitive"); return }
+    const written = hook(root, join(misCased, "sample.md"), `Ask ${owner}.\n`)
+    assert.equal(written.status, 2)
+    assert.equal(written.stderr.trim(), `sample.md:1: owner-name: ${owner}`)
+    const landed = landedEdit(root, "sample.md", `Ask ${owner}.\n`, root, join(misCased, "sample.md"))
+    assert.equal(landed.status, 2)
+    assert.equal(landed.stderr.trim(), `sample.md:1: owner-name: ${owner}`)
+    const kept = landedEdit(root, "README.md", `Ask ${owner}.\nmore\n`, root, join(root, "readme.md"))
+    assert.equal(kept.status, 0, kept.stderr)
+  } finally { rmSync(root, { recursive: true, force: true }) }
+})
+
+test("a path git ignores, a path in no repository, or a path in a repository without the checker is not checked", () => {
   const root = make("sample.md")
   const outside = mkdtempSync(join(tmpdir(), "orbit-timeless-outside-"))
   try {
@@ -558,6 +612,9 @@ test("a path git ignores or a path outside the repository is not checked", () =>
     writeFileSync(join(outside, "target.md"), "clean\n")
     symlinkSync(join(outside, "target.md"), join(root, "outside.md"))
     assert.equal(landedEdit(root, "outside.md", `Ask ${owner}.\n`).status, 0)
+    git(outside, "init", "-q")
+    assert.equal(landedEdit(root, "outside.md", `Ask ${owner}.\n`).status, 0)
+    assert.equal(hook(root, join(outside, "new.md"), `Ask ${owner}.\n`).status, 0)
   } finally {
     rmSync(root, { recursive: true, force: true })
     rmSync(outside, { recursive: true, force: true })
