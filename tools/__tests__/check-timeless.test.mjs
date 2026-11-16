@@ -34,10 +34,15 @@ const hook = (root, name, content, command = "tools/check-timeless.mjs") => {
   return command === "tools/check-timeless.mjs" ? run(root, ["--hook"], input)
     : spawnSync(process.execPath, [join(root, command)], { cwd: root, input, encoding: "utf8" })
 }
+const writeAllowlist = (root, entries) => {
+  writeFileSync(join(root, "tools/timeless-allowlist.json"), JSON.stringify(entries))
+  git(root, "add", "tools/timeless-allowlist.json")
+}
 
 const date = ["2026", "-08-12"].join("")
 const owner = ["Tho", "mas"].join("")
 const machine = ["/", "Users/example/work"].join("")
+const marker = ["ses", "sion"].join("")
 const cases = [
   ["machine-path", "sample.md", `Read ${machine}.\n`],
   ["owner-name", "sample.md", `Ask ${owner}.\n`],
@@ -100,8 +105,7 @@ test("the entry point rejects a planted edit and ignores scratchpad files", () =
 test("an unused allowlist entry fails the full scan", () => {
   const root = make("sample.md")
   try {
-    writeFileSync(join(root, "tools/timeless-allowlist.json"), JSON.stringify([{ path: "sample.md", rule: "owner-name", match: owner, reason: "unused" }]))
-    git(root, "add", "tools/timeless-allowlist.json")
+    writeAllowlist(root, [{ path: "sample.md", rule: "owner-name", match: owner, reason: "unused" }])
     const result = run(root, ["--all"])
     assert.equal(result.status, 1)
     assert.match(result.stderr, /unused allowlist/)
@@ -190,7 +194,6 @@ test("moving an existing violating comment passes the staged diff", () => {
     git(root, "add", name)
     const result = run(root, ["--staged"])
     assert.equal(result.status, 0, result.stderr)
-
   } finally { rmSync(root, { recursive: true, force: true }) }
 })
 
@@ -206,7 +209,6 @@ test("a directory entry may exempt comment-length but never machine-path", () =>
     const refused = run(root, ["--all"])
     assert.equal(refused.status, 2)
     assert.match(refused.stderr, /valid exact or directory-scoped entries/)
-
   } finally { rmSync(root, { recursive: true, force: true }) }
 })
 
@@ -268,10 +270,6 @@ const exportFixture = () => {
   git(root, "add", "export/only.md", "tools/timeless-allowlist.json")
   git(root, "commit", "-qm", "allow")
   return { root, base: git(root, "rev-parse", "HEAD") }
-}
-const writeAllowlist = (root, entries) => {
-  writeFileSync(join(root, "tools/timeless-allowlist.json"), JSON.stringify(entries))
-  git(root, "add", "tools/timeless-allowlist.json")
 }
 const touchChecker = (root) => {
   const file = join(root, "tools/check-timeless.mjs")
@@ -509,7 +507,7 @@ test("a landed Edit is checked on the bytes in the file, not on its old_string a
   try {
     const planted = landedEdit(root, "sample.md", `Ask ${owner}.\n`)
     assert.equal(planted.status, 2)
-    assert.equal(planted.stderr.trim(), `sample.md:1: owner-name: ${owner}`)
+    assert.equal(planted.stderr.trim(), ownerFinding("sample.md"))
     writeFileSync(join(root, "sample.md"), "clean\n")
     const tool_input = { file_path: join(root, "sample.md"), old_string: "clean", new_string: `Ask ${owner}.` }
     const claimed = run(root, ["--hook"], JSON.stringify({ hook_event_name: "PostToolUse", tool_name: "Edit", tool_input, tool_response: {} }))
@@ -534,12 +532,11 @@ test("a landed Edit is judged against HEAD, as the staged check judges the file"
     git(root, "add", "sample.md")
     const staged = landedEdit(root, "sample.md", `Ask ${owner}.\nmore\n`)
     assert.equal(staged.status, 2)
-    assert.equal(staged.stderr.trim(), `sample.md:1: owner-name: ${owner}`)
+    assert.equal(staged.stderr.trim(), ownerFinding("sample.md"))
   } finally { rmSync(root, { recursive: true, force: true }) }
 })
 
 test("a landed Edit in a CRLF checkout of an LF blob does not report a finding the blob already has", () => {
-  const marker = ["ses", "sion"].join("")
   const root = make("Sample.cs", `/* ${marker}\n   abcdef1234 */\nvar x = 1;\n`)
   try {
     const result = landedEdit(root, "Sample.cs", `/* ${marker}\r\n   abcdef1234 */\r\nvar x = 2;\r\n`)
@@ -548,7 +545,6 @@ test("a landed Edit in a CRLF checkout of an LF blob does not report a finding t
 })
 
 test("a landed Edit on a CRLF blob does not report a finding the blob already has", () => {
-  const marker = ["ses", "sion"].join("")
   const root = make("Sample.cs")
   try {
     git(root, "config", "core.autocrlf", "false")
@@ -561,29 +557,27 @@ test("a landed Edit on a CRLF blob does not report a finding the blob already ha
   } finally { rmSync(root, { recursive: true, force: true }) }
 })
 
-for (const [session, other] of [["orbit-api", "orbit-ui-mobile"], ["orbit-ui-mobile", "orbit-api"]]) {
-  test(`a hook in ${session} judges a file of ${other} against the HEAD and allowlist of ${other}, not through its checker`, () => {
-    const sessionRoot = make("sample.md"), otherRoot = make("kept.md", `Ask ${owner}.\n`)
-    try {
-      writeFileSync(join(otherRoot, "tools/check-timeless.mjs"), "process.exit(0)\n")
-      writeFileSync(join(otherRoot, ".gitignore"), "local/\n")
-      assert.equal(landedEdit(otherRoot, "kept.md", `Ask ${owner}.\nmore\n`, sessionRoot).status, 0)
-      const planted = landedEdit(otherRoot, "sample.md", `Ask ${owner}.\n`, sessionRoot)
-      assert.equal(planted.status, 2)
-      assert.equal(planted.stderr.trim(), `sample.md:1: owner-name: ${owner}`)
-      const written = hook(sessionRoot, join(otherRoot, "new.md"), `Ask ${owner}.\n`)
-      assert.equal(written.status, 2)
-      assert.equal(written.stderr.trim(), `new.md:1: owner-name: ${owner}`)
-      mkdirSync(join(otherRoot, "local"))
-      assert.equal(landedEdit(otherRoot, "local/notes.md", `Ask ${owner}.\n`, sessionRoot).status, 0)
-      writeAllowlist(otherRoot, [{ path: "sample.md", rule: "owner-name", match: owner, reason: "reviewed" }])
-      assert.equal(landedEdit(otherRoot, "sample.md", `Ask ${owner}.\n`, sessionRoot).status, 0)
-    } finally {
-      rmSync(sessionRoot, { recursive: true, force: true })
-      rmSync(otherRoot, { recursive: true, force: true })
-    }
-  })
-}
+test("a hook judges a file of another repository against that repository's HEAD and allowlist, not through its checker", () => {
+  const sessionRoot = make("sample.md"), otherRoot = make("kept.md", `Ask ${owner}.\n`)
+  try {
+    writeFileSync(join(otherRoot, "tools/check-timeless.mjs"), "process.exit(0)\n")
+    writeFileSync(join(otherRoot, ".gitignore"), "local/\n")
+    assert.equal(landedEdit(otherRoot, "kept.md", `Ask ${owner}.\nmore\n`, sessionRoot).status, 0)
+    const planted = landedEdit(otherRoot, "sample.md", `Ask ${owner}.\n`, sessionRoot)
+    assert.equal(planted.status, 2)
+    assert.equal(planted.stderr.trim(), ownerFinding("sample.md"))
+    const written = hook(sessionRoot, join(otherRoot, "new.md"), `Ask ${owner}.\n`)
+    assert.equal(written.status, 2)
+    assert.equal(written.stderr.trim(), ownerFinding("new.md"))
+    mkdirSync(join(otherRoot, "local"))
+    assert.equal(landedEdit(otherRoot, "local/notes.md", `Ask ${owner}.\n`, sessionRoot).status, 0)
+    writeAllowlist(otherRoot, [{ path: "sample.md", rule: "owner-name", match: owner, reason: "reviewed" }])
+    assert.equal(landedEdit(otherRoot, "sample.md", `Ask ${owner}.\n`, sessionRoot).status, 0)
+  } finally {
+    rmSync(sessionRoot, { recursive: true, force: true })
+    rmSync(otherRoot, { recursive: true, force: true })
+  }
+})
 
 test("a mis-cased path is judged at the case the file system stores", (t) => {
   const root = make("README.md", `Ask ${owner}.\n`)
@@ -592,10 +586,10 @@ test("a mis-cased path is judged at the case the file system stores", (t) => {
     if (!existsSync(join(misCased, "readme.md"))) { t.skip("the file system is case-sensitive"); return }
     const written = hook(root, join(misCased, "sample.md"), `Ask ${owner}.\n`)
     assert.equal(written.status, 2)
-    assert.equal(written.stderr.trim(), `sample.md:1: owner-name: ${owner}`)
+    assert.equal(written.stderr.trim(), ownerFinding("sample.md"))
     const landed = landedEdit(root, "sample.md", `Ask ${owner}.\n`, root, join(misCased, "sample.md"))
     assert.equal(landed.status, 2)
-    assert.equal(landed.stderr.trim(), `sample.md:1: owner-name: ${owner}`)
+    assert.equal(landed.stderr.trim(), ownerFinding("sample.md"))
     const kept = landedEdit(root, "README.md", `Ask ${owner}.\nmore\n`, root, join(root, "readme.md"))
     assert.equal(kept.status, 0, kept.stderr)
   } finally { rmSync(root, { recursive: true, force: true }) }
