@@ -795,6 +795,30 @@ Production requires the latest trusted smoke status and matching staging health.
 `force_unstaged` requires `override_reason`; the summary and production deployment
 payload retain that reason. It does not bypass CI or the export gate.
 
+#### Stripe webhook endpoint version
+
+The webhook handler refuses each event whose API version is outside the major
+release of the pinned `Stripe.net` (`StripeConfiguration.ApiVersion`). Stripe sets
+the version of a webhook endpoint when you create the endpoint, so the endpoint
+does not follow a package update. `/health/stripe` lists the versions of the enabled
+endpoints for `/api/subscriptions/webhook` and the library version. Render does not
+probe this route.
+
+Release API reads `/health/stripe` three times:
+
+1. Before the production deploy, it compares the library version that staging serves
+   at the selected SHA with the production endpoint versions. `force_unstaged` skips
+   this step. A production build without the route gives only a warning.
+2. After the production deploy, it checks production against its own endpoints.
+3. After the staging deploy, it checks staging against its own endpoints. The staging
+   deployment record, which production needs, waits for this check.
+
+Before you release a `Stripe.net` update that changes the major release, create a
+new endpoint at the new version in each Stripe mode. Use the same URL and the same
+five events. Put the new signing secret in `/orbit/<environment>/api/Stripe__WebhookSecret`
+and in the matching Render environment group. Keep the old endpoint enabled until
+the new build delivers, then disable it.
+
 Configure GitHub Actions environment secrets `SMOKE_TEST_EMAIL`,
 `SMOKE_TEST_CODE` and `SMOKE_BOT_BYPASS` in both `staging` and `production`. On staging, provision that
 account and retain its email and six-digit code in the API's `TEST_ACCOUNTS` value
