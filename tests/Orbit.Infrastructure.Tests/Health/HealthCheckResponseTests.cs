@@ -81,6 +81,65 @@ public class HealthCheckResponseTests
     }
 
     [Fact]
+    public async Task HealthEndpoints_StripeVersionMismatchDoesNotFailRenderProbe_StripeReportReturns503WithVersions()
+    {
+        var stripeCalls = 0;
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSingleton(new System.Diagnostics.DiagnosticListener("HealthCheckTests"));
+        services.AddRouting();
+        services.AddHealthChecks()
+            .AddCheck("database", () => HealthCheckResult.Healthy("Database reachable"))
+            .AddCheck("background-services", () => HealthCheckResult.Healthy(
+                "All background services running",
+                new Dictionary<string, object> { ["reminder-scheduler"] = "Last tick: 1m ago" }), tags: ["jobs"])
+            .AddCheck(WebApplicationExtensions.StripeHealthCheckName, () =>
+            {
+                stripeCalls++;
+                return HealthCheckResult.Unhealthy("No enabled webhook endpoint", data: new Dictionary<string, object>
+                {
+                    ["libraryApiVersion"] = "2026-08-26.dahlia",
+                    ["endpointApiVersions"] = new[] { "2026-02-25.clover" },
+                });
+            }, tags: [WebApplicationExtensions.StripeHealthTag]);
+        using var provider = services.BuildServiceProvider();
+        var app = new ApplicationBuilder(provider);
+        app.UseRouting();
+        app.UseEndpoints(endpoints => endpoints.MapOrbitHealthChecks());
+        var pipeline = app.Build();
+
+        async Task<(int Status, JsonDocument Body)> GetAsync(string path)
+        {
+            var context = new DefaultHttpContext { RequestServices = provider };
+            context.Request.Path = path;
+            context.Request.Method = "GET";
+            using var body = new MemoryStream();
+            context.Response.Body = body;
+            await pipeline(context);
+            return (context.Response.StatusCode, JsonDocument.Parse(body.ToArray()));
+        }
+
+        var (liveStatus, liveBody) = await GetAsync("/health");
+        liveStatus.Should().Be(200);
+        stripeCalls.Should().Be(0);
+        liveBody.RootElement.GetProperty("checks").EnumerateArray().Select(c => c.GetProperty("name").GetString())
+            .Should().Equal("database");
+
+        var (jobsStatus, jobsBody) = await GetAsync("/health/jobs");
+        jobsStatus.Should().Be(200);
+        jobsBody.RootElement.GetProperty("checks")[0].TryGetProperty("data", out _).Should().BeFalse();
+
+        var (stripeStatus, stripeBody) = await GetAsync("/health/stripe");
+        stripeStatus.Should().Be(503);
+        stripeCalls.Should().Be(1);
+        var stripe = stripeBody.RootElement.GetProperty("checks").EnumerateArray().Single();
+        stripe.GetProperty("name").GetString().Should().Be(WebApplicationExtensions.StripeHealthCheckName);
+        stripe.GetProperty("data").GetProperty("libraryApiVersion").GetString().Should().Be("2026-08-26.dahlia");
+        stripe.GetProperty("data").GetProperty("endpointApiVersions")[0].GetString().Should().Be("2026-02-25.clover");
+        stripeBody.RootElement.TryGetProperty("commit", out _).Should().BeTrue();
+    }
+
+    [Fact]
     public async Task HealthyReport_ExposesRenderCommit()
     {
         const string commit = "1234567890abcdef1234567890abcdef12345678";
