@@ -340,16 +340,22 @@ public sealed class AiBlockAnswerService(
 
     /// <summary>
     /// The preview of a pickList answer on the <c>ai_change_plan</c> path: the chosen items as one change of the bulk
-    /// kind of the action, compiled with the compiler of the chat round. The executor call is the one of the old path.
+    /// kind of the action, through the compile flow of the chat round. The executor call is the one of the old path.
     /// </summary>
     private async Task<PendingAgentOperation?> CompilePickListAsync(ProcessUserChatCommand request, ProposedChange change,
         int chosen, AiToolRegistry registry, CancellationToken token)
     {
         var compiled = await new ChangeListCompiler(registry).CompileAsync(request.UserId, [change], new HashSet<Guid>(),
-            async (call, ct) => await PreviewPickListAsync(request, call.Name, call.Args, chosen, ct) is { } preview
-                ? new ChangeResult(call.Id, preview, null)
-                : new ChangeResult(call.Id, null, new ChangeError(call.Id, string.Empty, ErrorCodes.AiBlockPreviewUnavailable,
-                    "The chosen items have no preview.")),
+            async (calls, ct) =>
+            {
+                var results = new List<ChangeResult>(calls.Count);
+                foreach (var call in calls)
+                    results.Add(await PreviewPickListAsync(request, call.Name, call.Args, chosen, ct) is { } preview
+                        ? new ChangeResult(call.Id, preview, null)
+                        : new ChangeResult(call.Id, null, new ChangeError(call.Id, string.Empty, ErrorCodes.AiBlockPreviewUnavailable,
+                            "The chosen items have no preview.")));
+                return results;
+            },
             pendingOperations, token);
         return compiled.IsSuccess && compiled.Previews is [var preview] ? preview : null;
     }

@@ -35,11 +35,20 @@ public sealed record ChangeResult(string ChangeId, PendingAgentOperation? Previe
 public sealed record ChangeListCheck(IReadOnlyList<AiToolCall> Runnable, IReadOnlyList<ChangeError> Waiting,
     IReadOnlyList<ChangeError> Errors);
 
-/// <summary>The previews of a compiled change list, or its errors. A list with an error holds no preview.</summary>
-public sealed record ChangeListOutcome(IReadOnlyList<PendingAgentOperation> Previews, IReadOnlyList<ChangeError> Errors,
+/// <summary>
+/// A compiled change list: the result of each change that ran, the errors of the list, and the changes that wait for an
+/// answer. A list with an error holds no preview.
+/// </summary>
+public sealed record ChangeListOutcome(IReadOnlyList<ChangeResult> Results, IReadOnlyList<ChangeError> Errors,
     IReadOnlyList<ChangeError> Waiting)
 {
     public bool IsSuccess => Errors.Count == 0;
+
+    /// <summary>The previews that the list holds: none when the list has an error.</summary>
+    public IReadOnlyList<PendingAgentOperation> Previews => IsSuccess ? Prepared(Results) : [];
+
+    internal static IReadOnlyList<PendingAgentOperation> Prepared(IEnumerable<ChangeResult> results) =>
+        [.. results.Where(result => result.Preview is not null).Select(result => result.Preview!)];
 }
 
 /// <summary>
@@ -92,7 +101,7 @@ public sealed class ChangeListCompiler(AiToolRegistry registry)
     /// Decides the list after its writes ran: the error of each change that failed, and <c>too_many_previews</c> when the
     /// previews of the list need more than <see cref="MaxPreviews"/> cards. Older previews do not count.
     /// </summary>
-    public async Task<IReadOnlyList<ChangeError>> SettleAsync(Guid userId, IReadOnlyList<ChangeResult> results,
+    private async Task<IReadOnlyList<ChangeError>> SettleAsync(Guid userId, IReadOnlyList<ChangeResult> results,
         IPendingAgentOperationStore store, CancellationToken ct)
     {
         var errors = results.Where(result => result.Error is not null).Select(result => result.Error!).ToList();
@@ -115,23 +124,28 @@ public sealed class ChangeListCompiler(AiToolRegistry registry)
     }
 
     /// <summary>
-    /// Compiles a change list through <paramref name="dispatch"/>, which runs one write tool call and returns its result.
-    /// A list with an error withdraws each preview that it prepared, so it holds nothing.
+    /// The one compile flow of the chat round and of the pickList answer. <paramref name="dispatch"/> runs once with the
+    /// write call of each change that can run. <paramref name="unreadable"/> holds the error of each change call with no
+    /// readable change. A list with an error holds nothing: <paramref name="withdraw"/> takes back what the list
+    /// prepared. A caller with no ledger of the turn leaves it out, and the store withdraws each preview of the list.
     /// </summary>
     public async Task<ChangeListOutcome> CompileAsync(Guid userId, IReadOnlyList<ProposedChange> changes, IReadOnlySet<Guid> askRecords,
-        Func<AiToolCall, CancellationToken, Task<ChangeResult>> dispatch, IPendingAgentOperationStore store, CancellationToken ct)
+        Func<IReadOnlyList<AiToolCall>, CancellationToken, Task<IReadOnlyList<ChangeResult>>> dispatch,
+        IPendingAgentOperationStore store, CancellationToken ct, IReadOnlyList<ChangeError>? unreadable = null,
+        Action<IReadOnlyList<PendingAgentOperation>>? withdraw = null)
     {
         var check = Check(changes, askRecords);
-        var results = new List<ChangeResult>();
-        foreach (var call in check.Runnable)
-            results.Add(await dispatch(call, ct));
-        var errors = check.Errors.Concat(await SettleAsync(userId, results, store, ct)).ToArray();
-        var previews = results.Where(result => result.Preview is not null).Select(result => result.Preview!).ToArray();
+        var results = await dispatch(check.Runnable, ct);
+        var errors = (unreadable ?? []).Concat(check.Errors).Concat(await SettleAsync(userId, results, store, ct)).ToArray();
         if (errors.Length == 0)
-            return new(previews, [], check.Waiting);
-        foreach (var preview in previews)
-            Withdraw(userId, preview.Id, store);
-        return new([], errors, check.Waiting);
+            return new(results, [], check.Waiting);
+        var prepared = ChangeListOutcome.Prepared(results);
+        if (withdraw is not null)
+            withdraw(prepared);
+        else
+            foreach (var preview in prepared)
+                Withdraw(userId, preview.Id, store);
+        return new(results, errors, check.Waiting);
     }
 
     /// <summary>
@@ -142,7 +156,7 @@ public sealed class ChangeListCompiler(AiToolRegistry registry)
         $"The change list holds no change. Send one item in {ChangeDeclarations.ChangesArgument} for each change.");
 
     /// <summary>Withdraws a preview that a failed change list prepared.</summary>
-    public static void Withdraw(Guid userId, Guid pendingOperationId, IPendingAgentOperationStore store)
+    private static void Withdraw(Guid userId, Guid pendingOperationId, IPendingAgentOperationStore store)
     {
         if (store.GetExecution(userId, pendingOperationId) is { } stored)
             store.Withdraw(userId, pendingOperationId,

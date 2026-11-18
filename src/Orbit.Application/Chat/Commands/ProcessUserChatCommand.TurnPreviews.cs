@@ -221,6 +221,36 @@ public partial class ProcessUserChatCommandHandler
             KeepsEarlierPreview = earlierIds.Any(id => store.IsAwaitingConfirmation(userId, id));
         }
 
+        /// <summary>The state of the turn before a change list runs, for <see cref="WithdrawList"/>.</summary>
+        public ChangeListMark MarkList() => new(_closes.Count, [.. results.PreviewedCalls], results.PreviousWriteCalls.Count);
+
+        /// <summary>
+        /// Withdraws only what one failed change list prepared, so each preview of an earlier round stays. The store
+        /// withdraws each preview that a write of the list created. A preview from before the turn stays in the store,
+        /// and leaves the cards of the turn unless a revision of the turn holds it. Each close and each write guard
+        /// after <paramref name="mark"/> is dropped, so the repair round can send the same change again.
+        /// </summary>
+        public void WithdrawList(Guid userId, IPendingAgentOperationStore store, ChangeListMark mark,
+            IReadOnlyCollection<Guid> listPreviewIds)
+        {
+            foreach (var close in _closes.Skip(mark.HeldCloses))
+                if (close.Card is var (toolName, card))
+                    results.KeepPendingOperation(toolName, card);
+            _closes.RemoveRange(mark.HeldCloses, _closes.Count - mark.HeldCloses);
+            foreach (var id in listPreviewIds)
+            {
+                if (!earlierIds.Contains(id))
+                {
+                    WithdrawCreated(userId, store, id);
+                    results.SupersedePendingOperation(id);
+                }
+                else if (!_earlierRevisions.ContainsKey(id))
+                    results.PendingWriteCalls.Remove(id);
+            }
+            results.PreviewedCalls.IntersectWith(mark.PreviewedCalls);
+            results.PreviousWriteCalls.RemoveRange(mark.WriteCalls, results.PreviousWriteCalls.Count - mark.WriteCalls);
+        }
+
         /// <summary>
         /// Withdraws a preview that a write of this turn created. A change set of the turn first puts back each earlier
         /// preview that it combines and releases it, so the store withdraws only the members that this turn created.
@@ -314,4 +344,10 @@ public partial class ProcessUserChatCommandHandler
         private sealed record DeferredClose(Guid Id, (string ToolName, PendingAgentOperation Preview)? Card,
             Func<CancellationToken, Task<bool>> Close);
     }
+
+    /// <summary>
+    /// The state of the turn before a change list runs: the count of its held closes, the fingerprints of its previewed
+    /// writes and the count of its write calls. A failed list goes back to it.
+    /// </summary>
+    internal sealed record ChangeListMark(int HeldCloses, IReadOnlyCollection<string> PreviewedCalls, int WriteCalls);
 }

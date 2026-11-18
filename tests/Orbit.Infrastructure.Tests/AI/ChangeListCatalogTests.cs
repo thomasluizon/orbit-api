@@ -122,10 +122,10 @@ public sealed class ChangeListCatalogTests(ITestOutputHelper output)
         AiToolCall? dispatched = null;
 
         var outcome = await new ChangeListCompiler(registry).CompileAsync(Guid.NewGuid(), [new ProposedChange("change", kind, arguments)],
-            new HashSet<Guid>(), (call, _) =>
+            new HashSet<Guid>(), (calls, _) =>
             {
-                dispatched = call;
-                return Task.FromResult(new ChangeResult(call.Id, preview, null));
+                dispatched = calls.Should().ContainSingle().Subject;
+                return Task.FromResult<IReadOnlyList<ChangeResult>>([new ChangeResult(dispatched.Id, preview, null)]);
             }, store, default);
 
         outcome.IsSuccess.Should().BeTrue();

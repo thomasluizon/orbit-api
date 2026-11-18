@@ -68,11 +68,13 @@ public sealed class ChangeListCompilerTests
         return pending;
     }
 
-    private Func<AiToolCall, CancellationToken, Task<ChangeResult>> Prepares(List<AiToolCall> dispatched) => (call, _) =>
-    {
-        dispatched.Add(call);
-        return Task.FromResult(new ChangeResult(call.Id, Prepare(call.Name, call.Args), null));
-    };
+    private Func<IReadOnlyList<AiToolCall>, CancellationToken, Task<IReadOnlyList<ChangeResult>>> Prepares(List<AiToolCall> dispatched) =>
+        (calls, _) =>
+        {
+            dispatched.AddRange(calls);
+            return Task.FromResult<IReadOnlyList<ChangeResult>>(
+                [.. calls.Select(call => new ChangeResult(call.Id, Prepare(call.Name, call.Args), null))]);
+        };
 
     [Fact]
     public void Kinds_AreTheChatWriteToolsWithTheSingleFormsMergedIntoTheirBulkForm()
@@ -166,23 +168,71 @@ public sealed class ChangeListCompilerTests
         ChangeListCompiler.RecordIds(ask).Should().Equal(id);
     }
 
+    /// <summary>The change "c" fails with <c>NOT_FOUND</c>; each other change prepares its preview in <paramref name="prepared"/>.</summary>
+    private Func<IReadOnlyList<AiToolCall>, CancellationToken, Task<IReadOnlyList<ChangeResult>>> FailsTheLogChange(
+        List<PendingAgentOperation> prepared) => (calls, _) => Task.FromResult<IReadOnlyList<ChangeResult>>([.. calls.Select(call =>
+        {
+            if (call.Id == "c")
+                return new ChangeResult("c", null, ChangeListCompiler.ErrorOf("c",
+                    new AgentOperationResult("bulk_log_habits", "bulk_log_habits", AgentRiskClass.Low, AgentConfirmationRequirement.None,
+                        AgentOperationStatus.Failed, PolicyReason: "No matching habits found.", ErrorCode: "NOT_FOUND"),
+                    new AiToolCallResult("bulk_log_habits", "c", false, null, null, "No matching habits found."), null));
+            var preview = Prepare(call.Name, call.Args);
+            prepared.Add(preview);
+            return new ChangeResult(call.Id, preview, null);
+        })]);
+
+    /// <summary>
+    /// The chat round and the pickList answer use one compile flow. A caller with a ledger of the turn gets the previews
+    /// of a failed list and decides each withdrawal, so the compiler withdraws nothing in the store by itself.
+    /// </summary>
+    [Fact]
+    public async Task AFailedListGivesItsPreviewsToTheWithdrawalOfTheCallerAndWithdrawsNothingByItself()
+    {
+        var prepared = new List<PendingAgentOperation>();
+        var withdrawn = new List<IReadOnlyList<PendingAgentOperation>>();
+        var outcome = await new ChangeListCompiler(Registry).CompileAsync(UserId,
+            [Change("a", "bulk_delete_habits"), Change("b", "bulk_update_habits"), Change("c", "bulk_log_habits")],
+            new HashSet<Guid>(), FailsTheLogChange(prepared), _store, default, withdraw: withdrawn.Add);
+
+        outcome.IsSuccess.Should().BeFalse();
+        outcome.Previews.Should().BeEmpty();
+        outcome.Results.Select(result => result.ChangeId).Should().Equal("a", "b", "c");
+        withdrawn.Should().ContainSingle().Which.Should().Equal(prepared);
+        _store.DidNotReceiveWithAnyArgs().Withdraw(default, default, default!, default);
+    }
+
+    /// <summary>
+    /// A change call with no readable change is an error of the list. The changes that can run still run in one
+    /// dispatch, the list holds nothing, and the error of the call comes first.
+    /// </summary>
+    [Fact]
+    public async Task AnUnreadableChangeCallFailsTheListAndWithdrawsTheChangesThatRan()
+    {
+        var dispatches = 0;
+        var prepared = new List<PendingAgentOperation>();
+        var outcome = await new ChangeListCompiler(Registry).CompileAsync(UserId, [Change("a", "bulk_delete_habits")],
+            new HashSet<Guid>(), (calls, token) =>
+            {
+                dispatches++;
+                return FailsTheLogChange(prepared)(calls, token);
+            }, _store, default, unreadable: [ChangeListCompiler.EmptyList("list")]);
+
+        dispatches.Should().Be(1);
+        outcome.Errors.Should().Equal(ChangeListCompiler.EmptyList("list"));
+        outcome.Previews.Should().BeEmpty();
+        var preview = prepared.Should().ContainSingle().Subject;
+        _store.Received(1).Withdraw(UserId, preview.Id,
+            AgentOperationFingerprint.Compute(preview.CapabilityId, _stored[preview.Id].Arguments.GetRawText()), null);
+    }
+
     [Fact]
     public async Task AFailedChangeBesideThreeCorrectChangesHoldsNothingAndNamesOnlyThatChange()
     {
         var prepared = new List<PendingAgentOperation>();
         var outcome = await new ChangeListCompiler(Registry).CompileAsync(UserId,
             [Change("a", "bulk_delete_habits"), Change("b", "bulk_update_habits"), Change("c", "bulk_log_habits"), Change("d", "manage_subscription")],
-            new HashSet<Guid>(), (call, _) =>
-            {
-                if (call.Id == "c")
-                    return Task.FromResult(new ChangeResult("c", null, ChangeListCompiler.ErrorOf("c",
-                        new AgentOperationResult("bulk_log_habits", "bulk_log_habits", AgentRiskClass.Low, AgentConfirmationRequirement.None,
-                            AgentOperationStatus.Failed, PolicyReason: "No matching habits found.", ErrorCode: "NOT_FOUND"),
-                        new AiToolCallResult("bulk_log_habits", "c", false, null, null, "No matching habits found."), null)));
-                var preview = Prepare(call.Name, call.Args);
-                prepared.Add(preview);
-                return Task.FromResult(new ChangeResult(call.Id, preview, null));
-            }, _store, default);
+            new HashSet<Guid>(), FailsTheLogChange(prepared), _store, default);
 
         outcome.IsSuccess.Should().BeFalse();
         outcome.Previews.Should().BeEmpty();

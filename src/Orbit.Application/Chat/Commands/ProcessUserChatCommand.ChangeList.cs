@@ -11,10 +11,10 @@ namespace Orbit.Application.Chat.Commands;
 public partial class ProcessUserChatCommandHandler
 {
     /// <summary>
-    /// One round of the <c>ai_change_plan</c> path. The change calls of the response form one typed change list, which
-    /// the compiler runs as one unit beside the reads. A list with an error, or a change call with no change, holds
-    /// nothing, issues no <c>ask</c> of the response, and returns every error in one typed list. The model gets one
-    /// repair round; a second failed list ends the turn with no preview, and the answer says so.
+    /// One round of the <c>ai_change_plan</c> path. The compiler runs the change calls of the response as one typed list
+    /// beside the reads. A list with an error, or a change call with no change, issues no <c>ask</c> and returns every
+    /// error in one typed list. It holds nothing of that list; a preview from before the turn or of an earlier round
+    /// stays. The model gets one repair round; a second failed list ends the turn with no preview, and the answer says so.
     /// </summary>
     private async Task<ToolRoundResult> ProcessChangeListRoundAsync(AiResponse response, ProcessUserChatCommand request,
         ChatContext context, ToolExecutionAccumulator results, int iteration, string? language,
@@ -30,37 +30,43 @@ public partial class ProcessUserChatCommandHandler
         var ask = calls.FirstOrDefault(call => call.Name == "ask");
         var askRecords = ask is null ? new HashSet<Guid>()
             : ChangeListCompiler.RecordIds(AskTool.ExecutionArguments(ask.Args)).ToHashSet();
-        var compiler = new ChangeListCompiler(ai.ToolRegistry);
-        var check = compiler.Check(changes, askRecords);
-
-        var writes = check.Runnable.Select(ChangeKinds.Dispatch).Select(call => ProactiveProposal.KeepRequestedSchedule(
-            ProactiveProposal.CompleteCreateReminder(call, request.ClientContext), request.Message)).ToArray();
         var others = calls.Where(call => !changeCalls.Contains(call) && call.Name != "ask")
             .OrderBy(call => ai.ToolRegistry.GetTool(call.Name)?.Order ?? int.MaxValue);
-        var ordered = others.Concat(writes).Select(NormalizeExecutionArguments).ToList();
-        var outcomes = new Dictionary<string, ToolCallOutcome>(
-            await ExecuteToolCallsAsync(ordered, request, results, language, ct), StringComparer.Ordinal);
-
-        var changeResults = writes.Select(call => ChangeResultOf(call, outcomes[call.Id], results)).ToArray();
-        var errors = emptyLists.Select(call => ChangeListCompiler.EmptyList(call.Id)).Concat(check.Errors)
-            .Concat(await compiler.SettleAsync(request.UserId, changeResults, execution.PendingOperationStore, ct)).ToArray();
-        if (errors.Length > 0)
-            HoldNothing(request, writes, outcomes, errors, results);
+        AiToolCall[] writes = [];
+        List<AiToolCall> ordered = [];
+        var outcomes = new Dictionary<string, ToolCallOutcome>(StringComparer.Ordinal);
+        var mark = results.Previews.MarkList();
+        var compiled = await new ChangeListCompiler(ai.ToolRegistry).CompileAsync(request.UserId, changes, askRecords,
+            async (runnable, token) =>
+            {
+                writes = [.. runnable.Select(ChangeKinds.Dispatch).Select(call => ProactiveProposal.KeepRequestedSchedule(
+                    ProactiveProposal.CompleteCreateReminder(call, request.ClientContext), request.Message))];
+                ordered = [.. others.Concat(writes).Select(NormalizeExecutionArguments)];
+                foreach (var (id, outcome) in await ExecuteToolCallsAsync(ordered, request, results, language, token))
+                    outcomes[id] = outcome;
+                return [.. writes.Select(call => ChangeResultOf(call, outcomes[call.Id], results))];
+            },
+            execution.PendingOperationStore, ct, [.. emptyLists.Select(call => ChangeListCompiler.EmptyList(call.Id))],
+            prepared => results.Previews.WithdrawList(request.UserId, execution.PendingOperationStore, mark,
+                [.. prepared.Select(preview => preview.Id)]));
+        var errors = compiled.Errors;
+        if (!compiled.IsSuccess)
+            HoldNothing(writes, outcomes, errors, results);
         else if (changes.Length > 0)
         {
             results.ChangesNotPrepared = false;
-            await BuildChangePlanAsync(request, results, changeCalls, changes, changeResults);
+            await BuildChangePlanAsync(request, results, changeCalls, changes, compiled.Results);
         }
         if (ask is not null)
         {
             var asked = NormalizeExecutionArguments(ask with { Args = AskTool.ExecutionArguments(ask.Args) });
             ordered.Add(asked);
-            outcomes[asked.Id] = errors.Length > 0
+            outcomes[asked.Id] = errors.Count > 0
                 ? TypedChangeOutcome(new ProposedChange(asked.Id, asked.Name, asked.Args), ChangeListCompiler.NotPrepared,
                     new { error = ChangeListCompiler.NotPrepared, errors })
                 : await ExecuteAskCallAsync(asked, request, results, ct);
         }
-        foreach (var waiting in check.Waiting)
+        foreach (var waiting in compiled.Waiting)
             outcomes[waiting.Change] = TypedChangeOutcome(changes.First(change => change.Id == waiting.Change), waiting.Code,
                 new { error = waiting.Code, errors = new[] { waiting } });
         var unprepared = changes.Where(change => !outcomes.ContainsKey(change.Id))
@@ -75,14 +81,14 @@ public partial class ProcessUserChatCommandHandler
         RecordReadOfferIntents(response, request, results);
         results.CapturePreviewDiscussionText(response.TextMessage);
 
-        if (errors.Length > 0 && results.FailedChangeLists > 1)
+        if (errors.Count > 0 && results.FailedChangeLists > 1)
             return new ToolRoundResult(new AiResponse());
         if (BulkNoChangesMessage(results, language) is { } noChanges)
             return new ToolRoundResult(new AiResponse { TextMessage = noChanges });
         if (await EndsWithAskAsync(response, ordered, outcomes, request, context, results, ct))
             return new ToolRoundResult(response with { ToolCalls = null, ReportedTokenCount = 0, RequestBudgetTokenCount = 0 });
         var toolResults = ChangeListToolResults(calls, shape, changes, outcomes, errors);
-        if (errors.Length == 0 && (CanCompleteChangeList(response, changeCalls, changes, check, changeResults)
+        if (errors.Count == 0 && (CanCompleteChangeList(response, changeCalls, changes, compiled)
             || changeCalls.Length == 0 && CanCompleteToolRound(response, request, context, results, iteration, ordered, outcomes, toolResults)))
         {
             ct.ThrowIfCancellationRequested();
@@ -153,29 +159,19 @@ public partial class ProcessUserChatCommandHandler
     }
 
     /// <summary>
-    /// The turn holds nothing of a change list with an error. Each preview of the list is withdrawn, each earlier preview
-    /// of the turn goes back through the turn preview ledger, and each change returns the error list with no card. The
-    /// clarification of a create with a missing field stays, so an <c>ask</c> can bind to it.
+    /// The turn holds nothing of a change list with an error, and the compiler withdrew what the list prepared. Each
+    /// change returns the error list with no card. The clarification of a create with a missing field stays, so an
+    /// <c>ask</c> can bind to it.
     /// </summary>
-    private void HoldNothing(ProcessUserChatCommand request, IReadOnlyList<AiToolCall> writes,
-        Dictionary<string, ToolCallOutcome> outcomes, IReadOnlyList<ChangeError> errors, ToolExecutionAccumulator results)
+    private static void HoldNothing(IReadOnlyList<AiToolCall> writes, Dictionary<string, ToolCallOutcome> outcomes,
+        IReadOnlyList<ChangeError> errors, ToolExecutionAccumulator results)
     {
         results.FailedChangeLists++;
         results.ChangesNotPrepared = true;
         foreach (var call in writes)
-        {
-            if (outcomes[call.Id].PendingOperation is { } preview)
-            {
-                ChangeListCompiler.Withdraw(request.UserId, preview.Id, execution.PendingOperationStore);
-                results.PendingWriteCalls.Remove(preview.Id);
-            }
             outcomes[call.Id] = new ToolCallOutcome(new AiToolCallResult(call.Name, call.Id, false, null, null,
                 ChangeListCompiler.NotPrepared, new { error = ChangeListCompiler.NotPrepared, errors }),
                 null, null, null, null, FailureKey: ChangeListCompiler.NotPrepared);
-        }
-        results.Previews.Withdraw(request.UserId, execution.PendingOperationStore);
-        results.PreviewedCalls.Clear();
-        results.PreviousWriteCalls.Clear();
     }
 
     private static ToolCallOutcome TypedChangeOutcome(ProposedChange change, string code, object payload) => new(
@@ -186,9 +182,9 @@ public partial class ProcessUserChatCommandHandler
     /// change calls that declare completion, no change waits for an answer, and the list prepared a preview.
     /// </summary>
     private static bool CanCompleteChangeList(AiResponse response, IReadOnlyList<AiToolCall> changeCalls,
-        IReadOnlyList<ProposedChange> changes, ChangeListCheck check, IReadOnlyList<ChangeResult> results) =>
-        changeCalls.Count == response.ToolCalls!.Count && changes.Count > 0 && check.Waiting.Count == 0
-        && results.Any(result => result.Preview is not null) && TerminalWriteDirective.IsComplete(response);
+        IReadOnlyList<ProposedChange> changes, ChangeListOutcome compiled) =>
+        changeCalls.Count == response.ToolCalls!.Count && changes.Count > 0 && compiled.Waiting.Count == 0
+        && compiled.Previews.Count > 0 && TerminalWriteDirective.IsComplete(response);
 
     /// <summary>
     /// The results that the model gets for one response, one for each call. A wrapper call gets the result of its whole
