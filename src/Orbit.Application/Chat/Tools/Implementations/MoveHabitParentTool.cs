@@ -8,7 +8,7 @@ namespace Orbit.Application.Chat.Tools.Implementations;
 
 public class MoveHabitParentTool(
     IMediator mediator,
-    IGenericRepository<Habit> habitRepository) : IAiTool, IArgumentCheckTool
+    IGenericRepository<Habit> habitRepository) : IAiTool, IArgumentCheckTool, ITransactionalAiTool
 {
     public string Name => "move_habit_parent";
 

@@ -140,11 +140,9 @@ public partial class BulkLogHabitsCommandHandler(
             var loggedHabitIds = changedHabitIds.Union(derivedParentIds).ToList();
             if (loggedHabitIds.Count > 0)
             {
-                try
-                {
-                    await services.GamificationService.ProcessHabitsLogged(request.UserId, loggedHabitIds, ct);
-                }
-                catch (Exception ex) { LogGamificationBulkLogFailed(logger, ex, request.UserId); }
+                await BestEffortEffect.RunAsync(unitOfWork,
+                    token => services.GamificationService.ProcessHabitsLogged(request.UserId, loggedHabitIds, token),
+                    exception => LogGamificationBulkLogFailed(logger, exception, request.UserId), ct);
 
                 await ConcurrencyRetry.SaveWithRetryAsync(
                     unitOfWork,

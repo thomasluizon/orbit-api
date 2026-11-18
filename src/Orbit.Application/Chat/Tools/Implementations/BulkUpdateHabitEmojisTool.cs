@@ -15,7 +15,7 @@ public sealed partial class BulkUpdateHabitEmojisTool(
     IGenericRepository<Habit> habitRepository,
     IHabitEmojiInferenceService inferenceService,
     IUnitOfWork unitOfWork,
-    ILogger<BulkUpdateHabitEmojisTool> logger) : IAiTool, IArgumentCheckTool
+    ILogger<BulkUpdateHabitEmojisTool> logger) : IAiTool, IArgumentCheckTool, ITransactionalAiTool, IProviderCallTool
 {
     internal const int InferenceChunkSize = 25;
 
@@ -61,6 +61,17 @@ public sealed partial class BulkUpdateHabitEmojisTool(
         },
         required = Array.Empty<string>()
     };
+
+    public bool CallsProvider(JsonElement arguments)
+    {
+        if (arguments.ValueKind != JsonValueKind.Object)
+            return false;
+        if (!arguments.TryGetProperty("revised_items", out var items))
+            return ResolveEmojiOperation(OptionalToolArguments.OmitOptionalNulls(arguments, GetParameterSchema())).Infer;
+        var overrides = new Dictionary<Guid, string?>();
+        var (filter, _) = ParseRevisedItems(items, overrides);
+        return filter is not null && overrides.Count != filter.HabitIds.Count && ResolveEmojiOperation(arguments).Infer;
+    }
 
     public async Task<Result> CheckArgumentsAsync(JsonElement args, Guid userId, CancellationToken ct)
     {

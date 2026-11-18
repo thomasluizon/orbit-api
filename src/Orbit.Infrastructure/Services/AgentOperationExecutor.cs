@@ -406,7 +406,8 @@ public partial class AgentOperationExecutor(
 
         try
         {
-            if (tool is not ITransactionalAiTool && execution.Operation.Id != AccountChangeSet.OperationName)
+            if ((tool is not ITransactionalAiTool && execution.Operation.Id != AccountChangeSet.OperationName)
+                || (tool is IProviderCallTool provider && provider.CallsProvider(execution.Arguments)))
                 return await ExecutePolicyAndToolAsync(execution, tool, policyState, cancellationToken);
             return unitOfWork.HasActiveTransaction
                 ? await unitOfWork.ExecuteInSavepointAsync(
@@ -429,11 +430,14 @@ public partial class AgentOperationExecutor(
         }
     }
 
+    /// <param name="bindsPreparedIntent">False for a change set member: its stored arguments are the intent that
+    /// was bound when the member was held, and the approval executes them unchanged.</param>
     private async Task<AgentExecuteOperationResponse> ExecutePolicyAndToolAsync(
         OperationExecutionContext execution,
         IAiTool? tool,
         OperationPolicyState policyState,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool bindsPreparedIntent = true)
     {
         policyState.Decision = null;
         if (execution.Request.Surface == AgentExecutionSurface.Chat && tool is IHabitCreationCapacityTool creation)
@@ -445,7 +449,7 @@ public partial class AgentOperationExecutor(
                     ToolResult.FromFailure(capacity), cancellationToken);
         }
         PreparedToolIntent? preparedIntent = null;
-        if (execution.Request.Surface == AgentExecutionSurface.Chat && execution.Operation.IsMutation
+        if (bindsPreparedIntent && execution.Request.Surface == AgentExecutionSurface.Chat && execution.Operation.IsMutation
             && execution.Request.ConfirmationToken is null
             && tool is IPreparedIntentTool preparer)
         {

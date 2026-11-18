@@ -110,7 +110,7 @@ public class AccountChangeSetRegressionTests
     [InlineData("support")]
     [InlineData("habit")]
     [InlineData("bulk_habit")]
-    public async Task CompoundApproval_RejectsExternalEffectsBeforeExecutionAndRetry(string effectKind)
+    public async Task CompoundApproval_RejectsExternalEffectsAndRollsBackHabitCreation(string effectKind)
     {
         using var db = new OrbitDbContext(new DbContextOptionsBuilder<OrbitDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
@@ -121,6 +121,7 @@ public class AccountChangeSetRegressionTests
         var supportHandler = new SendSupportCommandHandler(email, new GenericRepository<User>(db));
         var mediator = Substitute.For<IMediator>();
         mediator.Send(Arg.Any<CheckChatCommandQuery>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
+        mediator.Send(Arg.Any<CreateHabitCommand>(), Arg.Any<CancellationToken>()).Returns(Result.Success(Guid.NewGuid()));
         mediator.Send(Arg.Any<SendSupportCommand>(), Arg.Any<CancellationToken>())
             .Returns(call => supportHandler.Handle(call.Arg<SendSupportCommand>(), call.Arg<CancellationToken>()));
         var dates = Substitute.For<IUserDateService>();
@@ -174,18 +175,24 @@ public class AccountChangeSetRegressionTests
         var result = await executor.ExecuteAsync(new(user.Id, AccountChangeSet.OperationName, combinedArgs,
             AgentExecutionSurface.Chat, AgentAuthMethod.Jwt, ConfirmationToken: confirmation.ConfirmationToken));
         result.Operation.Status.Should().NotBe(AgentOperationStatus.Succeeded);
-        result.Operation.PolicyReason.Should().Be("unsupported_by_policy");
         var retry = await executor.ExecuteAsync(new(user.Id, AccountChangeSet.OperationName, combinedArgs,
             AgentExecutionSurface.Chat, AgentAuthMethod.Jwt, ConfirmationToken: confirmation.ConfirmationToken));
         retry.Operation.Status.Should().NotBe(AgentOperationStatus.Succeeded);
         await email.DidNotReceive().SendSupportEmailAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
-        failure.Executions.Should().Be(0);
-        await mediator.DidNotReceive().Send(Arg.Any<CreateHabitCommand>(), Arg.Any<CancellationToken>());
+        if (effectKind == "support")
+        {
+            result.Operation.PolicyReason.Should().Be("unsupported_by_policy");
+            failure.Executions.Should().Be(0);
+            await mediator.DidNotReceive().Send(Arg.Any<CreateHabitCommand>(), Arg.Any<CancellationToken>());
+            return;
+        }
+        result.Operation.Status.Should().Be(AgentOperationStatus.Failed);
+        failure.Executions.Should().BePositive();
+        await mediator.Received(failure.Executions).Send(Arg.Any<CreateHabitCommand>(), Arg.Any<CancellationToken>());
     }
 
     private sealed class ProbeTool(string name, bool succeeds) : IAiTool, ITransactionalAiTool
     {
-        public bool SupportsAtomicExecution(JsonElement arguments) => true;
         public string Name => name;
         public string Description => name;
         public int Executions { get; private set; }

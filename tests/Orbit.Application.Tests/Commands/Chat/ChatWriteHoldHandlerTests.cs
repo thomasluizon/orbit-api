@@ -108,7 +108,10 @@ public sealed partial class ChatWriteHoldHandlerTests : IDisposable
             bulkUpdateTool,
             new BulkRescheduleHabitsTool(Orbit.Tests.Shared.HabitToolCommandMediator.Create(
                 _habitRepo, _tagRepo, _goalRepo, _userDateService, _payGate, _unitOfWork, configureTransactions: false)),
-            new SendSupportRequestTool(_mediator)
+            new SendSupportRequestTool(_mediator),
+            new DeleteHabitTool(_mediator, _habitRepo),
+            new LinkGoalsToHabitTool(_mediator, _habitRepo),
+            new AssignTagsTool(_habitRepo, _tagRepo, _unitOfWork)
         ]);
         _previewer = new PendingOperationChangePreviewer(_habitRepo, _goalRepo, _tagRepo, _userDateService,
             _toolRegistry);

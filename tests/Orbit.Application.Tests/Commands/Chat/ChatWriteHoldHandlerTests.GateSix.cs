@@ -197,16 +197,9 @@ public sealed partial class ChatWriteHoldHandlerTests
     }
 
     [Fact]
-    public async Task GateSix_SkipWithActiveStreakRewardsKeepsExternalEffectsOutsideAtomicBundles()
+    public void GateSix_SkipWithActiveStreakRewardsJoinsAtomicBundles()
     {
-        var habit = ParentAccount("en")[0];
-        var goal = Goal.Create(new Goal.CreateGoalParams(_userId, "Keep a streak", 10, "days", Type: GoalType.Streak)).Value;
-        habit.AddGoal(goal);
-        var args = JsonSerializer.SerializeToElement(new { habit_id = habit.Id, date = Today.ToString("yyyy-MM-dd") });
-
-        var supported = await AiToolAtomicity.SupportsAsync(new SkipHabitTool(_mediator, _habitRepo), _userId, args, default);
-
-        supported.Should().BeFalse();
-        await _mediator.DidNotReceive().Send(Arg.Any<SkipHabitCommand>(), Arg.Any<CancellationToken>());
+        new SkipHabitTool(_mediator, _habitRepo).Should().BeAssignableTo<ITransactionalAiTool>(
+            "the streak reward of a skip waits for the commit, so the skip joins a change set");
     }
 }

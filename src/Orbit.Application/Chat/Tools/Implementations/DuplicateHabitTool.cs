@@ -7,7 +7,7 @@ namespace Orbit.Application.Chat.Tools.Implementations;
 
 public class DuplicateHabitTool(
     IMediator mediator,
-    IGenericRepository<Habit> habitRepository) : IAiTool, IArgumentCheckTool
+    IGenericRepository<Habit> habitRepository) : IAiTool, IArgumentCheckTool, ITransactionalAiTool
 {
     public string Name => "duplicate_habit";
 

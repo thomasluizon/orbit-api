@@ -44,7 +44,7 @@ public partial class AgentOperationExecutor
         var operation = catalogService.GetOperation(member.OperationId);
         var capability = operation is null ? null : catalogService.GetCapability(operation.CapabilityId);
         if (operation is not { IsMutation: true, IsAgentExecutable: true } || capability is null
-            || !await AiToolAtomicity.SupportsAsync(toolRegistry.GetTool(operation.Id), execution.Request.UserId, member.Arguments, ct))
+            || toolRegistry.GetTool(operation.Id) is not ITransactionalAiTool)
             return (null, Orbit.Application.Common.AgentPolicyReasons.UnsupportedByPolicy);
         var ownership = await targetOwnershipService.GetDenialReasonAsync(operation.Id, execution.Request.UserId, member.Arguments, ct);
         if (ownership is not null) return (null, ownership);
@@ -85,7 +85,8 @@ public partial class AgentOperationExecutor
         var results = new List<AgentOperationResult>();
         foreach (var member in members)
         {
-            var result = await ExecutePolicyAndToolAsync(member, toolRegistry.GetTool(member.Operation.Id), new OperationPolicyState(), ct);
+            var result = await ExecutePolicyAndToolAsync(member, toolRegistry.GetTool(member.Operation.Id), new OperationPolicyState(), ct,
+                bindsPreparedIntent: false);
             results.Add(result.Operation);
             if (result.Operation.Status != AgentOperationStatus.Succeeded || IsPartialMutation(result.Operation.Payload))
                 return new ToolResult(false, Error: result.Operation.PolicyReason ?? result.Operation.ErrorCode ?? "change_set_failed", Payload: results);

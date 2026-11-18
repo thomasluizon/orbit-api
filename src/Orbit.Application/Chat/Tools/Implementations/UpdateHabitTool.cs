@@ -15,9 +15,6 @@ public class UpdateHabitTool(
     IUserDateService userDateService,
     IMediator mediator) : IAiTool, IArgumentCheckTool, ITransactionalAiTool
 {
-    public bool SupportsAtomicExecution(JsonElement arguments) =>
-        !arguments.TryGetProperty(ToolArgumentNames.GoalIds, out _);
-
     public string Name => "update_habit";
 
     public string Description =>

@@ -23,7 +23,7 @@ public sealed class AccountChangeSetService(IPendingAgentOperationStore store,
         var eligible = new List<PendingAgentOperationExecution>();
         foreach (var operation in operations)
             if (store.GetExecution(userId, operation.Id) is { } member
-                && await AiToolAtomicity.SupportsAsync(registry.GetTool(member.OperationId), userId, member.Arguments, ct))
+                && registry.GetTool(member.OperationId) is ITransactionalAiTool)
                 eligible.Add(member);
         var members = eligible.ToArray();
         if (members.Length < 2 || members.Any(member => member.RequiresReproposal)) return null;

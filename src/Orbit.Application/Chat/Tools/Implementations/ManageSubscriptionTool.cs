@@ -4,6 +4,7 @@ using Orbit.Application.Subscriptions.Commands;
 
 namespace Orbit.Application.Chat.Tools.Implementations;
 
+[ExternalEffectTool]
 public class ManageSubscriptionTool(IMediator mediator) : IPreparedIntentTool
 {
     public string Name => "manage_subscription";

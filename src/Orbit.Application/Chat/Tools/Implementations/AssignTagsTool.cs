@@ -11,8 +11,6 @@ public class AssignTagsTool(
     IGenericRepository<Tag> tagRepository,
     IUnitOfWork unitOfWork) : IAiTool, IArgumentCheckTool, ITransactionalAiTool
 {
-    public bool SupportsAtomicExecution(JsonElement arguments) => true;
-
     public string Name => "assign_tags";
 
     public string Description =>

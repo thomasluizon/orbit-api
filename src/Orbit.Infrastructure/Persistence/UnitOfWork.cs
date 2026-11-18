@@ -142,6 +142,7 @@ public sealed class UnitOfWork(
         completionCts.CancelAfter(TimeSpan.FromSeconds(databaseSettings.CommandTimeoutSeconds));
         var name = $"orbit_{Guid.NewGuid():N}";
         var callbackCount = _afterCommit.Count;
+        var checkpoint = eventCollector?.Checkpoint();
         await transaction.CreateSavepointAsync(name, completionCts.Token);
         try
         {
@@ -156,7 +157,7 @@ public sealed class UnitOfWork(
             {
                 context.ChangeTracker.Clear();
                 scheduleSnapshots?.Invalidate();
-                eventCollector?.Clear();
+                if (checkpoint is not null) eventCollector!.Restore(checkpoint);
                 _afterCommit.RemoveRange(callbackCount, _afterCommit.Count - callbackCount);
             }
             throw;

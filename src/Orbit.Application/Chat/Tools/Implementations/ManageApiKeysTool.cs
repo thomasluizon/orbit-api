@@ -5,6 +5,7 @@ using Orbit.Application.ApiKeys.Commands;
 
 namespace Orbit.Application.Chat.Tools.Implementations;
 
+[ExternalEffectTool]
 public class ManageApiKeysTool(IMediator mediator) : IPreparedIntentTool
 {
     public string Name => "manage_api_keys";
