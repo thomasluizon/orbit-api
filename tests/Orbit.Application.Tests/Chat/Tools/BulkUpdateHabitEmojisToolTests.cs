@@ -106,6 +106,28 @@ public class BulkUpdateHabitEmojisToolTests
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
+    [Theory]
+    [InlineData("""{"replace_existing":false,"filter":{"all":true},"infer_from_title":true}""", true)]
+    [InlineData("{}", true)]
+    [InlineData("""{"emoji":null}""", true)]
+    [InlineData("""{"emoji_mode":"infer","emoji":"📚"}""", true)]
+    [InlineData("""{"revised_items":[{"habit_id":"HABIT"}]}""", true)]
+    [InlineData("""{"emoji":"📚"}""", false)]
+    [InlineData("""{"emoji_mode":"clear"}""", false)]
+    [InlineData("""{"revised_items":[{"habit_id":"HABIT","emoji":"📚"}]}""", false)]
+    [InlineData("""{"infer_from_title":false,"revised_items":[{"habit_id":"HABIT","emoji":"📚"}]}""", false)]
+    public async Task CallsProvider_AgreesWithTheProviderCallsOfExecute(string json, bool expected)
+    {
+        var habit = CreateHabit("Read");
+        SetupHabits(habit);
+        var args = JsonDocument.Parse(json.Replace("HABIT", habit.Id.ToString(), StringComparison.Ordinal)).RootElement;
+
+        _tool.CallsProvider(args).Should().Be(expected);
+
+        (await _tool.ExecuteAsync(args, UserId, CancellationToken.None)).Success.Should().BeTrue();
+        _inferenceService.ReceivedCalls().Any().Should().Be(expected, "the executor opens a transaction when the answer is false");
+    }
+
     [Fact]
     public async Task CheckArgumentsAsync_InferFromTitle_AcceptsWithoutInferenceOrWrites()
     {

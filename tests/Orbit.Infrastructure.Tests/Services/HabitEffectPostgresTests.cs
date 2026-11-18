@@ -153,9 +153,10 @@ public sealed partial class HabitEffectPostgresTests
 
     private Task<PostgresOrbitApp> StartAsync() => PostgresOrbitApp.StartAsync(services =>
     {
-        services.ConfigureDbContext<OrbitDbContext>(options => options.AddInterceptors(_faults));
+        services.ConfigureDbContext<OrbitDbContext>(options => options.AddInterceptors(_faults, _saves));
         services.AddSingleton<IPipelineBehavior<UpdateHabitFieldsCommand, Result<string>>>(_failingUpdate);
-        services.AddSingleton(_emojiInference);
+        services.AddScoped<IHabitEmojiInferenceService>(provider => new TransactionRecordingInference(
+            _emojiInference, provider.GetRequiredService<IUnitOfWork>(), _inferenceTransactions));
     });
 
     private static async Task<T> InTransactionAsync<T>(PostgresOrbitApp app,

@@ -286,11 +286,21 @@ public partial class LogHabitCommandHandler(
         var isFirstCompletionToday = persisted.Value.IsFirstCompletionToday;
         var goalSync = persisted.Value.GoalSync;
         var streakState = await services.UserStreakService.RecalculateAsync(request.UserId, cancellationToken: cancellationToken);
-        await PersistStreakRecalcAsync(request.UserId, cancellationToken);
+        /**
+         * Inside a transaction gamification runs in a savepoint, and a savepoint rollback clears the change
+         * tracker, so the streak saves first. With no transaction the gamification save carries the streak, and
+         * the streak saves alone only when gamification failed.
+         */
+        var savesStreakBeforeSavepoint = unitOfWork.HasActiveTransaction;
+        if (savesStreakBeforeSavepoint)
+            await PersistStreakRecalcAsync(request.UserId, cancellationToken);
         var gamificationResult = await ProcessGamificationSafeAsync(request.UserId, request.HabitId, cancellationToken);
         foreach (var parentHabitId in persisted.Value.DerivedParentHabitIds ?? [])
             await ProcessGamificationSafeAsync(request.UserId, parentHabitId, cancellationToken);
         await ProcessOnboardingChecklistSafeAsync(request.UserId, OnboardingChecklistSignal.HabitLogged, cancellationToken);
+
+        if (!savesStreakBeforeSavepoint && gamificationResult is null)
+            await PersistStreakRecalcAsync(request.UserId, cancellationToken);
 
         await CacheInvalidationHelper.InvalidateUserAiCachesAsync(cache, request.UserId, today, preserveDailyNarrative: true);
 

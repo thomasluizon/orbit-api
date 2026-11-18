@@ -54,6 +54,16 @@ public sealed partial class HabitEffectPostgresTests
         (await SnapshotAsync(app)).Should().BeEquivalentTo(before);
         app.Jobs.Created.Should().HaveCount(jobs);
         app.Bus.DidNotReceiveWithAnyArgs().Publish(default, default!, default);
+
+        var controlWorld = await SeedWorldAsync(app);
+        var alone = await HoldAsync(app, controlWorld.User.Id, kind, controlWorld.ArgumentsFor(kind));
+        var beforeControl = await SnapshotAsync(app);
+
+        var control = await ApproveAsync(app, controlWorld.User.Id, alone.Id);
+
+        control.Operation.Status.Should().Be(AgentOperationStatus.Succeeded, control.Operation.PolicyReason);
+        (await SnapshotAsync(app)).Should().NotBeEquivalentTo(beforeControl,
+            "the same member writes a row when no later member fails, so the equal snapshot above proves a rollback");
     }
 
     [PostgresFact]

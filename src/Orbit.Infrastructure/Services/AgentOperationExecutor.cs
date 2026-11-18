@@ -406,7 +406,8 @@ public partial class AgentOperationExecutor(
 
         try
         {
-            if (tool is not ITransactionalAiTool && execution.Operation.Id != AccountChangeSet.OperationName)
+            if ((tool is not ITransactionalAiTool && execution.Operation.Id != AccountChangeSet.OperationName)
+                || (tool is IProviderCallTool provider && provider.CallsProvider(execution.Arguments)))
                 return await ExecutePolicyAndToolAsync(execution, tool, policyState, cancellationToken);
             return unitOfWork.HasActiveTransaction
                 ? await unitOfWork.ExecuteInSavepointAsync(
