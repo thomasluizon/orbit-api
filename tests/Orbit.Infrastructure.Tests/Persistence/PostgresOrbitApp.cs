@@ -71,8 +71,9 @@ internal sealed class PostgresOrbitApp : IAsyncDisposable
             ["Ses:TopicArn"] = "arn:aws:sns:us-east-2:000000000000:orbit-test"
         });
         builder.AddOrbitDatabase().AddOrbitAiServices().AddOrbitInfrastructure().AddOrbitProductAnalytics();
-        var accessor = new HttpContextAccessor { HttpContext = new DefaultHttpContext() };
-        accessor.HttpContext.Request.Headers["X-Orbit-Event-Origin"] = Origin;
+        var context = new DefaultHttpContext();
+        context.Request.Headers["X-Orbit-Event-Origin"] = Origin;
+        var accessor = new FixedHttpContextAccessor { HttpContext = context };
         builder.Services.Replace(ServiceDescriptor.Singleton<IHttpContextAccessor>(accessor));
         configure?.Invoke(builder.Services);
         var bus = Substitute.For<IAccountEventBus>();
@@ -107,6 +108,12 @@ internal sealed class PostgresOrbitApp : IAsyncDisposable
         await using (var scope = CreateScope())
             await scope.ServiceProvider.GetRequiredService<OrbitDbContext>().Database.EnsureDeletedAsync();
         await _provider.DisposeAsync();
+    }
+
+    /// <summary>One request context for every async flow, unlike the async-local <see cref="HttpContextAccessor"/>.</summary>
+    private sealed class FixedHttpContextAccessor : IHttpContextAccessor
+    {
+        public HttpContext? HttpContext { get; set; }
     }
 
     internal sealed class RecordingJobClient : IBackgroundJobClient

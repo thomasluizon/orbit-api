@@ -3,7 +3,10 @@ using System.Text.Json;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using MediatR;
 using Microsoft.Extensions.DependencyInjection;
+using NSubstitute;
+using Orbit.Application.Habits.Commands;
 using Orbit.Application.Chat.Tools;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -21,6 +24,8 @@ namespace Orbit.Infrastructure.Tests.Services;
 public sealed partial class HabitEffectPostgresTests
 {
     private readonly StatementFaultInterceptor _faults = new();
+    private readonly FailAfterWriteBehavior _failingUpdate = new();
+    private readonly IHabitEmojiInferenceService _emojiInference = Substitute.For<IHabitEmojiInferenceService>();
 
     [PostgresFact]
     public async Task CreateInsideTransaction_SwallowedEffectFailure_DoesNotAbortLaterStatements()
@@ -80,9 +85,8 @@ public sealed partial class HabitEffectPostgresTests
     {
         await using var app = await StartAsync();
         var user = await SeedUserAsync(app);
-        var habit = await SeedHabitAsync(app, user.Id, "Run");
-        var today = await TodayAsync(app, user.Id);
-        _faults.Arm(() => InsertLogAsync(app, habit.Id, today));
+        var habit = await SeedHabitAsync(app, user.Id, "Run", loggedDaysAgo: [4]);
+        await ArmConcurrentLogAsync(app, habit.Id, await TodayAsync(app, user.Id));
 
         var result = await InTransactionAsync(app, async (scope, ct) =>
         {
@@ -148,7 +152,11 @@ public sealed partial class HabitEffectPostgresTests
     }
 
     private Task<PostgresOrbitApp> StartAsync() => PostgresOrbitApp.StartAsync(services =>
-        services.ConfigureDbContext<OrbitDbContext>(options => options.AddInterceptors(_faults)));
+    {
+        services.ConfigureDbContext<OrbitDbContext>(options => options.AddInterceptors(_faults));
+        services.AddSingleton<IPipelineBehavior<UpdateHabitFieldsCommand, Result<string>>>(_failingUpdate);
+        services.AddSingleton(_emojiInference);
+    });
 
     private static async Task<T> InTransactionAsync<T>(PostgresOrbitApp app,
         Func<AsyncServiceScope, CancellationToken, Task<T>> operation)
@@ -211,13 +219,15 @@ public sealed partial class HabitEffectPostgresTests
         return goal;
     }
 
-    private static async Task InsertLogAsync(PostgresOrbitApp app, Guid habitId, DateOnly date)
+    /// <summary>
+    /// Before the command inserts its log, another connection moves the habit's only earlier log to
+    /// <paramref name="date"/>. The command's insert then meets a real unique violation of a committed row.
+    /// </summary>
+    private async Task ArmConcurrentLogAsync(PostgresOrbitApp app, Guid habitId, DateOnly date)
     {
-        await using var scope = app.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
-        var habit = await db.Habits.AsNoTracking().Include(saved => saved.Logs).SingleAsync(saved => saved.Id == habitId);
-        db.HabitLogs.Add(habit.Log(date, advanceDueDate: false).Value);
-        await db.SaveChangesAsync();
+        var logId = await app.ReadAsync(db => db.HabitLogs.Where(log => log.HabitId == habitId).Select(log => log.Id).SingleAsync());
+        _faults.Arm(() => app.ExecuteSqlAsync(
+            $"UPDATE \"HabitLogs\" SET \"Date\" = DATE '{date:yyyy-MM-dd}' WHERE \"Id\" = '{logId}'"));
     }
 
     private static Task FailXpAwardsAsync(PostgresOrbitApp app, int times) => app.ExecuteSqlAsync($$"""
@@ -235,7 +245,7 @@ public sealed partial class HabitEffectPostgresTests
         """);
 
     /// <summary>
-    /// Commits a second log from another connection just before the command inserts its own. It can also send
+    /// Runs a statement on another connection just before the command inserts its log. It can also send
     /// each read of one table to the server as a statement that fails, as a query that times out does.
     /// </summary>
     private sealed class StatementFaultInterceptor : DbCommandInterceptor
