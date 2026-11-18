@@ -48,6 +48,11 @@ Deploy this API to production before the search sections and completion labels
 in thomasluizon/orbit-tickets#1924 (orbit-ui-mobile#2271). Tracks
 thomasluizon/orbit-tickets#1933.
 
+The append-only same-title detail of preview items (`entityDetail`, the capability flag
+`supportsPendingOperationEntityDetail` and the `clientContext` parameter of the conversation
+page) is documented in [SameTitleDetail.md](SameTitleDetail.md). Deploy this API before the
+paired client work. Tracks thomasluizon/orbit-tickets#2161.
+
 The FCM data message and shared Android category for repeat reminder actions
 are documented in [RepeatReminderPush.md](RepeatReminderPush.md).
 
