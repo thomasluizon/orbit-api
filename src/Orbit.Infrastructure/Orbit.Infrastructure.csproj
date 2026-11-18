@@ -6,14 +6,14 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="AWSSDK.S3" Version="4.1.0.1" />
-    <PackageReference Include="AWSSDK.SimpleEmailV2" Version="4.1.0.1" />
+    <PackageReference Include="AWSSDK.S3" Version="4.1.1" />
+    <PackageReference Include="AWSSDK.SimpleEmailV2" Version="4.1.0.2" />
     <PackageReference Include="BCrypt.Net-Next" Version="4.2.0" />
     <PackageReference Include="FileSignatures" Version="7.3.0" />
     <PackageReference Include="FirebaseAdmin" Version="3.7.1" />
     <PackageReference Include="Google.Apis.PlayIntegrity.v1" Version="1.78.0.4270" />
     <PackageReference Include="Hangfire.Core" Version="1.8.25" />
-    <PackageReference Include="Google.Apis.AndroidPublisher.v3" Version="1.78.0.4316" />
+    <PackageReference Include="Google.Apis.AndroidPublisher.v3" Version="1.78.0.4333" />
     <PackageReference Include="Google.Apis.Calendar.v3" Version="1.78.0.4320" />
     <PackageReference Include="MediatR" Version="14.3.0" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.15" />
@@ -22,7 +22,7 @@
     <PackageReference Include="Microsoft.ML.Tokenizers.Data.O200kBase" Version="2.0.1" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
     <PackageReference Include="OpenAI" Version="2.15.0" />
-    <PackageReference Include="PostHog" Version="2.26.1" />
+    <PackageReference Include="PostHog" Version="2.26.2" />
     <PackageReference Include="Stripe.net" Version="52.4.2" />
     <PackageReference Include="Lib.Net.Http.WebPush" Version="3.3.1" />
     <PackageReference Include="System.Formats.Cbor" Version="10.0.15" />
