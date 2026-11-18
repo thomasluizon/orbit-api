@@ -448,4 +448,35 @@ public partial class ProcessUserChatCommandHandlerTests
         calls[1].Arguments.GetProperty("updates").GetProperty("title").GetString().Should().Be(RenameTitle);
         calls.Should().OnlyContain(call => call.Status == nameof(AgentOperationStatus.PendingConfirmation));
     }
+
+    /// <summary>
+    /// A list with an error beside an <c>ask</c> issues no question, so the turn keeps its repair round. The repaired list
+    /// prepares its preview and the question of the repair shows beside it.
+    /// </summary>
+    [Theory]
+    [InlineData(ChangeDeclarationShape.Kinds)]
+    [InlineData(ChangeDeclarationShape.Wrapper)]
+    public async Task ChangeList_AFailedListBesideAnAskIssuesNoQuestionAndKeepsTheRepairRound(ChangeDeclarationShape shape)
+    {
+        var issued = new List<IssuedAiBlock>();
+        _blockStore.AddAsync(Arg.Do<IssuedAiBlock>(issued.Add), Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
+        AiResponse WithAsk(AiResponse list, Habit[] children) => list with
+        {
+            ToolCalls = [.. list.ToolCalls!, new AiToolCall("ask", "ask", JsonSerializer.SerializeToElement(new
+            {
+                input = new { form = "choice", missing_input = "record_selection", question = "Which?", about = children[..2].Select(child => child.Id.ToString()) }
+            }))]
+        };
+        var run = await RunChangeListAsync(shape, "en",
+            children => WithAsk(ChangeList(shape, null, false, DeleteChange("delete", children[5..]), RenameChange("rename", [Guid.NewGuid()])), children),
+            children => [WithAsk(ChangeList(shape, null, false, DeleteChange("delete", children[5..])), children), Text("en")],
+            tools: [RealAskTool()]);
+
+        run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
+        var first = run.ToolResults.Should().ContainSingle().Subject;
+        first.Single(result => result.Id == "ask").Error.Should().Be(ChangeListCompiler.NotPrepared);
+        issued.Should().ContainSingle("only the repair round issues the question");
+        run.Result.Value.PendingOperations.Should().ContainSingle().Which.Items!.Select(item => item.EntityId)
+            .Should().Equal(run.Children[5].Id);
+    }
 }

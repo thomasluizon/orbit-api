@@ -93,7 +93,8 @@ public sealed class ChangeListCatalogTests(ITestOutputHelper output)
             + $"S={parameters.Sum(tool => ChangeListCatalogs.SchemaStringLength(tool.Parameters))} "
             + $"depth={parameters.Max(tool => ChangeListCatalogs.ObjectDepth(tool.Parameters))} "
             + $"orbit_write_complete={parameters.Sum(tool => ChangeListCatalogs.CountProperty(tool.Parameters, TerminalWriteDirective.CompleteArgument))} "
-            + $"suggested_fields={parameters.Sum(tool => ChangeListCatalogs.CountProperty(tool.Parameters, ProactiveProposal.Argument))}");
+            + $"suggested_fields={parameters.Sum(tool => ChangeListCatalogs.CountProperty(tool.Parameters, ProactiveProposal.Argument))} "
+            + $"orbit_dismissed_offer_keys={parameters.Sum(tool => ChangeListCatalogs.CountProperty(tool.Parameters, "orbit_dismissed_offer_keys"))}");
 
         catalog.Tools.Keys.Should().Contain(PlanToolDeclaration.Name).And.Contain(Kinds).And.Contain(MergedForms)
             .And.NotContain(ChangeDeclarations.WrapperName);

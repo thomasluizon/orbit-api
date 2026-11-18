@@ -12,9 +12,9 @@ public partial class ProcessUserChatCommandHandler
 {
     /// <summary>
     /// One round of the <c>ai_change_plan</c> path. The change calls of the response form one typed change list, which
-    /// the compiler runs as one unit beside the reads and the <c>ask</c> of the response. A list with an error holds
-    /// nothing and returns every error in one typed list. The model gets one repair round; a second failed list ends the
-    /// turn with no preview of it, and the answer says that the request was not prepared.
+    /// the compiler runs as one unit beside the reads. A list with an error holds nothing, issues no <c>ask</c> of the
+    /// response, and returns every error in one typed list. The model gets one repair round; a second failed list ends
+    /// the turn with no preview of it, and the answer says that the request was not prepared.
     /// </summary>
     private async Task<ToolRoundResult> ProcessChangeListRoundAsync(AiResponse response, ProcessUserChatCommand request,
         ChatContext context, ToolExecutionAccumulator results, int iteration, string? language,
@@ -35,8 +35,7 @@ public partial class ProcessUserChatCommandHandler
             ProactiveProposal.CompleteCreateReminder(call, request.ClientContext), request.Message)).ToArray();
         var others = calls.Where(call => !changeCalls.Contains(call) && call.Name != "ask")
             .OrderBy(call => ai.ToolRegistry.GetTool(call.Name)?.Order ?? int.MaxValue);
-        var ordered = others.Concat(writes).Concat(ask is null ? [] : [ask with { Args = AskTool.ExecutionArguments(ask.Args) }])
-            .Select(NormalizeExecutionArguments).ToList();
+        var ordered = others.Concat(writes).Select(NormalizeExecutionArguments).ToList();
         var outcomes = new Dictionary<string, ToolCallOutcome>(
             await ExecuteToolCallsAsync(ordered, request, results, language, ct), StringComparer.Ordinal);
 
@@ -49,6 +48,15 @@ public partial class ProcessUserChatCommandHandler
         {
             results.ChangesNotPrepared = false;
             await BuildChangePlanAsync(request, results, changeCalls, changes, changeResults);
+        }
+        if (ask is not null)
+        {
+            var asked = NormalizeExecutionArguments(ask with { Args = AskTool.ExecutionArguments(ask.Args) });
+            ordered.Add(asked);
+            outcomes[asked.Id] = errors.Length > 0
+                ? TypedChangeOutcome(new ProposedChange(asked.Id, asked.Name, asked.Args), ChangeListCompiler.NotPrepared,
+                    new { error = ChangeListCompiler.NotPrepared, errors })
+                : await ExecuteAskCallAsync(asked, request, results, ct);
         }
         foreach (var waiting in check.Waiting)
             outcomes[waiting.Change] = TypedChangeOutcome(changes.First(change => change.Id == waiting.Change), waiting.Code,
