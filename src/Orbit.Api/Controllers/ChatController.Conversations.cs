@@ -3,6 +3,7 @@ using Orbit.Api.Extensions;
 using Orbit.Application.Chat;
 using Orbit.Application.Chat.Commands;
 using Orbit.Application.Chat.Queries;
+using Orbit.Application.Common;
 
 namespace Orbit.Api.Controllers;
 
@@ -15,10 +16,14 @@ public partial class ChatController
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetLatestConversation(CancellationToken cancellationToken,
-        [FromQuery] Guid? conversationId = null, [FromQuery] long? beforeOrder = null, [FromQuery] int pageSize = 40)
+        [FromQuery] Guid? conversationId = null, [FromQuery] long? beforeOrder = null, [FromQuery] int pageSize = 40,
+        [FromQuery] string? clientContext = null)
     {
         if (!CanAccessChat()) return Forbid();
-        var result = await mediator.Send(new GetLatestConversationQuery(HttpContext.GetUserId(), conversationId, beforeOrder, pageSize), cancellationToken);
+        if (!ClientContextQuery.TryParse(clientContext, out var parsedClientContext))
+            return BadRequest(ErrorMessages.InvalidClientContext.ToErrorBody());
+        var result = await mediator.Send(new GetLatestConversationQuery(HttpContext.GetUserId(), conversationId, beforeOrder, pageSize,
+            parsedClientContext), cancellationToken);
         return result.ToPayGateAwareResult(page => Ok(page));
     }
 

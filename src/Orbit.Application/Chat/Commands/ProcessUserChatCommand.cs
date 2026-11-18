@@ -237,10 +237,21 @@ public partial class ProcessUserChatCommandHandler(
             logger.LogDebug("AI turn timing {Phases} total {TotalMilliseconds} ms",
                 JsonSerializer.Serialize(timing.Phases, ChatStreamEvent.SerializerOptions), timing.TotalMilliseconds);
         }
+        if (response.IsSuccess)
+            response = Result.Success(await SameTitleDetailWriter.WriteAsync(response.Value, request.ClientContext,
+                reads.User?.Language, () => ReadAccountHabitsAsync(request.UserId, cancellationToken)));
         return response.IsSuccess && evalTrace is not null
             ? Result.Success(response.Value with { EvalTrace = evalTrace.Build(timer.Complete()) })
             : response;
     }
+
+    /// <summary>
+    /// Each habit of the account, for the app list order of a same-title group. The turn snapshot serves the read
+    /// until a write of the turn invalidates it.
+    /// </summary>
+    private async Task<IReadOnlyList<Habit>> ReadAccountHabitsAsync(Guid userId, CancellationToken ct) =>
+        ChatTurnReadScope.For(userId)?.Habits
+        ?? await data.HabitRepository.FindAsync(habit => habit.UserId == userId, ct);
 
     private async Task<IReadOnlyList<string>> ResolveTurnFeatureFlagsAsync(Guid userId, CancellationToken ct)
     {

@@ -369,7 +369,33 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AgentCapability"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AgentCapability"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AgentCapability"
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -391,7 +417,33 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AgentOperation"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AgentOperation"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AgentOperation"
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -413,7 +465,33 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/UserDataCatalogEntry"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/UserDataCatalogEntry"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/UserDataCatalogEntry"
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -435,7 +513,33 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AppSurface"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AppSurface"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AppSurface"
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -581,7 +685,84 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PendingOperationRevisionResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PendingOperationRevisionResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PendingOperationRevisionResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PendingOperationRevisionResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PendingOperationRevisionResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PendingOperationRevisionResult"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PendingOperationRevisionResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PendingOperationRevisionResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PendingOperationRevisionResult"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PendingOperationRevisionResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PendingOperationRevisionResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PendingOperationRevisionResult"
+                }
+              }
+            }
           }
         }
       }
@@ -619,7 +800,24 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfirmPendingOperationResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfirmPendingOperationResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfirmPendingOperationResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -690,7 +888,24 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentStepUpChallenge"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentStepUpChallenge"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentStepUpChallenge"
+                }
+              }
+            }
           }
         }
       }
@@ -741,7 +956,24 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PendingAgentOperation"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PendingAgentOperation"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PendingAgentOperation"
+                }
+              }
+            }
           }
         }
       }
@@ -792,7 +1024,24 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentExecuteOperationResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentExecuteOperationResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentExecuteOperationResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -843,7 +1092,24 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentExecuteOperationResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentExecuteOperationResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentExecuteOperationResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -3153,6 +3419,13 @@
               ],
               "format": "int32",
               "default": 40
+            }
+          },
+          {
+            "name": "clientContext",
+            "in": "query",
+            "schema": {
+              "type": "string"
             }
           },
           {
@@ -17624,6 +17897,91 @@
       "ActionStatus": {
         "type": "integer"
       },
+      "AgentCapability": {
+        "required": [
+          "id",
+          "displayName",
+          "description",
+          "domain",
+          "scope",
+          "riskClass",
+          "isMutation",
+          "isPhaseOneReadOnly",
+          "confirmationRequirement"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "domain": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string"
+          },
+          "riskClass": {
+            "$ref": "#/components/schemas/AgentRiskClass"
+          },
+          "isMutation": {
+            "type": "boolean"
+          },
+          "isPhaseOneReadOnly": {
+            "type": "boolean"
+          },
+          "confirmationRequirement": {
+            "$ref": "#/components/schemas/AgentConfirmationRequirement"
+          },
+          "planRequirement": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "featureFlagKeys": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "chatToolNames": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "mcpToolNames": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "controllerActionKeys": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
       "AgentClientContext": {
         "type": "object",
         "properties": {
@@ -17847,6 +18205,12 @@
               "null",
               "string"
             ]
+          },
+          "supportsPendingOperationEntityDetail": {
+            "type": [
+              "null",
+              "boolean"
+            ]
           }
         }
       },
@@ -17891,6 +18255,53 @@
                 "$ref": "#/components/schemas/AstraPlan"
               }
             ]
+          }
+        }
+      },
+      "AgentOperation": {
+        "required": [
+          "id",
+          "displayName",
+          "description",
+          "capabilityId",
+          "riskClass",
+          "confirmationRequirement",
+          "isMutation",
+          "isAgentExecutable",
+          "requestSchema",
+          "responseSchema"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "capabilityId": {
+            "type": "string"
+          },
+          "riskClass": {
+            "$ref": "#/components/schemas/AgentRiskClass"
+          },
+          "confirmationRequirement": {
+            "$ref": "#/components/schemas/AgentConfirmationRequirement"
+          },
+          "isMutation": {
+            "type": "boolean"
+          },
+          "isAgentExecutable": {
+            "type": "boolean"
+          },
+          "requestSchema": {
+            "$ref": "#/components/schemas/JsonElement"
+          },
+          "responseSchema": {
+            "$ref": "#/components/schemas/JsonElement"
           }
         }
       },
@@ -18014,6 +18425,28 @@
       },
       "AgentRiskClass": {
         "type": "integer"
+      },
+      "AgentStepUpChallenge": {
+        "required": [
+          "challengeId",
+          "pendingOperationId",
+          "expiresAtUtc"
+        ],
+        "type": "object",
+        "properties": {
+          "challengeId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "pendingOperationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "expiresAtUtc": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
       },
       "AiAction": {
         "type": "object",
@@ -18553,6 +18986,53 @@
               "null",
               "string"
             ]
+          }
+        }
+      },
+      "AppSurface": {
+        "required": [
+          "id",
+          "displayName",
+          "description",
+          "howToSteps",
+          "notes",
+          "relatedCapabilityIds",
+          "relatedControllerActionKeys"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "howToSteps": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "notes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "relatedCapabilityIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "relatedControllerActionKeys": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         }
       },
@@ -20638,6 +21118,37 @@
         "properties": {
           "code": {
             "type": "string"
+          }
+        }
+      },
+      "ConfirmPendingOperationResponse": {
+        "required": [
+          "pendingOperationId",
+          "confirmationToken",
+          "expiresAtUtc"
+        ],
+        "type": "object",
+        "properties": {
+          "pendingOperationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "confirmationToken": {
+            "type": "string"
+          },
+          "expiresAtUtc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "plan": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AstraPlan"
+              }
+            ]
           }
         }
       },
@@ -25400,6 +25911,12 @@
             ]
           },
           "habitType": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "entityDetail": {
             "type": [
               "null",
               "string"
@@ -30407,6 +30924,71 @@
             ]
           },
           "isSynced": {
+            "type": "boolean"
+          }
+        }
+      },
+      "UserDataCatalogEntry": {
+        "required": [
+          "id",
+          "displayName",
+          "description",
+          "sensitivity",
+          "retentionNotes",
+          "aiReadable",
+          "aiMutableInPhaseOne",
+          "fields"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "sensitivity": {
+            "type": "string"
+          },
+          "retentionNotes": {
+            "type": "string"
+          },
+          "aiReadable": {
+            "type": "boolean"
+          },
+          "aiMutableInPhaseOne": {
+            "type": "boolean"
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UserDataFieldDescriptor"
+            }
+          }
+        }
+      },
+      "UserDataFieldDescriptor": {
+        "required": [
+          "name",
+          "meaning",
+          "aiReadable",
+          "aiMutableInPhaseOne"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "meaning": {
+            "type": "string"
+          },
+          "aiReadable": {
+            "type": "boolean"
+          },
+          "aiMutableInPhaseOne": {
             "type": "boolean"
           }
         }

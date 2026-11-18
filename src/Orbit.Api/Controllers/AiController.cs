@@ -35,9 +35,11 @@ public class AiController(
     IAgentOperationExecutor operationExecutor,
     PendingOperationRevisionService revisionService,
     IValidator<ResolveClarificationRequest> resolveClarificationValidator,
+    SameTitleDetailWriter sameTitleDetail,
     ILogger<AiController>? logger = null, IConversationPlanStore? plans = null) : ControllerBase
 {
     [HttpGet("capabilities")]
+    [ProducesResponseType(typeof(IReadOnlyList<AgentCapability>), StatusCodes.Status200OK)]
     public Task<IActionResult> GetCapabilitiesMetadata(CancellationToken cancellationToken) =>
         ReadCatalogAsync(
             AgentCapabilityIds.CatalogCapabilitiesRead,
@@ -47,6 +49,7 @@ public class AiController(
             cancellationToken);
 
     [HttpGet("operations")]
+    [ProducesResponseType(typeof(IReadOnlyList<AgentOperation>), StatusCodes.Status200OK)]
     public Task<IActionResult> GetOperationsMetadata(CancellationToken cancellationToken) =>
         ReadCatalogAsync(
             AgentCapabilityIds.CatalogCapabilitiesRead,
@@ -56,6 +59,7 @@ public class AiController(
             cancellationToken);
 
     [HttpGet("data-catalog")]
+    [ProducesResponseType(typeof(IReadOnlyList<UserDataCatalogEntry>), StatusCodes.Status200OK)]
     public Task<IActionResult> GetUserDataCatalog(CancellationToken cancellationToken) =>
         ReadCatalogAsync(
             AgentCapabilityIds.CatalogDataRead,
@@ -65,6 +69,7 @@ public class AiController(
             cancellationToken);
 
     [HttpGet("surfaces")]
+    [ProducesResponseType(typeof(IReadOnlyList<AppSurface>), StatusCodes.Status200OK)]
     public Task<IActionResult> GetAppSurfaces(CancellationToken cancellationToken) =>
         ReadCatalogAsync(
             AgentCapabilityIds.CatalogSurfacesRead,
@@ -127,7 +132,7 @@ public class AiController(
             return Forbid();
 
         var userId = HttpContext.GetUserId();
-        if (!TryParseClientContext(clientContext, out var parsedClientContext))
+        if (!ClientContextQuery.TryParse(clientContext, out var parsedClientContext))
             return BadRequest(ErrorMessages.InvalidClientContext.ToErrorBody());
         var result = await revisionService.RefreshAsync(userId, id, cancellationToken, parsedClientContext);
         await auditService.RecordAsync(new AgentAuditEntry(
@@ -140,7 +145,7 @@ public class AiController(
             TargetId: id.ToString(), Error: result.Error), cancellationToken);
 
         if (result.IsSuccess)
-            return Ok(result);
+            return Ok(await sameTitleDetail.WriteAsync(userId, result, parsedClientContext, cancellationToken));
         if (result.Error == "pending_operation_not_found")
             return NotFound(result);
         return Conflict(result);
@@ -148,6 +153,10 @@ public class AiController(
 
     [HttpPost("pending-operations/{id:guid}/revise")]
     [DistributedRateLimit("ai-operations")]
+    [ProducesResponseType(typeof(PendingOperationRevisionResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(PendingOperationRevisionResult), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(PendingOperationRevisionResult), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(PendingOperationRevisionResult), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> RevisePendingOperation(
         Guid id, [FromBody] RevisePendingOperationRequest request, CancellationToken cancellationToken)
     {
@@ -166,7 +175,7 @@ public class AiController(
             TargetId: id.ToString(), Error: result.Error), cancellationToken);
 
         if (result.IsSuccess)
-            return Ok(result);
+            return Ok(await sameTitleDetail.WriteAsync(userId, result, request.ClientContext, cancellationToken));
         if (result.Error == "pending_operation_not_found")
             return NotFound(result);
         if (result.Error is "stale_preview" or "revision_conflict")
@@ -176,6 +185,7 @@ public class AiController(
 
     [HttpPost("pending-operations/{id:guid}/confirm")]
     [DistributedRateLimit("ai-operations")]
+    [ProducesResponseType(typeof(ConfirmPendingOperationResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> ConfirmPendingOperation(Guid id, CancellationToken cancellationToken,
         [FromQuery] string? clientContext = null)
     {
@@ -183,7 +193,7 @@ public class AiController(
             return Forbid();
 
         var userId = HttpContext.GetUserId();
-        if (!TryParseClientContext(clientContext, out var parsedClientContext))
+        if (!ClientContextQuery.TryParse(clientContext, out var parsedClientContext))
             return BadRequest(ErrorMessages.InvalidClientContext.ToErrorBody());
         var execution = pendingStores.OperationStore.GetExecution(userId, id);
         if (execution?.RequiresReproposal == true)
@@ -226,6 +236,7 @@ public class AiController(
 
     [HttpPost("pending-operations/{id:guid}/step-up")]
     [DistributedRateLimit("auth")]
+    [ProducesResponseType(typeof(AgentStepUpChallenge), StatusCodes.Status200OK)]
     public async Task<IActionResult> MarkPendingOperationStepUp(
         Guid id,
         [FromBody] StepUpChallengeRequest? request,
@@ -260,6 +271,7 @@ public class AiController(
 
     [HttpPost("pending-operations/{id:guid}/step-up/verify")]
     [DistributedRateLimit("auth")]
+    [ProducesResponseType(typeof(PendingAgentOperation), StatusCodes.Status200OK)]
     public async Task<IActionResult> VerifyPendingOperationStepUp(
         Guid id,
         [FromBody] VerifyStepUpRequest request,
@@ -290,11 +302,14 @@ public class AiController(
             TargetId: id.ToString(),
             Error: result.IsSuccess ? null : result.Error), cancellationToken);
 
+        if (result.IsSuccess)
+            result = Result.Success(await sameTitleDetail.WriteAsync(userId, result.Value, null, cancellationToken));
         return result.ToPayGateAwareResult(v => Ok(v));
     }
 
     [HttpPost("pending-operations/{id:guid}/execute")]
     [DistributedRateLimit("ai-operations")]
+    [ProducesResponseType(typeof(AgentExecuteOperationResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> ExecutePendingOperation(
         Guid id,
         [FromBody] ExecutePendingOperationRequest request,
@@ -363,22 +378,7 @@ public class AiController(
             return Conflict(new { error = AgentPolicyReasons.StalePreview });
         }
 
-        return Ok(result);
-    }
-
-    private static bool TryParseClientContext(string? value, out AgentClientContext? context)
-    {
-        context = null;
-        if (string.IsNullOrWhiteSpace(value)) return true;
-        try
-        {
-            context = JsonSerializer.Deserialize<AgentClientContext>(value, JsonSerializerOptions.Web);
-            return context is not null;
-        }
-        catch (JsonException)
-        {
-            return false;
-        }
+        return Ok(await sameTitleDetail.WriteAsync(userId, result, request.ClientContext, cancellationToken));
     }
 
     private BadRequestObjectResult ApprovalFailure(string error) => error == "parent_choice_required"
@@ -387,6 +387,7 @@ public class AiController(
 
     [HttpPost("clarifications/{operationId:guid}/resolve")]
     [DistributedRateLimit("ai-resolve")]
+    [ProducesResponseType(typeof(AgentExecuteOperationResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> ResolveClarification(
         Guid operationId,
         [FromBody] ResolveClarificationRequest body,
@@ -520,7 +521,7 @@ public class AiController(
                 result.Operation.TargetName),
             cancellationToken);
 
-        return Ok(result);
+        return Ok(await sameTitleDetail.WriteAsync(userId, result, pending.ClientContext, cancellationToken));
     }
 
     private sealed record ResolveAuditOutcome(

@@ -26,6 +26,7 @@ using Orbit.Domain.Events;
 using Orbit.Infrastructure.Configuration;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 using Orbit.Infrastructure.Persistence;
@@ -259,6 +260,50 @@ public sealed class ChatTurnStreamTests(Xunit.Abstractions.ITestOutputHelper out
         var conflict = await CreateController(services, userId, "answer").ProcessChatStream("Answer", null, null,
             default, blockAnswer: JsonSerializer.Serialize(new AiBlockAnswer(Guid.NewGuid(), ["other"])));
         conflict.Should().BeOfType<ConflictObjectResult>();
+        await mediator.Received(1).Send(Arg.Any<ProcessUserChatCommand>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// The turn answers with a preview that renames the second of two "Water" habits, for a client without the entity
+    /// detail flag. A retry with the same key returns the stored final event, so it holds the same detail when the
+    /// account has one "Water" less.
+    /// </summary>
+    [Fact]
+    public async Task RetryWithTheSameKey_ReturnsTheSameFinalEventWithTheSameTitleDetail()
+    {
+        var mediator = Substitute.For<IMediator>();
+        var userId = Guid.NewGuid();
+        using var services = new ChatTurnStreamTestServices(mediator, userId);
+        var morning = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, userId, "Morning", FrequencyUnit.Day, 1,
+            new DateOnly(2026, 4, 3), Position: 1)).Value;
+        var waters = Enumerable.Range(1, 2).Select(position => Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, userId,
+            "Water", FrequencyUnit.Day, 1, new DateOnly(2026, 4, 3), ParentHabitId: morning.Id, Position: position)).Value).ToList();
+        var habits = Substitute.For<IGenericRepository<Habit>>();
+        habits.FindAsync(Arg.Any<System.Linq.Expressions.Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(_ => (IReadOnlyList<Habit>)[morning, .. waters]);
+        var writer = new SameTitleDetailWriter(habits, Substitute.For<IGenericRepository<User>>());
+        var item = new PendingOperationItem(waters[1].Id.ToString(), waters[1].Id, "Water",
+            [new PendingOperationChange(waters[1].Id, "Water", "title", "Water", "Agua", "text")], "state");
+        var preview = new PendingAgentOperation(Guid.NewGuid(), "update_habit", "Update habit", "Update habit", AgentRiskClass.Low,
+            AgentConfirmationRequirement.FreshConfirmation, DateTime.UtcNow.AddMinutes(10), Items: [item]);
+        mediator.Send(Arg.Any<ProcessUserChatCommand>(), Arg.Any<CancellationToken>()).Returns(async call =>
+            Result.Success(await writer.WriteAsync(userId, new ChatResponse("Review the change.", [], PendingOperations: [preview]),
+                call.Arg<ProcessUserChatCommand>().ClientContext, null, call.Arg<CancellationToken>())));
+        var client = JsonSerializer.Serialize(new { locale = "en" });
+
+        var first = CreateController(services, userId, "same-title");
+        await first.ProcessChatStream("Rename my second Water to Agua", null, null, default, clientContext: client);
+        waters.RemoveAt(0);
+        var retry = CreateController(services, userId, "same-title");
+        await retry.ProcessChatStream("Rename my second Water to Agua", null, null, default, clientContext: client);
+
+        var final = Events(first).Last();
+        final.GetProperty("type").GetString().Should().Be("final");
+        var response = final.GetProperty("response");
+        response.GetProperty("pendingOperations")[0].GetProperty("items")[0].GetProperty("entityName").GetString()
+            .Should().Be("Water (Morning, 2 of 2)");
+        response.GetProperty("aiMessage").GetString().Should().Be("Review the change.\n\n- Water (Morning, 2 of 2) → Agua");
+        Events(retry).Last().GetRawText().Should().Be(final.GetRawText());
         await mediator.Received(1).Send(Arg.Any<ProcessUserChatCommand>(), Arg.Any<CancellationToken>());
     }
 

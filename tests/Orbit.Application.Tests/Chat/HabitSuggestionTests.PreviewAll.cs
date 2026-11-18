@@ -56,7 +56,7 @@ public partial class HabitSuggestionTests
         var store = Substitute.For<IPendingAgentOperationStore>();
         var changes = new AccountChangeSetService(store, Substitute.For<IPendingOperationChangePreviewer>(),
             Substitute.For<IAgentCatalogService>(), new AiToolRegistry([]));
-        var result = await new PreviewAllHabitSuggestionsCommandHandler(Service(), executor, changes, store)
+        var result = await new PreviewAllHabitSuggestionsCommandHandler(Service(), executor, changes, store, SameTitleDetailWriters.NoHabits())
             .Handle(new(_userId, drafts), default);
         result.Should().BeOfType<HabitSuggestionPreviewFailure>().Which.DraftIndex.Should().Be(failingIndex);
         result.ErrorCode.Should().Be("HABIT_SUGGESTION_UNAVAILABLE");
@@ -101,7 +101,7 @@ public partial class HabitSuggestionTests
             new AiToolRegistry([new BulkCreateHabitsTool(Substitute.For<IMediator>())]));
         var drafts = new[] { Draft(), Draft("Stretch") with { DueTime = new(21, 0), DueEndTime = new(21, 15) } };
 
-        var preview = () => new PreviewAllHabitSuggestionsCommandHandler(Service(), executor, changes, store)
+        var preview = () => new PreviewAllHabitSuggestionsCommandHandler(Service(), executor, changes, store, SameTitleDetailWriters.NoHabits())
             .Handle(new(_userId, drafts), default);
 
         await preview.Should().ThrowAsync<InvalidOperationException>().WithMessage("The account change preview could not be bound.");

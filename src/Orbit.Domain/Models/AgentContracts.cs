@@ -163,7 +163,9 @@ public record PendingOperationItem(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     string? EntityEmoji = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    string? HabitType = null);
+    string? HabitType = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? EntityDetail = null);
 
 public record PendingOperationPlacement(
     string Selected,
@@ -338,7 +340,8 @@ public record AgentClientContext(
     bool? SupportsProactiveOffers = null,
     Guid? ConversationId = null,
     IReadOnlyList<string>? DismissedOfferKeys = null,
-    string? SelectedOfferKey = null);
+    string? SelectedOfferKey = null,
+    bool? SupportsPendingOperationEntityDetail = null);
 
 public record AgentContextSnapshot(
     string Plan,

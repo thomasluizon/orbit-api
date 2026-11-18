@@ -335,7 +335,7 @@ public sealed partial class PlanCommittedOutcomeTests
             var controller = new AiController(_catalog, Substitute.For<IAgentPolicyEvaluator>(),
                 new(Pending, Substitute.For<IPendingClarificationStore>()), Substitute.For<IAgentStepUpService>(), _audit,
                 Executor, Revisions, Substitute.For<IValidator<ResolveClarificationRequest>>(),
-                new Logger<AiController>(_logs), _plans);
+                SameTitleDetailWriters.NoHabits(), new Logger<AiController>(_logs), _plans);
             controller.ControllerContext = new()
             {
                 HttpContext = new DefaultHttpContext

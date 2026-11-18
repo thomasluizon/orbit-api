@@ -52,6 +52,8 @@ public sealed partial class FirstTryPreviewTests : IDisposable
     private readonly HabitSuggestionService _suggestions;
     private readonly AccountChangeSetService _changeSets;
     private readonly AiController _controller;
+    private readonly SameTitleDetailWriter _sameTitleDetail;
+    private readonly IAgentStepUpService _stepUp = Substitute.For<IAgentStepUpService>();
     private readonly IConversationPlanStore _plans = Substitute.For<IConversationPlanStore>();
     private readonly IAgentStepUpAuthorizationBridge _bridge = Substitute.For<IAgentStepUpAuthorizationBridge>();
     private readonly Guid _userId;
@@ -126,11 +128,12 @@ public sealed partial class FirstTryPreviewTests : IDisposable
         _revisions = new PendingOperationRevisionService(_store, _previewer, new RevisePendingOperationRequestValidator(), _registry);
         _suggestions = new HabitSuggestionService(habits, goals, dates, Substitute.For<IHabitDraftGenerator>());
         _changeSets = new AccountChangeSetService(_store, _previewer, catalog, _registry);
+        _sameTitleDetail = SameTitleDetailWriters.Over(context);
         var validator = Substitute.For<IValidator<ResolveClarificationRequest>>();
         validator.ValidateAsync(Arg.Any<ResolveClarificationRequest>(), Arg.Any<CancellationToken>())
             .Returns(new FluentValidation.Results.ValidationResult());
         _controller = new AiController(catalog, policy, new AgentPendingStores(_store, _clarifications),
-            Substitute.For<IAgentStepUpService>(), Substitute.For<IAgentAuditService>(), _executor, _revisions, validator)
+            _stepUp, Substitute.For<IAgentAuditService>(), _executor, _revisions, validator, _sameTitleDetail)
         {
             ControllerContext = new ControllerContext
             {

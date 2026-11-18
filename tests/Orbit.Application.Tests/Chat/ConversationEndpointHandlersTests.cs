@@ -22,7 +22,7 @@ public class ConversationEndpointHandlersTests
         var flags = Substitute.For<IFeatureFlagService>();
         flags.GetEnabledKeysForUserAsync(user, Arg.Any<CancellationToken>()).Returns(enabled ? new[] { FeatureFlagKeys.AiConversationRecording } : []);
         store.GetLatestAsync(user, conversation, 9, 4, Arg.Any<CancellationToken>()).Returns(new ConversationPage(conversation, [], null));
-        var result = await new GetLatestConversationQueryHandler(store, flags).Handle(new(user, conversation, 9, 4), default);
+        var result = await new GetLatestConversationQueryHandler(store, flags, SameTitleDetailWriters.NoHabits()).Handle(new(user, conversation, 9, 4), default);
         result.IsSuccess.Should().Be(enabled);
         if (enabled) await store.Received(1).GetLatestAsync(user, conversation, 9, 4, Arg.Any<CancellationToken>());
         else

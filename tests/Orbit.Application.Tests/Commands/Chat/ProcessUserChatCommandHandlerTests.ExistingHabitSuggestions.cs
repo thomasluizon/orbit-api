@@ -58,8 +58,8 @@ public partial class ProcessUserChatCommandHandlerTests
         result.Value.PendingOperations.Should().BeNullOrEmpty();
         _productAnalytics.DidNotReceive().CaptureUserEvent(UserId, "chat_read_block_emitted", Arg.Any<string>(),
             Arg.Any<IReadOnlyDictionary<string, object>>());
-        var executor = Substitute.For<IAgentOperationExecutor>();
-        var preview = new PreviewHabitSuggestionCommandHandler(service, executor);
+        var executor = HeldPreviewExecutor.Create();
+        var preview = new PreviewHabitSuggestionCommandHandler(service, executor, SameTitleDetailWriters.NoHabits());
 
         var approval = await preview.Handle(new(UserId, draft, language), default);
 

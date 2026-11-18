@@ -68,9 +68,9 @@ public sealed partial class AiApprovalPathTests
         var changes = new AccountChangeSetService(store, Substitute.For<IPendingOperationChangePreviewer>(),
             new AgentCatalogService([tool]), new AiToolRegistry([tool]));
         var preview = previewAll
-            ? await new PreviewAllHabitSuggestionsCommandHandler(suggestions, executor, changes, store)
+            ? await new PreviewAllHabitSuggestionsCommandHandler(suggestions, executor, changes, store, SameTitleDetailWriters.NoHabits())
                 .Handle(new(_userId, [draft], language), default)
-            : await new PreviewHabitSuggestionCommandHandler(suggestions, executor)
+            : await new PreviewHabitSuggestionCommandHandler(suggestions, executor, SameTitleDetailWriters.NoHabits())
                 .Handle(new(_userId, draft, language), default);
         preview.IsSuccess.Should().BeTrue(preview.Error);
         preview.Value.Operation.Status.Should().Be(AgentOperationStatus.PendingConfirmation);

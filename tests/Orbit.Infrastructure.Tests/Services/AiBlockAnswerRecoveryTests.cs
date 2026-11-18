@@ -253,7 +253,7 @@ public class AiBlockAnswerRecoveryTests
         var controller = new AiController(new AgentCatalogService(), Substitute.For<IAgentPolicyEvaluator>(),
             new AgentPendingStores(pending, Substitute.For<IPendingClarificationStore>()),
             Substitute.For<IAgentStepUpService>(), Substitute.For<IAgentAuditService>(), executor, revisions,
-            Substitute.For<IValidator<ResolveClarificationRequest>>())
+            Substitute.For<IValidator<ResolveClarificationRequest>>(), SameTitleDetailWriters.NoHabits())
         {
             ControllerContext = new ControllerContext
             {

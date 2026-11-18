@@ -46,8 +46,8 @@ public partial class HabitSuggestionTests
         { DueTime = new(18 + index, 0), DueEndTime = new(18 + index, 15) }).ToArray();
 
         if (count == 1)
-            await new PreviewHabitSuggestionCommandHandler(Service(), executor).Handle(new(_userId, drafts[0], language), default);
-        await new PreviewAllHabitSuggestionsCommandHandler(Service(), executor, changes, store)
+            await new PreviewHabitSuggestionCommandHandler(Service(), executor, SameTitleDetailWriters.NoHabits()).Handle(new(_userId, drafts[0], language), default);
+        await new PreviewAllHabitSuggestionsCommandHandler(Service(), executor, changes, store, SameTitleDetailWriters.NoHabits())
             .Handle(new(_userId, drafts, language), default);
 
         requests.Should().NotBeEmpty().And.OnlyContain(request => request.ClientContext == expected);
