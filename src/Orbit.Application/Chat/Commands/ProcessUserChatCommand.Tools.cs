@@ -498,8 +498,7 @@ public partial class ProcessUserChatCommandHandler
         }
         executionResults.Previews.KeepRevisions(earlierRevisions, outcomesByCallId);
 
-        var selectionScope = RejectHeldSelections(writeCalls, resolvedWrites, executionResults, outcomesByCallId,
-            SelectionScopeOf(request, resolvedWrites, executionResults));
+        var selectionScope = RejectHeldSelections(request, writeCalls, resolvedWrites, executionResults, outcomesByCallId);
         await CoalesceLogCallsAsync(writeCalls, resolvedWrites, request.UserId, executionResults, cancellationToken);
         CoalesceTagCalls(resolvedWrites, executionResults);
         PrepareHabitProposals(resolvedWrites, request, executionResults, language);

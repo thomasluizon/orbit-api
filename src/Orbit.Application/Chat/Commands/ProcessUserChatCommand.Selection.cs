@@ -61,17 +61,19 @@ public partial class ProcessUserChatCommandHandler
     }
 
     /// <summary>
-    /// Runs the selection guard over the writes of a round and returns the scope of the writes that remain. The
-    /// <c>ai_change_plan</c> path runs no guard.
+    /// Runs the selection guard over the writes of a round and returns the scope of the writes that remain. The scope
+    /// is built after the duplicate check, so a refused write covers no part of a split. The <c>ai_change_plan</c>
+    /// path runs no guard.
     /// </summary>
-    private static SelectionScope RejectHeldSelections(IReadOnlyList<AiToolCall> calls,
+    private static SelectionScope RejectHeldSelections(ProcessUserChatCommand request, IReadOnlyList<AiToolCall> calls,
         Dictionary<string, AiToolCall?> resolvedCalls, ToolExecutionAccumulator results,
-        Dictionary<string, ToolCallOutcome> outcomes, SelectionScope scope)
+        Dictionary<string, ToolCallOutcome> outcomes)
     {
         if (results.ChangePlan)
-            return scope;
+            return SelectionScopeOf(request, resolvedCalls, results);
         RejectUnreadDuplicateTargets(calls, resolvedCalls, results, outcomes);
-        return RejectUnansweredSelections(calls, resolvedCalls, results, outcomes, scope);
+        return RejectUnansweredSelections(calls, resolvedCalls, results, outcomes,
+            SelectionScopeOf(request, resolvedCalls, results));
     }
 
     /// <summary>
