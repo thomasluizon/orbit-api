@@ -139,4 +139,74 @@ public partial class ProcessUserChatCommandHandlerTests
         item.EntityName.Should().Be(name);
         item.Fields.Single(field => field.Field == "title").NewValue.Should().Be("Water");
     }
+    /// <summary>
+    /// One turn that renames the second "Water" and deletes the first. The response for the client holds the detail.
+    /// The conversation record, which is the source of the model history, the tool results that the model reads and
+    /// the grounding facts hold the plain title and no text line.
+    /// </summary>
+    [Theory]
+    [InlineData("en", true)]
+    [InlineData("pt-BR", true)]
+    [InlineData("en", false)]
+    [InlineData("pt-BR", false)]
+    public async Task SameTitleDetail_RecordModelTextAndGroundingHoldThePlainTitleAndNoTextLine(string language, bool withFlag)
+    {
+        var user = User.Create("Reader", "reader@example.test").Value;
+        user.SetLanguage(language);
+        SetupUserAndPayGate(user);
+        EnableRecording();
+        ConversationTurnCapture? recorded = null;
+        _conversationRecorder.RecordAsync(Arg.Do<ConversationTurnCapture>(turn => recorded = turn)).Returns(true);
+        var morning = PlacedHabit("Morning", 1);
+        var first = PlacedHabit("Water", 1, morning.Id);
+        var second = PlacedHabit("Water", 2, morning.Id);
+        SetupSelectionHabits(morning, first, second);
+        var query = new QueryHabitsTool(_habitRepo, _userRepo, _userDateService, _scheduleLogReader);
+        var delete = new BulkDeleteHabitsTool(_mediator, _habitRepo);
+        var update = new UpdateHabitTool(_habitRepo, _userDateService, _mediator);
+        var handler = CreateHandler(query, delete, update);
+        HoldSelectionReplayWrites(query, delete, update);
+        SetupAiResponse(new AiResponse { ConversationContext = TestConversationContext, ToolCalls = [ReadEachHabit()] });
+        var modelInputs = new List<IReadOnlyList<AiToolCallResult>>();
+        _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
+                Arg.Do<IReadOnlyList<AiToolCallResult>>(results => modelInputs.Add([.. results])),
+                Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AiResponse
+            {
+                ConversationContext = TestConversationContext,
+                ToolCalls =
+                [
+                    new(update.Name, "rename", JsonSerializer.SerializeToElement(new { habit_id = second.Id, title = "Agua" })),
+                    DeleteCall([first])
+                ]
+            }), Result.Success(new AiResponse { TextMessage = "Review the changes." }));
+        var place = language == "en" ? "{0} of 2" : "{0}º de 2";
+        string Detail(int index) => "Morning, " + string.Format(System.Globalization.CultureInfo.InvariantCulture, place, index);
+
+        var result = await handler.Handle(new ProcessUserChatCommand(UserId, "Rename my second Water to Agua and delete the first.",
+            ClientContext: new(SupportsParts: true, PartKinds: ["habitList", "choice"], SupportsHabitListCard: true,
+                SupportsDatedHabitListCard: true, SupportsPendingOperationEntityDetail: withFlag ? true : null)), default);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        var items = result.Value.PendingOperations!.SelectMany(operation => operation.Items!).ToDictionary(item => item.EntityId!.Value);
+        items[second.Id].EntityName.Should().Be(withFlag ? "Water" : $"Water ({Detail(2)})");
+        items[second.Id].EntityDetail.Should().Be(withFlag ? Detail(2) : null);
+        items[first.Id].EntityName.Should().Be(withFlag ? "Water" : $"Water ({Detail(1)})");
+        items[first.Id].EntityDetail.Should().Be(withFlag ? Detail(1) : null);
+        items[second.Id].Fields.Single(field => field.Field == "title").NewValue.Should().Be("Agua");
+        var answer = string.Join("\n", (result.Value.Parts?.OfType<ChatTextPart>().Select(part => part.Text) ?? [])
+            .Append(result.Value.AiMessage));
+        if (withFlag)
+            answer.Should().NotContain("→");
+        else
+            answer.Split('\n').Where(text => text.Contains('→')).Should().Equal($"- Water ({Detail(2)}) → Agua");
+        recorded.Should().NotBeNull();
+        foreach (var stored in new[] { recorded!.ResponseJson!, recorded.AssistantContent ?? string.Empty, recorded.ToolCallsJson,
+                     JsonSerializer.Serialize(recorded.ToolResults), JsonSerializer.Serialize(modelInputs) })
+            stored.Should().NotContain("Morning, ", "no stored form and no model input holds the detail")
+                .And.NotContain("\\u2192").And.NotContain("→").And.NotContainEquivalentOf("entityDetail");
+        recorded.ResponseJson.Should().Contain("\"entityName\":\"Water\"");
+        result.Value.GroundingFacts.Facts.Should().NotContain(fact => fact.Value.Contains("MORNING, ", StringComparison.OrdinalIgnoreCase));
+        result.Value.GroundingFacts.Facts.Should().Contain(fact => fact.Value.Equals("WATER", StringComparison.OrdinalIgnoreCase));
+    }
 }

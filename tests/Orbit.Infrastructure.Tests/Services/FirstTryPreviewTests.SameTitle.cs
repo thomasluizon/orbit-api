@@ -1,21 +1,26 @@
 using System.Text.Json;
 using FluentAssertions;
+using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
 using Orbit.Api.Controllers;
 using Orbit.Application.Chat;
 using Orbit.Application.Chat.Commands;
 using Orbit.Application.Chat.Models;
+using Orbit.Application.Chat.Tools;
 using Orbit.Application.Common;
+using Orbit.Application.Goals.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 using Orbit.Infrastructure.Configuration;
+using Orbit.Infrastructure.Persistence;
 using Orbit.Infrastructure.Services;
 
 namespace Orbit.Infrastructure.Tests.Services;
@@ -251,6 +256,80 @@ public sealed partial class FirstTryPreviewTests
         var stored = _store.GetExecution(_userId, set.Id)!;
         stored.PreviewFingerprint.Should().Be(set.PreviewFingerprint);
         Succeeded(await ApproveAsync(set.Id, PlainClient));
+    }
+
+    /// <summary>
+    /// A pick list answer that reuses the second "Water" and adds a sub-habit, through the chat handler and the real
+    /// block store. The first answer and its replay each give the detail one time, and the stored block is plain.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task PickListAnswerAndItsReplay_EachGiveTheDetailOneTime(bool withFlag)
+    {
+        var (_, water) = AddWaterPair();
+        var context = _factory.Context;
+        var block = IssuedAiBlock.Create(_userId, new("pickList", "Choose", [],
+            [new("a", "Water", JsonSerializer.SerializeToElement(new
+            {
+                title = "Water", habit_id = water.Id, frequency_unit = "Day", frequency_quantity = 1,
+                sub_habits = new[] { new { title = "Sip" } }
+            }))], true, Action: "create_habits"));
+        var blocks = new IssuedAiBlockStore(context);
+        await blocks.AddAsync(block, default);
+        var work = _provider.GetRequiredService<IUnitOfWork>();
+        var quota = _provider.GetRequiredService<IPayGateService>();
+        quota.TryConsumeAiMessage(_userId, work, Arg.Any<CancellationToken>()).Returns(Result.Success());
+        var handler = new ProcessUserChatCommandHandler(
+            new(new GenericRepository<Habit>(context), new GenericRepository<Goal>(context), new GenericRepository<User>(context),
+                new GenericRepository<Tag>(context), new GenericRepository<ChecklistTemplate>(context), Substitute.For<IFeatureFlagService>()),
+            new(Substitute.For<IAiIntentService>(), _registry, Substitute.For<ISystemPromptBuilder>(), new AgentCatalogService(_registry.GetAll())),
+            new(_provider.GetRequiredService<IUserDateService>(), Substitute.For<IUserStreakService>(), quota, work,
+                Substitute.For<IServiceScopeFactory>(), _executor, _clarifications, Substitute.For<IGoalProgressReadSyncer>(),
+                Substitute.For<IGamificationService>(), Substitute.For<IMediator>(), Substitute.For<IProductAnalytics>(),
+                Substitute.For<IHabitScheduleLogReader>(), blocks, _store, _previewer),
+            NullLogger<ProcessUserChatCommandHandler>.Instance, _provider.GetRequiredService<IAppConfigService>(),
+            ModerationTestDouble.Clean());
+        var request = new ProcessUserChatCommand(_userId, "Water", BlockAnswer: new(block.Id, ["a"]),
+            ClientContext: withFlag ? DetailClient : PlainClient);
+
+        var first = await handler.Handle(request, default);
+        var replay = await handler.Handle(request, default);
+
+        foreach (var response in new[] { first, replay })
+        {
+            response.IsSuccess.Should().BeTrue(response.Error);
+            var item = response.Value.PendingOperations.Should().ContainSingle().Which.Items.Should().ContainSingle().Subject;
+            item.EntityId.Should().Be(water.Id);
+            HasDetail(item, withFlag);
+            item.Fields.Single(field => field.Field == "title").NewValue.Should().Be("Water");
+            var texts = response.Value.Parts!.OfType<ChatTextPart>().Select(part => part.Text).ToArray();
+            texts.Count(text => text.Contains(TitleForm)).Should().Be(withFlag ? 0 : 1, "one text line, not two");
+            if (!withFlag) texts.Last().Should().Be($"- {TitleForm} → Water");
+        }
+        replay.Value.PendingOperations!.Single().Id.Should().Be(first.Value.PendingOperations!.Single().Id);
+        context.ChangeTracker.Clear();
+        var stored = await context.IssuedAiBlocks.AsNoTracking().SingleAsync(row => row.Id == block.Id);
+        stored.ResponseJson.Should().NotBeNull();
+        stored.ResponseJson.Should().NotContain("of 2").And.NotContainEquivalentOf("entityDetail");
+    }
+
+    /// <summary>
+    /// The executor adds preview items only on the chat surface, so an MCP call returns a pending operation with no
+    /// item and the route needs no detail.
+    /// </summary>
+    [Fact]
+    public async Task McpSurface_ReturnsAPendingOperationWithNoItem()
+    {
+        var (_, water) = AddWaterPair();
+
+        var response = await _executor.ExecuteAsync(new AgentExecuteOperationRequest(_userId, "bulk_delete_habits",
+            JsonSerializer.SerializeToElement(new { filter = new { habit_ids = new[] { water.Id } } }),
+            AgentExecutionSurface.Mcp, AgentAuthMethod.Jwt));
+
+        response.Operation.Status.Should().Be(AgentOperationStatus.PendingConfirmation, JsonSerializer.Serialize(response));
+        response.PendingOperation!.Items.Should().BeNull();
+        response.PendingOperation.Changes.Should().BeNull();
     }
 
     /// <summary>
