@@ -103,4 +103,39 @@ public class TurnPolicyTests
         legacy.Instruction("Do it.").Should().Be("Do it.");
         plan.Instruction("Do it.").Should().BeNull();
     }
+
+    /// <summary>
+    /// The two policy classes are the one place where the paths differ. A handler file that reads the marker to pick a
+    /// path brings back a fork outside the policy. The two request markers of <c>Ai.cs</c> are the only readers.
+    /// </summary>
+    [Fact]
+    public void HandlerFiles_DoNotReadTheMarkerToPickAPath()
+    {
+        var root = new DirectoryInfo(AppContext.BaseDirectory);
+        while (root is not null && !File.Exists(Path.Combine(root.FullName, "Orbit.slnx")))
+            root = root.Parent;
+        root.Should().NotBeNull();
+        var directory = Path.Combine(root!.FullName, "src", "Orbit.Application", "Chat", "Commands");
+        var forks = Directory.EnumerateFiles(directory, "ProcessUserChatCommand*.cs")
+            .Where(path => !path.EndsWith("ProcessUserChatCommand.TurnPolicy.cs", StringComparison.Ordinal))
+            .SelectMany(path => File.ReadAllLines(path).Select((line, index) => (File: Path.GetFileName(path), Line: index + 1, Text: line.Trim())))
+            .Where(read => System.Text.RegularExpressions.Regex.IsMatch(read.Text, @"\.ChangePlan\b")
+                && !System.Text.RegularExpressions.Regex.IsMatch(read.Text, @"^ChangePlan(:| =) context\.Policy\.ChangePlan\)?;?$"))
+            .Select(read => $"{read.File}:{read.Line} {read.Text}")
+            .ToArray();
+
+        forks.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void PathMembers_DifferByPolicyOnly()
+    {
+        var legacy = ProcessUserChatCommandHandler.TurnPolicy.Legacy;
+        var plan = ProcessUserChatCommandHandler.TurnPolicy.For([FeatureFlagKeys.AiChangePlan]);
+
+        legacy.DefersCreationBesideRead.Should().BeTrue();
+        plan.DefersCreationBesideRead.Should().BeFalse();
+        legacy.WithTerminalDirective("system").Should().EndWith(TerminalWriteDirective.Instruction).And.StartWith("system");
+        plan.WithTerminalDirective("system").Should().Be("system");
+    }
 }

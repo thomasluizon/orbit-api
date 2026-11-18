@@ -53,8 +53,8 @@ public partial class ProcessUserChatCommandHandler
             var roundResult = !aiResponse.HasToolCalls
                 ? await CorrectTerminalAnswerAsync(aiResponse, request, context, executionResults,
                     terminalAnswerCorrectionAttempted, iteration, totalBudgetTokens, cancellationToken)
-                : await ProcessToolCallsAsync(aiResponse, request, context, executionResults, iteration, totalBudgetTokens,
-                    correction, language, aiStreamSink, cancellationToken);
+                : await context.Policy.ProcessRoundAsync(this, aiResponse, request, context, executionResults, iteration,
+                    totalBudgetTokens, correction, language, aiStreamSink, cancellationToken);
             if (!aiResponse.HasToolCalls) terminalAnswerCorrectionAttempted = true;
 
             if (roundResult.ProviderError is not null)
@@ -421,7 +421,7 @@ public partial class ProcessUserChatCommandHandler
             || totalBudgetTokens < AppConstants.MaxAiRequestTotalTokens)
         && request.ConfirmationToken is null;
 
-    private sealed record ToolRoundResult(
+    internal sealed record ToolRoundResult(
         AiResponse Response,
         bool HadToolFailure = false,
         AppError? ProviderError = null,
@@ -463,7 +463,7 @@ public partial class ProcessUserChatCommandHandler
         var writeCalls = orderedCalls
             .Where(call => call.Name != "ask" && ai.ToolRegistry.GetTool(call.Name)?.IsReadOnly != true)
             .ToList();
-        var deferredCreations = readOnlyCalls.Count > 0 && !executionResults.Policy.ChangePlan
+        var deferredCreations = readOnlyCalls.Count > 0 && executionResults.Policy.DefersCreationBesideRead
             ? writeCalls.Where(call => call.Name == "bulk_create_habits").ToArray() : [];
         executionResults.RequiresCreationProposal |= deferredCreations.Length > 0;
         writeCalls.RemoveAll(call => deferredCreations.Contains(call));

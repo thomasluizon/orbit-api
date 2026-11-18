@@ -53,12 +53,15 @@ public partial class ProcessUserChatCommandHandler
     /// list that failed. A question leaves a refusal to its answer. A plan, feature or policy denial does not withdraw.
     /// </summary>
     private bool LeavesPartOfTheRequest(ToolExecutionAccumulator results, bool failed) =>
-        failed || (results.Policy.ChangePlan ? results.ChangesNotPrepared && results.AskBlock is null : results.Previews.HoldsChange
+        failed || results.Policy.LeavesPartOfTheRequest(this, results);
+
+    private bool LeavesPartOfTheOldRequest(ToolExecutionAccumulator results) =>
+        results.Previews.HoldsChange
         && (results.OperationResults.Any(operation => IsOwnershipWriteDenial(operation)
                 || operation.Status == AgentOperationStatus.Failed && operation.ErrorCode != ErrorCodes.HabitLimitReached
                 && (operation.Access == "write" || ai.ToolRegistry.GetTool(operation.OperationId) is { IsReadOnly: false }))
             || results.PendingSelection is null && results.AskBlock is null
-            && results.RefusedWrites.Any(refused => !CarriesRefusedWrite(refused.Call, results))));
+            && results.RefusedWrites.Any(refused => !CarriesRefusedWrite(refused.Call, results)));
 
     /// <summary>
     /// A write that a guard of the handler turned down before dispatch, so it has no operation result: repeated single

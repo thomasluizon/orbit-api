@@ -19,9 +19,9 @@ public partial class ProcessUserChatCommandHandler
 
     /// <summary>
     /// The one owner of the path of a turn. The handler resolves it once from the enabled flags and asks it each
-    /// decision that differs by path: which routes and guards read the words of the person, what the declarations
-    /// say, and how a tool result reaches the model. <see cref="LegacyTurnPolicy"/> is the path of every account today.
+    /// decision that differs by path. <see cref="LegacyTurnPolicy"/> is the path of every account today.
     /// <see cref="ChangePlanTurnPolicy"/> is the <c>ai_change_plan</c> path. Removing the old path deletes the first one.
+    /// A test scans the handler files for a read of <see cref="ChangePlan"/>.
     /// </summary>
     internal abstract class TurnPolicy
     {
@@ -32,8 +32,27 @@ public partial class ProcessUserChatCommandHandler
         public static TurnPolicy For(IReadOnlyList<string> enabledFlags) =>
             enabledFlags.Contains(FeatureFlagKeys.AiChangePlan, StringComparer.Ordinal) ? Plan : Legacy;
 
-        /// <summary>The marker that the prompt request and the provider request carry, and that picks the round driver and the declarations.</summary>
+        /// <summary>The marker that the prompt request and the provider request carry. Nothing else reads it.</summary>
         public abstract bool ChangePlan { get; }
+
+        /// <summary>The path text of the system prompt: the plan instruction of the old path, or the change list instruction.</summary>
+        public abstract string TurnInstruction(ProcessUserChatCommandHandler handler);
+
+        /// <summary>The system prompt with the terminal write directive of the old path. The flag path adds none.</summary>
+        public abstract string WithTerminalDirective(string systemPrompt);
+
+        public abstract List<object> TurnDeclarations(ProcessUserChatCommandHandler handler,
+            IReadOnlyList<IAiTool> availableTools, ProcessUserChatCommand request, ChatContext context);
+
+        public abstract Task<ToolRoundResult> ProcessRoundAsync(ProcessUserChatCommandHandler handler, AiResponse response,
+            ProcessUserChatCommand request, ChatContext context, ToolExecutionAccumulator results, int iteration,
+            long totalBudgetTokens, ICallCorrection? correction, string? language, Func<AiStreamEvent, Task>? streamSink,
+            CancellationToken ct);
+
+        /// <summary>Whether a bulk creation beside a read waits for the next round. The old path defers it.</summary>
+        public abstract bool DefersCreationBesideRead { get; }
+
+        public abstract bool LeavesPartOfTheRequest(ProcessUserChatCommandHandler handler, ToolExecutionAccumulator results);
 
         public abstract (string Key, string Locale)? MatchFaq(ProcessUserChatCommand request);
 
@@ -117,6 +136,40 @@ public partial class ProcessUserChatCommandHandler
     private sealed class LegacyTurnPolicy : TurnPolicy
     {
         public override bool ChangePlan => false;
+
+        public override string TurnInstruction(ProcessUserChatCommandHandler handler) => PlanToolDeclaration.Instruction;
+
+        public override string WithTerminalDirective(string systemPrompt) =>
+            string.Join(Environment.NewLine, systemPrompt, TerminalWriteDirective.Instruction);
+
+        public override List<object> TurnDeclarations(ProcessUserChatCommandHandler handler,
+            IReadOnlyList<IAiTool> availableTools, ProcessUserChatCommand request, ChatContext context)
+        {
+            var declarations = availableTools
+                .OrderBy(tool => tool.Name, StringComparer.Ordinal)
+                .Select(tool => (object)new
+                {
+                    name = tool.Name,
+                    description = ToolDescription(tool),
+                    parameters = ToolSchema(tool, request.ClientContext, UsesComposition(request, context))
+                })
+                .ToList();
+            if (declarations.Count > 0)
+                declarations.Add(PlanToolDeclaration.Declaration);
+            return declarations;
+        }
+
+        public override Task<ToolRoundResult> ProcessRoundAsync(ProcessUserChatCommandHandler handler, AiResponse response,
+            ProcessUserChatCommand request, ChatContext context, ToolExecutionAccumulator results, int iteration,
+            long totalBudgetTokens, ICallCorrection? correction, string? language, Func<AiStreamEvent, Task>? streamSink,
+            CancellationToken ct) =>
+            handler.ProcessToolCallsAsync(response, request, context, results, iteration, totalBudgetTokens, correction,
+                language, streamSink, ct);
+
+        public override bool DefersCreationBesideRead => true;
+
+        public override bool LeavesPartOfTheRequest(ProcessUserChatCommandHandler handler, ToolExecutionAccumulator results) =>
+            handler.LeavesPartOfTheOldRequest(results);
 
         public override (string Key, string Locale)? MatchFaq(ProcessUserChatCommand request) =>
             ChatFaqCache.TryMatchFaqKey(request.Message);
@@ -235,6 +288,26 @@ public partial class ProcessUserChatCommandHandler
     private sealed class ChangePlanTurnPolicy : TurnPolicy
     {
         public override bool ChangePlan => true;
+
+        public override string TurnInstruction(ProcessUserChatCommandHandler handler) =>
+            handler.ChangeListInstruction();
+
+        public override string WithTerminalDirective(string systemPrompt) => systemPrompt;
+
+        public override List<object> TurnDeclarations(ProcessUserChatCommandHandler handler,
+            IReadOnlyList<IAiTool> availableTools, ProcessUserChatCommand request, ChatContext context) =>
+            handler.ChangeListDeclarations(availableTools, request.ClientContext, context, UsesComposition(request, context));
+
+        public override Task<ToolRoundResult> ProcessRoundAsync(ProcessUserChatCommandHandler handler, AiResponse response,
+            ProcessUserChatCommand request, ChatContext context, ToolExecutionAccumulator results, int iteration,
+            long totalBudgetTokens, ICallCorrection? correction, string? language, Func<AiStreamEvent, Task>? streamSink,
+            CancellationToken ct) =>
+            handler.ProcessChangeListRoundAsync(response, request, context, results, iteration, language, streamSink, ct);
+
+        public override bool DefersCreationBesideRead => false;
+
+        public override bool LeavesPartOfTheRequest(ProcessUserChatCommandHandler handler, ToolExecutionAccumulator results) =>
+            results.ChangesNotPrepared && results.AskBlock is null;
 
         public override (string Key, string Locale)? MatchFaq(ProcessUserChatCommand request) => null;
 

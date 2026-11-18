@@ -105,6 +105,8 @@ public partial class ProcessUserChatCommandHandler
             continued.ErrorCode ?? ErrorMessages.AiUnavailable.Code, continued.Error));
     }
 
+    private string ChangeListInstruction() => ChangeDeclarations.Instruction(ai.ChangeShape);
+
     /// <summary>
     /// The declarations of the <c>ai_change_plan</c> path: each read tool, <c>ask</c> and <c>revise_pending_changes</c> as
     /// before on this path, and the change kinds in the shape of the setting. <c>present_plan</c> is not declared. The

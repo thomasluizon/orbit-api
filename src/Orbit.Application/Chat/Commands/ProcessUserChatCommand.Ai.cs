@@ -49,7 +49,7 @@ public partial class ProcessUserChatCommandHandler
             Environment.NewLine,
             ai.PromptBuilder.BuildStatic(promptRequest),
             ai.CatalogService.BuildStaticSupplement(),
-            context.Policy.ChangePlan ? ChangeDeclarations.Instruction(ai.ChangeShape) : PlanToolDeclaration.Instruction);
+            context.Policy.TurnInstruction(this));
         var accountContext = string.Join(
             Environment.NewLine,
             ai.PromptBuilder.BuildAccountContext(promptRequest),
@@ -107,13 +107,12 @@ public partial class ProcessUserChatCommandHandler
                 + PendingPreviewModelContext.Instruction,
                 PendingPreviewModelContext.Serialize(pendingPreviews));
 
-        systemPrompt = AppendCardPromptInstructions(context.Policy.ChangePlan ? systemPrompt
-            : string.Join(Environment.NewLine, systemPrompt, TerminalWriteDirective.Instruction), request, context, toolNames);
+        systemPrompt = AppendCardPromptInstructions(context.Policy.WithTerminalDirective(systemPrompt), request, context, toolNames);
         if (request.ClientContext?.SupportsFollowUps == true && !ProactiveProposal.Enabled(request.ClientContext))
             dynamicContext = string.Join(Environment.NewLine, dynamicContext,
                 "Follow-ups are optional: emit zero, one or two grounded contextual questions. If useful, end with [[orbit:followups]] and one question per line, at most 60 characters each. Never suggest unavailable capabilities, invent facts or execute a write from a suggestion. Do not add other text after them.");
 
-        var toolDeclarations = TurnDeclarations(availableTools, request, context);
+        var toolDeclarations = context.Policy.TurnDeclarations(this, availableTools, request, context);
 
         if (turn.ChoiceSelection is { } selection)
             dynamicContext = string.Join(Environment.NewLine, dynamicContext, selection.ToModelContext());
@@ -150,29 +149,6 @@ public partial class ProcessUserChatCommandHandler
             },
             aiStreamSink,
             cancellationToken);
-    }
-
-    /// <summary>
-    /// The tool declarations of the turn, in name order. The old path declares each tool and <c>present_plan</c>; the
-    /// <c>ai_change_plan</c> path declares the change list in the shape of the setting.
-    /// </summary>
-    private List<object> TurnDeclarations(IReadOnlyList<Orbit.Application.Chat.Tools.IAiTool> availableTools,
-        ProcessUserChatCommand request, ChatContext context)
-    {
-        var toolDeclarations = context.Policy.ChangePlan
-            ? ChangeListDeclarations(availableTools, request.ClientContext, context, UsesComposition(request, context))
-            : availableTools
-            .OrderBy(tool => tool.Name, StringComparer.Ordinal)
-            .Select(tool => (object)new
-            {
-                name = tool.Name,
-                description = context.Policy.ToolDescription(tool),
-                parameters = context.Policy.ToolSchema(tool, request.ClientContext, UsesComposition(request, context))
-            })
-            .ToList();
-        if (toolDeclarations.Count > 0 && !context.Policy.ChangePlan)
-            toolDeclarations.Add(PlanToolDeclaration.Declaration);
-        return toolDeclarations.OrderBy(declaration => JsonSerializer.SerializeToElement(declaration).GetProperty("name").GetString(), StringComparer.Ordinal).ToList();
     }
 
     private static string AddSelectedOfferContext(string context, AiOfferFact? selected) => selected is null ? context

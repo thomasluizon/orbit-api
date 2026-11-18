@@ -68,7 +68,7 @@ public partial class ProcessUserChatCommandHandler
     /// The one correction that a round offers for its failed calls. The next round runs its candidates as the correction,
     /// and the correction then tells whether a failed call is left.
     /// </summary>
-    private interface ICallCorrection
+    internal interface ICallCorrection
     {
         bool HasUnresolvedFailures { get; }
     }
