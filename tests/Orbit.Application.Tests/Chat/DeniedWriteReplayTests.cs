@@ -266,10 +266,10 @@ public partial class ProcessUserChatCommandHandlerTests
         var parent = CreateHabit("Water");
         var children = Enumerable.Range(1, 6).Select(index => CreateHabit($"Water {index}")).ToArray();
         if (parentId is { } fixedParent)
-            WithId(parent, fixedParent);
+            WithFixedId(parent, fixedParent);
         foreach (var child in children) child.SetParentHabitId(parent.Id);
         for (var index = 0; index < (childIds?.Length ?? 0); index++)
-            WithId(children[index], childIds![index]);
+            WithFixedId(children[index], childIds![index]);
         SetupSelectionHabits([parent, .. children, .. foreign ?? []]);
         var delete = new BulkDeleteHabitsTool(_mediator, _habitRepo);
         var update = new BulkUpdateHabitsTool(_mediator);
@@ -301,19 +301,6 @@ public partial class ProcessUserChatCommandHandlerTests
     }
 
     private static readonly Guid UnknownHabitId = Guid.Parse("5d0c7a43-2f61-4b8e-9c3a-7e1f0b6d2a95");
-
-    /// <summary>
-    /// Water 1 and Water 6 share their first 12 hex digits. The Water 1 id cut short the run 4 way keeps 11 of them and
-    /// then names no next digit of either habit, so the chat boundary cannot select one and turns it down. The cut id
-    /// still holds the later groups of Water 1 only, so it is a copy of Water 1.
-    /// </summary>
-    private static readonly Guid CollidingWater1 = Guid.Parse("1b2c3d4e-5f60-4a1b-8c2d-3e4f5a6b7c8d");
-
-    private static readonly Guid CollidingWater6 = Guid.Parse("1b2c3d4e-5f60-4f9e-9d8c-7b6a5f4e3d2c");
-
-    private static Guid[] CollidingIds() => [CollidingWater1, .. Enumerable.Range(0, 4).Select(_ => Guid.NewGuid()), CollidingWater6];
-
-    private static void WithId(Habit habit, Guid id) => typeof(Entity).GetProperty(nameof(Entity.Id))!.SetValue(habit, id);
 
     /// <summary>A single rename whose id is a GUID of no record of the person.</summary>
     private static AiToolCall RenameOneUnknown(Habit[] children) => new("update_habit", "rename-one",

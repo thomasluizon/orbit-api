@@ -37,10 +37,19 @@ public static partial class ReferenceArguments
 
     /// <summary>
     /// ID arguments that name no listed record and pass unchanged: a calendar suggestion GUID, Google calendar ids, the
-    /// call id of a habit draft, and the ids that the model chooses for the questions, options and items of an ask card.
+    /// call id of a habit draft, and the question ids of an ask card. The option and item ids of an ask card are the
+    /// exception that <see cref="AskRecordType"/> names.
     /// </summary>
     public static IReadOnlySet<string> Unreferenced { get; } =
         new HashSet<string>(["suggestion_id", "calendar_ids", "draft_call_id", "id"], StringComparer.Ordinal);
+
+    /// <summary>
+    /// The record type of an <c>id</c> of an ask card. An option or item id that holds a reference is the habit that the
+    /// option or item stands for, so the ask guards and the issued card read its full GUID. A free id such as
+    /// <c>yes</c> is no reference and stays.
+    /// </summary>
+    public static ReferenceRecordType? AskRecordType(string name, string? container) =>
+        name == "id" && container is "options" or "items" ? ReferenceRecordType.Habit : null;
 
     /// <summary>The options that the provider adapter serializes a tool declaration with.</summary>
     private static readonly JsonSerializerOptions DeclarationOptions = new()

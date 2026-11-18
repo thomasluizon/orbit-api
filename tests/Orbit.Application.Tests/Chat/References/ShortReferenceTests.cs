@@ -217,4 +217,41 @@ public class ShortReferenceTests
         result.IsResolved.Should().BeTrue();
         result.Call.Should().BeSameAs(call, "nothing in the call names a listed record by reference");
     }
+
+    /// <summary>
+    /// The option and item ids of an ask card stand for the records that they name, so a reference among them resolves as
+    /// a habit and a reference that names no habit of the person is turned down. A free id and a question id stay.
+    /// </summary>
+    [Fact]
+    public async Task Normalizer_ResolvesTheRecordIdsOfAnAskCardAndKeepsItsFreeIds()
+    {
+        using var book = Book([]);
+        book.Seed(ReferenceRecordType.Habit, [Water, Reading]);
+        object Card(string guess) => new
+        {
+            input = new
+            {
+                form = "question",
+                missing_input = "record_selection",
+                questions = new[]
+                {
+                    new { id = "abcdef12", options = new[] { new { id = "dab2ad98" }, new { id = guess }, new { id = "yes" } } }
+                },
+                items = new[] { new { id = "4c1e7f20", arguments = "{}" } }
+            }
+        };
+
+        var resolved = await Normalizer(book).NormalizeAsync(Call("ask", Card("q1")), default);
+        var guessed = await Normalizer(book).NormalizeAsync(Call("ask", Card("deadbeef")), default);
+
+        resolved.IsResolved.Should().BeTrue(resolved.IsResolved ? null : resolved.Error());
+        var input = resolved.Call.Args.GetProperty("input");
+        var question = input.GetProperty("questions")[0];
+        question.GetProperty("id").GetString().Should().Be("abcdef12", "a question id names no record");
+        question.GetProperty("options").EnumerateArray().Select(option => option.GetProperty("id").GetString())
+            .Should().Equal(Water.Id.ToString(), "q1", "yes");
+        input.GetProperty("items")[0].GetProperty("id").GetString().Should().Be(Reading.Id.ToString());
+        guessed.IsResolved.Should().BeFalse("a guessed reference names no habit of the person");
+        guessed.Error().Should().StartWith("unknown_reference: id \"deadbeef\" names no habit of this person.");
+    }
 }

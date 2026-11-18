@@ -7,6 +7,7 @@ using Orbit.Application.Chat.Commands;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Application.Common;
+using Orbit.Application.Tests.Common;
 using Orbit.Domain.Enums;
 using Orbit.Application.Chat.References;
 using Orbit.Domain.Common;
@@ -74,6 +75,17 @@ public partial class ProcessUserChatCommandHandlerTests
         typeof(Entity).GetProperty(nameof(Entity.Id))!.SetValue(habit, id);
         return habit;
     }
+
+    /// <summary>
+    /// Water 1 and Water 6 share their first 12 hex digits. The Water 1 id cut short the run 4 way keeps 11 of them and
+    /// then names no next digit of either habit, so the chat boundary cannot select one and turns it down. The cut id
+    /// still holds the later groups of Water 1 only, so it is a copy of Water 1.
+    /// </summary>
+    private static readonly Guid CollidingWater1 = Guid.Parse("1b2c3d4e-5f60-4a1b-8c2d-3e4f5a6b7c8d");
+
+    private static readonly Guid CollidingWater6 = Guid.Parse("1b2c3d4e-5f60-4f9e-9d8c-7b6a5f4e3d2c");
+
+    private static Guid[] CollidingIds() => [CollidingWater1, .. Enumerable.Range(0, 4).Select(_ => Guid.NewGuid()), CollidingWater6];
 
     /// <summary>
     /// A revision names its preview, its item and a field of <c>edits_json</c> by reference. The revision reaches the
@@ -459,6 +471,82 @@ public partial class ProcessUserChatCommandHandlerTests
         results.Should().HaveCount(2);
         ModelText(results[0]).Should().Contain($"\"{Reference(skipId)}\"").And.NotContain(skipId.ToString());
         results[1].Should().ContainSingle(item => item.Id == "undo").Which.Success.Should().BeTrue();
+    }
+
+    /// <summary>
+    /// A record selection over two same-titled groups names each habit by the reference that the model reads, so the
+    /// server cannot complete the card from one group. The issued card holds the full id of each habit. The answer in the
+    /// next turn settles the chosen habit, and its delete reaches a preview with no second ask.
+    /// </summary>
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task ShortReference_RecordSelectionOptionsNameTheirHabitsSoTheAnswerSettlesTheChosenOne(string language)
+    {
+        var portuguese = language == "pt-BR";
+        var user = User.Create("Reader", "reader@example.test").Value;
+        user.SetLanguage(language);
+        SetupUserAndPayGate(user);
+        _shortReferences = true;
+        EnableComposition();
+        _unitOfWork.PassThroughTransactions<Result<PreparedAiBlockAnswer>>();
+        var (walk, water) = portuguese ? ("Caminhada", "Água") : ("Walk", "Water");
+        Habit[] habits = [CreateHabit(walk), CreateHabit(walk), CreateHabit(water), CreateHabit(water)];
+        SetupSelectionHabits(habits);
+        var query = new QueryHabitsTool(_habitRepo, _userRepo, _userDateService, _scheduleLogReader);
+        var delete = new DeleteHabitTool(_mediator, _habitRepo);
+        var (askHandler, answerHandler) = (CreateHandler(query, delete, RealAskTool()), CreateHandler(query, delete, RealAskTool()));
+        var held = HoldSelectionReplayWrites(query, delete);
+        var issued = new List<IssuedAiBlock>();
+        _blockStore.AddAsync(Arg.Do<IssuedAiBlock>(issued.Add), Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
+        SetupAiResponse(new AiResponse
+        {
+            ConversationContext = TestConversationContext,
+            ToolCalls = [new(query.Name, "lookup", JsonSerializer.SerializeToElement(new { orbit_read_complete = false }))]
+        });
+        _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(),
+                Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(ToolResponse("ask", "ask", JsonSerializer.Serialize(new
+            {
+                input = new
+                {
+                    missing_input = "record_selection",
+                    form = "choice",
+                    multiSelect = false,
+                    question = portuguese ? "Qual hábito devo excluir?" : "Which habit should I delete?",
+                    options = habits.Select((habit, index) => new { id = Reference(habit.Id), label = $"{habit.Title} {index + 1}" }).ToArray()
+                }
+            }))), Result.Success(new AiResponse { TextMessage = portuguese ? "Qual?" : "Which one?" }));
+
+        var asked = await askHandler.Handle(new ProcessUserChatCommand(UserId,
+            portuguese ? "Exclui um dos meus hábitos repetidos" : "Delete one of my repeated habits",
+            ClientContext: new(SupportsParts: true, SupportsPendingOperationChanges: true, PartKinds: ["choice"])), default);
+
+        asked.IsSuccess.Should().BeTrue(asked.Error);
+        var card = issued.Should().ContainSingle("the card reached the person").Subject.ReadDefinition();
+        card.Options.Select(option => option.Id).Should().Equal(habits.Select(habit => habit.Id.ToString()),
+            "the issued card names each habit by its full id");
+
+        issued.Clear();
+        var answered = StoreAnsweredBlock(card);
+        AiToolRequest? sent = null;
+        _aiIntentService.SendWithToolsAsync(Arg.Do<AiToolRequest>(value => sent = value),
+                Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(ToolResponse(delete.Name, "delete",
+                JsonSerializer.Serialize(new { habit_id = Reference(habits[0].Id), orbit_write_complete = true }))));
+        ReplyToReplay(portuguese ? "Revise a exclusão." : "Review the delete.");
+
+        var result = await answerHandler.Handle(new(UserId, "Answer", BlockAnswer: new(answered.Id, [card.Options[0].Id]),
+            ClientContext: new(SupportsParts: true, SupportsPendingOperationChanges: true, PartKinds: ["choice"])), default);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        sent!.DynamicContext.Should().Contain("Validated choice selection: ")
+            .And.Contain($"\"chosenTargets\":[\"{Reference(habits[0].Id)}\"]");
+        held.Should().ContainSingle(request => request.OperationId == delete.Name)
+            .Which.Arguments.GetProperty("habit_id").GetGuid().Should().Be(habits[0].Id);
+        issued.Should().BeEmpty("the answer settles the chosen habit, so the server asks no second time");
+        result.Value.PendingOperations!.SelectMany(operation => operation.Items!).Select(item => item.EntityId)
+            .Should().Equal([habits[0].Id]);
     }
 
     private static IAiTool WriteTool(string name, Func<ToolResult> execute)

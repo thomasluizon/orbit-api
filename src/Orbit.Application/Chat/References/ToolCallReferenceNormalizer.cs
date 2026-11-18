@@ -61,25 +61,36 @@ public sealed partial class ToolCallReferenceNormalizer(ReferenceBook book,
         return new NormalizedToolCall(changed ? call with { Args = JsonSerializer.SerializeToElement(root) } : call, []);
     }
 
-    private async Task<bool> WalkAsync(JsonNode? node, bool ask, List<ReferenceFailure> failures, CancellationToken ct)
+    /// <summary>
+    /// Resolves each typed ID argument under the node. <paramref name="container"/> is the name of the argument that
+    /// holds the node, so the option and item ids of an ask card resolve as habits and its question ids stay.
+    /// </summary>
+    private async Task<bool> WalkAsync(JsonNode? node, bool ask, List<ReferenceFailure> failures, CancellationToken ct,
+        string? container = null)
     {
         var changed = false;
         if (node is JsonArray array)
         {
             foreach (var item in array.ToArray())
-                changed |= await WalkAsync(item, ask, failures, ct);
+                changed |= await WalkAsync(item, ask, failures, ct, container);
             return changed;
         }
         if (node is not JsonObject fields)
             return false;
         foreach (var (name, value) in fields.ToArray())
         {
+            if ((ask ? ReferenceArguments.AskRecordType(name, container) : null) is { } askType)
+            {
+                changed |= await ResolveValuesAsync(fields, name, askType, value, failures,
+                    async text => ReferenceCodes.IsReference(text) ? Outcome(await book.ResolveAsync(askType, text, ct)) : (text, []));
+                continue;
+            }
             if (ReferenceArguments.Unreferenced.Contains(name))
                 continue;
             if (ReferenceArguments.Typed.TryGetValue(name, out var type))
             {
                 if (type != ReferenceRecordType.PreviewItem)
-                    changed |= await ResolveValuesAsync(fields, name, value, failures,
+                    changed |= await ResolveValuesAsync(fields, name, type, value, failures,
                         async text => ReferenceCodes.IsReference(text) ? Outcome(await book.ResolveAsync(type, text, ct)) : (text, []));
                 continue;
             }
@@ -89,7 +100,7 @@ public sealed partial class ToolCallReferenceNormalizer(ReferenceBook book,
                 changed |= await ResolveJsonStringAsync(fields, name, text, ask, failures, ct);
                 continue;
             }
-            changed |= await WalkAsync(value, ask, failures, ct);
+            changed |= await WalkAsync(value, ask, failures, ct, name);
         }
         return changed;
     }
@@ -116,10 +127,9 @@ public sealed partial class ToolCallReferenceNormalizer(ReferenceBook book,
             : (null, resolution.Closest.Select(candidate => new ReferenceCandidate(candidate.Id.ToString(), candidate.Title)).ToArray());
 
     /// <summary>Resolves one string or each string of an array. A null, an empty string or a value of another kind stays.</summary>
-    private static async Task<bool> ResolveValuesAsync(JsonObject owner, string name, JsonNode? value, List<ReferenceFailure> failures,
-        Func<string, Task<(string? Value, IReadOnlyList<ReferenceCandidate> Closest)>> resolve)
+    private static async Task<bool> ResolveValuesAsync(JsonObject owner, string name, ReferenceRecordType type, JsonNode? value,
+        List<ReferenceFailure> failures, Func<string, Task<(string? Value, IReadOnlyList<ReferenceCandidate> Closest)>> resolve)
     {
-        var type = ReferenceArguments.Typed[name];
         if (value is JsonValue single && single.TryGetValue<string>(out var text))
         {
             if (await ResolveOneAsync(text) is not { } resolved || resolved == text)
@@ -181,7 +191,7 @@ public sealed partial class ToolCallReferenceNormalizer(ReferenceBook book,
                 {
                     items ??= await previewItems(pendingOperationId, ct);
                     if (items.Count > 0)
-                        changed |= await ResolveValuesAsync(fields, name, value, failures,
+                        changed |= await ResolveValuesAsync(fields, name, ReferenceRecordType.PreviewItem, value, failures,
                             text => Task.FromResult(ResolveItem(text, items)));
                 }
                 else if (name != ReferenceArguments.EditsJson)
