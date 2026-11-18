@@ -11,7 +11,7 @@ using Orbit.Infrastructure.Persistence;
 namespace Orbit.Infrastructure.Services;
 
 public class FeatureFlagManagementService(
-    OrbitDbContext dbContext, IFeatureFlagService resolver, ILogger<FeatureFlagManagementService> logger)
+    OrbitDbContext dbContext, IFeatureFlagService resolver, IUnitOfWork unitOfWork, ILogger<FeatureFlagManagementService> logger)
     : IFeatureFlagManagementService
 {
     public async Task<Result<IReadOnlyList<AdminFeatureFlag>>> ListAsync(Guid adminId, CancellationToken cancellationToken)
@@ -79,7 +79,7 @@ public class FeatureFlagManagementService(
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
-        resolver.Invalidate();
+        unitOfWork.AfterCommit(resolver.Invalidate);
         logger.LogInformation("Admin {AdminId} performed {Action} on feature flag {FlagKey} for accounts {Accounts}",
             request.AdminId, request.Action, request.Key, request.Action is FeatureFlagActions.EnableForEveryone or FeatureFlagActions.DisableForEveryone
                 ? "everyone" : string.Join(", ", accounts.Select(account => account.Email)));

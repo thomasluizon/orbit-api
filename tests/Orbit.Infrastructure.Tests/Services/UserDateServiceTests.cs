@@ -137,6 +137,26 @@ public class UserDateServiceTests
     }
 
     [Fact]
+    public async Task InvalidateUserDatePreferencesAsync_InsideAnOpenTransaction_RemovesTheEntryAfterTheCommit()
+    {
+        var user = User.Create("Test", "test@test.com").Value;
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        await _sut.GetUserWeekStartDayAsync(UserId);
+        var work = Substitute.For<IUnitOfWork>();
+        work.HasActiveTransaction.Returns(true);
+        Action? afterCommit = null;
+        work.AfterCommit(Arg.Do<Action>(callback => afterCommit = callback));
+        var inTransaction = new UserDateService(_userRepo, _cache, TimeProvider.System, work);
+
+        await inTransaction.InvalidateUserDatePreferencesAsync(UserId);
+
+        (await _cache.GetStringAsync($"user-tz:{UserId}")).Should().NotBeNull("a rollback of the transaction must remove nothing");
+        afterCommit.Should().NotBeNull();
+        afterCommit!();
+        (await _cache.GetStringAsync($"user-tz:{UserId}")).Should().BeNull();
+    }
+
+    [Fact]
     public async Task GetUserWeekStartDayAsync_SecondInstanceSharingCache_ReadsCachedValueWithoutRepository()
     {
         var user = User.Create("Test", "test@test.com").Value;

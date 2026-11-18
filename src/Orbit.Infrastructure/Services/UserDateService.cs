@@ -80,6 +80,15 @@ public class UserDateService(
         return preferences;
     }
 
-    public Task InvalidateUserDatePreferencesAsync(Guid userId, CancellationToken cancellationToken = default) =>
-        cache.RemoveAsync(CacheKey(userId), cancellationToken);
+    /// <summary>
+    /// Inside an open transaction the entry leaves after the commit. The key holds no cache version, so a removal
+    /// before the commit lets another request store the old value again, and a rollback must remove nothing.
+    /// </summary>
+    public Task InvalidateUserDatePreferencesAsync(Guid userId, CancellationToken cancellationToken = default)
+    {
+        if (!unitOfWork.HasActiveTransaction)
+            return cache.RemoveAsync(CacheKey(userId), cancellationToken);
+        unitOfWork.AfterCommit(() => cache.Remove(CacheKey(userId)));
+        return Task.CompletedTask;
+    }
 }

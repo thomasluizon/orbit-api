@@ -5,6 +5,7 @@ using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using Orbit.Application.Common;
 using Orbit.Application.Notifications.Commands;
+using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
@@ -516,6 +517,36 @@ public class SubscribePushCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Handle_InsideAnOpenTransaction_SavesTheNewRegistrationInASavepoint()
+    {
+        ArrangeNoExistingEndpoint();
+        ArrangeUserSubscriptions();
+        _unitOfWork.HasActiveTransaction.Returns(true);
+        _unitOfWork.ExecuteInSavepointAsync(Arg.Any<Func<CancellationToken, Task<Result>>>(), Arg.Any<CancellationToken>())
+            .Returns<Task<Result>>(_ => throw new DbUpdateException("duplicate", new FakeUniqueViolationException()));
+
+        var result = await _handler.Handle(
+            new SubscribePushCommand(UserId, "https://fcm.googleapis.com/endpoint", "p256dh", "auth"), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue("the savepoint rollback removes the refused registration from the change tracker");
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_WithNoOpenTransaction_SavesTheNewRegistrationWithNoSavepoint()
+    {
+        ArrangeNoExistingEndpoint();
+        ArrangeUserSubscriptions();
+
+        var result = await _handler.Handle(
+            new SubscribePushCommand(UserId, "https://fcm.googleapis.com/endpoint", "p256dh", "auth"), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _unitOfWork.DidNotReceiveWithAnyArgs().ExecuteInSavepointAsync<Result>(default!, default);
     }
 
     [Fact]
