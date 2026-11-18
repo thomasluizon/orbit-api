@@ -215,7 +215,6 @@ public sealed partial class AiProactiveCheckinMessageService(
             {
                 var title = facts.HabitTitles[index];
                 referencedHabits.Add(title);
-                if (!match.Groups["phrase"].Success) return title;
                 var phrase = match.Groups["phrase"].Value.Trim();
                 if (phrase.Length > 0)
                 {
@@ -368,7 +367,7 @@ public sealed partial class AiProactiveCheckinMessageService(
     private static partial Regex Numbers();
     [GeneratedRegex(@"[.!?](?:\s|$)")]
     private static partial Regex SentenceEnds();
-    [GeneratedRegex(@"\{\{(?:habit:(?<index>0|[1-9]\d*)(?:\|(?<phrase>[^{}|\r\n]{1,60}))?|(?<goal>goal))\}\}", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    [GeneratedRegex(@"\{\{(?:habit:(?<index>0|[1-9]\d*)\|(?<phrase>[^{}|\r\n]{1,60})|(?<goal>goal))\}\}", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
     private static partial Regex TitlePlaceholders();
     [GeneratedRegex(@"\p{L}[\p{L}\p{M}]*", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
     private static partial Regex Words();

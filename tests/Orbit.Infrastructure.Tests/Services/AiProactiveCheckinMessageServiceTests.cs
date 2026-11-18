@@ -82,7 +82,7 @@ public sealed class AiProactiveCheckinMessageServiceTests(ITestOutputHelper outp
     }
 
     [Theory]
-    [InlineData("en", "{{habit:0}} is still open today.", "Read is still open today.")]
+    [InlineData("en", "{{habit:0|Read}} is still open today.", "Read is still open today.")]
     [InlineData("pt-BR", "Você tem 2 hábitos pendentes hoje.", "Você tem 2 hábitos pendentes hoje.")]
     public async Task GroundedSentence_UsesModelWithLowReasoning(string locale, string sentence, string expected)
     {
@@ -106,20 +106,20 @@ public sealed class AiProactiveCheckinMessageServiceTests(ITestOutputHelper outp
     }
 
     [Fact]
-    public async Task GroundedMarkdownSentence_ReturnsPlainTextAndPreservesHabitName()
+    public async Task GroundedMarkdownSentence_ReturnsPlainText()
     {
         var facts = Facts(ProactiveTrigger.EveningCheckin) with { HabitTitles = ["Read *daily*"] };
-        const string text = "**{{habit:0}}** is __still open__ today.";
+        const string text = "**{{habit:0|your reading}}** is __still open__ today.";
         var result = await Service(text, line: Line(text, facts)).GenerateAsync(facts, "en", [], default);
 
-        result.Text.Should().Be("Read *daily* is still open today.");
+        result.Text.Should().Be("your reading is still open today.");
     }
 
     [Theory]
-    [InlineData("en", "Between {{habit:0}} and {{habit:1}}, choose your quiet finish without filling every gap.",
+    [InlineData("en", "Between {{habit:0|Read}} and {{habit:1|Walk}}, choose your quiet finish without filling every gap.",
         "Between Read and Walk, choose your quiet finish without filling every gap.")]
-    [InlineData("pt-BR", "Entre {{habit:0}} e {{habit:1}}, escolha o que cabe nesta noite.",
-        "Entre Leitura e Caminhada, escolha o que cabe nesta noite.")]
+    [InlineData("pt-BR", "Entre {{habit:0|a leitura}} e {{habit:1|a caminhada}}, escolha o que cabe nesta noite.",
+        "Entre a leitura e a caminhada, escolha o que cabe nesta noite.")]
     public async Task NaturalSentence_WithOrdinaryWords_UsesModel(string locale, string sentence, string expected)
     {
         var facts = Facts(ProactiveTrigger.EveningCheckin) with
@@ -134,13 +134,13 @@ public sealed class AiProactiveCheckinMessageServiceTests(ITestOutputHelper outp
     [Theory]
     [InlineData("pt-BR", "Choose your habit today", "Para esta noite, escolha o que combina com você: {{habit:0}}.")]
     [InlineData("en", "Escolha seu hábito hoje", "Choose what fits tonight: {{habit:0}}.")]
-    public async Task CorrectLanguageModelSentence_PreservesForeignHabitTitle(string locale, string title, string text)
+    public async Task ForeignHabitTitleInsideALine_IsRefusedWhenTheModelDoesNotSayItInThePhrase(string locale, string title, string text)
     {
         var facts = new ProactiveFacts(ProactiveTrigger.EveningCheckin, [title], HabitCount: 1);
 
         var result = await Service(text, line: Line(text, facts)).GenerateAsync(facts, locale, facts.HabitTitles, default);
 
-        result.Text.Should().Be(text.Replace("{{habit:0}}", title, StringComparison.Ordinal));
+        result.Should().Be(AiProactiveCheckinMessageService.Template(facts, locale));
     }
 
     [Theory]
@@ -156,9 +156,9 @@ public sealed class AiProactiveCheckinMessageServiceTests(ITestOutputHelper outp
     }
 
     [Theory]
-    [InlineData("en", "You can restart today with {{habit:0}}; yesterday had no positive logs, so no make-up is needed.")]
-    [InlineData("en", "Yesterday had no positive logs, so restart today with {{habit:0}}; the other 4 can wait.")]
-    [InlineData("pt-BR", "Como ontem ficou sem registros, hoje você pode recomeçar por {{habit:0}}.")]
+    [InlineData("en", "You can restart today with {{habit:0|your walk}}; yesterday had no positive logs, so no make-up is needed.")]
+    [InlineData("en", "Yesterday had no positive logs, so restart today with {{habit:0|your walk}}; the other 4 can wait.")]
+    [InlineData("pt-BR", "Como ontem ficou sem registros, hoje você pode recomeçar por {{habit:0|sua caminhada}}.")]
     public async Task InternalDataWordingReplay_UsesLocalizedTemplate(string locale, string text)
     {
         var facts = Facts(ProactiveTrigger.RestartAfterMiss) with { HabitTitles = ["Morning walk"], HabitCount = 5 };
@@ -184,8 +184,8 @@ public sealed class AiProactiveCheckinMessageServiceTests(ITestOutputHelper outp
     {
         var facts = Facts(ProactiveTrigger.RestartAfterMiss) with { HabitTitles = ["Morning walk"], HabitCount = 5 };
         var text = locale == "en"
-            ? "For today, start with {{habit:0}} (" + word + ")."
-            : "Para hoje, comece por {{habit:0}} (" + word + ").";
+            ? "For today, start with {{habit:0|your walk}} (" + word + ")."
+            : "Para hoje, comece por {{habit:0|sua caminhada}} (" + word + ").";
 
         var result = await Service(text, line: Line(text, facts)).GenerateAsync(facts, locale, facts.HabitTitles, default);
 
@@ -199,8 +199,9 @@ public sealed class AiProactiveCheckinMessageServiceTests(ITestOutputHelper outp
     public async Task InternalDataWordInHabitTitle_PreservesModelSentence(string locale, string title, string text)
     {
         var facts = Facts(ProactiveTrigger.RestartAfterMiss) with { HabitTitles = [title], HabitCount = 1 };
+        var line = text.Replace("{{habit:0}}", "{{habit:0|" + title + "}}", StringComparison.Ordinal);
 
-        var result = await Service(text, line: Line(text, facts)).GenerateAsync(facts, locale, facts.HabitTitles, default);
+        var result = await Service(line, line: Line(line, facts)).GenerateAsync(facts, locale, facts.HabitTitles, default);
 
         result.Text.Should().Be(text.Replace("{{habit:0}}", title, StringComparison.Ordinal));
     }
@@ -316,8 +317,8 @@ public sealed class AiProactiveCheckinMessageServiceTests(ITestOutputHelper outp
     public async Task MissingTitleDeclarations_UsesWholeTemplate()
     {
         var facts = Facts(ProactiveTrigger.EveningCheckin);
-        var result = await Service("{{habit:0}} fits tonight.",
-            line: new("{{habit:0}} fits tonight.", null, null)).GenerateAsync(facts, "en", [], default);
+        var result = await Service("{{habit:0|Read}} fits tonight.",
+            line: new("{{habit:0|Read}} fits tonight.", null, null)).GenerateAsync(facts, "en", [], default);
 
         result.Should().Be(AiProactiveCheckinMessageService.Template(facts, "en"));
     }
@@ -337,9 +338,9 @@ public sealed class AiProactiveCheckinMessageServiceTests(ITestOutputHelper outp
     }
 
     [Theory]
-    [InlineData("{{habit:0}} and Swim are still open today.")]
+    [InlineData("{{habit:0|Read}} and Swim are still open today.")]
     [InlineData("Your goal Marathon needs attention today.")]
-    [InlineData("{{habit:0}} e Natação cabem nesta noite.")]
+    [InlineData("{{habit:0|Read}} e Natação cabem nesta noite.")]
     public async Task UnknownProperName_UsesWholeTemplate(string text)
     {
         var facts = Facts(ProactiveTrigger.EveningCheckin);
@@ -350,10 +351,10 @@ public sealed class AiProactiveCheckinMessageServiceTests(ITestOutputHelper outp
     }
 
     [Theory]
-    [InlineData("{{habit:0}} and swim can fit tonight.", "Swim")]
+    [InlineData("{{habit:0|Read}} and swim can fit tonight.", "Swim")]
     [InlineData("Your goal marathon needs attention today.", "Marathon")]
-    [InlineData("{{habit:0}} e natação cabem nesta noite.", "Natação")]
-    [InlineData("{{habit:0}} and SWIM can fit tonight.", "swim")]
+    [InlineData("{{habit:0|Read}} e natação cabem nesta noite.", "Natação")]
+    [InlineData("{{habit:0|Read}} and SWIM can fit tonight.", "swim")]
     public async Task AccountTitleOutsideFacts_UsesWholeTemplate(string text, string accountTitle)
     {
         var facts = Facts(ProactiveTrigger.EveningCheckin);
@@ -367,7 +368,7 @@ public sealed class AiProactiveCheckinMessageServiceTests(ITestOutputHelper outp
     public async Task AccountTitleInsideLargerWord_DoesNotRejectNaturalProse()
     {
         var facts = Facts(ProactiveTrigger.EveningCheckin);
-        const string text = "{{habit:0}} can be your unhurried finish this evening.";
+        const string text = "{{habit:0|Read}} can be your unhurried finish this evening.";
 
         var result = await Service(text).GenerateAsync(facts, "en", ["Read", "Hurry", "Even"], default);
 
@@ -375,15 +376,17 @@ public sealed class AiProactiveCheckinMessageServiceTests(ITestOutputHelper outp
     }
 
     [Theory]
-    [InlineData("{{habit:1}} fits tonight.")]
-    [InlineData("{{habit:-1}} fits tonight.")]
-    [InlineData("{{habit:01}} fits tonight.")]
-    [InlineData("{{habit:99999999999999999999}} fits tonight.")]
-    [InlineData("{{habit:x}} fits tonight.")]
+    [InlineData("{{habit:1|Read}} fits tonight.")]
+    [InlineData("{{habit:-1|Read}} fits tonight.")]
+    [InlineData("{{habit:01|Read}} fits tonight.")]
+    [InlineData("{{habit:99999999999999999999|Read}} fits tonight.")]
+    [InlineData("{{habit:x|Read}} fits tonight.")]
     [InlineData("{{goal}} fits tonight.")]
     [InlineData("{{goal:0}} fits tonight.")]
     [InlineData("{{other}} fits tonight.")]
-    [InlineData("{{habit:0} fits tonight.")]
+    [InlineData("{{habit:0|Read} fits tonight.")]
+    [InlineData("{{habit:0}} fits tonight.")]
+    [InlineData("{{habit:0|}} fits tonight.")]
     public async Task InvalidPlaceholder_UsesWholeTemplate(string text)
     {
         var facts = Facts(ProactiveTrigger.EveningCheckin);
@@ -397,7 +400,7 @@ public sealed class AiProactiveCheckinMessageServiceTests(ITestOutputHelper outp
     [InlineData("read fits tonight.")]
     [InlineData("Start with READ tonight.")]
     [InlineData("Read fits tonight.")]
-    [InlineData("{{habit:0}} and read fit tonight.")]
+    [InlineData("{{habit:0|Read}} and read fit tonight.")]
     public async Task RawSuppliedTitle_UsesWholeTemplate(string text)
     {
         var facts = Facts(ProactiveTrigger.EveningCheckin);
@@ -441,7 +444,7 @@ public sealed class AiProactiveCheckinMessageServiceTests(ITestOutputHelper outp
         var facts = Facts(ProactiveTrigger.EveningCheckin);
         var format = CultureInfo.GetCultureInfo("en").DateTimeFormat;
         var name = month ? format.GetMonthName(10) : format.GetDayName(DayOfWeek.Monday);
-        var text = "For {{habit:0}}, I can help you choose a " + name + " starting point.";
+        var text = "For {{habit:0|Read}}, I can help you choose a " + name + " starting point.";
 
         var result = await Service(text).GenerateAsync(facts, "en", ["Read"], default);
 
@@ -449,26 +452,29 @@ public sealed class AiProactiveCheckinMessageServiceTests(ITestOutputHelper outp
     }
 
     [Theory]
-    [InlineData("Ask Orbit to help you fit {{habit:0}} into your evening.")]
-    [InlineData("Open Orbit to choose where {{habit:0}} fits tonight.")]
+    [InlineData("Ask Orbit to help you fit {{habit:0|Read}} into your evening.")]
+    [InlineData("Open Orbit to choose where {{habit:0|Read}} fits tonight.")]
     public async Task AllowedBrandName_UsesModel(string text)
     {
         var facts = Facts(ProactiveTrigger.EveningCheckin);
 
         var result = await Service(text).GenerateAsync(facts, "en", ["Read"], default);
 
-        result.Text.Should().Be(text.Replace("{{habit:0}}", "Read", StringComparison.Ordinal));
+        result.Text.Should().Be(text.Replace("{{habit:0|Read}}", "Read", StringComparison.Ordinal));
     }
 
-    [Fact]
-    public async Task LengthLimit_AppliesAfterSubstitution()
+    [Theory]
+    [InlineData(65, true)]
+    [InlineData(66, false)]
+    public async Task LengthLimit_AppliesAfterSubstitution(int leadLength, bool expectModelLine)
     {
-        var facts = Facts(ProactiveTrigger.EveningCheckin) with { HabitTitles = [new string('a', 140)] };
-        const string text = "{{habit:0}} fits tonight.";
+        var facts = Facts(ProactiveTrigger.EveningCheckin);
+        var text = new string('a', leadLength) + " {{habit:0|" + new string('b', 60) + "}} fits tonight.";
 
         var result = await Service(text, line: Line(text, facts)).GenerateAsync(facts, "en", facts.HabitTitles, default);
 
-        result.Should().Be(AiProactiveCheckinMessageService.Template(facts, "en"));
+        if (expectModelLine) result.Text.Should().HaveLength(ProactiveRules.MaxTextLength);
+        else result.Should().Be(AiProactiveCheckinMessageService.Template(facts, "en"));
     }
 
     [Theory]
@@ -500,17 +506,17 @@ public sealed class AiProactiveCheckinMessageServiceTests(ITestOutputHelper outp
     public async Task LiteralTitleNumbersAndPunctuation_DoNotGroundUnrelatedFigures()
     {
         var facts = Facts(ProactiveTrigger.EveningCheckin) with { HabitTitles = ["Read 99 pages. Plan"], HabitCount = 1 };
-        const string valid = "{{habit:0}} can be your quiet finish tonight.";
+        const string valid = "{{habit:0|reading}} can be your quiet finish tonight.";
         (await Service(valid, line: Line(valid, facts)).GenerateAsync(facts, "en", [], default)).Text.Should()
-            .Be("Read 99 pages. Plan can be your quiet finish tonight.");
-        const string invented = "{{habit:0}} and 99 more habits are still open.";
+            .Be("reading can be your quiet finish tonight.");
+        const string invented = "{{habit:0|reading}} and 99 more habits are still open.";
         (await Service(invented, line: Line(invented, facts)).GenerateAsync(facts, "en", [], default)).Should()
             .Be(AiProactiveCheckinMessageService.Template(facts, "en"));
     }
 
     [Theory]
-    [InlineData("en", "{{habit:0}} can fit your day.", "Psyllium 5g can fit your day.")]
-    [InlineData("pt-BR", "{{habit:0}} pode caber no seu dia.", "Psyllium 5g pode caber no seu dia.")]
+    [InlineData("en", "{{habit:0|Psyllium 5g}} can fit your day.", "Psyllium 5g can fit your day.")]
+    [InlineData("pt-BR", "{{habit:0|Psyllium 5g}} pode caber no seu dia.", "Psyllium 5g pode caber no seu dia.")]
     public async Task StoredTitleDigits_AreNotInventedFigures(string language, string text, string expected)
     {
         var facts = Facts(ProactiveTrigger.EveningCheckin) with { HabitTitles = ["Psyllium 5g"], HabitCount = 1 };
@@ -534,6 +540,20 @@ public sealed class AiProactiveCheckinMessageServiceTests(ITestOutputHelper outp
 
         result.Text.Should().Be("Para começar a manhã, comece com seu litro de água e depois alterar o email do Twitter.");
         result.Text.Should().NotContain("Water").And.NotContain("Change");
+    }
+
+    [Theory]
+    [InlineData("pt-BR", "Para começar a manhã, comece com {{habit:0}} e depois {{habit:1}}.")]
+    [InlineData("pt-BR", "Para começar a manhã, comece com {{habit:0|seu litro de água}} e depois {{habit:1}}.")]
+    [InlineData("en", "To start the morning, begin with {{habit:0}} and then {{habit:1}}.")]
+    public async Task BarePlaceholder_UsesTheFallbackBecauseItWouldRenderTheRawTitle(string locale, string text)
+    {
+        var facts = OwnerMorning();
+
+        var result = await Service(text, line: Line(text, facts))
+            .GenerateAsync(facts, locale, [OwnerWater, OwnerEmail], default);
+
+        result.Should().Be(AiProactiveCheckinMessageService.Template(facts, locale));
     }
 
     [Theory]
