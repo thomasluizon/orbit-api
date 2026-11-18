@@ -1,0 +1,13 @@
+[
+  { "library": "{library}", "endpoint": "{library}", "accepted": true },
+  { "library": "{library}", "endpoint": "2099-12-31.{release}", "accepted": true },
+  { "library": "{library}", "endpoint": "{date}.{release}.preview", "accepted": true },
+  { "library": "{library}", "endpoint": "{date}", "accepted": false },
+  { "library": "{library}", "endpoint": "{release}", "accepted": false },
+  { "library": "{library}", "endpoint": "2026-02-25.clover", "accepted": false },
+  { "library": "{library}", "endpoint": "2099-12-31.not-a-release", "accepted": false },
+  { "library": "{library}", "endpoint": "account-default", "accepted": false },
+  { "library": "2026-08-26.preview", "endpoint": "2026-08-26.preview", "accepted": true },
+  { "library": "2026-08-26.preview", "endpoint": "2026-09-30.preview", "accepted": false },
+  { "library": "2026-08-26.preview", "endpoint": "2026-08-26.dahlia", "accepted": false }
+]
