@@ -27,8 +27,23 @@ public interface IAccountEventBus
     void CloseAccount(Guid userId);
 }
 
+/// <summary>
+/// The collected account event state at a savepoint. Only the collector that made it can restore it.
+/// </summary>
+public abstract record AccountEventCheckpoint;
+
 public interface IAccountEventCollector
 {
     void MarkResync(Guid userId);
     void Clear();
+
+    /// <summary>
+    /// Captures the pending events, the resync, revoked-session, deleted-user and auth-user sets, and the origin.
+    /// </summary>
+    AccountEventCheckpoint Checkpoint();
+
+    /// <summary>
+    /// Returns the collector to <paramref name="checkpoint"/> after a savepoint rollback, with no staged save.
+    /// </summary>
+    void Restore(AccountEventCheckpoint checkpoint);
 }
