@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using FluentAssertions;
@@ -277,7 +278,7 @@ public class StripeWebhookVersionHealthCheckTests
     }
 
     private static async IAsyncEnumerable<WebhookEndpoint> ListAfter(
-        Task stripeReplies, CancellationToken cancellationToken, params WebhookEndpoint[] endpoints)
+        Task stripeReplies, [EnumeratorCancellation] CancellationToken cancellationToken, params WebhookEndpoint[] endpoints)
     {
         await stripeReplies.WaitAsync(cancellationToken);
         foreach (var endpoint in endpoints)

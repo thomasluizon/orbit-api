@@ -74,18 +74,36 @@ export async function verify(libraryUrl, endpointUrl, sha, fetchImpl = fetch) {
   return { message: `${endpointUrl} has a webhook endpoint that Stripe.net ${libraryVersion} accepts: [${versions.join(', ')}]` }
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const [libraryUrl, endpointUrl] = process.argv.slice(2)
-  const sha = process.env.COMMIT_SHA
+const controlCharacters = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/g
+
+/**
+ * Writes each control character as its `\uXXXX` escape. A health response supplies versions, commits and body text,
+ * and a raw line break in one of them would start a second log line or a forged `::error::` workflow command.
+ */
+export function printable(text) {
+  return String(text).replace(controlCharacters, character => `\\u${character.charCodeAt(0).toString(16).padStart(4, '0')}`)
+}
+
+/** The one log line of a run, as a GitHub workflow command when it is a warning or an error. */
+export async function outcome(libraryUrl, endpointUrl, sha, fetchImpl = fetch) {
   try {
     if (!libraryUrl || !endpointUrl || !/^[a-f0-9]{40}$/.test(sha ?? '')) {
       throw new Error('Usage: COMMIT_SHA=<sha> stripe-webhook-version.mjs <library-base-url> <endpoint-base-url>')
     }
-    const result = await verify(libraryUrl, endpointUrl, sha)
-    if (result.warning) console.log(`::warning::${result.warning}`)
-    else console.log(result.message)
+    const result = await verify(libraryUrl, endpointUrl, sha, fetchImpl)
+    return { failed: false, line: result.warning ? `::warning::${printable(result.warning)}` : printable(result.message) }
   } catch (error) {
-    console.error(`::error::${error.message}`)
+    return { failed: true, line: `::error::${printable(error.message)}` }
+  }
+}
+
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const [libraryUrl, endpointUrl] = process.argv.slice(2)
+  const { failed, line } = await outcome(libraryUrl, endpointUrl, process.env.COMMIT_SHA)
+  if (failed) {
+    console.error(line)
     process.exitCode = 1
+  } else {
+    console.log(line)
   }
 }

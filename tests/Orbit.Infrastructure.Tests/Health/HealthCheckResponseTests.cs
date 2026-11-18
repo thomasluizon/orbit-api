@@ -11,6 +11,8 @@ namespace Orbit.Infrastructure.Tests.Health;
 
 public class HealthCheckResponseTests
 {
+    private static readonly string[] CloverEndpointVersions = ["2026-02-25.clover"];
+
     private static HealthReportEntry Entry(
         HealthStatus status,
         string description,
@@ -99,7 +101,7 @@ public class HealthCheckResponseTests
                 return HealthCheckResult.Unhealthy("No enabled webhook endpoint", data: new Dictionary<string, object>
                 {
                     ["libraryApiVersion"] = "2026-08-26.dahlia",
-                    ["endpointApiVersions"] = new[] { "2026-02-25.clover" },
+                    ["endpointApiVersions"] = CloverEndpointVersions,
                 });
             }, tags: [WebApplicationExtensions.StripeHealthTag]);
         using var provider = services.BuildServiceProvider();
