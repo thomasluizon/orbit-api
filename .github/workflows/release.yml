@@ -176,6 +176,10 @@ jobs:
           fi
           echo "Staging served $COMMIT_SHA with status Healthy" >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Require a production Stripe webhook endpoint the release accepts
+        if: ${{ !inputs.force_unstaged }}
+        run: node .github/scripts/stripe-webhook-version.mjs 'https://api-staging.useorbit.org' 'https://api.useorbit.org'
+
       - name: Resolve verified staging image
         id: staging_image
         env:
@@ -364,6 +368,7 @@ jobs:
             echo "::error::Render now serves $live_commit, not the released image digest $IMAGE_DIGEST"
             exit 1
           fi
+          node .github/scripts/stripe-webhook-version.mjs 'https://api.useorbit.org' 'https://api.useorbit.org'
 
       - name: Run production read-only authenticated smoke
         env:
@@ -564,6 +569,7 @@ jobs:
             echo "::error::Render now serves $live_commit, not the released image digest $IMAGE_DIGEST"
             exit 1
           fi
+          node .github/scripts/stripe-webhook-version.mjs 'https://api-staging.useorbit.org' 'https://api-staging.useorbit.org'
 
       - name: Run staging authenticated smoke
         id: smoke
