@@ -149,7 +149,10 @@ public sealed partial class AiProactiveCheckinMessageService(
         var checkedWords = phraseWords.Prepend(prose).ToList();
         if (InternalDataWords().IsMatch(rawProse) || phraseWords.Any(InternalDataWords().IsMatch)
             || checkedWords.Any(SalesWords().IsMatch)) return Refuse("forbidden-word", out refusal);
-        if (!HasOnlyAllowedNames(prose, language)) return Refuse("unknown-name", out refusal);
+        var titleWords = referencedHabits.Concat(referencedGoals)
+            .SelectMany(title => Words().Matches(title).Select(match => match.Value))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (!HasOnlyAllowedNames(rendered, language, titleWords)) return Refuse("unknown-name", out refusal);
         if (SentenceEnds().Matches(prose).Count != 1 || !".?".Contains(prose[^1])
             || phrases.Any(p => SentenceEnds().IsMatch(p.Phrase))) return Refuse("sentence-shape", out refusal);
         return HasGroundedNumbers(prose, phrases, facts, referencedHabits.Count)
@@ -230,7 +233,7 @@ public sealed partial class AiProactiveCheckinMessageService(
         && Regex.IsMatch(text, @"(?<!\p{L})" + Regex.Escape(title) + @"(?!\p{L})",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
 
-    private static bool HasOnlyAllowedNames(string text, string language)
+    private static bool HasOnlyAllowedNames(string text, string language, ISet<string> titleWords)
     {
         var pt = LocaleHelper.IsPortuguese(language);
         var format = CultureInfo.GetCultureInfo(pt ? "pt-BR" : "en").DateTimeFormat;
@@ -239,7 +242,8 @@ public sealed partial class AiProactiveCheckinMessageService(
             .Concat(format.MonthGenitiveNames).Concat(format.AbbreviatedMonthGenitiveNames)
             .SelectMany(name => Words().Matches(name).Select(match => match.Value)).ToHashSet(StringComparer.OrdinalIgnoreCase);
         return Words().Matches(text).Skip(1).All(word => !char.IsUpper(word.Value[0])
-            || word.Value is "Orbit" || (!pt && word.Value == "I") || calendarWords.Contains(word.Value));
+            || word.Value is "Orbit" || (!pt && word.Value == "I") || calendarWords.Contains(word.Value)
+            || titleWords.Contains(word.Value));
     }
 
     private static bool HasRealMiss(ProactiveFacts facts) => facts.HadScheduledHabitsYesterday == true

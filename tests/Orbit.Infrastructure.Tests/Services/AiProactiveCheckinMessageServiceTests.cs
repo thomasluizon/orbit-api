@@ -581,6 +581,8 @@ public sealed class AiProactiveCheckinMessageServiceTests(ITestOutputHelper outp
     [InlineData("pt-BR", "Para hoje, escolha {{habit:0|Journal e Natação}}.", "Natação")]
     [InlineData("en", "For today, choose {{habit:0|your reading and the swim}}.", "Swim")]
     [InlineData("pt-BR", "Para hoje, escolha {{habit:0|sua leitura}} e {{habit:1|a caminhada}}.", "")]
+    [InlineData("pt-BR", "Para hoje, escolha {{habit:0|sua leitura ou a Natação}}.", "")]
+    [InlineData("pt-BR", "Para hoje, escolha {{habit:0|no diário com a Ana}}.", "")]
     public async Task LineThatNamesAHabitOutsideTheFacts_UsesTheFallback(string locale, string text, string otherAccountTitle)
     {
         var facts = new ProactiveFacts(ProactiveTrigger.MorningPlan, ["Journal"], HabitCount: 1);
