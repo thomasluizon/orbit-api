@@ -105,7 +105,7 @@ jobs:
 
       - name: API release admission tests
         if: ${{ !cancelled() }}
-        run: node --test .github/scripts/release-admission.test.mjs .github/scripts/release-admission-security.test.mjs
+        run: node --test .github/scripts/release-admission.test.mjs .github/scripts/release-admission-security.test.mjs .github/scripts/stripe-webhook-version.test.mjs
 
       - name: CI input selection tests
         if: ${{ !cancelled() }}

@@ -42,6 +42,7 @@ AI/                       - top-level AI service entry points
 - **API key set ONCE** at startup in `Orbit.Api/Extensions/ServiceCollectionExtensions.cs`: `StripeConfiguration.ApiKey = ...`. NEVER set it per-request in a controller.
 - **Webhook signature verification** in `SubscriptionController.HandleWebhook`. Reject if `WebhookSecret` is not configured.
 - Validate checkout intervals against a whitelist of allowed values.
+- **Webhook endpoint version:** each Stripe webhook endpoint keeps the API version of its creation. `StripeWebhookVersionHealthCheck` serves `/health/stripe`, and Release API refuses a deploy when no enabled endpoint matches `Stripe.net`. See [Stripe webhook endpoint version](../../infra/README.md#stripe-webhook-endpoint-version).
 
 ## Push notifications
 

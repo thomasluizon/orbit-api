@@ -76,17 +76,25 @@ public static partial class WebApplicationExtensions
         app.MapOrbitHealthChecks();
     }
 
+    internal const string StripeHealthCheckName = "stripe-webhook-version";
+    internal const string StripeHealthTag = "stripe";
+
     internal static void MapOrbitHealthChecks(this Microsoft.AspNetCore.Routing.IEndpointRouteBuilder app)
     {
         app.MapHealthChecks("/health", new HealthCheckOptions
         {
-            Predicate = registration => !registration.Tags.Contains("jobs"),
+            Predicate = registration => !registration.Tags.Contains("jobs") && !registration.Tags.Contains(StripeHealthTag),
             ResponseWriter = WriteHealthCheckResponseAsync
         }).AllowAnonymous();
         app.MapHealthChecks("/health/jobs", new HealthCheckOptions
         {
             Predicate = registration => registration.Tags.Contains("jobs"),
             ResponseWriter = WriteHealthCheckResponseAsync
+        }).AllowAnonymous();
+        app.MapHealthChecks("/health/stripe", new HealthCheckOptions
+        {
+            Predicate = registration => registration.Tags.Contains(StripeHealthTag),
+            ResponseWriter = (context, report) => WriteHealthCheckResponseAsync(context, report, includeData: true)
         }).AllowAnonymous();
     }
 
@@ -106,7 +114,14 @@ public static partial class WebApplicationExtensions
         await migrate(OrbitConnectionStringFactory.ForSession(configuration), settings);
     }
 
-    internal static async Task WriteHealthCheckResponseAsync(HttpContext context, HealthReport report)
+    internal static Task WriteHealthCheckResponseAsync(HttpContext context, HealthReport report) =>
+        WriteHealthCheckResponseAsync(context, report, includeData: false);
+
+    /// <summary>
+    /// <paramref name="includeData"/> adds each check's data. Only <c>/health/stripe</c> sets it, because the release
+    /// workflow compares the API versions there; <c>/health/jobs</c> keeps its per-job timings out of the public body.
+    /// </summary>
+    internal static async Task WriteHealthCheckResponseAsync(HttpContext context, HealthReport report, bool includeData)
     {
         context.Response.StatusCode = report.Status == HealthStatus.Healthy
             ? StatusCodes.Status200OK
@@ -117,12 +132,20 @@ public static partial class WebApplicationExtensions
         {
             status = report.Status.ToString(),
             commit = Environment.GetEnvironmentVariable("RENDER_GIT_COMMIT"),
-            checks = report.Entries.Select(e => new
-            {
-                name = e.Key,
-                status = e.Value.Status.ToString(),
-                description = e.Value.Description
-            })
+            checks = report.Entries.Select(e => includeData
+                ? (object)new
+                {
+                    name = e.Key,
+                    status = e.Value.Status.ToString(),
+                    description = e.Value.Description,
+                    data = e.Value.Data
+                }
+                : new
+                {
+                    name = e.Key,
+                    status = e.Value.Status.ToString(),
+                    description = e.Value.Description
+                })
         };
 
         await context.Response.WriteAsJsonAsync(result);

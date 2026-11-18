@@ -796,6 +796,49 @@ Production requires the latest trusted smoke status and matching staging health.
 `force_unstaged` requires `override_reason`; the summary and production deployment
 payload retain that reason. It does not bypass CI or the export gate.
 
+#### Stripe webhook endpoint version
+
+The webhook handler refuses each event whose API version is outside the major
+release of the pinned `Stripe.net` (`StripeConfiguration.ApiVersion`). Stripe sets
+the version of a webhook endpoint when you create the endpoint, so the endpoint
+does not follow a package update. `/health/stripe` lists the versions of the enabled
+endpoints for `/api/subscriptions/webhook` and the library version. Render does not
+probe this route.
+
+Release API reads `/health/stripe` three times:
+
+1. Before the production deploy, it compares the library version that staging serves
+   at the selected SHA with the production endpoint versions. `force_unstaged` skips
+   this step. A production build without the route gives only a warning.
+2. After the production deploy, it checks production against its own endpoints.
+3. After the staging deploy, it checks staging against its own endpoints. The staging
+   deployment record, which production needs, waits for this check.
+
+Before you release a `Stripe.net` update that changes the major release, change the
+endpoint version in each environment. Production uses Stripe live mode, the group
+`orbit-production-api` and the service `orbit-api`. Staging uses Stripe test mode,
+the group `orbit-staging-api` and the service `orbit-api-staging`. Do these steps in
+this order:
+
+1. In the Stripe Dashboard, in the mode of the environment, open **Developers >
+   Webhooks** and add an endpoint at the new version. Use the same URL and the
+   same five events. Keep the old endpoint enabled.
+2. Write the signing secret of the new endpoint to the SSM SecureString
+   `/orbit/<environment>/api/Stripe__WebhookSecret` in `us-east-2`.
+3. Save and review a plan targeted only to `render_env_group.production_api` or
+   `render_env_group.staging_api`. Its only change must be the masked
+   `Stripe__WebhookSecret`. Apply only that reviewed plan.
+4. In **Render > the service > Environment**, confirm that `Stripe__WebhookSecret`
+   comes from the linked group and that no service override exists.
+5. Run **GitHub > orbit-api > Actions > Release API** from `main` for the
+   environment. The API reads `Stripe__WebhookSecret` only when the process starts,
+   so the deploy of this run loads the new secret. Do this step directly after
+   step 3: until the new process runs, the signature check can refuse events.
+   Stripe retries a refused live event for up to three days.
+6. Confirm that the check after the deploy passes and that the next event of the
+   new endpoint gets a 2xx in **Developers > Webhooks**. Then disable the old
+   endpoint.
+
 Configure GitHub Actions environment secrets `SMOKE_TEST_EMAIL`,
 `SMOKE_TEST_CODE` and `SMOKE_BOT_BYPASS` in both `staging` and `production`. On staging, provision that
 account and retain its email and six-digit code in the API's `TEST_ACCOUNTS` value
