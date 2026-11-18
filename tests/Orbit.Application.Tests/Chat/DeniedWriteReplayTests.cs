@@ -98,7 +98,7 @@ public partial class ProcessUserChatCommandHandlerTests
     /// </summary>
     private async Task<DeniedWriteRun> RunDeniedAnswerTurnAsync(string language, Func<Habit[], AiResponse[]> continuations,
         Action<Habit[]>? arrange = null, Func<Habit[], AiResponse>? first = null, Task<Result<AiResponse>>? lastReply = null,
-        IAiTool[]? tools = null)
+        IAiTool[]? tools = null, bool denyUnowned = true)
     {
         var user = User.Create("Reader", "reader@example.test").Value;
         user.SetLanguage(language);
@@ -109,7 +109,8 @@ public partial class ProcessUserChatCommandHandlerTests
         var update = new BulkUpdateHabitsTool(_mediator);
         var handler = CreateHandler([delete, update, .. tools ?? []]);
         var held = HoldReplayWrites([delete, update, .. (tools ?? []).Where(tool => !tool.IsReadOnly)]);
-        DenyUnownedHabitTargets([parent, .. children]);
+        if (denyUnowned)
+            DenyUnownedHabitTargets([parent, .. children]);
         var block = RetryBlock(RecordQuestion(children, language == "en"
             ? "There are 6 Water - 710ml, not 7. Which two do you want to delete?"
             : "Há 6 Water - 710ml, não 7. Quais dois você quer excluir?"));
