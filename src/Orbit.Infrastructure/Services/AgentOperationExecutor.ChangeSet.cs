@@ -85,7 +85,8 @@ public partial class AgentOperationExecutor
         var results = new List<AgentOperationResult>();
         foreach (var member in members)
         {
-            var result = await ExecutePolicyAndToolAsync(member, toolRegistry.GetTool(member.Operation.Id), new OperationPolicyState(), ct);
+            var result = await ExecutePolicyAndToolAsync(member, toolRegistry.GetTool(member.Operation.Id), new OperationPolicyState(), ct,
+                bindsPreparedIntent: false);
             results.Add(result.Operation);
             if (result.Operation.Status != AgentOperationStatus.Succeeded || IsPartialMutation(result.Operation.Payload))
                 return new ToolResult(false, Error: result.Operation.PolicyReason ?? result.Operation.ErrorCode ?? "change_set_failed", Payload: results);
