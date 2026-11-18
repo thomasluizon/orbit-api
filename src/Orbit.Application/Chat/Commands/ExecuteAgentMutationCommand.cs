@@ -5,8 +5,8 @@ using Orbit.Domain.Models;
 
 namespace Orbit.Application.Chat.Commands;
 
-public sealed record ExecuteAgentMutationCommand(AgentExecuteOperationRequest Request)
-    : IRequest<AgentExecuteOperationResponse>, IIdempotentCommand;
+public sealed record ExecuteAgentMutationCommand(AgentExecuteOperationRequest Request, bool CallsProvider = false)
+    : IRequest<AgentExecuteOperationResponse>, IIdempotentCommand, IProviderCallCommand;
 
 public interface IAgentMutationRunner
 {

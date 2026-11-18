@@ -35,14 +35,18 @@ public sealed class IdempotencyBehavior<TRequest, TResponse>(
         if (storedResponse is not null)
             return Deserialize(storedResponse);
 
-        var response = default(TResponse)!;
+        var callsProvider = request is IProviderCallCommand { CallsProvider: true };
+        var response = callsProvider ? await next(cancellationToken) : default!;
         try
         {
             await unitOfWork.ExecuteInTransactionAsync(async transactionToken =>
             {
                 var reservation = idempotencyStore.Reserve(userId, idempotencyKey, requestType, requestOrdinal);
-                await unitOfWork.SaveChangesAsync(transactionToken);
-                response = await next(transactionToken);
+                if (!callsProvider)
+                {
+                    await unitOfWork.SaveChangesAsync(transactionToken);
+                    response = await next(transactionToken);
+                }
                 reservation.SetResponseBody(Serialize(response));
                 await unitOfWork.SaveChangesAsync(transactionToken);
             }, cancellationToken);

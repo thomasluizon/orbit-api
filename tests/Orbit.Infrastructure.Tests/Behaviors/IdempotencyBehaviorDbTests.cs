@@ -76,6 +76,43 @@ public class IdempotencyBehaviorDbTests : IDisposable
         (await _dbContext.ProcessedRequests.CountAsync()).Should().Be(2);
     }
 
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public async Task Handle_ProviderCallCommand_RunsTheHandlerOutsideTheTransactionAndReplaysTheStoredResponse(
+        bool callsProvider, bool handlerRunsInTransaction)
+    {
+        var behavior = new IdempotencyBehavior<ProviderRequest, string>(
+            new StubIdempotencyContext(true, _userId, "provider-call"), _store, _unitOfWork);
+        var openTransactions = new List<bool>();
+        RequestHandlerDelegate<string> handler = _ =>
+        {
+            _handlerCalls++;
+            openTransactions.Add(_unitOfWork.HasActiveTransaction);
+            return Task.FromResult("answer");
+        };
+
+        (await behavior.Handle(new(callsProvider), handler, default)).Should().Be("answer");
+        (await behavior.Handle(new(callsProvider), handler, default)).Should().Be("answer");
+
+        _handlerCalls.Should().Be(1, "the replay returns the stored response");
+        openTransactions.Should().Equal(handlerRunsInTransaction);
+        (await _dbContext.ProcessedRequests.CountAsync()).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Handle_ProviderCallCommandThatThrows_StoresNoResponse()
+    {
+        var behavior = new IdempotencyBehavior<ProviderRequest, string>(
+            new StubIdempotencyContext(true, _userId, "provider-call-failure"), _store, _unitOfWork);
+
+        var failed = () => behavior.Handle(new(true), _ => throw new InvalidOperationException("The provider failed"), default);
+
+        await failed.Should().ThrowAsync<InvalidOperationException>();
+        (await _dbContext.ProcessedRequests.CountAsync()).Should().Be(0);
+        (await behavior.Handle(new(true), CountingHandler("answer"), default)).Should().Be("answer");
+    }
+
     [Fact]
     public async Task Handle_NewKey_ExecutesHandlerOnceAndStoresResponse()
     {
@@ -1197,6 +1234,8 @@ public class IdempotencyBehaviorDbTests : IDisposable
         };
 
     private sealed record FakeRequest : IRequest<string>, IIdempotentCommand;
+
+    private sealed record ProviderRequest(bool CallsProvider) : IRequest<string>, IIdempotentCommand, IProviderCallCommand;
 
     private sealed record NamedRequest(string Name) : IRequest<string>, IIdempotentCommand;
 
