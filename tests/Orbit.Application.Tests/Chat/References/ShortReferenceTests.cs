@@ -219,9 +219,9 @@ public class ShortReferenceTests
     }
 
     /// <summary>
-    /// The option ids of an ask card stand for the habits that they name, so a reference among them resolves as a habit
-    /// and a full GUID that names no habit of the person is turned down. A free option id, a date option id that names no
-    /// habit, a question id and a pickList item id stay.
+    /// The option ids of an ask card stand for the habits that they name, so a reference among them resolves as a habit.
+    /// A full GUID that names no habit of the person, a free option id, a date option id that names no habit, a question
+    /// id and a pickList item id stay. The ask guard owns the refusal of a record selection with a guessed GUID.
     /// </summary>
     [Fact]
     public async Task Normalizer_ResolvesTheRecordIdsOfAnAskCardAndKeepsItsFreeIds()
@@ -253,7 +253,9 @@ public class ShortReferenceTests
         question.GetProperty("options").EnumerateArray().Select(option => option.GetProperty("id").GetString())
             .Should().Equal(Water.Id.ToString(), "deadbeef", "yes", "2026-11-18");
         input.GetProperty("items")[0].GetProperty("id").GetString().Should().Be("4c1e7f20", "no guard reads a pickList item id");
-        guessed.IsResolved.Should().BeFalse("the ask guards read a full GUID option id as a habit, and it names no habit of the person");
-        guessed.Error().Should().StartWith($"unknown_reference: id \"{invented}\" names no habit of this person.");
+        guessed.IsResolved.Should().BeTrue(guessed.IsResolved ? null : guessed.Error());
+        guessed.Call.Args.GetProperty("input").GetProperty("questions")[0].GetProperty("options").EnumerateArray()
+            .Select(option => option.GetProperty("id").GetString())
+            .Should().Equal([Water.Id.ToString(), invented, "yes", "2026-11-18"], "a GUID that names no habit of the person stays for the ask guard");
     }
 }

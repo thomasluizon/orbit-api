@@ -609,6 +609,57 @@ public partial class ProcessUserChatCommandHandlerTests
             card.Options.Select(option => option.Id).Should().Equal(["2026-11-18", "2026-11-19"], "an option id that names no habit is a free label");
     }
 
+    /// <summary>
+    /// A choice over records of a type other than habit holds the full GUID of each record as its option id. The id names
+    /// no habit of the person, and the card is no record selection, so no ask guard reads it as a habit. The card reaches
+    /// the person with the same option ids, with the setting on and with the setting off.
+    /// </summary>
+    [Theory]
+    [InlineData("en", true)]
+    [InlineData("pt-BR", true)]
+    [InlineData("en", false)]
+    [InlineData("pt-BR", false)]
+    public async Task ShortReference_AChoiceOverGoalsKeepsTheGoalGuidsOfItsOptions(string language, bool shortReferences)
+    {
+        var portuguese = language == "pt-BR";
+        var user = User.Create("Reader", "reader@example.test").Value;
+        user.SetLanguage(language);
+        SetupUserAndPayGate(user);
+        _shortReferences = shortReferences;
+        EnableComposition();
+        SetupSelectionHabits(CreateHabit(portuguese ? "Água" : "Water"));
+        _mediator.Send(Arg.Any<CheckChatCommandQuery>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
+        var goals = new[] { portuguese ? "Ler 12 livros" : "Read 12 books", portuguese ? "Correr 10 km" : "Run 10 km" }
+            .Select(title => Goal.Create(new Goal.CreateGoalParams(UserId, title, 12, "x")).Value).ToArray();
+        var input = new
+        {
+            form = "choice",
+            missing_input = "preference",
+            question = portuguese ? "Qual meta?" : "Which goal?",
+            options = goals.Select(goal => new { id = goal.Id.ToString(), label = goal.Title[..Math.Min(goal.Title.Length, 20)] }).ToArray()
+        };
+        var issued = new List<IssuedAiBlock>();
+        _blockStore.AddAsync(Arg.Do<IssuedAiBlock>(issued.Add), Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
+        var results = CaptureModelResults(portuguese ? "Escolha." : "Choose.");
+        SetupAiResponse(new AiResponse
+        {
+            ConversationContext = TestConversationContext,
+            ToolCalls = [AskSelectionRead(), new("ask", "ask", JsonSerializer.SerializeToElement(new { input }))]
+        });
+        var query = new QueryHabitsTool(_habitRepo, _userRepo, _userDateService, _scheduleLogReader);
+        var handler = CreateHandler(RealAskTool(), query);
+        UseProductionReadExecutor(query);
+
+        var result = await handler.Handle(new(UserId, portuguese ? "Prepare a seleção pedida." : "Prepare the requested selection.",
+            ClientContext: new(SupportsParts: true, PartKinds: ["choice"], Locale: language)), default);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        results.SelectMany(round => round).Where(item => item.Name == "ask").Select(item => item.Error)
+            .Should().OnlyContain(error => error == null, "an option id that names no habit is no reference error");
+        issued.Should().ContainSingle("the card reached the person").Subject.ReadDefinition().Options.Select(option => option.Id)
+            .Should().Equal(goals.Select(goal => goal.Id.ToString()), "the option ids are the goal GUIDs that the model sent");
+    }
+
     private static IAiTool WriteTool(string name, Func<ToolResult> execute)
     {
         var tool = Substitute.For<IAiTool>();

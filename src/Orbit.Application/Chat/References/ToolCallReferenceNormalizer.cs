@@ -127,12 +127,12 @@ public sealed partial class ToolCallReferenceNormalizer(ReferenceBook book,
             : (null, resolution.Closest.Select(candidate => new ReferenceCandidate(candidate.Id.ToString(), candidate.Title)).ToArray());
 
     /// <summary>
-    /// The outcome of an option id of an ask card. A full GUID that names no habit of the person is turned down, because
-    /// the ask guards read it as a record. Other text that names no habit, such as a <c>YYYY-MM-DD</c> date, is a free
-    /// label and stays.
+    /// The outcome of an option id of an ask card. An option id that names a habit of the person resolves to its full
+    /// GUID. Other text stays as it is, and the ask guard turns down a record selection whose GUID option id no read of
+    /// the turn returned.
     /// </summary>
     private static (string? Value, IReadOnlyList<ReferenceCandidate> Closest) OptionOutcome(string text, ReferenceResolution resolution) =>
-        resolution.IsResolved || Guid.TryParse(text.Trim(), out _) ? Outcome(resolution) : (text, []);
+        resolution.IsResolved ? Outcome(resolution) : (text, []);
 
     /// <summary>Resolves one string or each string of an array. A null, an empty string or a value of another kind stays.</summary>
     private static async Task<bool> ResolveValuesAsync(JsonObject owner, string name, ReferenceRecordType type, JsonNode? value,

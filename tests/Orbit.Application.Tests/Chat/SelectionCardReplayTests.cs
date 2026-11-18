@@ -195,8 +195,7 @@ public partial class ProcessUserChatCommandHandlerTests
         run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
         var rejected = run.ToolResults[1].Should().ContainSingle(result => result.Name == "ask").Subject;
         rejected.Success.Should().BeFalse();
-        rejected.Error.Should().StartWith("unknown_reference: id \"9b610c68-0080-417a-80b1-a3f9c3fbc810\" names no habit of this person.")
-            .And.Contain("(Water - 710ml)").And.NotContain("plain text");
+        rejected.Error.Should().Contain("query_habits returned in this turn").And.NotContain("plain text");
         var block = run.Issued.Should().ContainSingle().Subject.ReadDefinition();
         var (records, several) = Selectable(block);
         records.Should().BeEquivalentTo(run.Children.Select(child => child.Id.ToString()));
