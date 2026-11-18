@@ -15,6 +15,12 @@ public sealed class AiSettings
     public int MaxRetries { get; init; } = 2;
 
     /// <summary>
+    /// The reasoning effort of the chat purpose on the <c>ai_change_plan</c> path, in the effort names of the provider
+    /// SDK (for example <c>low</c> or <c>medium</c>). The old path and every other purpose stay at low.
+    /// </summary>
+    public string ChatReasoningEffort { get; init; } = "low";
+
+    /// <summary>
     /// Bounds buffered calls independently of per-attempt timeouts and retry count.
     /// Allows a 90-second failed attempt, a 90-second successful retry and five seconds for
     /// retry wait and processing. Longer server-directed retry waits consume this same deadline.

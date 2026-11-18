@@ -31,6 +31,7 @@ public sealed partial class AiCompletionClient
     internal TimeSpan StreamingCompletionTimeout { get; }
     private readonly string _primaryModel;
     private readonly string _subTaskModel;
+    private readonly ResponseReasoningEffortLevel _changePlanChatEffort;
     private readonly ILogger<AiCompletionClient> _logger;
     private readonly IAiUsageRecorder _usageRecorder;
     private readonly TimeProvider _timeProvider;
@@ -93,7 +94,13 @@ public sealed partial class AiCompletionClient
         _evalStreamingResponsesClient = string.IsNullOrWhiteSpace(settings.EvalApiKey) ? _streamingResponsesClient
             : CreateClient(settings.NetworkTimeoutSeconds, apiKey: settings.EvalApiKey);
         _subTaskModel = ResolveSubTaskModel(settings.SubTaskModel, settings.Model);
+        _changePlanChatEffort = ResolveChatReasoningEffort(settings.ChatReasoningEffort);
     }
+
+    internal static ResponseReasoningEffortLevel ResolveChatReasoningEffort(string? effort) =>
+        string.IsNullOrWhiteSpace(effort)
+            ? ResponseReasoningEffortLevel.Low
+            : new ResponseReasoningEffortLevel(effort.Trim().ToLowerInvariant());
 
     internal static string ResolveSubTaskModel(string subTaskModel, string primaryModel)
         => string.IsNullOrWhiteSpace(subTaskModel) ? primaryModel : subTaskModel;
@@ -115,9 +122,11 @@ public sealed partial class AiCompletionClient
         TimeSpan? completionTimeout = null,
         string primaryModel = "gpt-6-luna",
         string subTaskModel = "gpt-6-luna",
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        string chatReasoningEffort = "low")
     {
         _timeProvider = timeProvider ?? TimeProvider.System;
+        _changePlanChatEffort = ResolveChatReasoningEffort(chatReasoningEffort);
         CompletionTimeout = completionTimeout ?? new AiSettings().CompletionTimeout;
         StreamingCompletionTimeout = completionTimeout ?? new AiSettings().StreamingCompletionTimeout;
         _responsesClient = responsesClient;
@@ -187,11 +196,17 @@ public sealed partial class AiCompletionClient
         return ModelReaderWriter.Write(options).ToString();
     }
 
+    /// <summary>
+    /// Builds the provider options of one call. <paramref name="changePlanChat"/> marks the chat purpose on the
+    /// <c>ai_change_plan</c> path: it takes the configured chat effort and its own prompt cache key, so the old and the
+    /// new prefix never share one cache route. Every other call keeps low effort and the key <c>orbit:&lt;model&gt;</c>.
+    /// </summary>
     internal CreateResponseOptions CreateOptions(
         AiModelTier tier = AiModelTier.Primary,
         double temperature = 0.1,
         int? maxOutputTokens = null,
-        Guid? userId = null)
+        Guid? userId = null,
+        bool changePlanChat = false)
     {
         userId ??= AiCallContext.Current?.UserId;
         var model = tier == AiModelTier.SubTask ? _subTaskModel : _primaryModel;
@@ -207,7 +222,7 @@ public sealed partial class AiCompletionClient
         {
             options.ReasoningOptions = new ResponseReasoningOptions
             {
-                ReasoningEffortLevel = ResponseReasoningEffortLevel.Low
+                ReasoningEffortLevel = changePlanChat ? _changePlanChatEffort : ResponseReasoningEffortLevel.Low
             };
             options.IncludedProperties.Add(IncludedResponseProperty.ReasoningEncryptedContent);
         }
@@ -215,7 +230,7 @@ public sealed partial class AiCompletionClient
         if (userId is { } id && id != Guid.Empty)
         {
             options.SafetyIdentifier = id.ToString("N");
-            options.PromptCacheKey = "orbit:" + model;
+            options.PromptCacheKey = changePlanChat ? "orbit:" + model + ":plan" : "orbit:" + model;
         }
         return options;
     }
