@@ -16,6 +16,15 @@ updates:
       - dependency-name: "*"
         update-types:
           - "version-update:semver-major"
+      # The analyzer must not reference a Roslyn newer than the CI SDK compiler, or csc refuses it with CS9057.
+      - dependency-name: "Microsoft.CodeAnalysis.CSharp"
+        update-types:
+          - "version-update:semver-minor"
+          - "version-update:semver-patch"
+      - dependency-name: "Microsoft.CodeAnalysis.CSharp.Workspaces"
+        update-types:
+          - "version-update:semver-minor"
+          - "version-update:semver-patch"
 
   - package-ecosystem: github-actions
     directory: /

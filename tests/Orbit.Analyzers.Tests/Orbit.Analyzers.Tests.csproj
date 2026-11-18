@@ -22,6 +22,17 @@
   </ItemGroup>
 
   <ItemGroup>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>RoslynTargetsPath</_Parameter1>
+      <_Parameter2>$(RoslynTargetsPath)</_Parameter2>
+    </AssemblyAttribute>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>DotnetHostPath</_Parameter1>
+      <_Parameter2>$(DOTNET_HOST_PATH)</_Parameter2>
+    </AssemblyAttribute>
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\Orbit.Analyzers\Orbit.Analyzers.csproj" />
     <ProjectReference Include="..\..\src\Orbit.Analyzers.CodeFixes\Orbit.Analyzers.CodeFixes.csproj" />
   </ItemGroup>
