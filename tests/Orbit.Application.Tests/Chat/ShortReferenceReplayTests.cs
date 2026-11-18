@@ -2,6 +2,12 @@ using System.Linq.Expressions;
 using System.Text.Json;
 using FluentAssertions;
 using NSubstitute;
+using Orbit.Application.Chat;
+using Orbit.Application.Chat.Commands;
+using Orbit.Application.Chat.Tools;
+using Orbit.Application.Chat.Tools.Implementations;
+using Orbit.Application.Common;
+using Orbit.Domain.Enums;
 using Orbit.Application.Chat.References;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -33,6 +39,375 @@ public partial class ProcessUserChatCommandHandlerTests
         rename.Arguments.GetProperty("filter").GetProperty("habit_ids").EnumerateArray().Select(id => id.GetString())
             .Should().Equal(run.Children[0].Id.ToString(), run.Children[1].Id.ToString());
         run.Result.Value.PendingOperations.Should().NotBeNullOrEmpty();
+    }
+
+    private static string Reference(Guid id, int length = 8) => ReferenceCodes.Hex(id)[..length];
+
+    /// <summary>The arguments of each request of one operation that reached the executor.</summary>
+    private JsonElement[] Dispatched(string operation) => _operationExecutor.ReceivedCalls()
+        .Where(call => call.GetMethodInfo().Name == nameof(IAgentOperationExecutor.ExecuteAsync))
+        .Select(call => (AgentExecuteOperationRequest)call.GetArguments()[0]!)
+        .Where(request => request.OperationId == operation).Select(request => request.Arguments).ToArray();
+
+    /// <summary>The tool results that the model received in each continuation, as the provider adapter reads them.</summary>
+    private List<IReadOnlyList<AiToolCallResult>> CaptureModelResults(string reply)
+    {
+        var results = new List<IReadOnlyList<AiToolCallResult>>();
+        _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
+                Arg.Do<IReadOnlyList<AiToolCallResult>>(round => results.Add([.. round])), Arg.Any<Func<AiStreamEvent, Task>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AiResponse { TextMessage = reply }));
+        return results;
+    }
+
+    private static string ModelText(IEnumerable<AiToolCallResult> results) =>
+        string.Join("\n", results.Select(result => JsonSerializer.Serialize(new { result.EntityId, result.Error, result.Payload })));
+
+    /// <summary>The executor answers the read with its tool result, beside the writes that <see cref="HoldReplayWrites"/> holds.</summary>
+    private void AnswerRead(string name, object payload) =>
+        _operationExecutor.ExecuteAsync(Arg.Is<AgentExecuteOperationRequest>(request => request.OperationId == name), Arg.Any<CancellationToken>())
+            .Returns(new AgentExecuteOperationResponse(new AgentOperationResult(name, name, AgentRiskClass.Low,
+                AgentConfirmationRequirement.None, AgentOperationStatus.Succeeded, Payload: payload)));
+
+    private static Habit WithFixedId(Habit habit, Guid id)
+    {
+        typeof(Entity).GetProperty(nameof(Entity.Id))!.SetValue(habit, id);
+        return habit;
+    }
+
+    /// <summary>
+    /// A revision names its preview, its item and a field of <c>edits_json</c> by reference. The revision reaches the
+    /// executor with the full id of each one.
+    /// </summary>
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task ShortReference_RevisionResolvesItsPreviewItsItemAndItsEditsJson(string language)
+    {
+        var user = User.Create("Reader", "reader@example.test").Value;
+        user.SetLanguage(language);
+        SetupUserAndPayGate(user);
+        var (morning, water) = (CreateHabit("Morning"), CreateHabit("Water"));
+        SetupSelectionHabits(morning, water);
+        var pendingId = Guid.NewGuid();
+        var stored = new PendingAgentOperationExecution(pendingId, "habits.update", "update_habit",
+            JsonSerializer.SerializeToElement(new { habit_id = water.Id, title = "Water" }), AgentExecutionSurface.Chat,
+            AgentConfirmationRequirement.FreshConfirmation, "preview");
+        _pendingOperationStore.GetAwaitingAsync(UserId, Arg.Any<CancellationToken>()).Returns([stored]);
+        _pendingOperationStore.GetExecution(UserId, pendingId).Returns(stored);
+        var handler = CreateHandler(ReadTool(ReviseTool, new ToolResult(true)));
+        SetupAiResponse(ToolResponse(ReviseTool, "revise", JsonSerializer.Serialize(new
+        {
+            pending_operation_id = Reference(pendingId),
+            items = new[] { new { item_id = Reference(water.Id), edits_json = JsonSerializer.Serialize(new { parent_habit_id = Reference(morning.Id) }) } },
+            answer_question = false
+        })));
+        ReplyToReplay(language == "en" ? "Revised." : "Revisado.");
+
+        var result = await handler.Handle(new(UserId, language == "en" ? "Put Water under Morning" : "Coloca Water dentro de Morning"), default);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        var revision = Dispatched(ReviseTool).Should().ContainSingle().Subject;
+        revision.GetProperty("pending_operation_id").GetGuid().Should().Be(pendingId);
+        var item = revision.GetProperty("items")[0];
+        item.GetProperty("item_id").GetString().Should().Be(water.Id.ToString());
+        using var edits = JsonDocument.Parse(item.GetProperty("edits_json").GetString()!);
+        edits.RootElement.GetProperty("parent_habit_id").GetGuid().Should().Be(morning.Id);
+    }
+
+    /// <summary>
+    /// An <c>ask</c> pickList holds a <c>create_habits</c> item with a reference in its JSON string and a
+    /// <c>log_habits</c> item with a reference in <c>habit_id</c>. The eval trace records the call with full GUIDs.
+    /// </summary>
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task ShortReference_PickListItemsResolveWithTheSchemaOfTheirOperation(string language)
+    {
+        var user = User.Create("Reader", "reader@example.test").Value;
+        user.SetLanguage(language);
+        SetupUserAndPayGate(user);
+        var (morning, water) = (CreateHabit("Morning"), CreateHabit("Water"));
+        SetupSelectionHabits(morning, water);
+        _featureFlagService.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>()).Returns(new[] { FeatureFlagKeys.AiEvalTrace });
+        var handler = CreateHandler();
+        SetupAiResponse(ToolResponse("ask", "pick", JsonSerializer.Serialize(new
+        {
+            input = new
+            {
+                form = "pickList",
+                missing_input = "bulk_selection",
+                action = "log_habits",
+                items = new object[]
+                {
+                    new { id = "stretch", label = "Stretch", arguments = JsonSerializer.Serialize(new { title = "Stretch", parent_habit_id = Reference(morning.Id) }) },
+                    new { id = "water", label = "Water", arguments = new { habit_id = Reference(water.Id), date = "2026-04-03" } }
+                }
+            }
+        })));
+        ReplyToReplay(language == "en" ? "Choose." : "Escolha.");
+
+        var result = await handler.Handle(new(UserId, language == "en" ? "Log my habits" : "Registra meus hábitos",
+            EvalTraceRequested: true), default);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        var items = EvalResponseJson(result.Value, false).GetProperty("evalTrace").GetProperty("toolCalls")[0]
+            .GetProperty("arguments").GetProperty("input").GetProperty("items");
+        using var created = JsonDocument.Parse(items[0].GetProperty("arguments").GetString()!);
+        created.RootElement.GetProperty("parent_habit_id").GetGuid().Should().Be(morning.Id);
+        items[1].GetProperty("arguments").GetProperty("habit_id").GetGuid().Should().Be(water.Id);
+    }
+
+    /// <summary>
+    /// Two habits of the person share their first 8 digits. Model text names both by 12 digits, a reference with the next
+    /// digits selects one, and a reference of 8 digits returns <c>unknown_reference</c> with both.
+    /// </summary>
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task ShortReference_CollisionShowsTwelveDigitsAndTheNextDigitsSelectOne(string language)
+    {
+        var user = User.Create("Reader", "reader@example.test").Value;
+        user.SetLanguage(language);
+        SetupUserAndPayGate(user);
+        _shortReferences = true;
+        var water = WithFixedId(CreateHabit("Water"), Guid.Parse("dab2ad98-e891-4a8f-a8c6-91d0c3b2a1f4"));
+        var twin = WithFixedId(CreateHabit("Water"), Guid.Parse("dab2ad98-77aa-4b1c-9d2e-3f4a5b6c7d8e"));
+        SetupSelectionHabits(water, twin);
+        _promptBuilder.BuildAccountContext(Arg.Any<PromptBuildRequest>())
+            .Returns($"- \"Water\" (1 of 2) | {water.Id}\n- \"Water\" (2 of 2) | {twin.Id}");
+        AiToolRequest? sent = null;
+        _aiIntentService.SendWithToolsAsync(Arg.Do<AiToolRequest>(request => sent = request), Arg.Any<Func<AiStreamEvent, Task>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AiResponse
+            {
+                ConversationContext = TestConversationContext,
+                ToolCalls =
+                [
+                    new("get_habit_metrics", "twelve", JsonSerializer.SerializeToElement(new { habit_id = Reference(twin.Id, 12) })),
+                    new("get_habit_metrics", "eight", JsonSerializer.SerializeToElement(new { habit_id = "dab2ad98" }))
+                ]
+            }));
+        var results = CaptureModelResults(language == "en" ? "Which one?" : "Qual deles?");
+        var handler = CreateHandler(ReadTool("get_habit_metrics", new ToolResult(true, Payload: new { completions = 3 })));
+
+        var result = await handler.Handle(new(UserId, language == "en" ? "Show Water metrics" : "Mostra as métricas de Water"), default);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        sent!.AccountContext.Should().StartWith("- \"Water\" (1 of 2) | dab2ad98e891\n- \"Water\" (2 of 2) | dab2ad9877aa")
+            .And.NotContain(water.Id.ToString()).And.NotContain(twin.Id.ToString());
+        Dispatched("get_habit_metrics").Should().ContainSingle().Which.GetProperty("habit_id").GetGuid().Should().Be(twin.Id);
+        var unknown = results.Should().NotBeEmpty().And.Subject.First().Should().ContainSingle(item => item.Id == "eight").Subject;
+        unknown.Success.Should().BeFalse();
+        unknown.Error.Should().StartWith("unknown_reference: habit_id \"dab2ad98\" names no habit of this person.")
+            .And.Contain("\"dab2ad98e891\" (Water)").And.Contain("\"dab2ad9877aa\" (Water)").And.NotContain(water.Id.ToString());
+    }
+
+    /// <summary>
+    /// The digits match only a habit of another person, and a habit reference sits in <c>goal_id</c>. Neither resolves,
+    /// and the error holds no data of the other person.
+    /// </summary>
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task ShortReference_AForeignPrefixAndAReferenceOfAnotherTypeDoNotResolve(string language)
+    {
+        var user = User.Create("Reader", "reader@example.test").Value;
+        user.SetLanguage(language);
+        SetupUserAndPayGate(user);
+        var water = CreateHabit("Water");
+        var foreign = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, Guid.NewGuid(), "Secret plan", null, null,
+            DueDate: Today)).Value;
+        SetupSelectionHabits(water, foreign);
+        SetupAiResponse(new AiResponse
+        {
+            ConversationContext = TestConversationContext,
+            ToolCalls =
+            [
+                new("get_habit_metrics", "foreign", JsonSerializer.SerializeToElement(new { habit_id = Reference(foreign.Id) })),
+                new("review_goals", "goal", JsonSerializer.SerializeToElement(new { goal_id = Reference(water.Id) }))
+            ]
+        });
+        var results = CaptureModelResults(language == "en" ? "Not found." : "Não encontrei.");
+        var handler = CreateHandler(ReadTool("get_habit_metrics", new ToolResult(true)), ReadTool("review_goals", new ToolResult(true)));
+
+        var result = await handler.Handle(new(UserId, language == "en" ? "Show it" : "Mostra"), default);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        Dispatched("get_habit_metrics").Should().BeEmpty();
+        Dispatched("review_goals").Should().BeEmpty();
+        var round = results.Should().NotBeEmpty().And.Subject.First();
+        round.Should().OnlyContain(item => !item.Success && item.Error!.StartsWith("unknown_reference:"));
+        ModelText(round).Should().NotContain("Secret plan").And.NotContain(foreign.Id.ToString());
+        round.Single(item => item.Id == "goal").Error.Should().Contain("names no goal of this person");
+    }
+
+    /// <summary>
+    /// A full GUID of a habit of the person resolves as itself with the setting on and off. A full GUID of no habit of
+    /// the person does not resolve.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ShortReference_AFullGuidResolvesAsItselfOnlyForARecordOfThePerson(bool shortReferences)
+    {
+        SetupUserAndPayGate();
+        _shortReferences = shortReferences;
+        var water = CreateHabit("Water");
+        SetupSelectionHabits(water);
+        var nobody = Guid.NewGuid();
+        SetupAiResponse(new AiResponse
+        {
+            ConversationContext = TestConversationContext,
+            ToolCalls =
+            [
+                new("get_habit_metrics", "owned", JsonSerializer.SerializeToElement(new { habit_id = water.Id })),
+                new("get_habit_metrics", "nobody", JsonSerializer.SerializeToElement(new { habit_id = nobody }))
+            ]
+        });
+        var results = CaptureModelResults("Done.");
+        var handler = CreateHandler(ReadTool("get_habit_metrics", new ToolResult(true)));
+
+        var result = await handler.Handle(new(UserId, "Show Water metrics"), default);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        Dispatched("get_habit_metrics").Should().ContainSingle().Which.GetProperty("habit_id").GetGuid().Should().Be(water.Id);
+        results.Should().NotBeEmpty().And.Subject.First().Single(item => item.Id == "nobody").Error
+            .Should().StartWith($"unknown_reference: habit_id \"{nobody}\" names no habit of this person.");
+    }
+
+    /// <summary>
+    /// A rename whose reference names no habit beside a prepared delete. The turn offers one correction, as it does for
+    /// a write that the ownership check turns down, and a turn whose correction fails leaves no preview.
+    /// </summary>
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task ShortReference_AnUnknownReferenceBesideAPreparedWriteGetsOneCorrectionOrNoPreview(string language)
+    {
+        var failed = await RunRequestTurnAsync(language, RequestMessage(language),
+            children => Calls(Run4Delete(children), Rename("rename-one", "0f0f0f0f")), _ => [Text(language), Text(language)]);
+
+        failed.Result.IsSuccess.Should().BeTrue(failed.Result.Error);
+        var denied = failed.ToolResults[0].Should().ContainSingle(result => !result.Success).Subject;
+        denied.Error.Should().StartWith("unknown_reference: habit_id \"0f0f0f0f\" names no habit of this person.");
+        JsonSerializer.Serialize(denied.Payload).Should().Contain("correction_allowed");
+        failed.Result.Value.PendingOperations.Should().BeNullOrEmpty("a preview with only the delete holds half of the request");
+        failed.Result.Value.AiMessage.Should().Be(NotPreparedFor(language));
+        failed.Held.Should().NotContain(request => request.OperationId == "update_habit", "the boundary turns the rename down before dispatch");
+
+        var corrected = await RunRequestTurnAsync(language, RequestMessage(language),
+            children => Calls(Run4Delete(children), Rename("rename-one", OneCharacterOff(children[1].Id))),
+            children => [Calls(Rename("rename-one-again", Reference(children[1].Id))), Text(language)]);
+
+        corrected.Result.IsSuccess.Should().BeTrue(corrected.Result.Error);
+        corrected.Result.Value.PendingOperations!.SelectMany(operation => operation.Items!).Select(item => item.EntityId)
+            .Should().BeEquivalentTo([.. corrected.Children[4..].Select(child => child.Id), corrected.Children[1].Id]);
+        corrected.Result.Value.PolicyDenials.Should().BeNullOrEmpty();
+    }
+
+    /// <summary>
+    /// One turn reads a habit and prepares a write on it by reference. The model text holds references, and a GUID of no
+    /// listed type stays at full length. The client blocks, the stored record and the eval trace hold full GUIDs.
+    /// </summary>
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task ShortReference_ModelTextHoldsReferencesAndEveryOtherReaderHoldsFullGuids(string language)
+    {
+        var user = User.Create("Reader", "reader@example.test").Value;
+        user.SetLanguage(language);
+        SetupUserAndPayGate(user);
+        _shortReferences = true;
+        _featureFlagService.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>())
+            .Returns(new[] { FeatureFlagKeys.AiEvalTrace, FeatureFlagKeys.AiConversationRecording });
+        var water = CreateHabit("Water");
+        SetupSelectionHabits(water);
+        var suggestion = Guid.NewGuid();
+        var payload = new { habits = new[] { new { id = water.Id, title = "Water" } }, suggestion_id = suggestion };
+        var read = ReadTool("query_habits", new ToolResult(true, Payload: payload));
+        var rename = new UpdateHabitTool(_habitRepo, _userDateService, _mediator);
+        var handler = CreateHandler(read, rename);
+        var held = HoldReplayWrites(rename);
+        AnswerRead(read.Name, payload);
+        SetupAiResponse(new AiResponse
+        {
+            ConversationContext = TestConversationContext,
+            ToolCalls =
+            [
+                new("query_habits", "read", JsonSerializer.SerializeToElement(new { search = "Water" })),
+                new("update_habit", "write", JsonSerializer.SerializeToElement(new { habit_id = Reference(water.Id), title = "Water - 1L" }))
+            ]
+        });
+        var results = CaptureModelResults(language == "en" ? "Review the change." : "Revise a mudança.");
+        ConversationTurnCapture? stored = null;
+        _conversationRecorder.RecordAsync(Arg.Do<ConversationTurnCapture>(turn => stored = turn), Arg.Any<CancellationToken>()).Returns(true);
+
+        var result = await handler.Handle(new(UserId, language == "en" ? "Rename Water" : "Renomeia Water", EvalTraceRequested: true,
+            ClientContext: new(SupportsPendingOperationChanges: true, ConversationId: Guid.NewGuid())), default);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        held.Should().ContainSingle(request => request.OperationId == rename.Name).Which.Arguments.GetProperty("habit_id").GetGuid().Should().Be(water.Id);
+        var modelText = ModelText(results.SelectMany(round => round));
+        modelText.Should().Contain(Reference(water.Id)).And.NotContain(water.Id.ToString()).And.Contain(suggestion.ToString());
+        result.Value.PendingOperations.Should().ContainSingle().Which.Items!.Single().EntityId.Should().Be(water.Id);
+        stored.Should().NotBeNull();
+        stored!.ToolCallsJson.Should().Contain(water.Id.ToString()).And.NotContain($"\"{Reference(water.Id)}\"");
+        var trace = EvalResponseJson(result.Value, false).GetProperty("evalTrace").GetRawText();
+        trace.Should().Contain(water.Id.ToString()).And.NotContain($"\"{Reference(water.Id)}\"");
+    }
+
+    /// <summary>
+    /// With the setting off, model text holds full GUIDs, and the same calls with full GUIDs give the same previews as
+    /// with the setting on.
+    /// </summary>
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task ShortReference_SettingOffShowsFullGuidsAndGivesTheSamePreviews(string language)
+    {
+        var water = WithFixedId(CreateHabit("Water"), Guid.Parse("4c1e7f20-3b5a-4d6c-8e9f-0a1b2c3d4e5f"));
+        async Task<(ChatResponse Response, string ModelText)> RunAsync(bool shortReferences)
+        {
+            _shortReferences = shortReferences;
+            var user = User.Create("Reader", "reader@example.test").Value;
+            user.SetLanguage(language);
+            SetupUserAndPayGate(user);
+            SetupSelectionHabits(water);
+            var payload = new { habits = new[] { new { id = water.Id, title = "Water" } } };
+            var read = ReadTool("query_habits", new ToolResult(true, Payload: payload));
+            var rename = new UpdateHabitTool(_habitRepo, _userDateService, _mediator);
+            var handler = CreateHandler(read, rename);
+            HoldReplayWrites(rename);
+            AnswerRead(read.Name, payload);
+            SetupAiResponse(new AiResponse
+            {
+                ConversationContext = TestConversationContext,
+                ToolCalls =
+                [
+                    new("query_habits", "read", JsonSerializer.SerializeToElement(new { search = "Water" })),
+                    new("update_habit", "write", JsonSerializer.SerializeToElement(new { habit_id = water.Id, title = "Water - 1L" }))
+                ]
+            });
+            var results = CaptureModelResults(language == "en" ? "Review the change." : "Revise a mudança.");
+            var result = await handler.Handle(new(UserId, language == "en" ? "Rename Water" : "Renomeia Water",
+                ClientContext: new(SupportsPendingOperationChanges: true)), default);
+            result.IsSuccess.Should().BeTrue(result.Error);
+            return (result.Value, ModelText(results.SelectMany(round => round)));
+        }
+
+        var off = await RunAsync(shortReferences: false);
+        var on = await RunAsync(shortReferences: true);
+
+        off.ModelText.Should().Contain("4c1e7f20-3b5a-4d6c-8e9f-0a1b2c3d4e5f");
+        on.ModelText.Should().Contain("\"4c1e7f20\"").And.NotContain("4c1e7f20-3b5a-4d6c-8e9f-0a1b2c3d4e5f");
+        static object Shape(ChatResponse response) => response.PendingOperations!.Select(operation => new
+        {
+            operation.CapabilityId,
+            operation.PreviewFingerprint,
+            Items = operation.Items!.Select(item => new { item.ItemId, item.EntityId, item.EntityName, Fields = item.Fields.Select(field => new { field.Field, field.NewValue }) })
+        }).ToArray();
+        JsonSerializer.Serialize(Shape(on.Response)).Should().Be(JsonSerializer.Serialize(Shape(off.Response)));
     }
 
     /// <summary>The rename that the model sent in run 4 of #2129, with the second id cut short.</summary>
