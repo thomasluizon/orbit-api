@@ -57,9 +57,9 @@ public partial class ProcessUserChatCommandHandler
         return $"{ToolNameToPascalCase(call.Name)} requested via chat";
     }
 
-    private AiToolCallResult BuildToolCallResult(AiToolCall call, AgentOperationResult operationResult)
+    private AiToolCallResult BuildToolCallResult(AiToolCall call, AgentOperationResult operationResult, bool changePlan = false)
     {
-        return new AiToolCallResult(
+        var result = new AiToolCallResult(
             call.Name,
             call.Id,
             operationResult.Status == AgentOperationStatus.Succeeded,
@@ -76,13 +76,34 @@ public partial class ProcessUserChatCommandHandler
                     instruction = SelectionRule
                 },
                 HabitMonthCard month => HabitMonthModelPayload.From(month),
-                PendingPreviewDiscard => new { status = "discarded", instruction = PendingPreviewDiscard.Instruction },
+                PendingPreviewDiscard => new { status = "discarded", instruction = changePlan ? null : PendingPreviewDiscard.Instruction },
                 IReadOnlyList<ChecklistTemplateResponse> templates when !ModelPayloadBudget.Fits(templates) => ChecklistTemplateModelPayload.From(templates),
                 HabitRankingResponse ranking when !ModelPayloadBudget.Fits(ranking) => HabitRankingModelPayload.From(ranking),
                 _ => operationResult.Payload
             },
             operationResult.ReadBlock is null || operationResult.Payload is HabitListCard { Selection.RequiresAnswer: true }
                 ? null : "[[orbit:read:" + call.Id + "]]");
+        return changePlan ? result with { Payload = WithoutInstruction(result.Payload) } : result;
+    }
+
+    private static readonly JsonSerializerOptions ModelPayloadJson = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+    };
+
+    /// <summary>
+    /// A read payload on the <c>ai_change_plan</c> path keeps its data and loses its instruction. The instruction of a
+    /// shortened habit month, template list or ranking page, and of a discarded preview, lives in the chat description of
+    /// its tool on that path.
+    /// </summary>
+    internal static object? WithoutInstruction(object? payload)
+    {
+        if (payload is not (HabitMonthModelPayload or ChecklistTemplateModelPayload or HabitRankingModelPayload)
+            || JsonSerializer.SerializeToNode(payload, payload.GetType(), ModelPayloadJson) is not JsonObject node)
+            return payload;
+        node.Remove("instruction");
+        return node;
     }
 
     private static string? BuildToolError(AgentOperationResult operationResult)

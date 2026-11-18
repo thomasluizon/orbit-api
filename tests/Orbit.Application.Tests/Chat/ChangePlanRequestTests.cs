@@ -266,4 +266,21 @@ public partial class ProcessUserChatCommandHandlerTests
             definition.DraftClarification.Should().BeNull();
         }
     }
+
+    [Fact]
+    public void ChangePlanReadPayload_KeepsItsDataAndLosesItsInstruction()
+    {
+        var templates = Enumerable.Range(0, 400).Select(index => new Orbit.Application.ChecklistTemplates.Queries.ChecklistTemplateResponse(
+            Guid.NewGuid(), $"Template {index} with a long name", [.. Enumerable.Range(0, 20).Select(item => $"Item {item} of a long list")])).ToArray();
+        var payload = ChecklistTemplateModelPayload.From(templates);
+
+        var stripped = JsonSerializer.SerializeToElement(ProcessUserChatCommandHandler.WithoutInstruction(payload));
+
+        stripped.TryGetProperty("instruction", out _).Should().BeFalse();
+        stripped.GetProperty("totalCount").GetInt32().Should().Be(400);
+        stripped.GetProperty("templates").GetArrayLength().Should().Be(payload.Templates.Count);
+        JsonSerializer.SerializeToElement(payload, new JsonSerializerOptions(JsonSerializerDefaults.Web))
+            .GetProperty("instruction").GetString().Should().NotBeNullOrEmpty();
+        ProcessUserChatCommandHandler.WithoutInstruction("plain data").Should().Be("plain data");
+    }
 }

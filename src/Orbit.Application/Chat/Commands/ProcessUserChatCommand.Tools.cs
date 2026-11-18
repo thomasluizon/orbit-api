@@ -706,7 +706,7 @@ public partial class ProcessUserChatCommandHandler
         RegisterPreviewDiscussion(call, executionResponse, executionResults);
         var operationResult = ReadSelectionOf(call, StatusCardBuilder.ForClient(
             executionResponse.Operation with { Access = access }, request.ClientContext), request, executionResults);
-        var toolResult = BuildToolCallResult(call, operationResult);
+        var toolResult = BuildToolCallResult(call, operationResult, executionResults.ChangePlan);
         InvalidateTurnSnapshotIfMutated(request.UserId, tool, operationResult);
 
         await RegisterPendingWriteAsync(request.UserId, tool, executionResponse, executionResults, cancellationToken);
