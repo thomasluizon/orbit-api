@@ -143,6 +143,8 @@ public sealed partial class OfferDeadlineControllerTests
         policy.EvaluateAsync(Arg.Any<AgentPolicyEvaluationContext>()).Returns(call => new AgentPolicyDecision(
             AgentPolicyDecisionStatus.Allowed, catalog.GetCapability(call.Arg<AgentPolicyEvaluationContext>().CapabilityId)!));
         var work = Substitute.For<IUnitOfWork>();
+        work.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task<AgentExecuteOperationResponse>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.Arg<Func<CancellationToken, Task<AgentExecuteOperationResponse>>>()(call.Arg<CancellationToken>()));
         work.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
             .Returns(call => call.Arg<Func<CancellationToken, Task>>()(call.Arg<CancellationToken>()));
         IPendingAgentOperationStore pending = Substitute.For<IPendingAgentOperationStore>();

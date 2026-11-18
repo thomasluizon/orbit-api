@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
+using Orbit.Application.Chat;
 using Orbit.Application.Gamification.Jobs;
 using Orbit.Application.Notifications.Commands;
 using Orbit.Domain.Common;
@@ -314,6 +315,39 @@ public sealed partial class HabitEffectPostgresTests
         payload.GetProperty("status").GetString().Should().Be("sent");
         payload.GetProperty("subscriptionCount").GetInt32().Should().Be(1);
         _pushTransactions.Should().ContainSingle().Which.Should().BeFalse("a push inside an open transaction holds its connection for the whole send");
+    }
+
+    [PostgresFact]
+    public async Task SetBuiltWithATestPushMember_IsRefusedBeforeAnyMemberRuns()
+    {
+        await using var app = await StartAsync();
+        var world = await SeedWorldAsync(app);
+        await SeedPushSubscriptionAsync(app, world.User.Id, Endpoint);
+        var push = await HoldAsync(app, world.User.Id, "update_notifications", new { action = "test_push" });
+        var rename = await HoldAsync(app, world.User.Id, "update_habit", new { habit_id = world.Read.Id, title = "Study" });
+        Guid setId;
+        await using (var scope = app.CreateScope())
+        {
+            var services = scope.ServiceProvider;
+            var store = services.GetRequiredService<IPendingAgentOperationStore>();
+            var arguments = AccountChangeSet.BuildArguments(
+                [store.GetExecution(world.User.Id, push.Id)!, store.GetExecution(world.User.Id, rename.Id)!]);
+            var preview = (await services.GetRequiredService<IPendingOperationChangePreviewer>()
+                .PreviewAsync(world.User.Id, AccountChangeSet.OperationName, arguments)).Value!;
+            var fingerprint = AgentOperationFingerprint.Compute(AccountChangeSet.OperationName, arguments.GetRawText());
+            setId = store.Create(world.User.Id,
+                services.GetRequiredService<IAgentCatalogService>().GetCapability(AccountChangeSet.CapabilityId)!,
+                AccountChangeSet.OperationName, arguments.GetRawText(), "Review", fingerprint, AgentExecutionSurface.Chat).Id;
+            store.Revise(world.User.Id, setId, fingerprint, arguments.GetRawText(), fingerprint, preview.PreviewFingerprint!)
+                .Should().BeTrue();
+        }
+
+        var approved = await ApproveAsync(app, world.User.Id, setId);
+
+        approved.Operation.Status.Should().Be(AgentOperationStatus.Denied);
+        approved.Operation.PolicyReason.Should().Be(Orbit.Application.Common.AgentPolicyReasons.UnsupportedByPolicy);
+        _pushTransactions.Should().BeEmpty("a test push is not part of a change set");
+        (await app.ReadAsync(db => db.Habits.SingleAsync(saved => saved.Id == world.Read.Id))).Title.Should().Be("Read");
     }
 
     private void ArmConcurrentRegistration(PostgresOrbitApp app, Guid earlierSubscriptionId) => _faults.Arm(
