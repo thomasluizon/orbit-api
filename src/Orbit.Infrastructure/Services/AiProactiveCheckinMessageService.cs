@@ -21,9 +21,11 @@ public sealed partial class AiProactiveCheckinMessageService(
         + "Never invent numbers, habits or goals. Never mention subscriptions, plans, prices or upgrades. "
         + "Never mention data, logs, facts, or why this message was chosen in the sentence's own prose. "
         + "Stay calm and unpushy, without blame. "
-        + "Return JSON with text (the sentence using title placeholders), habitTitles and goalTitles (arrays of every title referenced). "
-        + "In text, refer to habits only as {{habit:N}}, with N the zero-based index in HabitTitles, and to the supplied goal only as {{goal}}. "
-        + "Never write a literal habit or goal title in text, even an ordinary word; the server substitutes the titles. Never name anything else. "
+        + "Return JSON with text (the sentence using habit placeholders), habitTitles and goalTitles (arrays of every title referenced). "
+        + "In text, refer to each habit as {{habit:N|phrase}}, with N the zero-based index in HabitTitles and phrase the words a native speaker of the app language would use for that one habit, so the sentence reads as one language. "
+        + "Say a habit the common way in the app language instead of copying a stored title written in another language. A name, brand, product, app or loanword that people use as it is stays as written. "
+        + "The phrase has 1 to 60 characters, holds no sentence-ending punctuation, and never names a second habit or a goal. "
+        + "Refer to the supplied goal only as {{goal}}. Outside the placeholders, never write a habit or goal title, even an ordinary word. Never name anything that is not in the facts. "
         + "In habitTitles and goalTitles, copy the literal titles of the referenced placeholders exactly from the facts. "
         + "Capitalize only the first word, the English pronoun I, Orbit, or the language's weekday and month names. "
         + "Use empty arrays when no titles are mentioned. Use no Markdown.";
@@ -37,8 +39,10 @@ public sealed partial class AiProactiveCheckinMessageService(
             var line = await aiClient.CompleteJsonAsync<ProactiveLine>(BuildSystemPrompt(language),
                 BuildPrompt(facts, language), temperature: ProactiveRules.Temperature,
                 purpose: "proactive_item", cancellationToken: cancellationToken);
-            var text = GroundedText(line, facts, language, accountTitles);
-            return text is not null ? fallback with { Text = text } : fallback;
+            var text = GroundedText(line, facts, language, accountTitles, out var refusal);
+            if (text is not null) return fallback with { Text = text };
+            TextRefused(logger, facts.Trigger, refusal);
+            return fallback;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -54,7 +58,10 @@ public sealed partial class AiProactiveCheckinMessageService(
 
     internal static string BuildSystemPrompt(string language) => $"You are Orbit. {LanguageInstruction(language)} "
         + "Do not infer the language from titles or from the language of these instructions. "
-        + "Localize only the sentence's own prose; keep stored titles verbatim in the title arrays. "
+        + "Localize the sentence and every phrase; keep stored titles verbatim in the title arrays. "
+        + (LocaleHelper.IsPortuguese(language)
+            ? "Example: HabitTitles [\"Water - 1.18L\", \"Change twitter founder account email\"] gives text \"Para começar a manhã, comece com {{habit:0|seu litro de água}} e depois {{habit:1|alterar o email do Twitter}}.\" "
+            : string.Empty)
         + (LocaleHelper.IsPortuguese(language)
             ? "Orbit is masculine in Brazilian Portuguese (o Orbit, do Orbit, ele); use native, warm você phrasing. "
             : "Use natural, warm English, addressing the reader as you. ")
@@ -86,7 +93,7 @@ public sealed partial class AiProactiveCheckinMessageService(
             Facts: {JsonSerializer.Serialize(context)}
             Trigger context: {TriggerContext(facts)}
             Rules:
-            - In text, use title placeholders from the system prompt, never literal titles; indexes refer to the supplied HabitTitles order. Do not name anything else
+            - In text, refer to each habit with a placeholder and a phrase from the system prompt, never with its stored title; indexes refer to the supplied HabitTitles order. Do not name anything else
             - The 140-character limit applies AFTER the server substitutes the literal titles
             - Name the supplied open habits, at most three, then the count of the rest; if space is tight, name fewer and count the rest. Never invent a title when none is supplied
             - Use real progress only when supplied; an open count does not reveal how many habits were completed or the day's total. An app-wide streak is not a habit streak
@@ -113,33 +120,67 @@ public sealed partial class AiProactiveCheckinMessageService(
         _ => throw new ArgumentOutOfRangeException(nameof(facts))
     };
 
+    private sealed record HabitPhrase(string Title, string Phrase);
+
     private static string? GroundedText(ProactiveLine? line, ProactiveFacts facts, string language,
-        IReadOnlyCollection<string> accountTitles)
+        IReadOnlyCollection<string> accountTitles, out string refusal)
     {
+        refusal = string.Empty;
         var text = line?.Text;
         if (string.IsNullOrWhiteSpace(text) || text.Any(char.IsControl)
-            || line!.HabitTitles is null || line.GoalTitles is null) return null;
+            || line!.HabitTitles is null || line.GoalTitles is null) return Refuse("shape", out refusal);
         text = AiPlainText.Normalize(text);
         var referencedHabits = new HashSet<string>(StringComparer.Ordinal);
         var referencedGoals = new HashSet<string>(StringComparer.Ordinal);
-        var rendered = SubstituteTitles(text, facts, referencedHabits, referencedGoals);
+        var phrases = new List<HabitPhrase>();
+        var rendered = SubstituteTitles(text, facts, referencedHabits, referencedGoals, phrases);
         var prose = TitlePlaceholders().Replace(text, "habit");
-        if (rendered is null || prose.IndexOfAny(['{', '}']) >= 0
-            || rendered.Length > ProactiveRules.MaxTextLength || rendered.Any(char.IsControl)
-            || referencedHabits.Count > 3 || !referencedHabits.SetEquals(line.HabitTitles)
-            || !referencedGoals.SetEquals(line.GoalTitles)) return null;
+        if (rendered is null || prose.IndexOfAny(['{', '}']) >= 0) return Refuse("placeholder", out refusal);
+        if (rendered.Length > ProactiveRules.MaxTextLength || rendered.Any(char.IsControl)) return Refuse("length", out refusal);
+        if (referencedHabits.Count > 3 || !referencedHabits.SetEquals(line.HabitTitles)
+            || !referencedGoals.SetEquals(line.GoalTitles)) return Refuse("declared-titles", out refusal);
 
         var rawProse = TitlePlaceholders().Replace(text, " ");
-        if (facts.HabitTitles.Append(facts.GoalTitle ?? string.Empty).Any(title => ContainsTitle(rawProse, title))) return null;
-        var substitutedTitles = referencedHabits.Concat(referencedGoals).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        if (accountTitles.Any(title => !substitutedTitles.Contains(title) && ContainsTitle(rendered, title))) return null;
-        if (InternalDataWords().IsMatch(rawProse) || !MatchesAccountLanguage(rawProse, language)
-            || !HasOnlyAllowedNames(prose, language) || SalesWords().IsMatch(prose)) return null;
-        if (SentenceEnds().Matches(prose).Count != 1 || !".?".Contains(prose[^1])) return null;
-        return HasGroundedNumbers(prose, facts, referencedHabits.Count) ? rendered : null;
+        var titleRefusal = TitleRefusal(rawProse, phrases, facts, accountTitles,
+            referencedHabits.Concat(referencedGoals).ToHashSet(StringComparer.OrdinalIgnoreCase));
+        if (titleRefusal is not null) return Refuse(titleRefusal, out refusal);
+
+        var phraseWords = phrases.Select(p => RemoveTitle(p.Phrase, p.Title)).ToList();
+        var checkedWords = phraseWords.Prepend(prose).ToList();
+        if (InternalDataWords().IsMatch(rawProse) || phraseWords.Any(InternalDataWords().IsMatch)
+            || checkedWords.Any(SalesWords().IsMatch)) return Refuse("forbidden-word", out refusal);
+        if (!HasOnlyAllowedNames(prose, language)) return Refuse("unknown-name", out refusal);
+        if (SentenceEnds().Matches(prose).Count != 1 || !".?".Contains(prose[^1])
+            || phrases.Any(p => SentenceEnds().IsMatch(p.Phrase))) return Refuse("sentence-shape", out refusal);
+        return HasGroundedNumbers(prose, phrases, facts, referencedHabits.Count)
+            ? rendered : Refuse("ungrounded-number", out refusal);
     }
 
-    private static bool HasGroundedNumbers(string prose, ProactiveFacts facts, int namedHabitCount)
+    private static string? TitleRefusal(string rawProse, IReadOnlyCollection<HabitPhrase> phrases, ProactiveFacts facts,
+        IReadOnlyCollection<string> accountTitles, ISet<string> namedTitles)
+    {
+        var factTitles = facts.HabitTitles.Append(facts.GoalTitle ?? string.Empty).ToList();
+        if (factTitles.Any(title => ContainsTitle(rawProse, title))) return "title-in-prose";
+        if (accountTitles.Any(title => !namedTitles.Contains(title) && ContainsTitle(rawProse, title))) return "unknown-habit";
+        var known = factTitles.Concat(accountTitles).Where(title => !string.IsNullOrWhiteSpace(title))
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        return phrases.Any(phrase => NamesAnotherTitle(phrase, known)) ? "unknown-habit" : null;
+    }
+
+    private static string? Refuse(string reason, out string refusal)
+    {
+        refusal = reason;
+        return null;
+    }
+
+    private static bool NamesAnotherTitle(HabitPhrase phrase, IEnumerable<string> knownTitles) => knownTitles.Any(title =>
+        !title.Equals(phrase.Title, StringComparison.OrdinalIgnoreCase) && !ContainsTitle(phrase.Title, title)
+        && ContainsTitle(phrase.Phrase, title));
+
+    private static string RemoveTitle(string phrase, string title) => phrase.Replace(title, " ", StringComparison.OrdinalIgnoreCase);
+
+    private static bool HasGroundedNumbers(string prose, IReadOnlyCollection<HabitPhrase> phrases, ProactiveFacts facts,
+        int namedHabitCount)
     {
         var numbers = new[] { facts.HabitCount, facts.CurrentStreak, facts.TimedEventCount,
             facts.TimedMinutes, facts.TotalCompletions, facts.TotalScheduled, facts.BadHabitSlips }
@@ -147,11 +188,15 @@ public sealed partial class AiProactiveCheckinMessageService(
         if (namedHabitCount > 0)
             numbers.Add(Math.Max(0, (facts.HabitCount ?? facts.HabitTitles.Count)
                 - namedHabitCount).ToString(CultureInfo.InvariantCulture));
-        return Numbers().Matches(prose).All(n => numbers.Contains(n.Value));
+        return Numbers().Matches(prose).All(n => numbers.Contains(n.Value))
+            && phrases.All(p => Numbers().Matches(p.Phrase).Select(n => DecimalPoint(n.Value)).All(n =>
+                numbers.Contains(n) || Numbers().Matches(p.Title).Any(own => DecimalPoint(own.Value) == n)));
     }
 
+    private static string DecimalPoint(string number) => number.Replace(',', '.');
+
     private static string? SubstituteTitles(string text, ProactiveFacts facts,
-        ISet<string> referencedHabits, ISet<string> referencedGoals)
+        ISet<string> referencedHabits, ISet<string> referencedGoals, ICollection<HabitPhrase> phrases)
     {
         var invalidPlaceholder = false;
         var rendered = TitlePlaceholders().Replace(text, match =>
@@ -165,8 +210,15 @@ public sealed partial class AiProactiveCheckinMessageService(
                 && int.TryParse(match.Groups["index"].Value, NumberStyles.None, CultureInfo.InvariantCulture, out var index)
                 && index < facts.HabitTitles.Count && !string.IsNullOrWhiteSpace(facts.HabitTitles[index]))
             {
-                referencedHabits.Add(facts.HabitTitles[index]);
-                return facts.HabitTitles[index];
+                var title = facts.HabitTitles[index];
+                referencedHabits.Add(title);
+                if (!match.Groups["phrase"].Success) return title;
+                var phrase = match.Groups["phrase"].Value.Trim();
+                if (phrase.Length > 0)
+                {
+                    phrases.Add(new(title, phrase));
+                    return phrase;
+                }
             }
             invalidPlaceholder = true;
             return string.Empty;
@@ -177,38 +229,6 @@ public sealed partial class AiProactiveCheckinMessageService(
     private static bool ContainsTitle(string text, string title) => !string.IsNullOrWhiteSpace(title)
         && Regex.IsMatch(text, @"(?<!\p{L})" + Regex.Escape(title) + @"(?!\p{L})",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
-
-    /// <summary>
-    /// Language evidence comes only from the model's prose after title placeholders are removed.
-    /// Require the account language and reject mixed or uncertain prose; unlisted words remain unrestricted.
-    /// Shared words such as a, as, no, me and do cannot distinguish English from Portuguese.
-    /// </summary>
-    private static bool MatchesAccountLanguage(string prose, string language)
-    {
-        var words = Words().Matches(prose).Select(word => word.Value).ToArray();
-        var expected = LocaleHelper.IsPortuguese(language) ? PortugueseLanguageMarkers : EnglishLanguageMarkers;
-        var other = LocaleHelper.IsPortuguese(language) ? EnglishLanguageMarkers : PortugueseLanguageMarkers;
-        return words.Any(expected.Contains) && !words.Any(other.Contains);
-    }
-
-    private static readonly HashSet<string> EnglishLanguageMarkers = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "the", "an", "and", "or", "but", "of", "to", "for", "from", "with", "without", "between", "into",
-        "you", "your", "yours", "i", "we", "our", "ours", "they", "their", "them", "it", "its",
-        "this", "that", "these", "those", "is", "are", "am", "was", "were", "be", "been",
-        "have", "has", "had", "can", "could", "should", "would", "will", "not", "still",
-        "if", "than", "then", "when", "where", "which", "what", "who", "how",
-        "today", "tonight", "tomorrow", "yesterday"
-    };
-
-    private static readonly HashSet<string> PortugueseLanguageMarkers = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "o", "os", "um", "uma", "uns", "umas", "e", "ou", "mas", "de", "da", "dos", "das", "em",
-        "na", "nos", "nas", "ao", "aos", "por", "para", "pelo", "pela", "pelos", "pelas", "com", "sem", "entre",
-        "você", "vocês", "seu", "sua", "seus", "suas", "eu", "nós", "nosso", "nossa", "ele", "ela", "eles", "elas",
-        "é", "são", "está", "estão", "foi", "foram", "ser", "tem", "têm", "há", "pode", "podem", "não", "ainda",
-        "se", "que", "quando", "onde", "qual", "quais", "quem", "como", "hoje", "amanhã", "ontem", "nesta", "neste"
-    };
 
     private static bool HasOnlyAllowedNames(string text, string language)
     {
@@ -277,7 +297,7 @@ public sealed partial class AiProactiveCheckinMessageService(
 
     private static string FitTemplateText(ProactiveFacts facts, bool pt)
     {
-        var titles = facts.HabitTitles.Where(title => !string.IsNullOrWhiteSpace(title) && !title.Any(char.IsControl)).Take(3).ToList();
+        var titles = facts.HabitTitles.Where(title => !string.IsNullOrWhiteSpace(title) && !title.Any(char.IsControl)).Take(1).ToList();
         var goal = string.IsNullOrWhiteSpace(facts.GoalTitle) || facts.GoalTitle.Any(char.IsControl) ? null : facts.GoalTitle;
         while (true)
         {
@@ -296,14 +316,14 @@ public sealed partial class AiProactiveCheckinMessageService(
             return total > 0 ? string.Create(CultureInfo.InvariantCulture,
                 $"{total} {(pt ? total == 1 ? "hábito" : "hábitos" : total == 1 ? "habit" : "habits")}")
                 : pt ? "seus hábitos" : "your habits";
-        var remaining = Math.Max(0, total - titles.Count);
-        var items = titles.ToList();
-        if (remaining > 0)
-            items.Add(pt ? string.Create(CultureInfo.InvariantCulture, $"mais {remaining}")
-                : string.Create(CultureInfo.InvariantCulture, $"{remaining} more"));
-        return items.Count == 1 ? items[0]
-            : string.Join(", ", items.Take(items.Count - 1)) + (pt ? " e " : " and ") + items[^1];
+        var title = Quoted(titles[0]);
+        var remaining = Math.Max(0, total - 1);
+        if (remaining == 0) return title;
+        return pt ? string.Create(CultureInfo.InvariantCulture, $"{title} e mais {remaining}")
+            : string.Create(CultureInfo.InvariantCulture, $"{title} and {remaining} more");
     }
+
+    private static string Quoted(string title) => $"\u201c{title}\u201d";
 
     private static string TemplateText(ProactiveFacts facts, bool pt, string habits, string? goal)
     {
@@ -325,8 +345,8 @@ public sealed partial class AiProactiveCheckinMessageService(
                 $"Com {facts.TimedEventCount} {(facts.TimedEventCount == 1 ? "evento" : "eventos")} hoje, escolha um intervalo antes de encaixar um hábito."),
             (ProactiveTrigger.BusyCalendarDay, false) => string.Create(CultureInfo.InvariantCulture,
                 $"With {facts.TimedEventCount} {(facts.TimedEventCount == 1 ? "event" : "events")} today, choose a gap before fitting in a habit."),
-            (ProactiveTrigger.GoalBehind, true) => $"Para {goal ?? "sua meta"}, escolha um próximo passo menor que caiba no seu dia.",
-            (ProactiveTrigger.GoalBehind, false) => $"For {goal ?? "your goal"}, choose a smaller next step that fits your day.",
+            (ProactiveTrigger.GoalBehind, true) => $"Para {(goal is null ? "sua meta" : $"a meta {Quoted(goal)}")}, escolha um próximo passo menor que caiba no seu dia.",
+            (ProactiveTrigger.GoalBehind, false) => $"For {(goal is null ? "your goal" : $"the goal {Quoted(goal)}")}, choose a smaller next step that fits your day.",
             (ProactiveTrigger.WeeklyReview, true) => "Olhe a semana passada e escolha o que manter ou ajustar.",
             (ProactiveTrigger.WeeklyReview, false) => "Look back at last week and choose what to keep or adjust.",
             (ProactiveTrigger.MorningPlan, true) => $"Para começar a manhã, escolha o que cabe: {habits}.",
@@ -344,10 +364,12 @@ public sealed partial class AiProactiveCheckinMessageService(
     private static partial Regex Numbers();
     [GeneratedRegex(@"[.!?](?:\s|$)")]
     private static partial Regex SentenceEnds();
-    [GeneratedRegex(@"\{\{(?:habit:(?<index>0|[1-9]\d*)|(?<goal>goal))\}\}", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    [GeneratedRegex(@"\{\{(?:habit:(?<index>0|[1-9]\d*)(?:\|(?<phrase>[^{}|\r\n]{1,60}))?|(?<goal>goal))\}\}", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
     private static partial Regex TitlePlaceholders();
     [GeneratedRegex(@"\p{L}[\p{L}\p{M}]*", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
     private static partial Regex Words();
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Proactive text refused for {Trigger} because of {Reason}; using grounded template")]
+    private static partial void TextRefused(ILogger logger, ProactiveTrigger trigger, string reason);
     [LoggerMessage(Level = LogLevel.Warning, Message = "Proactive text generation failed; using grounded template")]
     private static partial void GenerationFailed(ILogger logger, Exception exception);
 }
