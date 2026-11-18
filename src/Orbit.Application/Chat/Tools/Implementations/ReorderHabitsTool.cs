@@ -5,7 +5,7 @@ using Orbit.Application.Habits.Commands;
 namespace Orbit.Application.Chat.Tools.Implementations;
 
 public class ReorderHabitsTool(
-    IMediator mediator) : IAiTool, IArgumentCheckTool
+    IMediator mediator) : IAiTool, IArgumentCheckTool, ITransactionalAiTool
 {
     public string Name => "reorder_habits";
 

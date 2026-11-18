@@ -5,6 +5,7 @@ using Orbit.Application.Profile.Commands;
 
 namespace Orbit.Application.Chat.Tools.Implementations;
 
+[ExternalEffectTool]
 public class ManageAccountTool(IMediator mediator) : IPreparedIntentTool
 {
     public string Name => "manage_account";

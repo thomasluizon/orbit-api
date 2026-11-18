@@ -15,7 +15,7 @@ public sealed partial class BulkUpdateHabitEmojisTool(
     IGenericRepository<Habit> habitRepository,
     IHabitEmojiInferenceService inferenceService,
     IUnitOfWork unitOfWork,
-    ILogger<BulkUpdateHabitEmojisTool> logger) : IAiTool, IArgumentCheckTool
+    ILogger<BulkUpdateHabitEmojisTool> logger) : IAiTool, IArgumentCheckTool, ITransactionalAiTool
 {
     internal const int InferenceChunkSize = 25;
 

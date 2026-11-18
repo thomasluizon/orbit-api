@@ -47,24 +47,18 @@ public interface IArgumentCheckTool
 }
 
 /// <summary>
-/// A tool whose database writes share the executor's unit of work.
-/// Atomic bundles additionally require a route that cannot trigger external effects,
-/// including effects dispatched indirectly by application commands.
+/// A write tool whose database writes share the executor's unit of work for every argument shape, so it joins a
+/// change set. Its effects outside the database wait for the commit through AfterCommit. The referral reward job
+/// is the exception: it is enqueued before the commit and fails while the referral stays pending.
 /// </summary>
-public interface ITransactionalAiTool
-{
-    bool SupportsAtomicExecution(JsonElement arguments) => false;
+public interface ITransactionalAiTool;
 
-    Task<bool> SupportsAtomicExecutionAsync(Guid userId, JsonElement arguments, CancellationToken ct) =>
-        Task.FromResult(SupportsAtomicExecution(arguments));
-}
-
-public static class AiToolAtomicity
-{
-    public static Task<bool> SupportsAsync(IAiTool? tool, Guid userId, JsonElement arguments, CancellationToken ct) =>
-        tool is ITransactionalAiTool transactional
-            ? transactional.SupportsAtomicExecutionAsync(userId, arguments, ct) : Task.FromResult(false);
-}
+/// <summary>
+/// A write tool with an effect outside the database, such as a payment provider, an email or a calendar provider.
+/// It never joins a change set.
+/// </summary>
+[AttributeUsage(AttributeTargets.Class, Inherited = false)]
+public sealed class ExternalEffectToolAttribute : Attribute;
 
 public record ToolResult(
     bool Success,

@@ -14,7 +14,7 @@ namespace Orbit.Application.Chat.Tools.Implementations;
 public class LogHabitTool(
     IMediator mediator,
     IGenericRepository<Habit> habitRepository,
-    IUserDateService userDateService) : IAiTool, IArgumentCheckTool
+    IUserDateService userDateService) : IAiTool, IArgumentCheckTool, ITransactionalAiTool
 {
     public string Name => "log_habit";
 

@@ -11,7 +11,7 @@ public sealed class BulkLogHabitsTool(
     IMediator mediator,
     IGenericRepository<Habit> habitRepository,
     IUserDateService userDateService,
-    BulkHabitReplayPlanner replayPlanner) : IAiTool, IArgumentCheckTool
+    BulkHabitReplayPlanner replayPlanner) : IAiTool, IArgumentCheckTool, ITransactionalAiTool
 {
     public string Name => "bulk_log_habits";
 

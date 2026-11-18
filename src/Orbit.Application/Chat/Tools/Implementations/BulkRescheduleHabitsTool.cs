@@ -7,8 +7,6 @@ namespace Orbit.Application.Chat.Tools.Implementations;
 
 public sealed class BulkRescheduleHabitsTool(IMediator mediator) : IAiTool, IArgumentCheckTool, ITransactionalAiTool
 {
-    public bool SupportsAtomicExecution(JsonElement arguments) => true;
-
     public string Name => "bulk_reschedule_habits";
 
     public string Description =>

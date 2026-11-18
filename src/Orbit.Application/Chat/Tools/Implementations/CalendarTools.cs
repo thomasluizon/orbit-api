@@ -112,6 +112,7 @@ public class GetCalendarOverviewTool(IMediator mediator) : IAiTool
 
 }
 
+[ExternalEffectTool]
 public class ManageCalendarSyncTool(IMediator mediator) : IPreparedIntentTool
 {
     public string Name => "manage_calendar_sync";

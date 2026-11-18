@@ -14,8 +14,6 @@ public sealed class BulkSkipHabitsTool(
     IUserDateService userDateService,
     BulkHabitReplayPlanner replayPlanner) : IAiTool, IArgumentCheckTool, ITransactionalAiTool
 {
-    public bool SupportsAtomicExecution(JsonElement arguments) => true;
-
     public string Name => "bulk_skip_habits";
 
     public string Description =>

@@ -14,18 +14,6 @@ public partial class BulkCreateHabitsTool(
 {
     private const string TitleProperty = "title";
 
-    public bool SupportsAtomicExecution(JsonElement arguments)
-    {
-        if (!arguments.TryGetProperty(ToolArgumentNames.Habits, out var habits) || habits.ValueKind != JsonValueKind.Array
-            || habits.EnumerateArray().Any(HasGoalLinks)) return false;
-        if (!HasExistingParent(arguments, habits) && !habits.EnumerateArray().Any(RequiresTreeCommands)) return true;
-        return habits.EnumerateArray().All(item => item.TryGetProperty(HabitId, out _)
-            || item.TryGetProperty(ParentHabitId, out _) || arguments.TryGetProperty(ParentHabitId, out _));
-    }
-
-    internal static bool HasGoalLinks(JsonElement item) => item.TryGetProperty(GoalIds, out _)
-        || item.TryGetProperty(SubHabits, out var children) && children.EnumerateArray().Any(HasGoalLinks);
-
     public string Name => ToolArgumentNames.BulkCreateHabits;
 
     public string Description =>
