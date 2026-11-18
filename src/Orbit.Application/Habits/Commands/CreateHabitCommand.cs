@@ -234,30 +234,16 @@ public partial class CreateHabitCommandHandler(
         return Result.Success<IReadOnlyList<Guid>>([]);
     }
 
-    private async Task ProcessGamificationSafeAsync(Guid userId, CancellationToken cancellationToken)
-    {
-        try
-        {
-            await gamificationService.ProcessHabitCreated(userId, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            LogGamificationHabitCreationFailed(logger, ex, userId);
-        }
-    }
+    private Task ProcessGamificationSafeAsync(Guid userId, CancellationToken cancellationToken) =>
+        BestEffortEffect.RunAsync(unitOfWork,
+            ct => gamificationService.ProcessHabitCreated(userId, ct),
+            exception => LogGamificationHabitCreationFailed(logger, exception, userId), cancellationToken);
 
-    private async Task ProcessOnboardingChecklistSafeAsync(
-        Guid userId, OnboardingChecklistSignal signal, CancellationToken cancellationToken)
-    {
-        try
-        {
-            await gamificationService.ProcessOnboardingChecklistAsync(userId, signal, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            LogOnboardingChecklistFailed(logger, ex, userId);
-        }
-    }
+    private Task ProcessOnboardingChecklistSafeAsync(
+        Guid userId, OnboardingChecklistSignal signal, CancellationToken cancellationToken) =>
+        BestEffortEffect.RunAsync(unitOfWork,
+            ct => gamificationService.ProcessOnboardingChecklistAsync(userId, signal, ct),
+            exception => LogOnboardingChecklistFailed(logger, exception, userId), cancellationToken);
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Gamification processing failed for habit creation by user {UserId}")]
     private static partial void LogGamificationHabitCreationFailed(ILogger logger, Exception ex, Guid userId);

@@ -286,13 +286,11 @@ public partial class LogHabitCommandHandler(
         var isFirstCompletionToday = persisted.Value.IsFirstCompletionToday;
         var goalSync = persisted.Value.GoalSync;
         var streakState = await services.UserStreakService.RecalculateAsync(request.UserId, cancellationToken: cancellationToken);
+        await PersistStreakRecalcAsync(request.UserId, cancellationToken);
         var gamificationResult = await ProcessGamificationSafeAsync(request.UserId, request.HabitId, cancellationToken);
         foreach (var parentHabitId in persisted.Value.DerivedParentHabitIds ?? [])
             await ProcessGamificationSafeAsync(request.UserId, parentHabitId, cancellationToken);
         await ProcessOnboardingChecklistSafeAsync(request.UserId, OnboardingChecklistSignal.HabitLogged, cancellationToken);
-
-        if (gamificationResult is null)
-            await PersistStreakRecalcAsync(request.UserId, cancellationToken);
 
         await CacheInvalidationHelper.InvalidateUserAiCachesAsync(cache, request.UserId, today, preserveDailyNarrative: true);
 
@@ -438,44 +436,22 @@ public partial class LogHabitCommandHandler(
         };
     }
 
-    private async Task<HabitLogGamificationResult?> ProcessGamificationSafeAsync(
-        Guid userId, Guid habitId, CancellationToken cancellationToken)
-    {
-        try
-        {
-            return await services.GamificationService.ProcessHabitLogged(userId, habitId, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            LogGamificationHabitLogFailed(logger, ex, habitId);
-            return null;
-        }
-    }
+    private Task<HabitLogGamificationResult?> ProcessGamificationSafeAsync(
+        Guid userId, Guid habitId, CancellationToken cancellationToken) =>
+        BestEffortEffect.RunAsync(unitOfWork,
+            ct => services.GamificationService.ProcessHabitLogged(userId, habitId, ct),
+            exception => LogGamificationHabitLogFailed(logger, exception, habitId), cancellationToken);
 
-    private async Task ProcessOnboardingChecklistSafeAsync(
-        Guid userId, OnboardingChecklistSignal signal, CancellationToken cancellationToken)
-    {
-        try
-        {
-            await services.GamificationService.ProcessOnboardingChecklistAsync(userId, signal, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            LogOnboardingChecklistFailed(logger, ex, userId);
-        }
-    }
+    private Task ProcessOnboardingChecklistSafeAsync(
+        Guid userId, OnboardingChecklistSignal signal, CancellationToken cancellationToken) =>
+        BestEffortEffect.RunAsync(unitOfWork,
+            ct => services.GamificationService.ProcessOnboardingChecklistAsync(userId, signal, ct),
+            exception => LogOnboardingChecklistFailed(logger, exception, userId), cancellationToken);
 
-    private async Task CheckReferralCompletionSafeAsync(Guid userId, CancellationToken cancellationToken)
-    {
-        try
-        {
-            await services.Mediator.Send(new CheckReferralCompletionCommand(userId), cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            LogReferralCompletionCheckFailed(logger, ex, userId);
-        }
-    }
+    private Task CheckReferralCompletionSafeAsync(Guid userId, CancellationToken cancellationToken) =>
+        BestEffortEffect.RunAsync(unitOfWork,
+            ct => services.Mediator.Send(new CheckReferralCompletionCommand(userId), ct),
+            exception => LogReferralCompletionCheckFailed(logger, exception, userId), cancellationToken);
 
     private static LinkedGoalSyncResult ToLinkedGoalSyncResult(IReadOnlyList<GoalCompletionUpdate> updates) =>
         updates.Count == 0
