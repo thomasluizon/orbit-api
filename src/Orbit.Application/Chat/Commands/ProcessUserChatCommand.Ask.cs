@@ -85,7 +85,8 @@ public partial class ProcessUserChatCommandHandler
         var user = await data.UserRepository.GetByIdAsync(request.UserId, ct);
         definition = AskBlockNegotiation.Definition(definition, request.ClientContext!, call.Args);
         var locale = ChatLocale.Resolve(request.ClientContext, user?.Language);
-        var places = new SameTitlePlaces(await ReadAccountHabitsAsync(request.UserId, ct));
+        var places = TurnRecords(results).Any()
+            ? new SameTitlePlaces(await ReadAccountHabitsAsync(request.UserId, ct)) : SameTitlePlaces.None;
         definition = GroundDuplicateRecordOptions(definition, results, locale, places);
         var card = HoldTheAnswer(call.Args, definition, request, results, locale, places);
         if (card.Definition is null)
