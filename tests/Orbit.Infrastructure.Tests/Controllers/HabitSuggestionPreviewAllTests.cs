@@ -96,6 +96,7 @@ public sealed class HabitSuggestionPreviewAllTests : IAsyncDisposable
         builder.Services.AddSingleton<BulkCreateHabitsRepositories>();
         builder.Services.AddSingleton<HabitSuggestionService>();
         builder.Services.AddSingleton<AccountChangeSetService>();
+        builder.Services.AddSingleton<SameTitleDetailWriter>();
         builder.Services.AddSingleton<IAiTool, CreateHabitTool>();
         builder.Services.AddSingleton<IAiTool, UpdateHabitTool>();
         builder.Services.AddSingleton<IAiTool, BulkCreateHabitsTool>();

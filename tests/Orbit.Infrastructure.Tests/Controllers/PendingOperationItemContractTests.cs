@@ -66,6 +66,76 @@ public sealed class PendingOperationItemContractTests
             .TryGetProperty("entityEmoji", out _).Should().BeFalse();
     }
 
+    [Fact]
+    public void EntityDetail_IsAnOptionalMemberThatAnItemWithoutADetailDoesNotWrite()
+    {
+        var plain = new PendingOperationItem("item", Guid.NewGuid(), "Water", [], "state");
+        var detailed = plain with { EntityDetail = "Morning, 5 of 6" };
+
+        JsonSerializer.SerializeToElement(plain, JsonSerializerOptions.Web).TryGetProperty("entityDetail", out _).Should().BeFalse();
+        JsonSerializer.Serialize(plain).Should().NotContain("EntityDetail", "a stored preview and a hash input hold no new member");
+        var json = JsonSerializer.SerializeToElement(detailed, JsonSerializerOptions.Web);
+        json.GetProperty("entityDetail").GetString().Should().Be("Morning, 5 of 6");
+        json.GetProperty("entityName").GetString().Should().Be("Water");
+        JsonSerializer.Deserialize<PendingOperationItem>(json, JsonSerializerOptions.Web).Should().BeEquivalentTo(detailed);
+        JsonSerializer.Deserialize<PendingOperationItem>(
+            """{"itemId":"0","entityId":null,"entityName":"Water","fields":[],"stateFingerprint":"state"}""",
+            JsonSerializerOptions.Web)!.EntityDetail.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData("""{"supportsPendingOperationEntityDetail":true}""", true)]
+    [InlineData("""{"supportsPendingOperationEntityDetail":false}""", false)]
+    [InlineData("""{"locale":"pt-BR"}""", null)]
+    public void ClientContext_ReadsTheOptionalEntityDetailFlag(string value, bool? expected)
+    {
+        Orbit.Api.Controllers.ClientContextQuery.TryParse(value, out var context).Should().BeTrue();
+
+        context!.SupportsPendingOperationEntityDetail.Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData(null, true)]
+    [InlineData(" ", true)]
+    [InlineData("{", false)]
+    [InlineData("null", false)]
+    [InlineData("[]", false)]
+    public void ClientContextQuery_TakesNoValueAndRefusesAValueThatIsNotAClientContext(string? value, bool valid)
+    {
+        Orbit.Api.Controllers.ClientContextQuery.TryParse(value, out var context).Should().Be(valid);
+
+        context.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData("openapi.json")]
+    [InlineData("openapi_v2.json")]
+    [InlineData("openapi_v1-r2.json")]
+    [InlineData("openapi_v2-r2.json")]
+    public void GeneratedOpenApi_HoldsTheOptionalEntityDetailTheFlagAndThePageParameter(string artifact)
+    {
+        var path = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../..", "src/Orbit.Api", artifact));
+        using var document = JsonDocument.Parse(File.ReadAllText(path));
+        var schemas = document.RootElement.GetProperty("components").GetProperty("schemas");
+
+        var item = schemas.GetProperty("PendingOperationItem");
+        item.GetProperty("properties").GetProperty("entityDetail").GetProperty("type").EnumerateArray()
+            .Select(type => type.GetString()).Should().BeEquivalentTo("string", "null");
+        item.GetProperty("required").EnumerateArray().Should().NotContain(field => field.GetString() == "entityDetail");
+        var client = schemas.GetProperty("AgentClientContext");
+        client.GetProperty("properties").GetProperty("supportsPendingOperationEntityDetail").GetProperty("type").EnumerateArray()
+            .Select(type => type.GetString()).Should().BeEquivalentTo("boolean", "null");
+        if (client.TryGetProperty("required", out var required))
+            required.EnumerateArray().Should().NotContain(field => field.GetString() == "supportsPendingOperationEntityDetail");
+        var page = document.RootElement.GetProperty("paths").EnumerateObject()
+            .Single(route => route.Name.EndsWith("/conversations/latest", StringComparison.OrdinalIgnoreCase)).Value.GetProperty("get");
+        var parameter = page.GetProperty("parameters").EnumerateArray()
+            .Single(value => value.GetProperty("name").GetString() == "clientContext");
+        parameter.GetProperty("in").GetString().Should().Be("query");
+        (parameter.TryGetProperty("required", out var needed) && needed.GetBoolean()).Should().BeFalse();
+        parameter.GetProperty("schema").GetProperty("type").GetString().Should().Be("string");
+    }
+
     [Theory]
     [InlineData("openapi.json")]
     [InlineData("openapi_v2.json")]
@@ -100,7 +170,7 @@ public sealed class PendingOperationItemContractTests
         changeProperties.GetProperty("entityEmoji").GetProperty("type").EnumerateArray()
             .Select(type => type.GetString()).Should().BeEquivalentTo("string", "null");
         properties.EnumerateObject().Select(property => property.Name).Should().Equal(
-            "itemId", "entityId", "entityName", "fields", "stateFingerprint", "removesData", "validationErrors", "fieldOptions", "placement", "entityEmoji", "habitType");
+            "itemId", "entityId", "entityName", "fields", "stateFingerprint", "removesData", "validationErrors", "fieldOptions", "placement", "entityEmoji", "habitType", "entityDetail");
         properties.GetProperty("placement").GetProperty("oneOf").EnumerateArray()
             .Any(value => value.TryGetProperty("$ref", out var reference)
                 && reference.GetString() == "#/components/schemas/PendingOperationPlacement").Should().BeTrue();
