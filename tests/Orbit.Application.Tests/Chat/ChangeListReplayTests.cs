@@ -380,4 +380,49 @@ public partial class ProcessUserChatCommandHandlerTests
         waiting.Should().ContainSingle().Which.Should().Match<ChangeError>(error => error.Change == "dependent"
             && error.Code == ChangeListCompiler.WaitsForAnswer && error.Candidates!.Single() == run.Children[0].Id.ToString());
     }
+
+    /// <summary>
+    /// A recorded offer turn of <c>create_habit</c> sent as a create change of the change list: the executor gets the same
+    /// arguments with the same offer metadata, and the preview holds the same fields with the same provenance and removal.
+    /// </summary>
+    [Theory]
+    [InlineData(ChangeDeclarationShape.Kinds, "repeat-en-r1")]
+    [InlineData(ChangeDeclarationShape.Wrapper, "repeat-en-r1")]
+    [InlineData(ChangeDeclarationShape.Kinds, "repeat-pt-BR-r3")]
+    [InlineData(ChangeDeclarationShape.Wrapper, "repeat-pt-BR-r3")]
+    [InlineData(ChangeDeclarationShape.Kinds, "dated-reminder-pt-BR-r2")]
+    public async Task ChangeList_AnOfferOnACreateChangeGivesTheSamePreviewAndOfferMetadata(ChangeDeclarationShape shape, string capture)
+    {
+        SetupUserAndPayGate();
+        EnableComposition();
+        var language = capture.Contains("pt-BR") ? "pt-BR" : "en";
+        var create = new CreateHabitTool(_userDateService, _mediator);
+        var bulk = new BulkCreateHabitsTool(_mediator);
+        var recorded = R9fCall(capture, create.Name);
+        var oldPath = CreateHandler(create);
+        var outcomes = R9fWriteExecutor(create);
+        SetupAiResponse(new AiResponse { ToolCalls = [recorded], ConversationContext = TestConversationContext });
+        var before = await oldPath.Handle(new(UserId, "Prepare the requested preview.", ClientContext: OfferClient(language)), default);
+
+        _changeShape = shape;
+        EnableChangePlan(FeatureFlagKeys.AiBlockFirst);
+        var habit = JsonNode.Parse(recorded.Args.GetRawText())!.AsObject();
+        habit.Remove(TerminalWriteDirective.CompleteArgument);
+        var changePath = CreateHandler(create, bulk);
+        var changeOutcomes = R9fWriteExecutor(create);
+        SetupAiResponse(ChangeList(shape, null, true, ("habit", "bulk_create_habits", new { habits = new[] { habit } })));
+        var after = await changePath.Handle(new(UserId, "Prepare the requested preview.", ClientContext: OfferClient(language)), default);
+
+        before.IsSuccess.Should().BeTrue(before.Error);
+        after.IsSuccess.Should().BeTrue(after.Error);
+        var held = outcomes.Should().ContainSingle().Subject;
+        var compiled = changeOutcomes.Should().ContainSingle().Subject;
+        compiled.Operation.OperationId.Should().Be(held.Operation.OperationId);
+        static object Fields(PendingAgentOperation preview) => preview.Items!.Single().Fields.Select(field =>
+            new { field.Field, field.NewValue, field.Provenance, Removal = JsonSerializer.Serialize(field.Removal) }).ToArray();
+        var expected = before.Value.PendingOperations.Should().ContainSingle().Subject;
+        var actual = after.Value.PendingOperations.Should().ContainSingle().Subject;
+        Fields(actual).Should().BeEquivalentTo(Fields(expected), options => options.WithStrictOrdering());
+        actual.Items!.Single().Fields.Should().Contain(field => field.Provenance == "suggested" && field.Removal != null);
+    }
 }
