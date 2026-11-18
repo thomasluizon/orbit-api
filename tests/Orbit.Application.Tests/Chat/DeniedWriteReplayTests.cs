@@ -331,7 +331,7 @@ public partial class ProcessUserChatCommandHandlerTests
 
         corrected.Result.IsSuccess.Should().BeTrue(corrected.Result.Error);
         corrected.ToolResults[0].Should().ContainSingle(result => !result.Success).Which.Error
-            .Should().Contain(form == "bulk" ? OneCharacterOff(corrected.Children[1].Id) : OneCharacterOff(corrected.Children[1].Id));
+            .Should().Contain(OneCharacterOff(corrected.Children[1].Id));
         corrected.Result.Value.PendingOperations!.SelectMany(operation => operation.Items!).Select(item => item.EntityId)
             .Should().BeEquivalentTo(corrected.Children.Select(child => child.Id));
 
