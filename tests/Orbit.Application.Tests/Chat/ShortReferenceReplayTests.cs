@@ -4,6 +4,7 @@ using FluentAssertions;
 using NSubstitute;
 using Orbit.Application.Chat.References;
 using Orbit.Domain.Common;
+using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 
@@ -24,7 +25,8 @@ public partial class ProcessUserChatCommandHandlerTests
     [InlineData("pt-BR")]
     public async Task ShortReference_Run4CutIdResolvesByItsFirstEightDigits(string language)
     {
-        var run = await RunDeniedAnswerTurnAsync(language, _ => [Text(language)], denyUnowned: false);
+        var run = await RunDeniedAnswerTurnAsync(language, _ => [Text(language)], denyUnowned: false,
+            first: children => Calls(Run4CutRename(children), Run4Delete(children)));
 
         run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
         var rename = run.Held.Should().ContainSingle(request => request.OperationId == "bulk_update_habits").Subject;
@@ -32,6 +34,13 @@ public partial class ProcessUserChatCommandHandlerTests
             .Should().Equal(run.Children[0].Id.ToString(), run.Children[1].Id.ToString());
         run.Result.Value.PendingOperations.Should().NotBeNullOrEmpty();
     }
+
+    /// <summary>The rename that the model sent in run 4 of #2129, with the second id cut short.</summary>
+    private static AiToolCall Run4CutRename(Habit[] children) => new("bulk_update_habits", "rename", JsonSerializer.SerializeToElement(new
+    {
+        filter = new { all = false, habit_ids = new[] { children[0].Id.ToString(), CutShort(children[1].Id) }, is_completed = false },
+        updates = new { title = RenameTitle }
+    }));
 
     /// <summary>
     /// The person owns these records of a type that the turn context does not read, so a reference to one resolves at the

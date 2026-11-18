@@ -79,10 +79,10 @@ public partial class ProcessUserChatCommandHandler
     }
 
     /// <summary>
-    /// The outcome of a call whose arguments name a record that the person does not have. The normalizer turns it down
-    /// before a guard or a tool runs, with the reason <c>unknown_reference</c>. The turn treats that reason as the
-    /// ownership check treats an id of no record of the person: one correction beside a change of the turn, or no
-    /// preview. An <c>ask</c> call fails in its own path.
+    /// The outcome of a call whose arguments name a record that the person does not have, before a guard or a tool runs.
+    /// The turn treats <c>unknown_reference</c> as an ownership denial: one correction beside a change of the turn, or no
+    /// preview. The client action reads as that denial; only the model gets the closest references. An <c>ask</c> call
+    /// fails in its own path.
     /// </summary>
     private ToolCallOutcome? ReferenceFailureOutcome(AiToolCall call)
     {
@@ -94,7 +94,8 @@ public partial class ProcessUserChatCommandHandler
         var access = tool.IsReadOnly ? "read" : "write";
         return new ToolCallOutcome(
             new AiToolCallResult(call.Name, call.Id, false, null, null, error),
-            tool.IsReadOnly ? null : new ActionResult(ToolNameToPascalCase(call.Name), ActionStatus.Failed, Error: error).WithToolResultMessage(call),
+            tool.IsReadOnly ? null : new ActionResult(ToolNameToPascalCase(call.Name), ActionStatus.Failed,
+                Error: $"Policy denied: {reason}").WithToolResultMessage(call),
             new AgentOperationResult(call.Name, call.Name, AgentRiskClass.Low, AgentConfirmationRequirement.None,
                 AgentOperationStatus.Denied, PolicyReason: reason, Access: access),
             new AgentPolicyDenial(call.Name, call.Name, AgentRiskClass.Low, AgentConfirmationRequirement.None, reason),

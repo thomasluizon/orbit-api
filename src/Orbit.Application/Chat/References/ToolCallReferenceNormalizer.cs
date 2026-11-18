@@ -153,7 +153,8 @@ public sealed partial class ToolCallReferenceNormalizer(ReferenceBook book,
 
     /// <summary>
     /// Resolves each preview item id against the items of the preview that the call names. The member index of a change
-    /// set and the date of a dated item stay, and only the GUID part resolves.
+    /// set and the date of a dated item stay, and only the GUID part resolves. An item id with no GUID part, such as the
+    /// index of a new habit, reaches the tool unchanged.
     /// </summary>
     private async Task<bool> ResolvePreviewItemsAsync(JsonObject root, List<ReferenceFailure> failures, CancellationToken ct)
     {
@@ -192,9 +193,9 @@ public sealed partial class ToolCallReferenceNormalizer(ReferenceBook book,
 
     private static (string? Value, IReadOnlyList<ReferenceCandidate> Closest) ResolveItem(string text, IReadOnlyList<PreviewItemReference> items)
     {
-        if (items.Any(item => item.ItemId == text))
-            return (text, []);
         var parts = Split(text);
+        if (items.Any(item => item.ItemId == text) || !ReferenceCodes.IsReference(parts.Core))
+            return (text, []);
         var shaped = items.Select(item => (Item: item, Parts: Split(item.ItemId)))
             .Where(pair => pair.Parts.Prefix == parts.Prefix && pair.Parts.Suffix == parts.Suffix && Guid.TryParse(pair.Parts.Core, out _))
             .ToArray();
