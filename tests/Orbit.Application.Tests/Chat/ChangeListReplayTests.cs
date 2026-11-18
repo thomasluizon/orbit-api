@@ -35,7 +35,7 @@ public partial class ProcessUserChatCommandHandlerTests
     private static AiResponse ChangeList(ChangeDeclarationShape shape, string? title, bool complete,
         params (string Id, string Kind, object Arguments)[] changes) => new()
         {
-            ConversationContext = TestConversationContext,
+            ConversationContext = new(),
             ToolCalls = shape == ChangeDeclarationShape.Wrapper
                 ? [new AiToolCall(ChangeDeclarations.WrapperName, "list", JsonSerializer.SerializeToElement(new Dictionary<string, object?>
                 {

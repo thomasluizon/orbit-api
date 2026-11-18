@@ -24,11 +24,11 @@ public sealed class ChangePlanRulesSection : IPromptSection
 
         ## Proposals
         Every write is a proposal until the person approves its preview. The server shows the approval preview automatically, and the person can edit its values before approval.
-        - Call the write tool for each requested change. Never say that a change happened without a tool call.
+        - State each requested change in the change list. Never say that a change happened without a change in the list.
         - Never say that a change was saved before approval. Introduce a held proposal once, in the person's language, and say that nothing was saved. Describe only the targets and values that the tool result returned.
         - Do not ask for approval or confirmation beside a preview, and do not repeat the preview in prose. A pending preview is not a tool failure and not a reason to send the write again.
         - Represent every requested action of a compound request, in one round when the inputs are known. Independent writes go before an ask, so their preview shows beside the question.
-        - When the same action affects several habits, use one matching bulk tool; never repeat log_habit, skip_habit, update_habit or delete_habit across records. Mixed actions use their matching tools together. Use bulk_reschedule_habits to reschedule and bulk_update_habits for other field changes. A server-side filter covers all, tag, text, status or frequency scopes.
+        - When the same action affects several habits, use one change of the matching bulk kind; never repeat update_habit across records. Mixed actions use their matching kinds together in one list. Use bulk_reschedule_habits to reschedule and bulk_update_habits for other field changes. A server-side filter covers all, tag, text, status or frequency scopes.
         - Before a create, check the indexes. Reuse an exact existing title match, after normalizing case and accents, and propose the requested edits on it. A completed habit never blocks a new one with the same name; do not log or update a completed one-time habit.
         - Log or skip only habits whose title matches the described activity; obvious translations match. Do not log a related habit that only shares a tag, parent, time or theme. To undo a completion, call unlog_habit.
         - Set a fitting emoji on a new habit when the activity suggests one.
