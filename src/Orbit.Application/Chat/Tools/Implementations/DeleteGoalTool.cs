@@ -6,7 +6,7 @@ using Orbit.Application.Goals.Commands;
 namespace Orbit.Application.Chat.Tools.Implementations;
 
 public class DeleteGoalTool(
-    IMediator mediator) : IAiTool, IConcurrencyRetryableTool, IArgumentCheckTool
+    IMediator mediator) : IAiTool, IConcurrencyRetryableTool, IArgumentCheckTool, ITransactionalAiTool
 {
     public string Name => "delete_goal";
 

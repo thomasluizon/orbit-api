@@ -40,8 +40,19 @@ public sealed partial class HabitEffectPostgresTests
     public async Task SetWithAFailingMember_LeavesNoRowNoCallbackNoEventAndNoCacheChange(string kind)
     {
         await using var app = await StartAsync();
-        var world = await SeedWorldAsync(app);
-        var member = await HoldAsync(app, world.User.Id, kind, world.ArgumentsFor(kind));
+
+        await AssertAFailingMemberLeavesNothingAsync(app, kind, async () =>
+        {
+            var world = await SeedWorldAsync(app);
+            return (world, world.ArgumentsFor(kind));
+        });
+    }
+
+    private async Task AssertAFailingMemberLeavesNothingAsync(PostgresOrbitApp app, string kind,
+        Func<Task<(World World, object Arguments)>> seed)
+    {
+        var (world, arguments) = await seed();
+        var member = await HoldAsync(app, world.User.Id, kind, arguments);
         var failing = await HoldFailingUpdateAsync(app, world);
         var before = await SnapshotAsync(app);
         var jobs = app.Jobs.Created.Count;
@@ -55,8 +66,8 @@ public sealed partial class HabitEffectPostgresTests
         app.Jobs.Created.Should().HaveCount(jobs);
         app.Bus.DidNotReceiveWithAnyArgs().Publish(default, default!, default);
 
-        var controlWorld = await SeedWorldAsync(app);
-        var alone = await HoldAsync(app, controlWorld.User.Id, kind, controlWorld.ArgumentsFor(kind));
+        var (controlWorld, controlArguments) = await seed();
+        var alone = await HoldAsync(app, controlWorld.User.Id, kind, controlArguments);
         var beforeControl = await SnapshotAsync(app);
 
         var control = await ApproveAsync(app, controlWorld.User.Id, alone.Id);
@@ -258,7 +269,7 @@ public sealed partial class HabitEffectPostgresTests
                 services.GetRequiredService<IPendingOperationChangePreviewer>(), services.GetRequiredService<IAgentCatalogService>(),
                 services.GetRequiredService<AiToolRegistry>());
             var combined = await changeSets.CombineAsync(userId, members, default, requireAllMembers: true);
-            combined.Should().NotBeNull("every habit kind joins one change set");
+            combined.Should().NotBeNull("every atomic kind joins one change set");
             setId = combined!.PendingOperation.Id;
         }
         return await ApproveAsync(app, userId, setId);
@@ -410,10 +421,17 @@ public sealed partial class HabitEffectPostgresTests
         public Guid? FailHabitId { get; set; }
         public int Failures { get; private set; }
 
+        private Func<Task>? _afterWrite;
+
+        /// <summary>Runs <paramref name="afterWrite"/> once after the next update writes, while the transaction of the set is still open.</summary>
+        public void RunAfterTheNextWrite(Func<Task> afterWrite) => _afterWrite = afterWrite;
+
         public async Task<Result<string>> Handle(UpdateHabitFieldsCommand request, RequestHandlerDelegate<Result<string>> next,
             CancellationToken cancellationToken)
         {
             var result = await next(cancellationToken);
+            if (Interlocked.Exchange(ref _afterWrite, null) is { } afterWrite)
+                await afterWrite();
             if (request.HabitId != FailHabitId) return result;
             Failures++;
             throw new InvalidOperationException("Simulated failure after the member's write");

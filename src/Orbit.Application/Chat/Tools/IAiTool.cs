@@ -47,10 +47,10 @@ public interface IArgumentCheckTool
 }
 
 /// <summary>
-/// A write tool whose database writes share the executor's unit of work for every argument shape, so it joins a
-/// change set. Its effects outside the database wait for the commit through AfterCommit. The referral reward job
-/// is the exception: it is enqueued before the commit and fails while the referral stays pending. A call to a
-/// model provider does not wait for the commit: the tool declares it with <see cref="IProviderCallTool"/>.
+/// A write tool whose database writes share the executor's unit of work, so it joins a change set. Its effects
+/// outside the database wait for the commit through AfterCommit. The referral reward job is the exception: it is
+/// enqueued before the commit and fails while the referral stays pending. A provider call does not wait for the
+/// commit (<see cref="IProviderCallTool"/>). A shape that writes no row joins no set (<see cref="IExternalShapeTool"/>).
 /// </summary>
 public interface ITransactionalAiTool;
 
@@ -63,6 +63,25 @@ public interface ITransactionalAiTool;
 public interface IProviderCallTool
 {
     bool CallsProvider(JsonElement arguments);
+}
+
+/// <summary>
+/// A transactional tool with one argument shape that writes no row and reports an effect outside the database in
+/// its result. That shape never joins a change set, and the executor opens no transaction for it.
+/// </summary>
+public interface IExternalShapeTool
+{
+    bool HasExternalShape(JsonElement arguments);
+}
+
+public static class AiToolAtomicity
+{
+    /// <summary>
+    /// True when a call of <paramref name="tool"/> with <paramref name="arguments"/> writes to the database only, so
+    /// it runs in the executor's unit of work and can join a change set.
+    /// </summary>
+    public static bool Supports(IAiTool? tool, JsonElement arguments) =>
+        tool is ITransactionalAiTool && !(tool is IExternalShapeTool shape && shape.HasExternalShape(arguments));
 }
 
 /// <summary>

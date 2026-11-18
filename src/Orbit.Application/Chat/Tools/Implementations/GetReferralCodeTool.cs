@@ -4,7 +4,7 @@ using Orbit.Application.Referrals.Commands;
 
 namespace Orbit.Application.Chat.Tools.Implementations;
 
-public class GetReferralCodeTool(IMediator mediator) : IAiTool, IArgumentCheckTool
+public class GetReferralCodeTool(IMediator mediator) : IAiTool, IArgumentCheckTool, ITransactionalAiTool
 {
     public string Name => "get_referral_code";
     public string Description => "Get or create the user's referral code (generates one if absent).";

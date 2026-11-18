@@ -8,6 +8,7 @@ using NSubstitute;
 using Orbit.Application.FeatureFlags;
 using Orbit.Application.FeatureFlags.Commands;
 using Orbit.Domain.Entities;
+using Orbit.Infrastructure.Configuration;
 using Orbit.Infrastructure.Persistence;
 using Orbit.Infrastructure.Services;
 using Orbit.Infrastructure.Tests.Persistence;
@@ -34,7 +35,7 @@ public class FeatureFlagManagementServiceTests : IDisposable
         _context.Users.AddRange(_admin, _account, _other);
         _context.SaveChanges();
         _resolver = new FeatureFlagService(_context, _cache, Substitute.For<IHostEnvironment>(), new ConfigurationBuilder().Build());
-        _service = new FeatureFlagManagementService(_context, _resolver, _logger);
+        _service = new FeatureFlagManagementService(_context, _resolver, new UnitOfWork(_context, new DatabaseConnectionSettings()), _logger);
     }
 
     [Fact]

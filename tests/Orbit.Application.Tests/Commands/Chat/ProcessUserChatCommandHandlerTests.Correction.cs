@@ -289,7 +289,7 @@ public partial class ProcessUserChatCommandHandlerTests
     }
 
     [Fact]
-    public async Task RecoveryCapability_PartialNotificationWriteHasNoCorrectionEvidence()
+    public async Task RecoveryCapability_FailedNotificationBatchHasNoCorrectionEvidence()
     {
         SetupUserAndPayGate();
         using var context = new HeldWriteTestContext();
@@ -312,11 +312,11 @@ public partial class ProcessUserChatCommandHandlerTests
 
         var result = await handler.Handle(new ProcessUserChatCommand(UserId, "Delete these notifications."), default);
 
-        first.IsDeleted.Should().BeTrue();
         second.IsDeleted.Should().BeFalse();
         await context.UnitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
         gateway.Requests.Should().ContainSingle();
-        gateway.Responses[0].Should().BeOfType<PreparedToolOperationResponse>();
+        gateway.Responses[0].Should().NotBeOfType<RejectedBeforeDispatchResponse>("the batch failed after its dispatch");
+        gateway.Responses[0].Operation.Status.Should().Be(AgentOperationStatus.Failed);
         result.Value.AiMessage.Should().Be(EnglishToolFailureMessage);
         await _aiIntentService.DidNotReceive().ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
             Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
@@ -558,6 +558,7 @@ public partial class ProcessUserChatCommandHandlerTests
     {
         _payGate.CanCreateHabits(UserId, Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
         _unitOfWork.PassThroughTransactions<ToolResult>();
+        _unitOfWork.PassThroughTransactions<AgentExecuteOperationResponse>();
         var registry = new AiToolRegistry([tool, .. otherTools]);
         var catalog = new AgentCatalogService([tool, .. otherTools]);
         var policy = Substitute.For<IAgentPolicyEvaluator>();

@@ -406,7 +406,7 @@ public partial class AgentOperationExecutor(
 
         try
         {
-            if ((tool is not ITransactionalAiTool && execution.Operation.Id != AccountChangeSet.OperationName)
+            if ((!AiToolAtomicity.Supports(tool, execution.Arguments) && execution.Operation.Id != AccountChangeSet.OperationName)
                 || (tool is IProviderCallTool provider && provider.CallsProvider(execution.Arguments)))
                 return await ExecutePolicyAndToolAsync(execution, tool, policyState, cancellationToken);
             return unitOfWork.HasActiveTransaction
@@ -550,7 +550,7 @@ public partial class AgentOperationExecutor(
                 execution.Arguments, execution.Request.UserId, executionCancellationToken)
             };
         var result = await ExecuteToolWithConcurrencyRetryAsync(tool, execution, executionCancellationToken);
-        if (tool is ITransactionalAiTool && !result.Success)
+        if (AiToolAtomicity.Supports(tool, execution.Arguments) && !result.Success)
             throw new ToolOutcomeRollbackException(policyDecision, result);
 
         return await BuildToolOutcomeResponseAsync(execution, policyDecision, result, executionCancellationToken);

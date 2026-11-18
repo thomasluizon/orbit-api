@@ -111,7 +111,11 @@ public sealed partial class ChatWriteHoldHandlerTests : IDisposable
             new SendSupportRequestTool(_mediator),
             new DeleteHabitTool(_mediator, _habitRepo),
             new LinkGoalsToHabitTool(_mediator, _habitRepo),
-            new AssignTagsTool(_habitRepo, _tagRepo, _unitOfWork)
+            new AssignTagsTool(_habitRepo, _tagRepo, _unitOfWork),
+            new CreateGoalTool(_mediator),
+            new CreateTagTool(_mediator),
+            new LinkHabitsToGoalTool(_mediator, _goalRepo),
+            new UpdateNotificationsTool(_mediator)
         ]);
         _previewer = new PendingOperationChangePreviewer(_habitRepo, _goalRepo, _tagRepo, _userDateService,
             _toolRegistry);

@@ -28,7 +28,7 @@ public class GetNotificationsTool(IMediator mediator) : IAiTool
     }
 }
 
-public class UpdateNotificationsTool(IMediator mediator) : IPreparedIntentTool
+public class UpdateNotificationsTool(IMediator mediator) : IPreparedIntentTool, ITransactionalAiTool, IExternalShapeTool
 {
     public string Name => "update_notifications";
     public string Description => "Mark notifications as read, manage push subscriptions, or send a test push notification.";
@@ -61,6 +61,9 @@ public class UpdateNotificationsTool(IMediator mediator) : IPreparedIntentTool
 
     public Task<Orbit.Domain.Common.Result> CheckArgumentsAsync(JsonElement args, Guid userId, CancellationToken ct) =>
         ChatToolArgumentCheck.CheckAsync(this, args, () => ExecuteCoreAsync(args, userId, ct, checkOnly: true));
+
+    public bool HasExternalShape(JsonElement arguments) =>
+        arguments.ValueKind == JsonValueKind.Object && JsonArgumentParser.GetOptionalString(arguments, "action") == "test_push";
 
     public Task<PreparedToolIntent?> PrepareIntentAsync(JsonElement args, Guid userId, CancellationToken ct)
     {
@@ -165,7 +168,7 @@ public class UpdateNotificationsTool(IMediator mediator) : IPreparedIntentTool
     }
 }
 
-public class DeleteNotificationsTool(IMediator mediator) : IPreparedIntentTool
+public class DeleteNotificationsTool(IMediator mediator) : IPreparedIntentTool, ITransactionalAiTool
 {
     public string Name => "delete_notifications";
     public string Description => "Delete one notification or clear all notifications.";

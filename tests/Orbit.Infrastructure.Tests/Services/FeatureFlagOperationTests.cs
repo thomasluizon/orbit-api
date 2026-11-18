@@ -60,6 +60,7 @@ public class FeatureFlagOperationTests
             policy => policy.AddRequirements(new AdminRequirement())));
         services.AddSingleton<IAuthorizationHandler>(new AdminAuthorizationHandler(new GenericRepository<User>(context)));
         services.AddMcpServer().WithTools<FeatureFlagTools>().WithFeatureFlagAccess();
+        var work = new UnitOfWork(context, new DatabaseConnectionSettings());
         using var provider = services
             .AddScoped<OrbitDbContext>(_ => factory.CreateContext())
             .AddScoped<IAgentAuditService, AgentAuditService>()
@@ -69,7 +70,8 @@ public class FeatureFlagOperationTests
                 configuration.AddOpenBehavior(typeof(ValidationBehavior<,>));
             })
             .AddSingleton<IValidator<ManageFeatureFlagsCommand>, ManageFeatureFlagsCommandValidator>()
-            .AddSingleton<IFeatureFlagManagementService>(new FeatureFlagManagementService(context, resolver, NullLogger<FeatureFlagManagementService>.Instance))
+            .AddSingleton<IFeatureFlagManagementService>(new FeatureFlagManagementService(context, resolver,
+                work, NullLogger<FeatureFlagManagementService>.Instance))
             .BuildServiceProvider();
         var adapter = new ManageFeatureFlagsTool(provider.GetRequiredService<IMediator>());
         var catalog = new AgentCatalogService([adapter]);
@@ -81,7 +83,7 @@ public class FeatureFlagOperationTests
         var executor = new AgentOperationExecutor(catalog, evaluator, provider.GetRequiredService<IAgentAuditService>(),
             new AgentTargetOwnershipService(context), stepUp, new AiToolRegistry([adapter]),
             Substitute.For<IPendingOperationChangePreviewer>(), pending,
-            new UnitOfWork(context, new DatabaseConnectionSettings()), NullLogger<AgentOperationExecutor>.Instance);
+            work, NullLogger<AgentOperationExecutor>.Instance);
         var tool = new FeatureFlagTools(provider.GetRequiredService<IMediator>(), new McpExecutorBridge(executor), provider);
         var principal = await AuthenticateAsync(admin.Id, oauthFamily);
         principal.GetAgentAuthMethod().Should().Be(oauthFamily ? AgentAuthMethod.OAuth : AgentAuthMethod.ApiKey);

@@ -5,7 +5,7 @@ using Orbit.Application.FeatureFlags.Commands;
 
 namespace Orbit.Application.Chat.Tools.Implementations;
 
-public class ManageFeatureFlagsTool(IMediator mediator) : IAiTool, IMcpOnlyAiTool
+public class ManageFeatureFlagsTool(IMediator mediator) : IAiTool, IMcpOnlyAiTool, ITransactionalAiTool
 {
     public string Name => FeatureFlagActions.ToolName;
     public string Description => "Manage feature flags for accounts or everyone. Requires an administrator.";

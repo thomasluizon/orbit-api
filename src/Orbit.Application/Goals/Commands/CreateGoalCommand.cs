@@ -91,14 +91,9 @@ public partial class CreateGoalCommandHandler(
             await unitOfWork.SaveChangesAsync(cancellationToken);
         }
 
-        try
-        {
-            await gamificationService.ProcessGoalCreated(request.UserId, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            LogGamificationGoalCreationFailed(logger, ex, request.UserId);
-        }
+        await BestEffortEffect.RunAsync(unitOfWork,
+            ct => gamificationService.ProcessGoalCreated(request.UserId, ct),
+            exception => LogGamificationGoalCreationFailed(logger, exception, request.UserId), cancellationToken);
 
         await CacheInvalidationHelper.InvalidateUserAiCachesAsync(cache, request.UserId, today);
 

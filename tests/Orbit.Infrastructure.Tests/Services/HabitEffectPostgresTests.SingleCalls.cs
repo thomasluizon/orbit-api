@@ -1,7 +1,9 @@
 using System.Data.Common;
+using System.Security.Claims;
 using System.Text.Json;
 using FluentAssertions;
 using MediatR;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
@@ -39,6 +41,41 @@ public sealed partial class HabitEffectPostgresTests
         _inferenceTransactions.Should().NotBeEmpty().And.AllBeEquivalentTo(false,
             "a provider call inside an open transaction holds its connection and its locks for the whole call");
         (await app.ReadAsync(db => db.Habits.CountAsync(saved => saved.Emoji == "🏃"))).Should().Be(world.Habits.Count);
+    }
+
+    [PostgresFact]
+    public async Task EmojiInferenceOnTheKeyedMcpRoute_RunsWithNoOpenTransactionAndAReplayInfersNothing()
+    {
+        await using var app = await StartAsync();
+        var world = await SeedWorldAsync(app);
+        InferEmoji("🏃");
+        var request = new AgentExecuteOperationRequest(world.User.Id, "bulk_update_habit_emojis",
+            JsonSerializer.SerializeToElement(new { replace_existing = false, filter = new { all = true }, infer_from_title = true }),
+            AgentExecutionSurface.Mcp, AgentAuthMethod.OAuth, [AgentScopes.WriteHabits]);
+
+        var first = await ExecuteWithIdempotencyKeyAsync(app, "emoji-request", request);
+        var providerCalls = _inferenceTransactions.Count;
+        var replay = await ExecuteWithIdempotencyKeyAsync(app, "emoji-request", request);
+
+        first.Operation.Status.Should().Be(AgentOperationStatus.Succeeded, first.Operation.PolicyReason);
+        providerCalls.Should().BePositive();
+        _inferenceTransactions.Should().AllBeEquivalentTo(false,
+            "a provider call inside an open transaction holds its connection and its locks for the whole call");
+        _inferenceTransactions.Should().HaveCount(providerCalls, "the replay returns the stored result with no provider call");
+        JsonSerializer.Serialize(replay).Should().Be(JsonSerializer.Serialize(first));
+        (await app.ReadAsync(db => db.Habits.CountAsync(saved => saved.Emoji == "🏃"))).Should().Be(world.Habits.Count);
+        (await app.ReadAsync(db => db.ProcessedRequests.CountAsync(saved => saved.UserId == world.User.Id))).Should().Be(1);
+    }
+
+    private static async Task<AgentExecuteOperationResponse> ExecuteWithIdempotencyKeyAsync(PostgresOrbitApp app, string key,
+        AgentExecuteOperationRequest request)
+    {
+        await using var scope = app.CreateScope();
+        var http = scope.ServiceProvider.GetRequiredService<IHttpContextAccessor>().HttpContext!;
+        http.Request.Headers["Idempotency-Key"] = key;
+        http.User = new ClaimsPrincipal(new ClaimsIdentity(
+            [new Claim(ClaimTypes.NameIdentifier, request.UserId.ToString())], "OAuth"));
+        return await scope.ServiceProvider.GetRequiredService<IAgentOperationExecutor>().ExecuteAsync(request);
     }
 
     [PostgresFact]

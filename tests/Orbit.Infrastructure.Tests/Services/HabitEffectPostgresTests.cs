@@ -7,6 +7,7 @@ using MediatR;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using Orbit.Application.Habits.Commands;
+using Orbit.Application.Notifications.Commands;
 using Orbit.Application.Chat.Tools;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -155,6 +156,9 @@ public sealed partial class HabitEffectPostgresTests
     {
         services.ConfigureDbContext<OrbitDbContext>(options => options.AddInterceptors(_faults, _saves));
         services.AddSingleton<IPipelineBehavior<UpdateHabitFieldsCommand, Result<string>>>(_failingUpdate);
+        services.AddSingleton<IPipelineBehavior<DeleteNotificationCommand, Result>>(_failingDeletion);
+        services.AddScoped<IPushNotificationService>(provider => new TransactionRecordingPush(
+            provider.GetRequiredService<IUnitOfWork>(), _pushTransactions));
         services.AddScoped<IHabitEmojiInferenceService>(provider => new TransactionRecordingInference(
             _emojiInference, provider.GetRequiredService<IUnitOfWork>(), _inferenceTransactions));
     });
@@ -246,16 +250,21 @@ public sealed partial class HabitEffectPostgresTests
         """);
 
     /// <summary>
-    /// Runs a statement on another connection just before the command inserts its log. It can also send
+    /// Runs a statement on another connection just before the command inserts a row of one table. It can also send
     /// each read of one table to the server as a statement that fails, as a query that times out does.
     /// </summary>
     private sealed class StatementFaultInterceptor : DbCommandInterceptor
     {
         private Func<Task>? _beforeInsert;
+        private string _insertTable = "HabitLogs";
         private string? _failedTable;
         private int _failedReads;
 
-        public void Arm(Func<Task> beforeInsert) => _beforeInsert = beforeInsert;
+        public void Arm(Func<Task> beforeInsert, string table = "HabitLogs")
+        {
+            _insertTable = table;
+            _beforeInsert = beforeInsert;
+        }
         public void FailReadsOf(string table) => _failedTable = table;
         public bool Fired { get; private set; }
         public int FailedReads => _failedReads;
@@ -270,7 +279,7 @@ public sealed partial class HabitEffectPostgresTests
                 command.CommandText = "SELECT 1 / 0";
                 command.Parameters.Clear();
             }
-            if (command.CommandText.Contains("INSERT INTO \"HabitLogs\"", StringComparison.Ordinal)
+            if (command.CommandText.Contains($"INSERT INTO \"{_insertTable}\"", StringComparison.Ordinal)
                 && Interlocked.Exchange(ref _beforeInsert, null) is { } insert)
             {
                 Fired = true;

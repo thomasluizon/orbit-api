@@ -10,6 +10,7 @@ using Orbit.Application.Chat.Models;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Application.Common;
+using Orbit.Application.Tests.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -146,6 +147,7 @@ public partial class ProcessUserChatCommandHandlerTests
     {
         var catalog = new AgentCatalogService([tool]);
         var policy = Substitute.For<IAgentPolicyEvaluator>();
+        _unitOfWork.PassThroughTransactions<AgentExecuteOperationResponse>();
         _pendingOperationStore.Revise(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<PendingOperationChangePreview?>()).Returns(true);
         policy.EvaluateAsync(Arg.Any<AgentPolicyEvaluationContext>()).Returns(call =>
         {

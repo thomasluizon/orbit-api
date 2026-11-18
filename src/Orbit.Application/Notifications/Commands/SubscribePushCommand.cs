@@ -65,13 +65,23 @@ public class SubscribePushCommandHandler(
 
         try
         {
-            return await SaveRegistration(cancellationToken);
+            return await SaveNewRegistration(cancellationToken);
         }
         catch (Exception exception) when (DbUniqueViolation.IsUniqueViolation(exception))
         {
             return Result.Success();
         }
     }
+
+    /// <summary>
+    /// Another request can register the same endpoint first, and this save then meets a unique violation that the
+    /// command reports as a success. Inside an open transaction the save runs in a savepoint: its rollback removes
+    /// the refused registration from the change tracker, so a later save of the transaction does not send it again.
+    /// </summary>
+    private Task<Result> SaveNewRegistration(CancellationToken cancellationToken) =>
+        unitOfWork.HasActiveTransaction
+            ? unitOfWork.ExecuteInSavepointAsync(SaveRegistration, cancellationToken)
+            : SaveRegistration(cancellationToken);
 
     /// <summary>
     /// A device keeps one endpoint across the accounts that sign in on it. When another account

@@ -1085,6 +1085,12 @@ public partial class AgentExecutionAndSanitizerTests
         }
         var pendingStore = Substitute.For<IPendingAgentOperationStore>();
         pendingStore.Revise(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>()).Returns(true);
+        if (unitOfWork is null)
+        {
+            unitOfWork = Substitute.For<IUnitOfWork>();
+            unitOfWork.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task<AgentExecuteOperationResponse>>>(), Arg.Any<CancellationToken>())
+                .Returns(call => call.Arg<Func<CancellationToken, Task<AgentExecuteOperationResponse>>>()(call.Arg<CancellationToken>()));
+        }
 
         return new AgentOperationExecutor(
             catalogService,
@@ -1095,7 +1101,7 @@ public partial class AgentExecutionAndSanitizerTests
             toolRegistry ?? new AiToolRegistry([]),
             changePreviewer,
             pendingStore,
-            unitOfWork ?? Substitute.For<IUnitOfWork>(),
+            unitOfWork,
             logger ?? NullLogger<AgentOperationExecutor>.Instance);
     }
 

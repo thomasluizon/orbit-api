@@ -39,7 +39,7 @@ public class GetChecklistTemplatesTool(IMediator mediator) : IAiTool
     }
 }
 
-public class CreateChecklistTemplateTool(IMediator mediator) : IAiTool, IArgumentCheckTool
+public class CreateChecklistTemplateTool(IMediator mediator) : IAiTool, IArgumentCheckTool, ITransactionalAiTool
 {
     public string Name => "create_checklist_template";
     public string Description => "Create a reusable checklist template.";
@@ -84,7 +84,7 @@ public class CreateChecklistTemplateTool(IMediator mediator) : IAiTool, IArgumen
     }
 }
 
-public class UpdateChecklistTemplateTool(IMediator mediator) : IAiTool, IArgumentCheckTool
+public class UpdateChecklistTemplateTool(IMediator mediator) : IAiTool, IArgumentCheckTool, ITransactionalAiTool
 {
     public string Name => "update_checklist_template";
     public string Description => "Update a reusable checklist template's name, items, or both. Omitted fields stay unchanged.";
@@ -134,7 +134,7 @@ public class UpdateChecklistTemplateTool(IMediator mediator) : IAiTool, IArgumen
     }
 }
 
-public class DeleteChecklistTemplateTool(IMediator mediator) : IAiTool, IArgumentCheckTool
+public class DeleteChecklistTemplateTool(IMediator mediator) : IAiTool, IArgumentCheckTool, ITransactionalAiTool
 {
     public string Name => "delete_checklist_template";
     public string Description => "Delete a checklist template by ID.";

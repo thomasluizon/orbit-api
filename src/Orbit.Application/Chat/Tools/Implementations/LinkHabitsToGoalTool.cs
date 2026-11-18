@@ -9,7 +9,7 @@ namespace Orbit.Application.Chat.Tools.Implementations;
 
 public class LinkHabitsToGoalTool(
     IMediator mediator,
-    IGenericRepository<Goal> goalRepository) : IAiTool, IArgumentCheckTool, IConcurrencyRetryableTool
+    IGenericRepository<Goal> goalRepository) : IAiTool, IArgumentCheckTool, IConcurrencyRetryableTool, ITransactionalAiTool
 {
     public string Name => "link_habits_to_goal";
 
