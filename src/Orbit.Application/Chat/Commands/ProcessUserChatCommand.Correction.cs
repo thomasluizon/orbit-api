@@ -15,18 +15,19 @@ public partial class ProcessUserChatCommandHandler
 
     private static bool IsOwnershipReadDenial(ToolCallOutcome outcome) =>
         outcome.OperationResult is { Status: AgentOperationStatus.Denied, Access: "read", PolicyReason: { } reason }
-        && reason.StartsWith("target_not_owned:", StringComparison.Ordinal);
+        && IsTargetDenialReason(reason);
 
     /// <summary>
-    /// A write that the ownership check turned down names a target id that is not one of the person's records. Beside a
-    /// change of the turn, the model gets one correction with the right ids, the same allowance that an ownership
-    /// denial of a read gets.
+    /// A write that the ownership check turned down names a target id that is not one of the person's records. A write
+    /// whose reference names no record of the person (<c>unknown_reference</c>) is the same denial, given by the
+    /// normalizer before the ownership check. Beside a change of the turn, the model gets one correction with the right
+    /// ids, the same allowance that an ownership denial of a read gets.
     /// </summary>
     private static bool IsOwnershipWriteDenial(ToolCallOutcome outcome) => IsOwnershipWriteDenial(outcome.OperationResult);
 
     private static bool IsOwnershipWriteDenial(AgentOperationResult? operation) =>
         operation is { Status: AgentOperationStatus.Denied, Access: "write", PolicyReason: { } reason }
-        && reason.StartsWith("target_not_owned:", StringComparison.Ordinal);
+        && IsTargetDenialReason(reason);
 
     private static bool HasReadCorrectionCandidate(ToolExecutionAccumulator results) =>
         results.CorrectionOccurrences.Any(occurrence =>
@@ -251,8 +252,9 @@ public partial class ProcessUserChatCommandHandler
             var evidence = original.Outcome.PreparedResponse;
             var corrected = evidence is null ? candidate
                 : candidate with { Name = evidence.Request.OperationId, Args = evidence.Intent.ExecutionArguments };
-            var outcome = await ExecuteSingleToolCallAsync(corrected, request, results, execution.OperationExecutor,
-                execution.PendingClarificationStore, ct, evidence is null ? null : evidence.Request with { Arguments = corrected.Args });
+            var outcome = (evidence is null ? ReferenceFailureOutcome(candidate) : null)
+                ?? await ExecuteSingleToolCallAsync(corrected, request, results, execution.OperationExecutor,
+                    execution.PendingClarificationStore, ct, evidence is null ? null : evidence.Request with { Arguments = corrected.Args });
             correction.Accept(original, outcome);
             if (original.Outcome.ActionResult is { } action)
                 results.ActionResults.Remove(action);

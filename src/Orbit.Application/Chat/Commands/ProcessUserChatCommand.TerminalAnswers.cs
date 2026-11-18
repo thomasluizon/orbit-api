@@ -23,7 +23,7 @@ public partial class ProcessUserChatCommandHandler
             return InvalidTerminalAnswer(response);
         response.ConversationContext!.ResponseValidationFeedback = TerminalAnswerDirective.ValidationFeedback;
         RefreshAskSchema(response.ConversationContext, request, context, results);
-        var corrected = await ai.IntentService.ContinueWithToolResultsAsync(response.ConversationContext, [], null, ct);
+        var corrected = await Model.ContinueWithToolResultsAsync(response.ConversationContext, [], null, ct);
         return corrected.IsSuccess ? new(corrected.Value)
             : new(response, ProviderError: new AppError(corrected.ErrorCode ?? ErrorMessages.AiUnavailable.Code, corrected.Error));
     }

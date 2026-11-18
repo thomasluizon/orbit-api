@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Orbit.Application.Chat.References;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Models;
@@ -57,6 +58,10 @@ public partial class ProcessUserChatCommandHandler
         ToolExecutionAccumulator results, CancellationToken ct)
     {
         using var phase = ChatTurnTimer.Measure(ChatPhase.ToolCall);
+        if (_referenceTurn?.FailureOf(call.Id) is { } referenceFailure)
+            return new ToolCallOutcome(new AiToolCallResult(call.Name, call.Id, false, null, null,
+                referenceFailure.Error() + AskRecoveryInstruction(request, results)), null, null, null, null,
+                FailureKey: NormalizedToolCall.ErrorCode);
         call = call with { Args = AskTool.ExecutionArguments(call.Args) };
         results.CanRetryAsk = false;
         PreserveAskRecordSelection(call.Args, request.UserId, results);

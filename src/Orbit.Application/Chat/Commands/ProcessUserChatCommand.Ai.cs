@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Orbit.Application.Chat.Models;
+using Orbit.Application.Chat.References;
 using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
@@ -144,7 +145,7 @@ public partial class ProcessUserChatCommandHandler
         if (request.BlockAnswer is null)
             turn.MessageAllowanceConsumed = true;
 
-        return await ai.IntentService.SendWithToolsAsync(
+        return await Model.SendWithToolsAsync(
             new AiToolRequest(
                 request.Message,
                 systemPrompt,
@@ -184,6 +185,10 @@ public partial class ProcessUserChatCommandHandler
             : tool.Description;
 
     private static object ChatToolSchema(Orbit.Application.Chat.Tools.IAiTool tool, AgentClientContext? client, bool composition,
+        bool hasAccountRead = false, IReadOnlyList<HabitSetupDraft>? drafts = null) =>
+        ReferenceArguments.NameReferences(ChatToolSchemaCore(tool, client, composition, hasAccountRead, drafts));
+
+    private static object ChatToolSchemaCore(Orbit.Application.Chat.Tools.IAiTool tool, AgentClientContext? client, bool composition,
         bool hasAccountRead = false, IReadOnlyList<HabitSetupDraft>? drafts = null)
     {
         var schema = tool is AskTool ask
