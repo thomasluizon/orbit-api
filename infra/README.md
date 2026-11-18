@@ -25,8 +25,9 @@ parameters; permission and service errors still fail the plan.
 streamed chat, auxiliary completions, moderation and audio transcription select that key
 for those accounts. Completion usage is labeled `eval_<purpose>`,
 so it remains visible separately from ordinary usage. `AI__EvalDailyBudgetUsd` defaults to
-`0.50` in both environment groups. All evaluation accounts in an environment share one UTC
-daily ceiling, including unsettled reservations, regardless of `astra_eval_unmetered`.
+`0.50` in code and in `production_api_values`. `staging_api_values` sets it to `1.20`,
+because the evaluation runs of the AI build go to staging. All evaluation accounts in an
+environment share one UTC daily ceiling, including unsettled reservations, regardless of `astra_eval_unmetered`.
 The reservation takes the UTC-day advisory lock before the account lock. Reservation
 errors prevent dispatch; settlement errors retain the reservation. Existing `eval_` usage
 provides a conservative floor during rollout. The additive `AddEvalDailyBudget` migration

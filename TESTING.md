@@ -132,9 +132,9 @@ as the service. A stale SSM model parameter is not that source.
 Use only the isolated evaluation project and `AI__EvalApiKey`, including direct probes.
 The key comes from the environment's SSM SecureString and must never be printed. Do not
 fall back to the production key. Confirm project attribution and its independent monthly
-limit in OpenAI Platform. The shared `AI__EvalDailyBudgetUsd` ceiling defaults to $0.50
-per UTC day in each environment. A quota response stops the run; do not change accounts,
-keys, the budget or the accounting date to continue. A direct probe must account for the
+limit in OpenAI Platform. The shared `AI__EvalDailyBudgetUsd` ceiling is $1.20
+per UTC day in staging and $0.50 per UTC day in production. A quota response stops the
+run; do not change accounts, keys, the budget or the accounting date to continue. A direct probe must account for the
 same remaining daily allowance before dispatch; the project limit also remains enforced.
 
 After release, use real turns and inspect the current UTC day's `AI cost ... (partial)`

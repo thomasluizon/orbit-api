@@ -15,8 +15,9 @@ or a quota response. Do not repeat passing cases or restart the live gate during
 Replay the captured real provider responses offline instead.
 
 Evaluation and probes use the isolated evaluation project and `AI__EvalApiKey`, with the
-shared $0.50 UTC daily ceiling and independent project monthly limit. Never use the
-production key, print a credential, raise a budget or rotate accounts to continue a run.
+shared UTC daily ceiling ($1.20 in staging, $0.50 in production) and independent project
+monthly limit. Never use the production key, print a credential, raise a budget or rotate
+accounts to continue a run.
 No paid-key probe runs without a written cost estimate and remaining allowance.
 
 Record the launch gate's actual cost, the daily or partial `AI cost` line, cache fraction
