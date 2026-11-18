@@ -350,11 +350,15 @@ public partial class ProcessUserChatCommandHandlerTests
             Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
     }
 
-    private (Habit Parent, Habit[] Children) SetupSameTitleChildren(string title, int count)
+    private (Habit Parent, Habit[] Children) SetupSameTitleChildren(string title, int count, int[]? positions = null)
     {
         var parent = CreateHabit("Water");
         var children = Enumerable.Range(0, count).Select(_ => CreateHabit(title)).ToArray();
-        foreach (var child in children) child.SetParentHabitId(parent.Id);
+        foreach (var (child, index) in children.Select((child, index) => (child, index)))
+        {
+            child.SetParentHabitId(parent.Id);
+            child.SetPosition(positions?[index] ?? index + 1);
+        }
         SetupSelectionHabits([parent, .. children]);
         return (parent, children);
     }

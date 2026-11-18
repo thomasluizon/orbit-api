@@ -79,9 +79,10 @@ public partial class ProcessUserChatCommandHandlerTests
 
     /// <summary>
     /// The read search and the request of a selection card turn, with the number of "Water - 710ml" sub-habits.
-    /// Without a message, the turn sends the owner's split request.
+    /// Without a message, the turn sends the owner's split request. Without positions, each sub-habit has the
+    /// position of its place in the read.
     /// </summary>
-    private sealed record SelectionCardTurn(string Search, string? Message = null, int Children = 6);
+    private sealed record SelectionCardTurn(string Search, string? Message = null, int Children = 6, int[]? Positions = null);
 
     private Task<SelectionCardRun> RunSelectionCardAsync(string language, string[] partKinds,
         params Func<Habit[], object>[] cards) =>
@@ -97,7 +98,7 @@ public partial class ProcessUserChatCommandHandlerTests
         var user = User.Create("Reader", "reader@example.test").Value;
         user.SetLanguage(language);
         SetupUserAndPayGate(user);
-        var (_, children) = SetupSameTitleChildren("Water - 710ml", turn.Children);
+        var (_, children) = SetupSameTitleChildren("Water - 710ml", turn.Children, turn.Positions);
         var query = new QueryHabitsTool(_habitRepo, _userRepo, _userDateService, _scheduleLogReader);
         var handler = CreateHandler(query, RealAskTool());
         HoldSelectionReplayWrites(query);
