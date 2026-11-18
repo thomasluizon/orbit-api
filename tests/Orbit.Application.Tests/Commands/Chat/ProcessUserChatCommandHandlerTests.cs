@@ -194,7 +194,7 @@ public partial class ProcessUserChatCommandHandlerTests
     {
         var toolRegistry = new AiToolRegistry(tools);
         SetupOperationExecutor(toolRegistry);
-        var aiDeps = new ChatAiDependencies(_aiIntentService, toolRegistry, _promptBuilder, _catalogService);
+        var aiDeps = new ChatAiDependencies(_aiIntentService, toolRegistry, _promptBuilder, _catalogService, _changeShape);
         var dataDeps = new ChatDataDependencies(_habitRepo, _goalRepo, userRepository, _tagRepo, _checklistTemplateRepo, _featureFlagService);
         var executionDeps = new ChatExecutionDependencies(
             _userDateService, _userStreakService, payGate, unitOfWork, _scopeFactory, _operationExecutor,

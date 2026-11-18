@@ -199,7 +199,8 @@ public static partial class ServiceCollectionExtensions
                 sp.GetRequiredService<IAiIntentService>(),
                 sp.GetRequiredService<AiToolRegistry>(),
                 sp.GetRequiredService<ISystemPromptBuilder>(),
-                sp.GetRequiredService<IAgentCatalogService>()));
+                sp.GetRequiredService<IAgentCatalogService>(),
+                sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<AiSettings>>().Value.ChangeShape));
         builder.Services.AddScoped<Orbit.Application.Chat.Commands.ChatDataDependencies>(sp =>
             new Orbit.Application.Chat.Commands.ChatDataDependencies(
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Habit>>(),

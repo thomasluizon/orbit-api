@@ -111,6 +111,39 @@ public class AiSettingsTests
         staging.Groups["overrides"].Value.Should().MatchRegex("(?m)^\\s*AI__ChatReasoningEffort\\s*=\\s*\"low\"\\s*$");
     }
 
+    [Theory]
+    [InlineData(null, ChangeDeclarationShape.Kinds)]
+    [InlineData("kinds", ChangeDeclarationShape.Kinds)]
+    [InlineData("wrapper", ChangeDeclarationShape.Wrapper)]
+    [InlineData(" Wrapper ", ChangeDeclarationShape.Wrapper)]
+    [InlineData("propose_changes", ChangeDeclarationShape.Kinds)]
+    public void ChangePlanShape_SelectsTheDeclarationShapeOfTheChangeList(string? configured, ChangeDeclarationShape expected)
+    {
+        var settings = configured is null ? new AiSettings() : new AiSettings { ChangePlanShape = configured };
+
+        settings.ChangeShape.Should().Be(expected);
+    }
+
+    [Fact]
+    public void ChangePlanShape_DefaultsToKindsAndOnlyStagingNamesIt()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "Orbit.slnx")))
+            directory = directory.Parent;
+        directory.Should().NotBeNull();
+        var terraform = File.ReadAllText(Path.Combine(directory!.FullName, "infra", "configuration.tf"));
+
+        new AiSettings().ChangePlanShape.Should().Be("kinds");
+
+        var production = Regex.Match(terraform, @"(?ms)^  production_api_values\s*=\s*\{(?<values>.*?)^  \}");
+        production.Success.Should().BeTrue();
+        production.Groups["values"].Value.Should().NotContain("AI__ChangePlanShape");
+
+        var staging = Regex.Match(terraform, @"(?ms)^  staging_api_values\s*=\s*merge\(local\.production_api_values,\s*\{(?<overrides>.*?)^  \}\)");
+        staging.Success.Should().BeTrue();
+        staging.Groups["overrides"].Value.Should().MatchRegex("(?m)^\\s*AI__ChangePlanShape\\s*=\\s*\"kinds\"\\s*$");
+    }
+
     [Fact]
     public void ConfiguredAndDefaultModels_HavePricingRows()
     {

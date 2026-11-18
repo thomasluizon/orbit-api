@@ -596,10 +596,10 @@ public sealed partial class ChatWriteHoldHandlerTests : IDisposable
     }
 
     private ProcessUserChatCommandHandler CreateHandler(IAgentOperationExecutor? executor = null, IPayGateService? payGate = null,
-        AiToolRegistry? tools = null)
+        AiToolRegistry? tools = null, ChangeDeclarationShape changeShape = ChangeDeclarationShape.Kinds)
     {
         var aiDeps = new ChatAiDependencies(_aiIntentService, tools ?? _toolRegistry,
-            _promptBuilder, _catalogService);
+            _promptBuilder, _catalogService, changeShape);
         var dataDeps = new ChatDataDependencies(_habitRepo, _goalRepo, _userRepo,
             _tagRepo, _templateRepo, _featureFlagService);
         var executionDeps = new ChatExecutionDependencies(

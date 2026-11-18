@@ -117,11 +117,13 @@ public enum ActionStatus { Success, Failed, Suggestion, NeedsClarification }
 /// <summary>
 /// Groups AI-related dependencies to reduce constructor parameter count (S107).
 /// </summary>
+/// <param name="ChangeShape">The declaration shape of the typed change list on the <c>ai_change_plan</c> path.</param>
 public record ChatAiDependencies(
     IAiIntentService IntentService,
     AiToolRegistry ToolRegistry,
     ISystemPromptBuilder PromptBuilder,
-    IAgentCatalogService CatalogService);
+    IAgentCatalogService CatalogService,
+    ChangeDeclarationShape ChangeShape = ChangeDeclarationShape.Kinds);
 
 /// <summary>
 /// Groups data repository dependencies to reduce constructor parameter count (S107).
@@ -272,7 +274,7 @@ public partial class ProcessUserChatCommandHandler(
                     recording.HabitDraft = prepared.HabitDraft;
                     recording.Enabled = !prepared.IsReplay;
                     recording.MessageAllowanceConsumed = prepared.MessageAllowanceConsumed;
-                }, recording.ToolCalls.Add, execution.PendingClarificationStore);
+                }, recording.ToolCalls.Add, execution.PendingClarificationStore, ai.ToolRegistry);
             return await answerService.ExecuteAsync(request, prepared =>
             {
                 if (prepared.ModeratedInput is { } flaggedInput)

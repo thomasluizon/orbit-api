@@ -53,8 +53,8 @@ public partial class ProcessUserChatCommandHandler
             var roundResult = !aiResponse.HasToolCalls
                 ? await CorrectTerminalAnswerAsync(aiResponse, request, context, executionResults,
                     terminalAnswerCorrectionAttempted, iteration, totalBudgetTokens, cancellationToken)
-                : await ProcessToolCallsAsync(aiResponse, request, context, executionResults, iteration, totalBudgetTokens,
-                    correction, language, aiStreamSink, cancellationToken);
+                : await context.Policy.ProcessRoundAsync(this, aiResponse, request, context, executionResults, iteration,
+                    totalBudgetTokens, correction, language, aiStreamSink, cancellationToken);
             if (!aiResponse.HasToolCalls) terminalAnswerCorrectionAttempted = true;
 
             if (roundResult.ProviderError is not null)
@@ -238,7 +238,7 @@ public partial class ProcessUserChatCommandHandler
         }
 
         foreach (var skipped in aiResponse.ToolCalls!.Where(call => toolResults.All(result => result.Id != call.Id)))
-            toolResults.Add(executionResults.Policy.Failed(skipped, WithheldBesideAskError,
+            toolResults.Add(new AiToolCallResult(skipped.Name, skipped.Id, false, null, null,
                 "This call was withheld while ask was unresolved. Continue the original request using the ask result; prepare only changes whose inputs are resolved."));
         RefreshAskSchema(aiResponse.ConversationContext, request, context, executionResults);
         toolResults.AddRange(planResults);
@@ -421,7 +421,7 @@ public partial class ProcessUserChatCommandHandler
             || totalBudgetTokens < AppConstants.MaxAiRequestTotalTokens)
         && request.ConfirmationToken is null;
 
-    private sealed record ToolRoundResult(
+    internal sealed record ToolRoundResult(
         AiResponse Response,
         bool HadToolFailure = false,
         AppError? ProviderError = null,
@@ -463,7 +463,7 @@ public partial class ProcessUserChatCommandHandler
         var writeCalls = orderedCalls
             .Where(call => call.Name != "ask" && ai.ToolRegistry.GetTool(call.Name)?.IsReadOnly != true)
             .ToList();
-        var deferredCreations = readOnlyCalls.Count > 0
+        var deferredCreations = readOnlyCalls.Count > 0 && executionResults.Policy.DefersCreationBesideRead
             ? writeCalls.Where(call => call.Name == "bulk_create_habits").ToArray() : [];
         executionResults.RequiresCreationProposal |= deferredCreations.Length > 0;
         writeCalls.RemoveAll(call => deferredCreations.Contains(call));
@@ -484,7 +484,7 @@ public partial class ProcessUserChatCommandHandler
         foreach (var call in excessReads)
             outcomesByCallId[call.Id] = ReadCallLimitOutcome(call, executionResults.Policy);
         foreach (var call in deferredCreations)
-            outcomesByCallId[call.Id] = AwaitCreationReads(call, executionResults.Policy);
+            outcomesByCallId[call.Id] = AwaitCreationReads(call);
         for (var index = 0; index < readOnlyCalls.Count; index++)
         {
             outcomesByCallId[readOnlyCalls[index].Id] = readOnlyOutcomes[index];
@@ -623,12 +623,6 @@ public partial class ProcessUserChatCommandHandler
         if (result.Status == AgentOperationStatus.Succeeded && !tool.IsReadOnly)
             ChatTurnReadScope.For(userId)?.InvalidateHabits();
     }
-
-    /// <summary>
-    /// The typed error of a write that the turn did not run because it targets a record of the <c>ask</c> in the same
-    /// response, on the <c>ai_change_plan</c> path.
-    /// </summary>
-    private const string WithheldBesideAskError = "withheld_beside_ask";
 
     private static ToolCallOutcome RepeatedSingleEntityToolOutcome(AiToolCall call, string bulkTool, TurnPolicy policy)
     {

@@ -1,3 +1,5 @@
+using Orbit.Application.Chat;
+
 namespace Orbit.Infrastructure.Configuration;
 
 public sealed class AiSettings
@@ -19,6 +21,16 @@ public sealed class AiSettings
     /// SDK (for example <c>low</c> or <c>medium</c>). The old path and every other purpose stay at low.
     /// </summary>
     public string ChatReasoningEffort { get; init; } = "low";
+
+    /// <summary>
+    /// The declaration shape of the typed change list on the <c>ai_change_plan</c> path: <c>kinds</c> declares one tool
+    /// for each change kind, and <c>wrapper</c> declares one <c>propose_changes</c> tool. Any other value means kinds.
+    /// </summary>
+    public string ChangePlanShape { get; init; } = "kinds";
+
+    public ChangeDeclarationShape ChangeShape =>
+        string.Equals(ChangePlanShape?.Trim(), "wrapper", StringComparison.OrdinalIgnoreCase)
+            ? ChangeDeclarationShape.Wrapper : ChangeDeclarationShape.Kinds;
 
     /// <summary>
     /// Bounds buffered calls independently of per-attempt timeouts and retry count.

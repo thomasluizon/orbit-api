@@ -48,7 +48,8 @@ public partial class ProcessUserChatCommandHandler
         var systemPrompt = string.Join(
             Environment.NewLine,
             ai.PromptBuilder.BuildStatic(promptRequest),
-            ai.CatalogService.BuildStaticSupplement(), PlanToolDeclaration.Instruction);
+            ai.CatalogService.BuildStaticSupplement(),
+            context.Policy.TurnInstruction(this));
         var accountContext = string.Join(
             Environment.NewLine,
             ai.PromptBuilder.BuildAccountContext(promptRequest),
@@ -106,24 +107,12 @@ public partial class ProcessUserChatCommandHandler
                 + PendingPreviewModelContext.Instruction,
                 PendingPreviewModelContext.Serialize(pendingPreviews));
 
-        systemPrompt = AppendCardPromptInstructions(
-            string.Join(Environment.NewLine, systemPrompt, TerminalWriteDirective.Instruction), request, context, toolNames);
+        systemPrompt = AppendCardPromptInstructions(context.Policy.WithTerminalDirective(systemPrompt), request, context, toolNames);
         if (request.ClientContext?.SupportsFollowUps == true && !ProactiveProposal.Enabled(request.ClientContext))
             dynamicContext = string.Join(Environment.NewLine, dynamicContext,
                 "Follow-ups are optional: emit zero, one or two grounded contextual questions. If useful, end with [[orbit:followups]] and one question per line, at most 60 characters each. Never suggest unavailable capabilities, invent facts or execute a write from a suggestion. Do not add other text after them.");
 
-        var toolDeclarations = availableTools
-            .OrderBy(tool => tool.Name, StringComparer.Ordinal)
-            .Select(tool => (object)new
-            {
-                name = tool.Name,
-                description = context.Policy.ToolDescription(tool),
-                parameters = context.Policy.ToolSchema(tool, request.ClientContext, UsesComposition(request, context))
-            })
-            .ToList();
-        if (toolDeclarations.Count > 0)
-            toolDeclarations.Add(PlanToolDeclaration.Declaration);
-        toolDeclarations = toolDeclarations.OrderBy(declaration => JsonSerializer.SerializeToElement(declaration).GetProperty("name").GetString(), StringComparer.Ordinal).ToList();
+        var toolDeclarations = context.Policy.TurnDeclarations(this, availableTools, request, context);
 
         if (turn.ChoiceSelection is { } selection)
             dynamicContext = string.Join(Environment.NewLine, dynamicContext, selection.ToModelContext());
@@ -184,9 +173,9 @@ public partial class ProcessUserChatCommandHandler
             : tool.Description;
 
     private static object ChatToolSchema(Orbit.Application.Chat.Tools.IAiTool tool, AgentClientContext? client, bool composition,
-        bool hasAccountRead = false, IReadOnlyList<HabitSetupDraft>? drafts = null, object? changePlanAsk = null)
+        bool hasAccountRead = false, IReadOnlyList<HabitSetupDraft>? drafts = null, object? source = null)
     {
-        var schema = changePlanAsk ?? (tool is AskTool ask
+        var schema = source ?? (tool is AskTool ask
             ? hasAccountRead || drafts is { Count: > 0 } ? ask.GetParameterSchema(hasAccountRead, drafts) : ask.GetCacheableParameterSchema()
             : tool.GetParameterSchema());
         if (ProactiveProposal.Enabled(client) && ProactiveProposal.Supports(tool.Name))
