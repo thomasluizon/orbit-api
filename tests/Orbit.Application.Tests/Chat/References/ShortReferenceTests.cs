@@ -219,14 +219,16 @@ public class ShortReferenceTests
     }
 
     /// <summary>
-    /// The option and item ids of an ask card stand for the records that they name, so a reference among them resolves as
-    /// a habit and a reference that names no habit of the person is turned down. A free id and a question id stay.
+    /// The option ids of an ask card stand for the habits that they name, so a reference among them resolves as a habit
+    /// and a full GUID that names no habit of the person is turned down. A free option id, a date option id that names no
+    /// habit, a question id and a pickList item id stay.
     /// </summary>
     [Fact]
     public async Task Normalizer_ResolvesTheRecordIdsOfAnAskCardAndKeepsItsFreeIds()
     {
         using var book = Book([]);
         book.Seed(ReferenceRecordType.Habit, [Water, Reading]);
+        const string invented = "9b610c68-0080-417a-80b1-a3f9c3fbc810";
         object Card(string guess) => new
         {
             input = new
@@ -235,23 +237,23 @@ public class ShortReferenceTests
                 missing_input = "record_selection",
                 questions = new[]
                 {
-                    new { id = "abcdef12", options = new[] { new { id = "dab2ad98" }, new { id = guess }, new { id = "yes" } } }
+                    new { id = "abcdef12", options = new[] { new { id = "dab2ad98" }, new { id = guess }, new { id = "yes" }, new { id = "2026-11-18" } } }
                 },
                 items = new[] { new { id = "4c1e7f20", arguments = "{}" } }
             }
         };
 
-        var resolved = await Normalizer(book).NormalizeAsync(Call("ask", Card("q1")), default);
-        var guessed = await Normalizer(book).NormalizeAsync(Call("ask", Card("deadbeef")), default);
+        var resolved = await Normalizer(book).NormalizeAsync(Call("ask", Card("deadbeef")), default);
+        var guessed = await Normalizer(book).NormalizeAsync(Call("ask", Card(invented)), default);
 
         resolved.IsResolved.Should().BeTrue(resolved.IsResolved ? null : resolved.Error());
         var input = resolved.Call.Args.GetProperty("input");
         var question = input.GetProperty("questions")[0];
         question.GetProperty("id").GetString().Should().Be("abcdef12", "a question id names no record");
         question.GetProperty("options").EnumerateArray().Select(option => option.GetProperty("id").GetString())
-            .Should().Equal(Water.Id.ToString(), "q1", "yes");
-        input.GetProperty("items")[0].GetProperty("id").GetString().Should().Be(Reading.Id.ToString());
-        guessed.IsResolved.Should().BeFalse("a guessed reference names no habit of the person");
-        guessed.Error().Should().StartWith("unknown_reference: id \"deadbeef\" names no habit of this person.");
+            .Should().Equal(Water.Id.ToString(), "deadbeef", "yes", "2026-11-18");
+        input.GetProperty("items")[0].GetProperty("id").GetString().Should().Be("4c1e7f20", "no guard reads a pickList item id");
+        guessed.IsResolved.Should().BeFalse("the ask guards read a full GUID option id as a habit, and it names no habit of the person");
+        guessed.Error().Should().StartWith($"unknown_reference: id \"{invented}\" names no habit of this person.");
     }
 }

@@ -549,6 +549,66 @@ public partial class ProcessUserChatCommandHandlerTests
             .Should().Equal([habits[0].Id]);
     }
 
+    /// <summary>
+    /// A pickList item id and an option id of an ask card are free labels when they name no habit of the person. A
+    /// <c>YYYY-MM-DD</c> date starts with 8 hexadecimal digits, and it reaches the issued card unchanged.
+    /// </summary>
+    [Theory]
+    [InlineData("en", "pickList")]
+    [InlineData("pt-BR", "pickList")]
+    [InlineData("en", "choice")]
+    [InlineData("pt-BR", "choice")]
+    public async Task ShortReference_AskDateIdIsAFreeLabelAndReachesTheCardUnchanged(string language, string form)
+    {
+        var portuguese = language == "pt-BR";
+        var user = User.Create("Reader", "reader@example.test").Value;
+        user.SetLanguage(language);
+        SetupUserAndPayGate(user);
+        _shortReferences = true;
+        EnableComposition();
+        SetupSelectionHabits(CreateHabit(portuguese ? "Água" : "Water"));
+        _mediator.Send(Arg.Any<CheckChatCommandQuery>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
+        var title = portuguese ? "Ler" : "Read";
+        object input = form == "pickList"
+            ? new
+            {
+                form,
+                missing_input = "habit_setup",
+                title,
+                action = "create_habits",
+                items = new[] { new { id = "2026-11-18", label = title, arguments = JsonSerializer.Serialize(new { title }) } }
+            }
+            : new
+            {
+                form,
+                missing_input = "preference",
+                question = portuguese ? "Quando começo?" : "When do I start?",
+                options = new[] { new { id = "2026-11-18", label = portuguese ? "Hoje" : "Today" }, new { id = "2026-11-19", label = portuguese ? "Amanhã" : "Tomorrow" } }
+            };
+        var issued = new List<IssuedAiBlock>();
+        _blockStore.AddAsync(Arg.Do<IssuedAiBlock>(issued.Add), Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
+        var results = CaptureModelResults(portuguese ? "Escolha." : "Choose.");
+        SetupAiResponse(new AiResponse
+        {
+            ConversationContext = TestConversationContext,
+            ToolCalls = [AskSelectionRead(), new("ask", "ask", JsonSerializer.SerializeToElement(new { input }))]
+        });
+        var query = new QueryHabitsTool(_habitRepo, _userRepo, _userDateService, _scheduleLogReader);
+        var handler = CreateHandler(RealAskTool(), query);
+        UseProductionReadExecutor(query);
+
+        var result = await handler.Handle(new(UserId, portuguese ? "Prepare a seleção pedida." : "Prepare the requested selection.",
+            ClientContext: new(SupportsParts: true, PartKinds: [form], Locale: language)), default);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        results.SelectMany(round => round).Should().NotContain(item => item.Error != null && item.Error.Contains("unknown_reference"));
+        var card = issued.Should().ContainSingle("the card reached the person").Subject.ReadDefinition();
+        if (form == "pickList")
+            card.Items.Select(item => item.Id).Should().Equal(["2026-11-18"], "an item id is a free label");
+        else
+            card.Options.Select(option => option.Id).Should().Equal(["2026-11-18", "2026-11-19"], "an option id that names no habit is a free label");
+    }
+
     private static IAiTool WriteTool(string name, Func<ToolResult> execute)
     {
         var tool = Substitute.For<IAiTool>();

@@ -63,7 +63,7 @@ public sealed partial class ToolCallReferenceNormalizer(ReferenceBook book,
 
     /// <summary>
     /// Resolves each typed ID argument under the node. <paramref name="container"/> is the name of the argument that
-    /// holds the node, so the option and item ids of an ask card resolve as habits and its question ids stay.
+    /// holds the node, so the option ids of an ask card resolve as habits and its question and item ids stay.
     /// </summary>
     private async Task<bool> WalkAsync(JsonNode? node, bool ask, List<ReferenceFailure> failures, CancellationToken ct,
         string? container = null)
@@ -82,7 +82,7 @@ public sealed partial class ToolCallReferenceNormalizer(ReferenceBook book,
             if ((ask ? ReferenceArguments.AskRecordType(name, container) : null) is { } askType)
             {
                 changed |= await ResolveValuesAsync(fields, name, askType, value, failures,
-                    async text => ReferenceCodes.IsReference(text) ? Outcome(await book.ResolveAsync(askType, text, ct)) : (text, []));
+                    async text => ReferenceCodes.IsReference(text) ? OptionOutcome(text, await book.ResolveAsync(askType, text, ct)) : (text, []));
                 continue;
             }
             if (ReferenceArguments.Unreferenced.Contains(name))
@@ -125,6 +125,14 @@ public sealed partial class ToolCallReferenceNormalizer(ReferenceBook book,
         resolution.Record is { } record
             ? (record.Id.ToString(), [])
             : (null, resolution.Closest.Select(candidate => new ReferenceCandidate(candidate.Id.ToString(), candidate.Title)).ToArray());
+
+    /// <summary>
+    /// The outcome of an option id of an ask card. A full GUID that names no habit of the person is turned down, because
+    /// the ask guards read it as a record. Other text that names no habit, such as a <c>YYYY-MM-DD</c> date, is a free
+    /// label and stays.
+    /// </summary>
+    private static (string? Value, IReadOnlyList<ReferenceCandidate> Closest) OptionOutcome(string text, ReferenceResolution resolution) =>
+        resolution.IsResolved || Guid.TryParse(text.Trim(), out _) ? Outcome(resolution) : (text, []);
 
     /// <summary>Resolves one string or each string of an array. A null, an empty string or a value of another kind stays.</summary>
     private static async Task<bool> ResolveValuesAsync(JsonObject owner, string name, ReferenceRecordType type, JsonNode? value,
