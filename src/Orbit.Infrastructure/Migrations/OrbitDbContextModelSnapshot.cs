@@ -661,6 +661,13 @@ namespace Orbit.Infrastructure.Migrations
                             Description = "Roll out the guided create, edit and onboarding flows",
                             Enabled = false,
                             UpdatedAtUtc = new DateTime(2026, 11, 12, 0, 0, 0, 0, DateTimeKind.Utc)
+                        },
+                        new
+                        {
+                            Key = "ai_change_plan",
+                            Description = "The model is the only owner of the act-or-ask decision on the short-prompt chat path",
+                            Enabled = false,
+                            UpdatedAtUtc = new DateTime(2026, 11, 18, 0, 0, 0, 0, DateTimeKind.Utc)
                         });
                 });
 

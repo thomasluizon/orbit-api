@@ -23,4 +23,5 @@ public static class FeatureFlagKeys
     public const string AiStatusBlocksDisabled = "astra_status_blocks_disabled";
     public const string AiRecordListsDisabled = "astra_record_lists_disabled";
     public const string AiAccountRowsDisabled = "astra_account_rows_disabled";
+    public const string AiChangePlan = "ai_change_plan";
 }
