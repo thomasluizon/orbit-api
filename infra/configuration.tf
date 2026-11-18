@@ -108,7 +108,7 @@ locals {
   }
 
   staging_api_values = merge(local.production_api_values, {
-    AI__EvalDailyBudgetUsd             = "0.50"
+    AI__EvalDailyBudgetUsd             = "1.20"
     Apns__Topic                        = "org.useorbit.app.staging"
     AppStore__AppAppleId               = "6831373752"
     AppStore__BundleId                 = "org.useorbit.app.staging"
