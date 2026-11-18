@@ -225,7 +225,7 @@ public partial class ProcessUserChatCommandHandler
         int OriginalEntryCount,
         IReadOnlySet<Guid> DoneTodayHabitIds);
 
-    private sealed record ChatContext(
+    internal sealed record ChatContext(
         IReadOnlyList<Habit> UserHabits,
         List<Habit> ActiveHabits,
         List<Habit> PromptHabits,
@@ -241,10 +241,7 @@ public partial class ProcessUserChatCommandHandler
         HabitTodaySnapshot TodayFacts,
         long ContextLoadMilliseconds)
     {
-        /// <summary>
-        /// The <c>ai_change_plan</c> path: the model is the only owner of the act-or-ask decision, and the turn runs no
-        /// server guard or route that reads the person's words.
-        /// </summary>
-        public bool ChangePlan => EnabledFeatureFlags.Contains(FeatureFlagKeys.AiChangePlan, StringComparer.Ordinal);
+        /// <summary>The path of the turn, resolved once from the enabled flags.</summary>
+        public TurnPolicy Policy { get; } = TurnPolicy.For(EnabledFeatureFlags);
     }
 }

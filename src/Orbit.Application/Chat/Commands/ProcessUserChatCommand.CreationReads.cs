@@ -39,10 +39,10 @@ public partial class ProcessUserChatCommandHandler
             results.RequiresCreationProposal = false;
     }
 
-    private static ToolCallOutcome AwaitCreationReads(AiToolCall call, bool changePlan) => new(
+    private static ToolCallOutcome AwaitCreationReads(AiToolCall call, TurnPolicy policy) => new(
         new AiToolCallResult(call.Name, call.Id, true, null, null, null,
-            new CreationReadDependency("awaiting_reads", changePlan ? null
-                : "Nothing was previewed or saved. Read the results from this round first, then call bulk_create_habits once with the complete set. Reuse each existing habit's ID and stored title verbatim. Copy selected suggestion draft fields unchanged, without inventing quantities, times or activities.")),
+            new CreationReadDependency("awaiting_reads", policy.Instruction(
+                "Nothing was previewed or saved. Read the results from this round first, then call bulk_create_habits once with the complete set. Reuse each existing habit's ID and stored title verbatim. Copy selected suggestion draft fields unchanged, without inventing quantities, times or activities."))),
         null, null, null, null);
 
     private sealed record CreationReadDependency(

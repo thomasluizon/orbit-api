@@ -14,7 +14,7 @@ public partial class ProcessUserChatCommandHandler
         ProcessUserChatCommand request, ChatContext context, Result<AiResponse> response,
         ToolExecutionAccumulator? results, CancellationToken ct)
     {
-        if (context.ChangePlan || request.BlockAnswer is not null || request.ConfirmationToken is not null
+        if (request.BlockAnswer is not null || request.ConfirmationToken is not null
             || results is not null && HasSucceededWrite(results)
             || response.IsFailure && response.ErrorCode != ErrorCodes.AiEmptyResponse)
             return null;

@@ -35,7 +35,7 @@ public partial class ProcessUserChatCommandHandler
 
     private void SeedProposedHabitNames(ProcessUserChatCommand request, ToolExecutionAccumulator results)
     {
-        if (results.ChangePlan || request.History is not { Count: > 0 }) return;
+        if (request.History is not { Count: > 0 }) return;
         var proposals = execution.PendingOperationStore.GetPendingHabitCreations(request.UserId);
         var normalizedMessage = HabitNameMatcher.Normalize(request.Message);
         var asksForReplacement = Regex.IsMatch(normalizedMessage,
@@ -414,12 +414,11 @@ public partial class ProcessUserChatCommandHandler
                 ambiguous_names = results.AmbiguousHabitNames,
                 existing_duplicates = results.ExistingDuplicateNames.ToArray(),
                 pending_duplicates = results.PendingDuplicateNames.ToArray(),
-                instruction = results.ChangePlan ? null
-                    : merged
+                instruction = results.Policy.Instruction(merged
                     ? "This call was merged into the held preview for this intent. Do not repeat the call or prepare another preview. Nothing changes until approval."
                     : error is not null
                         ? "These arguments were rejected before dispatch and produced no preview. Correct the validation error using the person's request, preserve all other requested actions and fields, then call the write tool again. Do not claim anything was saved."
-                        : "No new preview was prepared. Ask about the returned missing, ambiguous or duplicate names. Ignore unsolicited creates for a tag-only request."
+                        : "No new preview was prepared. Ask about the returned missing, ambiguous or duplicate names. Ignore unsolicited creates for a tag-only request.")
             }), error is null ? null : new ActionResult(ToolNameToPascalCase(call.Name), ActionStatus.Failed, Error: ToolFailureMessage(language))
                 .WithToolResultMessage(call, key: "toolFailure"), null, null, null);
     }

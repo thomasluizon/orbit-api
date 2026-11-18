@@ -57,7 +57,7 @@ public partial class ProcessUserChatCommandHandler
         return $"{ToolNameToPascalCase(call.Name)} requested via chat";
     }
 
-    private AiToolCallResult BuildToolCallResult(AiToolCall call, AgentOperationResult operationResult, bool changePlan = false)
+    private AiToolCallResult BuildToolCallResult(AiToolCall call, AgentOperationResult operationResult, TurnPolicy policy)
     {
         var result = new AiToolCallResult(
             call.Name,
@@ -76,14 +76,14 @@ public partial class ProcessUserChatCommandHandler
                     instruction = SelectionRule
                 },
                 HabitMonthCard month => HabitMonthModelPayload.From(month),
-                PendingPreviewDiscard => new { status = "discarded", instruction = changePlan ? null : PendingPreviewDiscard.Instruction },
+                PendingPreviewDiscard => new { status = "discarded", instruction = policy.Instruction(PendingPreviewDiscard.Instruction) },
                 IReadOnlyList<ChecklistTemplateResponse> templates when !ModelPayloadBudget.Fits(templates) => ChecklistTemplateModelPayload.From(templates),
                 HabitRankingResponse ranking when !ModelPayloadBudget.Fits(ranking) => HabitRankingModelPayload.From(ranking),
                 _ => operationResult.Payload
             },
             operationResult.ReadBlock is null || operationResult.Payload is HabitListCard { Selection.RequiresAnswer: true }
                 ? null : "[[orbit:read:" + call.Id + "]]");
-        return changePlan ? result with { Payload = WithoutInstruction(result.Payload) } : result;
+        return result with { Payload = policy.ForModel(result.Payload) };
     }
 
     private static readonly JsonSerializerOptions ModelPayloadJson = new()

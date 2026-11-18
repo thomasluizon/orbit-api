@@ -32,70 +32,6 @@ public partial class ProcessUserChatCommandHandler
             : operation;
     }
 
-    /// <summary>
-    /// The read result that the turn keeps. On the <c>ai_change_plan</c> path a read returns its records only: no
-    /// selection, no question and no rule.
-    /// </summary>
-    private static AgentOperationResult ReadSelectionOf(AiToolCall call, AgentOperationResult operation,
-        ProcessUserChatCommand request, ToolExecutionAccumulator results) =>
-        !results.ChangePlan ? ResolveNamedSelection(call, operation, request.Message)
-            : operation.Payload is HabitListCard { Selection: not null } card
-            ? operation with { Payload = card with { Selection = null } }
-            : operation;
-
-    /// <summary>
-    /// Keeps the selection of a read that needs an answer or names a reference. The <c>ai_change_plan</c> path keeps none.
-    /// </summary>
-    private static void RecordReadSelection(ToolCallOutcome outcome, ToolExecutionAccumulator results)
-    {
-        if (results.ChangePlan || outcome.OperationResult is not
-            {
-                Status: AgentOperationStatus.Succeeded,
-                Payload: HabitListCard { Selection: { } selection }
-            })
-            return;
-        if (selection.RequiresAnswer)
-            results.PendingSelection ??= selection;
-        if (selection.RequiresAnswer || selection.Reference is not null)
-            results.SelectionCandidates.Add(selection);
-    }
-
-    /// <summary>
-    /// Runs the selection guard over the writes of a round and returns the scope of the writes that remain. The scope
-    /// is built after the duplicate check, so a refused write covers no part of a split. The <c>ai_change_plan</c>
-    /// path runs no guard.
-    /// </summary>
-    private static SelectionScope RejectHeldSelections(ProcessUserChatCommand request, IReadOnlyList<AiToolCall> calls,
-        Dictionary<string, AiToolCall?> resolvedCalls, ToolExecutionAccumulator results,
-        Dictionary<string, ToolCallOutcome> outcomes)
-    {
-        if (results.ChangePlan)
-            return SelectionScopeOf(request, resolvedCalls, results);
-        RejectUnreadDuplicateTargets(calls, resolvedCalls, results, outcomes);
-        return RejectUnansweredSelections(calls, resolvedCalls, results, outcomes,
-            SelectionScopeOf(request, resolvedCalls, results));
-    }
-
-    /// <summary>
-    /// Holds a write whose selection is unanswered, or settles the selections it covers. The <c>ai_change_plan</c>
-    /// path holds no write.
-    /// </summary>
-    private static bool HoldsUnansweredSelection(AiToolCall call, AiToolCall? resolved, ToolExecutionAccumulator results,
-        SelectionScope scope, Dictionary<string, ToolCallOutcome> outcomes)
-    {
-        if (resolved is null || results.ChangePlan)
-            return false;
-        var verdict = SelectionForWrite(resolved, results, scope);
-        if (verdict.Unanswered is { } unanswered)
-        {
-            results.PendingSelection = unanswered;
-            outcomes[call.Id] = SelectionRequiredOutcome(call);
-            return true;
-        }
-        SettleSelections(results, verdict.Settled);
-        return false;
-    }
-
     private static bool MessageScopesAGroup(string message, HabitSelectionCandidates selection) =>
         selection.Candidates.GroupBy(candidate => HabitNameMatcher.TitleKey(candidate.Title))
             .Any(group => group.Count() > 1 && MessageScopesGroup(message, group.Key));
@@ -229,7 +165,7 @@ public partial class ProcessUserChatCommandHandler
     /// the whole set or members by order, or when the turn's writes make different changes that split the group
     /// between them without a gap or an overlap.
     /// </summary>
-    private sealed record SelectionScope(string Message, IReadOnlyList<AiToolCall> TurnWrites);
+    internal sealed record SelectionScope(string Message, IReadOnlyList<AiToolCall> TurnWrites);
 
     private sealed record SelectionVerdict(HabitSelectionCandidates? Unanswered, IReadOnlyList<SettledSelection> Settled);
 

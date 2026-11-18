@@ -25,11 +25,9 @@ public partial class ProcessUserChatCommandHandler
         ToolExecutionAccumulator results, CancellationToken ct)
     {
         var flags = await data.FeatureFlagService.GetEnabledKeysForUserAsync(request.UserId, ct);
-        if (request.AuthMethod != AgentAuthMethod.Jwt || flags.Contains(FeatureFlagKeys.AiAskBlocksDisabled)
-            || flags.Contains(FeatureFlagKeys.AiPartsDisabled) || request.ClientContext?.SupportsParts != true
-            || results.AskBlock is not null)
+        if (AskUnavailable(request, flags, results, out var client))
             return TypedAskError(call, "ask_unavailable");
-        var kinds = request.ClientContext.PartKinds ?? [];
+        var kinds = client.PartKinds ?? [];
         var user = await data.UserRepository.GetByIdAsync(request.UserId, ct);
         AiBlockDefinition definition;
         if (AboutRecords(call.Args) is { } about)
@@ -42,23 +40,22 @@ public partial class ProcessUserChatCommandHandler
         }
         else
         {
-            if (!CanAttemptAsk(call.Args, request.ClientContext))
+            if (!CanAttemptAsk(call.Args, client))
                 return TypedAskError(call, "ask_form_unsupported");
             if (ai.ToolRegistry.GetTool("ask") is not { } tool)
                 return TypedAskError(call, "ask_unavailable");
             var result = await tool.ExecuteAsync(call.Args, request.UserId, ct);
             if (!result.Success || result.Payload is not AiBlockDefinition parsed)
-                return TypedAskError(call, "ask_invalid_arguments", new { error = "ask_invalid_arguments", detail = result.Error });
-            definition = AskBlockNegotiation.Definition(parsed, request.ClientContext, call.Args);
+                return TypedAskError(call, "ask_invalid_arguments", new Dictionary<string, object?> { ["detail"] = result.Error });
+            definition = AskBlockNegotiation.Definition(parsed, client, call.Args);
         }
         if (!kinds.Contains(definition.Form, StringComparer.Ordinal))
             return TypedAskError(call, "ask_form_unsupported");
         return await IssueAskBlockAsync(call, definition, request, results, user, ct);
     }
 
-    private static ToolCallOutcome TypedAskError(AiToolCall call, string code, object? data = null) => new(
-        new AiToolCallResult(call.Name, call.Id, false, null, null, code, data ?? new { error = code }),
-        null, null, null, null, FailureKey: code);
+    private static ToolCallOutcome TypedAskError(AiToolCall call, string code, IReadOnlyDictionary<string, object?>? details = null) =>
+        new(TypedToolError(call, code, details), null, null, null, null, FailureKey: code);
 
     /// <summary>The record IDs of a choice about records, or null for every other form.</summary>
     private static IReadOnlyList<string>? AboutRecords(JsonElement args) =>
@@ -83,11 +80,11 @@ public partial class ProcessUserChatCommandHandler
         var ids = about.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         if (string.IsNullOrWhiteSpace(question) || question.Length > 120 || ids.Length < 2)
             return new(null, TypedAskError(call, "ask_invalid_arguments",
-                new { error = "ask_invalid_arguments", detail = "A choice about records needs a question of 1 to 120 characters and at least 2 distinct records." }));
+                new Dictionary<string, object?> { ["detail"] = "A choice about records needs a question of 1 to 120 characters and at least 2 distinct records." }));
         var owned = habits.Where(habit => habit.UserId == userId).ToDictionary(habit => habit.Id);
         var unknown = ids.Count(id => !Guid.TryParse(id, out var parsed) || !owned.ContainsKey(parsed));
         if (unknown > 0)
-            return new(null, TypedAskError(call, "unknown_record", new { error = "unknown_record", count = unknown }));
+            return new(null, TypedAskError(call, "unknown_record", new Dictionary<string, object?> { ["count"] = unknown }));
         var choice = kinds.Contains(AiBlockKinds.Choice, StringComparer.Ordinal);
         var form = kinds.Contains(AiBlockKinds.Question, StringComparer.Ordinal);
         if (!choice && !form)
@@ -95,7 +92,7 @@ public partial class ProcessUserChatCommandHandler
         var limit = form ? MaxQuestionRecords : MaxChoiceRecords;
         if (ids.Length > limit || ids.Length > MaxChoiceRecords && !form)
             return new(null, TypedAskError(call, "too_many_candidates",
-                new { error = "too_many_candidates", count = ids.Length, limit }));
+                new Dictionary<string, object?> { ["count"] = ids.Length, ["limit"] = limit }));
 
         var listOrder = HabitAppListOrder.Order(owned.Values);
         var chosen = ids.Select(id => Guid.Parse(id)).ToHashSet();
