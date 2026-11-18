@@ -60,7 +60,7 @@ public sealed partial class AiProactiveCheckinMessageService(
         + "Do not infer the language from titles or from the language of these instructions. "
         + "Localize the sentence and every phrase; keep stored titles verbatim in the title arrays. "
         + (LocaleHelper.IsPortuguese(language)
-            ? "Example: HabitTitles [\"Water - 1.18L\", \"Change twitter founder account email\"] gives text \"Para começar a manhã, comece com {{habit:0|seu litro de água}} e depois {{habit:1|alterar o email do Twitter}}.\" "
+            ? "Example: HabitTitles [\"Water - 2L\", \"Update LinkedIn profile\"] gives text \"Para começar a manhã, comece com {{habit:0|seus 2 litros de água}} e depois {{habit:1|atualizar o perfil do LinkedIn}}.\" "
             : string.Empty)
         + (LocaleHelper.IsPortuguese(language)
             ? "Orbit is masculine in Brazilian Portuguese (o Orbit, do Orbit, ele); use native, warm você phrasing. "
