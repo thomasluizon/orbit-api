@@ -26,7 +26,7 @@ public partial class ProcessUserChatCommandHandler
         IReadOnlyDictionary<string, ToolCallOutcome> outcomes, ProcessUserChatCommand request, ChatContext context,
         ToolExecutionAccumulator results, CancellationToken ct)
     {
-        if (request.BlockAnswer is not null || !AskEnabled(request, context)
+        if (results.ChangePlan || request.BlockAnswer is not null || !AskEnabled(request, context)
             || request.ClientContext!.PartKinds?.Contains(AiBlockKinds.PickList, StringComparer.Ordinal) != true
             || calls.Count == 0 || calls.Count != response.ToolCalls!.Count
             || !calls.All(IsSelectionRead) || SelectionAction(request.Message) is not { } action)

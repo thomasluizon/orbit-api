@@ -46,9 +46,8 @@ public partial class ProcessUserChatCommandHandler
 
         var systemPrompt = string.Join(
             Environment.NewLine,
-            ai.PromptBuilder.BuildStatic(promptRequest),
+            StaticPrompt(promptRequest, context),
             ai.CatalogService.BuildStaticSupplement(), PlanToolDeclaration.Instruction);
-        var habitTargets = HabitTargetContext.Build(context.PromptHabits, context.UserHabits);
         var accountContext = string.Join(
             Environment.NewLine,
             ai.PromptBuilder.BuildAccountContext(promptRequest),
@@ -63,8 +62,7 @@ public partial class ProcessUserChatCommandHandler
                 ? HabitPlacementContext.Build(context.UserHabits, request.Message)
                 : "The client cannot display placement choices. Keep the requested parent and independently tracked sub-habits. Do not recommend checklist placement or a separate parent for additions to an existing routine.");
 
-        if (habitTargets.HasSharedTargets)
-            accountContext = string.Join(Environment.NewLine, accountContext, HabitTargetContext.Instruction, habitTargets.Context);
+        accountContext = AddHabitTargets(accountContext, context);
 
         var availableTools = ai.ToolRegistry.GetAll().Where(tool => tool.Name != "ask" || AskEnabled(request, context)).ToArray();
         var toolNames = availableTools.Select(tool => tool.Name).ToArray();
@@ -118,8 +116,8 @@ public partial class ProcessUserChatCommandHandler
             .Select(tool => (object)new
             {
                 name = tool.Name,
-                description = ChatToolDescription(tool),
-                parameters = ChatToolSchema(tool, request.ClientContext, UsesComposition(request, context))
+                description = TurnToolDescription(tool, context),
+                parameters = TurnToolSchema(tool, request.ClientContext, context, UsesComposition(request, context))
             })
             .ToList();
         if (toolDeclarations.Count > 0)
@@ -156,7 +154,8 @@ public partial class ProcessUserChatCommandHandler
             {
                 Telemetry = telemetry,
                 AccountContext = accountContext,
-                DynamicContext = dynamicContext
+                DynamicContext = dynamicContext,
+                ChangePlan = context.ChangePlan
             },
             aiStreamSink,
             cancellationToken);
@@ -184,11 +183,11 @@ public partial class ProcessUserChatCommandHandler
             : tool.Description;
 
     private static object ChatToolSchema(Orbit.Application.Chat.Tools.IAiTool tool, AgentClientContext? client, bool composition,
-        bool hasAccountRead = false, IReadOnlyList<HabitSetupDraft>? drafts = null)
+        bool hasAccountRead = false, IReadOnlyList<HabitSetupDraft>? drafts = null, object? changePlanAsk = null)
     {
-        var schema = tool is AskTool ask
+        var schema = changePlanAsk ?? (tool is AskTool ask
             ? hasAccountRead || drafts is { Count: > 0 } ? ask.GetParameterSchema(hasAccountRead, drafts) : ask.GetCacheableParameterSchema()
-            : tool.GetParameterSchema();
+            : tool.GetParameterSchema());
         if (ProactiveProposal.Enabled(client) && ProactiveProposal.Supports(tool.Name))
             schema = ProactiveProposal.Schema(schema);
         if (tool.Name == "revise_pending_changes")
@@ -201,6 +200,48 @@ public partial class ProcessUserChatCommandHandler
         return tool.Name == "revise_pending_changes"
             ? TerminalReadDirective.WithCompletionArgument(schema, description: RevisePendingChangesTool.CompletionArgumentDescription)
             : TerminalReadDirective.WithCompletionArgument(schema);
+    }
+
+    /// <summary>
+    /// Adds the same-title target context and its selection instruction. The <c>ai_change_plan</c> path adds neither.
+    /// </summary>
+    private static string AddHabitTargets(string accountContext, ChatContext context)
+    {
+        if (context.ChangePlan)
+            return accountContext;
+        var habitTargets = HabitTargetContext.Build(context.PromptHabits, context.UserHabits);
+        return habitTargets.HasSharedTargets
+            ? string.Join(Environment.NewLine, accountContext, HabitTargetContext.Instruction, habitTargets.Context)
+            : accountContext;
+    }
+
+    /// <summary>The static rules: the one short prompt on the <c>ai_change_plan</c> path, the rule sections otherwise.</summary>
+    private string StaticPrompt(PromptBuildRequest promptRequest, ChatContext context) => context.ChangePlan
+        ? ai.PromptBuilder.BuildChangePlanStatic(promptRequest) : ai.PromptBuilder.BuildStatic(promptRequest);
+
+    private static string TurnToolDescription(Orbit.Application.Chat.Tools.IAiTool tool, ChatContext context) =>
+        context.ChangePlan ? ChangePlanToolDescriptions.For(tool, ChatToolDescription(tool)) : ChatToolDescription(tool);
+
+    private static object TurnToolSchema(Orbit.Application.Chat.Tools.IAiTool tool, AgentClientContext? client,
+        ChatContext context, bool composition) =>
+        context.ChangePlan ? ChangePlanToolSchema(tool, client, composition) : ChatToolSchema(tool, client, composition);
+
+    /// <summary>
+    /// The chat schema of the <c>ai_change_plan</c> path: <c>ask</c> takes its flag-path form, the
+    /// <c>for_selection</c> label of <c>query_habits</c> loses its instruction, and each schema keeps today's
+    /// completion, offer and dismissal arguments.
+    /// </summary>
+    private static object ChangePlanToolSchema(Orbit.Application.Chat.Tools.IAiTool tool, AgentClientContext? client, bool composition)
+    {
+        var schema = ChatToolSchema(tool, client, composition);
+        if (tool is AskTool ask)
+            return ChatToolSchema(ask, client, composition, changePlanAsk: ask.GetChangePlanParameterSchema());
+        if (tool.Name != "query_habits")
+            return schema;
+        var node = System.Text.Json.Nodes.JsonNode.Parse(JsonSerializer.Serialize(schema))!;
+        if (node["properties"]?["for_selection"] is System.Text.Json.Nodes.JsonObject selection)
+            selection["description"] = ChangePlanToolDescriptions.ForSelection;
+        return node;
     }
 
     private static string AppendCardPromptInstructions(

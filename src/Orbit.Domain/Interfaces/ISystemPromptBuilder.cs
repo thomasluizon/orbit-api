@@ -28,6 +28,13 @@ public interface ISystemPromptBuilder
     string BuildStatic(PromptBuildRequest request);
 
     /// <summary>
+    /// Builds the one short static prompt of the <c>ai_change_plan</c> path in place of <see cref="BuildStatic"/>: the
+    /// identity, the act-or-ask rule, the proposal, language, grounding and safety rules, and the habit model.
+    /// Identical for users and requests with the same composition mode.
+    /// </summary>
+    string BuildChangePlanStatic(PromptBuildRequest request);
+
+    /// <summary>
     /// Builds the per-user, per-request tail of the system prompt (habit and goal index, tags,
     /// routine patterns, today's date, image instructions). Emitted after all static content
     /// so it never poisons the cacheable prefix.

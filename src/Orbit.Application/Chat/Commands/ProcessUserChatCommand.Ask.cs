@@ -22,7 +22,7 @@ public partial class ProcessUserChatCommandHandler
             && request.ClientContext.PartKinds?.Any(IsAskKind) == true
             && !context.EnabledFeatureFlags.Contains(FeatureFlagKeys.AiAskBlocksDisabled)
             && !context.EnabledFeatureFlags.Contains(FeatureFlagKeys.AiPartsDisabled)
-            && !HasSupportedOfferDefault(request, context);
+            && (context.ChangePlan || !HasSupportedOfferDefault(request, context));
 
     /// <summary>
     /// An offer-enabled create turn with a server default (a fitting owned parent, an active goal or a repeat
@@ -41,6 +41,9 @@ public partial class ProcessUserChatCommandHandler
         var askEnabled = AskEnabled(request, context);
         if (askEnabled && UsesComposition(request, context))
             dynamicContext = string.Join(Environment.NewLine, dynamicContext, TerminalAnswerDirective.Instruction);
+        if (askEnabled && context.ChangePlan)
+            return string.Join(Environment.NewLine, dynamicContext, "Supported ask forms: "
+                + string.Join(", ", request.ClientContext!.PartKinds!.Where(IsAskKind).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)));
         if (askEnabled)
             dynamicContext = string.Join(Environment.NewLine, dynamicContext,
                 AskTool.AccountReadInstruction,
@@ -58,6 +61,8 @@ public partial class ProcessUserChatCommandHandler
     {
         using var phase = ChatTurnTimer.Measure(ChatPhase.ToolCall);
         call = call with { Args = AskTool.ExecutionArguments(call.Args) };
+        if (results.ChangePlan)
+            return await ExecuteChangePlanAskAsync(call, request, results, ct);
         results.CanRetryAsk = false;
         PreserveAskRecordSelection(call.Args, request.UserId, results);
         ToolCallOutcome Failed(string key, string error) => new(new AiToolCallResult(call.Name, call.Id, false, null, null,
@@ -92,6 +97,16 @@ public partial class ProcessUserChatCommandHandler
         definition = card.Definition;
         if (request.ClientContext!.PartKinds?.Contains(definition.Form, StringComparer.Ordinal) != true)
             return Failed("ask_form_unsupported", "The client does not support this block kind.");
+        return await IssueAskBlockAsync(call, definition, request, results, user, ct);
+    }
+
+    /// <summary>
+    /// Stores the block of a valid <c>ask</c>, binds it to a create draft when its arguments name that draft, and
+    /// returns the accepted result.
+    /// </summary>
+    private async Task<ToolCallOutcome> IssueAskBlockAsync(AiToolCall call, AiBlockDefinition definition,
+        ProcessUserChatCommand request, ToolExecutionAccumulator results, User? user, CancellationToken ct)
+    {
         if (HasBoundMissingField(call.Args, results))
         {
             var draft = results.MissingHabitDrafts[JsonArgumentParser.GetOptionalString(call.Args, "draft_call_id")!];
@@ -215,7 +230,7 @@ public partial class ProcessUserChatCommandHandler
     private void RefreshAskSchema(AiConversationContext? conversation, ProcessUserChatCommand request,
         ChatContext context, ToolExecutionAccumulator results)
     {
-        if (conversation is null || (!results.HasSuccessfulAccountRead && results.MissingHabitDrafts.Count == 0) || !AskEnabled(request, context)
+        if (context.ChangePlan || conversation is null || (!results.HasSuccessfulAccountRead && results.MissingHabitDrafts.Count == 0) || !AskEnabled(request, context)
             || ai.ToolRegistry.GetTool("ask") is not AskTool ask)
             return;
         conversation.ToolDeclarationUpdates = [new
@@ -303,6 +318,9 @@ public partial class ProcessUserChatCommandHandler
             return false;
         var targetHabits = habits.Where(habit => MatchesAskRecord(target.GetString(), null, habit)).ToArray();
         if (targetHabits.Length != 1) return false;
+        if (AboutRecords(ask.Args) is { } about)
+            return !WriteFootprint(call, targetHabits[0], habits).Overlaps(
+                about.Select(id => Guid.TryParse(id, out var parsed) ? parsed : Guid.Empty));
         AskToolArguments? input;
         try
         {
@@ -328,14 +346,23 @@ public partial class ProcessUserChatCommandHandler
             if (matches.Length == 0) return false;
             candidates.UnionWith(matches.Select(habit => habit.Id));
         }
-        var footprint = HabitHierarchy.SelfAndDescendants(targetHabits[0], habits.ToLookup(habit => habit.ParentHabitId))
+        return !WriteFootprint(call, targetHabits[0], habits).Overlaps(candidates);
+    }
+
+    /// <summary>
+    /// The records that a write beside an <c>ask</c> touches: its target with every descendant and ancestor, and each
+    /// record its arguments name.
+    /// </summary>
+    private static HashSet<Guid> WriteFootprint(AiToolCall call, Habit target, IReadOnlyList<Habit> habits)
+    {
+        var footprint = HabitHierarchy.SelfAndDescendants(target, habits.ToLookup(habit => habit.ParentHabitId))
             .Select(habit => habit.Id).ToHashSet();
         var parentsById = habits.ToDictionary(habit => habit.Id, habit => habit.ParentHabitId);
-        var parentId = targetHabits[0].ParentHabitId;
+        var parentId = target.ParentHabitId;
         while (parentId is Guid id && footprint.Add(id))
             parentId = parentsById.GetValueOrDefault(id);
         footprint.UnionWith(ArgumentEntityIds(call.Args));
-        return !footprint.Overlaps(candidates);
+        return footprint;
     }
 
     private static bool MatchesAskRecord(string? id, string? label, Habit habit) =>

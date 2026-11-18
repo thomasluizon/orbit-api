@@ -238,8 +238,11 @@ public partial class ProcessUserChatCommandHandler
         }
 
         foreach (var skipped in aiResponse.ToolCalls!.Where(call => toolResults.All(result => result.Id != call.Id)))
-            toolResults.Add(new AiToolCallResult(skipped.Name, skipped.Id, false, null, null,
-                "This call was withheld while ask was unresolved. Continue the original request using the ask result; prepare only changes whose inputs are resolved."));
+            toolResults.Add(executionResults.ChangePlan
+                ? new AiToolCallResult(skipped.Name, skipped.Id, false, null, null, WithheldBesideAskError,
+                    new { error = WithheldBesideAskError })
+                : new AiToolCallResult(skipped.Name, skipped.Id, false, null, null,
+                    "This call was withheld while ask was unresolved. Continue the original request using the ask result; prepare only changes whose inputs are resolved."));
         RefreshAskSchema(aiResponse.ConversationContext, request, context, executionResults);
         toolResults.AddRange(planResults);
         cancellationToken.ThrowIfCancellationRequested();
@@ -482,34 +485,20 @@ public partial class ProcessUserChatCommandHandler
 
         var outcomesByCallId = new Dictionary<string, ToolCallOutcome>(orderedCalls.Count, StringComparer.Ordinal);
         foreach (var call in excessReads)
-            outcomesByCallId[call.Id] = new ToolCallOutcome(
-                new AiToolCallResult(call.Name, call.Id, false, null, null, "Read call limit reached; narrow the request or read the next page in another round."),
-                new ActionResult(ToolNameToPascalCase(call.Name), ActionStatus.Failed, Error: "read_call_limit"), null, null, null,
-                FailureKey: "read_call_limit");
+            outcomesByCallId[call.Id] = ReadCallLimitOutcome(call, executionResults.ChangePlan);
         foreach (var call in deferredCreations)
-            outcomesByCallId[call.Id] = AwaitCreationReads(call);
+            outcomesByCallId[call.Id] = AwaitCreationReads(call, executionResults.ChangePlan);
         for (var index = 0; index < readOnlyCalls.Count; index++)
         {
             outcomesByCallId[readOnlyCalls[index].Id] = readOnlyOutcomes[index];
             RecordSuccessfulAskRead(readOnlyCalls[index], readOnlyOutcomes[index], executionResults);
             if (readOnlyOutcomes[index].OperationResult is { Status: AgentOperationStatus.Succeeded, Payload: PendingPreviewDiscard discard })
                 await DiscardPreviewAsync(readOnlyCalls[index], discard, request, executionResults, cancellationToken);
-            if (readOnlyOutcomes[index].OperationResult is
-                {
-                    Status: AgentOperationStatus.Succeeded,
-                    Payload: HabitListCard { Selection: { } selection }
-                })
-            {
-                if (selection.RequiresAnswer)
-                    executionResults.PendingSelection ??= selection;
-                if (selection.RequiresAnswer || selection.Reference is not null)
-                    executionResults.SelectionCandidates.Add(selection);
-            }
+            RecordReadSelection(readOnlyOutcomes[index], executionResults);
         }
         executionResults.Previews.KeepRevisions(earlierRevisions, outcomesByCallId);
 
-        RejectUnreadDuplicateTargets(writeCalls, resolvedWrites, executionResults, outcomesByCallId);
-        var selectionScope = RejectUnansweredSelections(writeCalls, resolvedWrites, executionResults, outcomesByCallId,
+        var selectionScope = RejectHeldSelections(writeCalls, resolvedWrites, executionResults, outcomesByCallId,
             SelectionScopeOf(request, resolvedWrites, executionResults));
         await CoalesceLogCallsAsync(writeCalls, resolvedWrites, request.UserId, executionResults, cancellationToken);
         CoalesceTagCalls(resolvedWrites, executionResults);
@@ -522,20 +511,11 @@ public partial class ProcessUserChatCommandHandler
             if (outcomesByCallId.ContainsKey(call.Id))
                 continue;
             var resolved = resolvedWrites[call.Id];
-            if (resolved is not null)
-            {
-                var verdict = SelectionForWrite(resolved, executionResults, selectionScope);
-                if (verdict.Unanswered is { } unanswered)
-                {
-                    executionResults.PendingSelection = unanswered;
-                    outcomesByCallId[call.Id] = SelectionRequiredOutcome(call);
-                    continue;
-                }
-                SettleSelections(executionResults, verdict.Settled);
-            }
+            if (HoldsUnansweredSelection(call, resolved, executionResults, selectionScope, outcomesByCallId))
+                continue;
             if (bulkRedirects.TryGetValue(call.Id, out var bulkTool))
             {
-                outcomesByCallId[call.Id] = RepeatedSingleEntityToolOutcome(call, bulkTool);
+                outcomesByCallId[call.Id] = RepeatedSingleEntityToolOutcome(call, bulkTool, executionResults.ChangePlan);
                 continue;
             }
             if (resolved is null || !executionResults.PreviewedCalls.Add(
@@ -648,11 +628,20 @@ public partial class ProcessUserChatCommandHandler
             ChatTurnReadScope.For(userId)?.InvalidateHabits();
     }
 
-    private static ToolCallOutcome RepeatedSingleEntityToolOutcome(AiToolCall call, string bulkTool)
+    /// <summary>
+    /// The typed error of a write that the turn did not run because it targets a record of the <c>ask</c> in the same
+    /// response, on the <c>ai_change_plan</c> path.
+    /// </summary>
+    private const string WithheldBesideAskError = "withheld_beside_ask";
+
+    private static ToolCallOutcome RepeatedSingleEntityToolOutcome(AiToolCall call, string bulkTool, bool changePlan)
     {
         var error = $"Repeated {call.Name} calls were blocked. Use one {bulkTool} call for the full matching set.";
         return new ToolCallOutcome(
-            new AiToolCallResult(call.Name, call.Id, false, null, null, error),
+            changePlan
+                ? new AiToolCallResult(call.Name, call.Id, false, null, null, "repeated_single_entity",
+                    new { error = "repeated_single_entity", bulk_tool = bulkTool })
+                : new AiToolCallResult(call.Name, call.Id, false, null, null, error),
             new ActionResult(ToolNameToPascalCase(call.Name), ActionStatus.Failed, Error: error).WithToolResultMessage(call, key: "repeatedSingleEntity", parameters: new(ToolName: call.Name, BulkTool: bulkTool)),
             null,
             null,
@@ -715,8 +704,8 @@ public partial class ProcessUserChatCommandHandler
             : await operationExecutor.ExecuteAsync(correctionRequest with { OnExecutionStarted = onExecutionStarted }, cancellationToken);
         executionResponse = RevisedPreviewResponse(call, executionResponse);
         RegisterPreviewDiscussion(call, executionResponse, executionResults);
-        var operationResult = ResolveNamedSelection(call, StatusCardBuilder.ForClient(
-            executionResponse.Operation with { Access = access }, request.ClientContext), request.Message);
+        var operationResult = ReadSelectionOf(call, StatusCardBuilder.ForClient(
+            executionResponse.Operation with { Access = access }, request.ClientContext), request, executionResults);
         var toolResult = BuildToolCallResult(call, operationResult);
         InvalidateTurnSnapshotIfMutated(request.UserId, tool, operationResult);
 
@@ -744,9 +733,7 @@ public partial class ProcessUserChatCommandHandler
                     dates = call.Name == "bulk_log_habits" ? executionResponse.PendingOperation?.Items?
                         .SelectMany(item => item.Fields).Where(field => field.Field == "date")
                         .Select(field => field.NewValue).Distinct().Order().ToArray() : null,
-                    instruction = executionResults.IsPreviewDiscussion
-                        ? "Answer the person's question about the preview in one short sentence without figures. The preview remains pending beside the answer. Do not apply or revise anything."
-                        : "The preview is the entire answer. Emit no prose before or after it. All preview facts come exclusively from preview_items."
+                    instruction = PreviewInstruction(executionResults)
                 }),
                 null,
                 null,
@@ -771,6 +758,22 @@ public partial class ProcessUserChatCommandHandler
             ArgumentRepairAllowed = AllowsArgumentRepair(executionResponse, request)
         };
     }
+
+    /// <summary>
+    /// The instruction of a held write's result. The <c>ai_change_plan</c> path returns the preview data only.
+    /// </summary>
+    private static string? PreviewInstruction(ToolExecutionAccumulator results) => results.ChangePlan ? null
+        : results.IsPreviewDiscussion
+            ? "Answer the person's question about the preview in one short sentence without figures. The preview remains pending beside the answer. Do not apply or revise anything."
+            : "The preview is the entire answer. Emit no prose before or after it. All preview facts come exclusively from preview_items.";
+
+    private static ToolCallOutcome ReadCallLimitOutcome(AiToolCall call, bool changePlan) => new(
+        changePlan
+            ? new AiToolCallResult(call.Name, call.Id, false, null, null, "read_call_limit",
+                new { error = "read_call_limit", limit = ChatTurnLimits.MaxReadCallsPerRound })
+            : new AiToolCallResult(call.Name, call.Id, false, null, null, "Read call limit reached; narrow the request or read the next page in another round."),
+        new ActionResult(ToolNameToPascalCase(call.Name), ActionStatus.Failed, Error: "read_call_limit"), null, null, null,
+        FailureKey: "read_call_limit");
 
     private static void RegisterPreviewDiscussion(AiToolCall call, AgentExecuteOperationResponse response, ToolExecutionAccumulator results)
     {

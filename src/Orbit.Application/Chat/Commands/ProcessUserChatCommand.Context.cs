@@ -239,5 +239,12 @@ public partial class ProcessUserChatCommandHandler
         IReadOnlyList<string> EnabledFeatureFlags,
         DateOnly UserToday,
         HabitTodaySnapshot TodayFacts,
-        long ContextLoadMilliseconds);
+        long ContextLoadMilliseconds)
+    {
+        /// <summary>
+        /// The <c>ai_change_plan</c> path: the model is the only owner of the act-or-ask decision, and the turn runs no
+        /// server guard or route that reads the person's words.
+        /// </summary>
+        public bool ChangePlan => EnabledFeatureFlags.Contains(FeatureFlagKeys.AiChangePlan, StringComparer.Ordinal);
+    }
 }

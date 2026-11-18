@@ -517,16 +517,13 @@ public partial class ProcessUserChatCommandHandler(
             ? null
             : aiStreamFilter.HandleAsync;
 
-        var faqMatch = ChatFaqCache.TryMatchFaqKey(request.Message);
+        var faqMatch = MatchFaq(request, context);
         var cachedFaqAnswer = await GetGroundedCachedFaqAnswerAsync(faqMatch, groundingTurn, request, composition);
         if (cachedFaqAnswer is not null)
             return Result.Success(ComposeCachedFaq(cachedFaqAnswer, request, composition));
 
-        if (await TryHandlePlacementTurnAsync(request, cancellationToken) is { } placementReply)
-            return placementReply;
-
-        if (await TryHandlePendingParentTurnAsync(request, context, cancellationToken) is { } pendingReply)
-            return pendingReply;
+        if (await TryHandleMessageRouteAsync(request, context, cancellationToken) is { } routeReply)
+            return routeReply;
 
         var aiStopwatch = System.Diagnostics.Stopwatch.StartNew();
         var response = await RequestInitialAiResponseAsync(request, context, aiStreamSink, telemetry, recording, cancellationToken);
@@ -540,17 +537,7 @@ public partial class ProcessUserChatCommandHandler(
             return response.PropagateError<ChatResponse>();
 
         recording.UsedModel = true;
-        var executionResults = new ToolExecutionAccumulator(recording.OpenPreviewIds)
-        {
-            AnsweredAtUtc = answeredAtUtc,
-            Recording = recording,
-            EvalTrace = evalTrace,
-            Habits = context.ActiveHabits,
-            AllHabits = context.UserHabits,
-            IsTaggingIntent = IsTagOnlyIntent(request.Message),
-            RequiresExistingParent = RequestsExistingParent(request.Message, context.UserHabits),
-            ParentHeadings = HabitHeadingParents.Read(request.Message, context.UserHabits)
-        };
+        var executionResults = NewTurnAccumulator(request, context, recording, evalTrace, answeredAtUtc);
         return await executionResults.Previews.SettleOnExitAsync(AnswerWithToolsAsync, request.UserId,
             execution.PendingOperationStore, execution.UnitOfWork);
 
@@ -642,6 +629,47 @@ public partial class ProcessUserChatCommandHandler(
             { GroundingFacts = facts });
         }
     }
+
+    /// <summary>
+    /// The tool accumulator of a turn. On the <c>ai_change_plan</c> path it reads no tag, parent or heading intent
+    /// from the person's words.
+    /// </summary>
+    private static ToolExecutionAccumulator NewTurnAccumulator(ProcessUserChatCommand request, ChatContext context,
+        ChatTurnState recording, ChatEvalTraceCollector? evalTrace, DateTime? answeredAtUtc) =>
+        context.ChangePlan
+            ? new ToolExecutionAccumulator(recording.OpenPreviewIds)
+            {
+                AnsweredAtUtc = answeredAtUtc,
+                Recording = recording,
+                EvalTrace = evalTrace,
+                Habits = context.ActiveHabits,
+                AllHabits = context.UserHabits,
+                ChangePlan = true
+            }
+            : new ToolExecutionAccumulator(recording.OpenPreviewIds)
+            {
+                AnsweredAtUtc = answeredAtUtc,
+                Recording = recording,
+                EvalTrace = evalTrace,
+                Habits = context.ActiveHabits,
+                AllHabits = context.UserHabits,
+                IsTaggingIntent = IsTagOnlyIntent(request.Message),
+                RequiresExistingParent = RequestsExistingParent(request.Message, context.UserHabits),
+                ParentHeadings = HabitHeadingParents.Read(request.Message, context.UserHabits)
+            };
+
+    /// <summary>The FAQ key that the message matches. The <c>ai_change_plan</c> path sends each message to the model.</summary>
+    private static (string Key, string Locale)? MatchFaq(ProcessUserChatCommand request, ChatContext context) =>
+        context.ChangePlan ? null : ChatFaqCache.TryMatchFaqKey(request.Message);
+
+    /// <summary>
+    /// The placement and pending-parent routes, which answer a message that matches their pattern without the model.
+    /// The <c>ai_change_plan</c> path runs neither.
+    /// </summary>
+    private async Task<Result<ChatResponse>?> TryHandleMessageRouteAsync(ProcessUserChatCommand request, ChatContext context,
+        CancellationToken ct) =>
+        context.ChangePlan ? null
+            : await TryHandlePlacementTurnAsync(request, ct) ?? await TryHandlePendingParentTurnAsync(request, context, ct);
 
     private void CaptureMessageAnalytics(Guid userId, string? plan, AiTurnTelemetry telemetry)
     {
