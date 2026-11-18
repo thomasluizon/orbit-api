@@ -53,7 +53,7 @@ public partial class ProcessUserChatCommandHandler
     /// list that failed. A question leaves a refusal to its answer. A plan, feature or policy denial does not withdraw.
     /// </summary>
     private bool LeavesPartOfTheRequest(ToolExecutionAccumulator results, bool failed) =>
-        failed || (results.ChangePlan ? results.ChangesNotPrepared && results.AskBlock is null : results.Previews.HoldsChange
+        failed || (results.Policy.ChangePlan ? results.ChangesNotPrepared && results.AskBlock is null : results.Previews.HoldsChange
         && (results.OperationResults.Any(operation => IsOwnershipWriteDenial(operation)
                 || operation.Status == AgentOperationStatus.Failed && operation.ErrorCode != ErrorCodes.HabitLimitReached
                 && (operation.Access == "write" || ai.ToolRegistry.GetTool(operation.OperationId) is { IsReadOnly: false }))

@@ -35,14 +35,15 @@ public partial class ProcessUserChatCommandHandler
 
         public ChatTurnState? Recording { get; init; }
 
-        /// <summary>The turn runs on the <c>ai_change_plan</c> path (<see cref="ChatContext.ChangePlan"/>).</summary>
-        public bool ChangePlan { get; init; }
+        /// <summary>The path of the turn (<see cref="ChatContext.Policy"/>).</summary>
+        public TurnPolicy Policy { get; init; } = TurnPolicy.Legacy;
 
         /// <summary>The change lists of the turn that failed to compile. The model gets one repair round.</summary>
         public int FailedChangeLists { get; set; }
 
         /// <summary>The last change list of the turn failed, so the turn holds no preview of it.</summary>
         public bool ChangesNotPrepared { get; set; }
+
         public SemaphoreSlim PlanGate => _toolStepGate;
         public IReadOnlyList<Orbit.Domain.Entities.Habit> Habits { get; set; } = [];
         public IReadOnlyList<Orbit.Domain.Entities.Habit> AllHabits { get; set; } = [];

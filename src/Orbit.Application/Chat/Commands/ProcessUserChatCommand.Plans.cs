@@ -14,7 +14,7 @@ public partial class ProcessUserChatCommandHandler
         ChatContext context, ToolExecutionAccumulator results, int iteration, long totalBudgetTokens,
         ICallCorrection? correction, string? language, Func<AiStreamEvent, Task>? streamSink, CancellationToken ct)
     {
-        if (context.ChangePlan)
+        if (context.Policy.ChangePlan)
             return await ProcessChangeListRoundAsync(response, request, context, results, iteration, language, streamSink, ct);
         var plans = await AcceptPlanAsync(response, request, results);
         TracePlanCalls(response, plans, results);

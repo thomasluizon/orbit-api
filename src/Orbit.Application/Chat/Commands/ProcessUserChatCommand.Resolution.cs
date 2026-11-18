@@ -35,26 +35,44 @@ public partial class ProcessUserChatCommandHandler
 
     private void SeedProposedHabitNames(ProcessUserChatCommand request, ToolExecutionAccumulator results)
     {
-        if (results.ChangePlan || request.History is not { Count: > 0 }) return;
+        if (request.History is not { Count: > 0 }) return;
         var proposals = execution.PendingOperationStore.GetPendingHabitCreations(request.UserId);
         var normalizedMessage = HabitNameMatcher.Normalize(request.Message);
         var asksForReplacement = Regex.IsMatch(normalizedMessage,
             @"\b(nova|new|outra|another)\s+(previa|preview)\b|\b(prepare|preparar|make)\s+(?:(?:um|uma|a)\s+)?(?:nova|new|outra|another)(?: one)?$|\b(again|de novo|reprepare)\b",
             RegexOptions.None, TimeSpan.FromSeconds(1));
+        var replaced = new HashSet<PendingHabitCreation>();
         foreach (var name in proposals)
         {
             var named = HabitNameMatcher.Matches(request.Message, name.Title);
-            if (asksForReplacement && (named || proposals.Count == 1))
+            if (!asksForReplacement || !named && proposals.Count != 1) continue;
+            if (execution.PendingOperationStore.FindHabitCreationReplacement(request.UserId, name.Title, name.ParentHabitId)
+                is { Count: > 0 } replacedIds)
             {
-                if (execution.PendingOperationStore.FindHabitCreationReplacement(request.UserId, name.Title, name.ParentHabitId)
-                    is { Count: > 0 } replaced)
-                {
-                    ReplaceWithTheTurn(request.UserId, replaced, results);
-                    continue;
-                }
-                results.BlockedReplacementNames.Add(name.Title);
-                results.PendingDuplicateNames.Add(name.Title);
+                ReplaceWithTheTurn(request.UserId, replacedIds, results);
+                replaced.Add(name);
+                continue;
             }
+            results.BlockedReplacementNames.Add(name.Title);
+            results.PendingDuplicateNames.Add(name.Title);
+        }
+        SeedPendingHabitNames(proposals.Where(name => !replaced.Contains(name)), results);
+    }
+
+    /// <summary>
+    /// Seeds the habit names of the creation previews that wait from earlier turns, so a create that repeats one of them
+    /// holds no second preview. It reads stored previews, not the words of the person.
+    /// </summary>
+    private void SeedPendingHabitNames(ProcessUserChatCommand request, ToolExecutionAccumulator results)
+    {
+        if (request.History is not { Count: > 0 }) return;
+        SeedPendingHabitNames(execution.PendingOperationStore.GetPendingHabitCreations(request.UserId), results);
+    }
+
+    private static void SeedPendingHabitNames(IEnumerable<PendingHabitCreation> proposals, ToolExecutionAccumulator results)
+    {
+        foreach (var name in proposals)
+        {
             var key = (name.ParentHabitId, HabitNameMatcher.TitleKey(name.Title));
             results.ProposedHabitNames.Add(key);
             results.PendingHabitNames[key] = name.Title;
@@ -414,12 +432,11 @@ public partial class ProcessUserChatCommandHandler
                 ambiguous_names = results.AmbiguousHabitNames,
                 existing_duplicates = results.ExistingDuplicateNames.ToArray(),
                 pending_duplicates = results.PendingDuplicateNames.ToArray(),
-                instruction = results.ChangePlan ? null
-                    : merged
+                instruction = results.Policy.Instruction(merged
                     ? "This call was merged into the held preview for this intent. Do not repeat the call or prepare another preview. Nothing changes until approval."
                     : error is not null
                         ? "These arguments were rejected before dispatch and produced no preview. Correct the validation error using the person's request, preserve all other requested actions and fields, then call the write tool again. Do not claim anything was saved."
-                        : "No new preview was prepared. Ask about the returned missing, ambiguous or duplicate names. Ignore unsolicited creates for a tag-only request."
+                        : "No new preview was prepared. Ask about the returned missing, ambiguous or duplicate names. Ignore unsolicited creates for a tag-only request.")
             }), error is null ? null : new ActionResult(ToolNameToPascalCase(call.Name), ActionStatus.Failed, Error: ToolFailureMessage(language))
                 .WithToolResultMessage(call, key: "toolFailure"), null, null, null);
     }

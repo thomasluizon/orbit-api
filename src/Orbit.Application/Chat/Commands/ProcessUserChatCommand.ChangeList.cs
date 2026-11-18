@@ -117,8 +117,8 @@ public partial class ProcessUserChatCommandHandler
         var declarations = tools.Where(tool => tool.IsReadOnly).Select(tool => (object)new
         {
             name = tool.Name,
-            description = TurnToolDescription(tool, context),
-            parameters = ChangePlanToolSchema(tool, client, composition)
+            description = context.Policy.ToolDescription(tool),
+            parameters = context.Policy.ToolSchema(tool, client, composition)
         }).ToList();
         var kinds = tools.Where(ChangeKinds.IsKind).OrderBy(tool => tool.Name, StringComparer.Ordinal).ToArray();
         var offers = ProactiveProposal.Enabled(client);
@@ -126,11 +126,11 @@ public partial class ProcessUserChatCommandHandler
             declarations.AddRange(kinds.Select(tool => (object)new
             {
                 name = tool.Name,
-                description = TurnToolDescription(tool, context),
+                description = context.Policy.ToolDescription(tool),
                 parameters = ChatToolSchema(tool, client, composition, source: ChangeDeclarations.WithPlanTitle(tool.GetParameterSchema()))
             }));
         else if (kinds.Length > 0)
-            declarations.Add(ChangeDeclarations.Wrapper(kinds.Select(tool => (tool.Name, TurnToolDescription(tool, context),
+            declarations.Add(ChangeDeclarations.Wrapper(kinds.Select(tool => (tool.Name, context.Policy.ToolDescription(tool),
                     offers && ProactiveProposal.Supports(tool.Name) ? ProactiveProposal.Schema(tool.GetParameterSchema()) : tool.GetParameterSchema())),
                 schema => TerminalWriteDirective.WithCompletionArgument(offers ? ProactiveOfferDismissal.Schema(schema) : schema)));
         return declarations;
