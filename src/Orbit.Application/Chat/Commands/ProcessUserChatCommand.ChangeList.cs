@@ -11,10 +11,9 @@ namespace Orbit.Application.Chat.Commands;
 public partial class ProcessUserChatCommandHandler
 {
     /// <summary>
-    /// One round of the <c>ai_change_plan</c> path. The compiler runs the change calls of the response as one typed list
-    /// beside the reads. A list with an error, or a change call with no change, issues no <c>ask</c> and returns every
-    /// error in one typed list. It holds nothing of that list; a preview from before the turn or of an earlier round
-    /// stays. The model gets one repair round; a second failed list ends the turn with no preview, and the answer says so.
+    /// One round of the <c>ai_change_plan</c> path. A list with an error holds nothing and returns every error in one
+    /// typed list, and an earlier preview stays. The model gets one repair round; a second failed list ends the turn
+    /// with no preview. A refusal that a repair cannot fix ends it with the explanation of that refusal.
     /// </summary>
     private async Task<ToolRoundResult> ProcessChangeListRoundAsync(AiResponse response, ProcessUserChatCommand request,
         ChatContext context, ToolExecutionAccumulator results, int iteration, string? language,
@@ -81,7 +80,7 @@ public partial class ProcessUserChatCommandHandler
         RecordReadOfferIntents(response, request, results);
         results.CapturePreviewDiscussionText(response.TextMessage);
 
-        if (errors.Count > 0 && results.FailedChangeLists > 1)
+        if (errors.Count > 0 && results.ChangesNotPrepared && results.FailedChangeLists > 1)
             return new ToolRoundResult(new AiResponse());
         if (BulkNoChangesMessage(results, language) is { } noChanges)
             return new ToolRoundResult(new AiResponse { TextMessage = noChanges });
@@ -159,20 +158,30 @@ public partial class ProcessUserChatCommandHandler
     }
 
     /// <summary>
-    /// The turn holds nothing of a change list with an error, and the compiler withdrew what the list prepared. Each
-    /// change returns the error list with no card. The clarification of a create with a missing field stays, so an
-    /// <c>ask</c> can bind to it.
+    /// The turn holds nothing of a change list with an error. Each change returns the error list with no card, and the
+    /// clarification of a create with a missing field stays for an <c>ask</c>. A list that failed only on a refusal
+    /// (<see cref="IsRefusal"/>) does not mark the turn as not prepared. A limit refusal keeps its operation result.
     /// </summary>
     private static void HoldNothing(IReadOnlyList<AiToolCall> writes, Dictionary<string, ToolCallOutcome> outcomes,
         IReadOnlyList<ChangeError> errors, ToolExecutionAccumulator results)
     {
         results.FailedChangeLists++;
-        results.ChangesNotPrepared = true;
+        results.ChangesNotPrepared = !errors.All(error => writes.Any(call => call.Id == error.Change
+            && outcomes.TryGetValue(call.Id, out var outcome) && IsRefusal(outcome.OperationResult)));
         foreach (var call in writes)
             outcomes[call.Id] = new ToolCallOutcome(new AiToolCallResult(call.Name, call.Id, false, null, null,
                 ChangeListCompiler.NotPrepared, new { error = ChangeListCompiler.NotPrepared, errors }),
-                null, null, null, null, FailureKey: ChangeListCompiler.NotPrepared);
+                null, outcomes[call.Id].OperationResult is { ErrorCode: ErrorCodes.HabitLimitReached } limit ? limit : null, null, null,
+                FailureKey: ChangeListCompiler.NotPrepared);
     }
+
+    /// <summary>
+    /// A write that the habit limit refused, or that a plan, feature or policy check denied. Sending the request again
+    /// cannot change it. The ownership check is no refusal: a corrected id can pass it.
+    /// </summary>
+    private static bool IsRefusal(AgentOperationResult? operation) => operation is not null && !IsOwnershipWriteDenial(operation)
+        && (operation is { Status: AgentOperationStatus.Failed, ErrorCode: ErrorCodes.HabitLimitReached }
+            || operation.Status is AgentOperationStatus.Denied or AgentOperationStatus.UnsupportedByPolicy);
 
     private static ToolCallOutcome TypedChangeOutcome(ProposedChange change, string code, object payload) => new(
         new AiToolCallResult(change.Kind, change.Id, false, null, null, code, payload), null, null, null, null, FailureKey: code);
