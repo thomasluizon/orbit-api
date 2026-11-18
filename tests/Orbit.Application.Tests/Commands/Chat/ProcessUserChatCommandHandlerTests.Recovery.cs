@@ -191,7 +191,7 @@ public partial class ProcessUserChatCommandHandlerTests
     }
 
     [Fact]
-    public async Task RecoveryBoundary_FailedBatchCanContainAnAlreadySavedMutation()
+    public async Task RecoveryBoundary_FailedBatchFailsInsideTheExecutorTransaction()
     {
         var notification = Notification.Create(UserId, "First", "Body");
         var secondId = Guid.NewGuid();
@@ -214,10 +214,10 @@ public partial class ProcessUserChatCommandHandlerTests
         }), UserId, default);
 
         result.Success.Should().BeFalse();
-        notification.IsDeleted.Should().BeTrue();
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
         await _mediator.Received(2).Send(Arg.Any<DeleteNotificationCommand>(), Arg.Any<CancellationToken>());
-        tool.Should().NotBeAssignableTo<ITransactionalAiTool>();
+        AiToolAtomicity.Supports(tool, JsonSerializer.SerializeToElement(new { action = "delete_selected" })).Should().BeTrue(
+            "the executor runs the batch in one transaction and rolls the first deletion back on this failed result");
     }
 
     [Fact]

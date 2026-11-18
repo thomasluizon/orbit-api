@@ -29,7 +29,7 @@ public class GetProfileTool(IMediator mediator) : IAiTool
     }
 }
 
-public class UpdateProfilePreferencesTool(IMediator mediator) : IPreparedIntentTool
+public class UpdateProfilePreferencesTool(IMediator mediator) : IPreparedIntentTool, ITransactionalAiTool
 {
     public string Name => "update_profile_preferences";
     public string Description => "Update profile preferences such as name, timezone, language, week start day, clock format, light or dark mode, onboarding completion, or tour state. Orbit uses one accent.";
@@ -166,7 +166,7 @@ public class UpdateProfilePreferencesTool(IMediator mediator) : IPreparedIntentT
     }
 }
 
-public abstract class ToggleProfileSettingTool(IMediator mediator) : IAiTool, IArgumentCheckTool
+public abstract class ToggleProfileSettingTool(IMediator mediator) : IAiTool, IArgumentCheckTool, ITransactionalAiTool
 {
     private const string EnabledState = "enabled";
     private const string DisabledState = "disabled";

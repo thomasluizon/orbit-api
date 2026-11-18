@@ -10,7 +10,7 @@ using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Chat.Tools.Implementations;
 
-public class CreateGoalTool(IMediator mediator) : IAiTool, IArgumentCheckTool
+public class CreateGoalTool(IMediator mediator) : IAiTool, IArgumentCheckTool, ITransactionalAiTool
 {
     public string Name => "create_goal";
     public string Description => "Create a measurable goal with habit_ids inline. Defaults: target 1, unit goal. Streak goals track consecutive habit days.";

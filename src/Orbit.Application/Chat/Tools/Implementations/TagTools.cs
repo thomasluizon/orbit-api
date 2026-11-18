@@ -26,7 +26,7 @@ public class ListTagsTool(IMediator mediator) : IAiTool
     }
 }
 
-public class CreateTagTool(IMediator mediator) : IAiTool, IArgumentCheckTool
+public class CreateTagTool(IMediator mediator) : IAiTool, IArgumentCheckTool, ITransactionalAiTool
 {
     public string Name => "create_tag";
     public string Description => "Create a new tag with a name and hex color.";
@@ -66,7 +66,7 @@ public class CreateTagTool(IMediator mediator) : IAiTool, IArgumentCheckTool
     }
 }
 
-public class UpdateTagTool(IMediator mediator) : IAiTool, IArgumentCheckTool
+public class UpdateTagTool(IMediator mediator) : IAiTool, IArgumentCheckTool, ITransactionalAiTool
 {
     public string Name => "update_tag";
     public string Description => "Update a tag's name and color.";
@@ -111,7 +111,7 @@ public class UpdateTagTool(IMediator mediator) : IAiTool, IArgumentCheckTool
     }
 }
 
-public class DeleteTagTool(IMediator mediator) : IAiTool, IArgumentCheckTool
+public class DeleteTagTool(IMediator mediator) : IAiTool, IArgumentCheckTool, ITransactionalAiTool
 {
     public string Name => "delete_tag";
     public string Description => "Delete a tag. Use only when the user clearly wants a tag removed.";

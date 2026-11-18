@@ -10,7 +10,7 @@ namespace Orbit.Application.Chat.Tools.Implementations;
 
 public class UpdateGoalProgressTool(
     IGenericRepository<Goal> goalRepository,
-    IMediator mediator) : IAiTool, IConcurrencyRetryableTool, IArgumentCheckTool
+    IMediator mediator) : IAiTool, IConcurrencyRetryableTool, IArgumentCheckTool, ITransactionalAiTool
 {
     public string Name => "update_goal_progress";
     public string Description => "Set goal progress by goal_id or fuzzy goal_name.";

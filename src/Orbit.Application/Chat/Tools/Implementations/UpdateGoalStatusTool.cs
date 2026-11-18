@@ -11,7 +11,7 @@ namespace Orbit.Application.Chat.Tools.Implementations;
 
 public class UpdateGoalStatusTool(
     IGenericRepository<Goal> goalRepository,
-    IMediator mediator) : IAiTool, IConcurrencyRetryableTool, IArgumentCheckTool
+    IMediator mediator) : IAiTool, IConcurrencyRetryableTool, IArgumentCheckTool, ITransactionalAiTool
 {
     public string Name => "update_goal_status";
 

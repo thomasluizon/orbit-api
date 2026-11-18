@@ -66,6 +66,25 @@ public interface IProviderCallTool
 }
 
 /// <summary>
+/// A transactional tool with one argument shape that writes no row and reports an effect outside the database in
+/// its result. That shape never joins a change set, and the executor opens no transaction for it.
+/// </summary>
+public interface IExternalShapeTool
+{
+    bool HasExternalShape(JsonElement arguments);
+}
+
+public static class AiToolAtomicity
+{
+    /// <summary>
+    /// True when a call of <paramref name="tool"/> with <paramref name="arguments"/> writes to the database only, so
+    /// it runs in the executor's unit of work and can join a change set.
+    /// </summary>
+    public static bool Supports(IAiTool? tool, JsonElement arguments) =>
+        tool is ITransactionalAiTool && !(tool is IExternalShapeTool shape && shape.HasExternalShape(arguments));
+}
+
+/// <summary>
 /// A write tool with an effect outside the database, such as a payment provider, an email or a calendar provider.
 /// It never joins a change set.
 /// </summary>

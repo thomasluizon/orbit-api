@@ -5,7 +5,7 @@ using Orbit.Application.Goals.Commands;
 namespace Orbit.Application.Chat.Tools.Implementations;
 
 public class ReorderGoalsTool(
-    IMediator mediator) : IAiTool, IArgumentCheckTool
+    IMediator mediator) : IAiTool, IArgumentCheckTool, ITransactionalAiTool
 {
     public string Name => "reorder_goals";
 
