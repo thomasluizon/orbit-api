@@ -154,13 +154,16 @@ public partial class ProcessUserChatCommandHandlerTests
     [Theory]
     [InlineData("en")]
     [InlineData("pt-BR")]
-    public async Task ChangePlan_Run4AnswerTurnKeepsTheCorrectionAndReachesOnePreviewWithBothActions(string language)
+    public async Task ChangePlan_Run4RepairRoundSendsTheWholeListAndReachesBothActions(string language)
     {
-        var run = await RunDeniedAnswerTurnAsync(language, children => [Calls(CorrectedRename(children)), Text(language)],
+        var run = await RunDeniedAnswerTurnAsync(language,
+            children => [Calls(CorrectedRename(children), Run4Delete(children)), Text(language)],
             arrange: _ => EnableChangePlan(FeatureFlagKeys.AiBlockFirst, FeatureFlagKeys.AiConversationRecording));
 
         run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
-        ShouldHoldNoServerQuestion(run.Result.Value, run.ToolResults, correction: true);
+        ShouldHoldNoServerQuestion(run.Result.Value, run.ToolResults);
+        run.ToolResults[0].Should().OnlyContain(result => !result.Success && result.Error == ChangeListCompiler.NotPrepared,
+            "the first list holds the cut id, so the server holds nothing of it");
         var items = run.Result.Value.PendingOperations.Should().NotBeNullOrEmpty().And.Subject
             .SelectMany(operation => operation.Items!).ToArray();
         items.Where(item => item.Fields.Any(field => field.Field == "delete")).Select(item => item.EntityId)

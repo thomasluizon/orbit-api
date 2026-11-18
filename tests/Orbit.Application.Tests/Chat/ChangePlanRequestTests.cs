@@ -216,27 +216,37 @@ public partial class ProcessUserChatCommandHandlerTests
             .Should().BeEquivalentTo(run.Children.Select(child => child.Id.ToString()));
     }
 
+    /// <summary>
+    /// The draft binding of the change list: a create change with a missing required field is a compile error that names
+    /// the field, the list holds nothing, and an <c>ask</c> binds to the change id and that field. An <c>ask</c> that names
+    /// another draft binds to nothing.
+    /// </summary>
     [Theory]
-    [InlineData("en", true)]
-    [InlineData("pt-BR", true)]
-    [InlineData("en", false)]
-    [InlineData("pt-BR", false)]
-    public async Task AskFormMap_DraftBindingStaysOnTodaysCreateResult(string language, bool bound)
+    [InlineData("en", true, ChangeDeclarationShape.Kinds)]
+    [InlineData("pt-BR", true, ChangeDeclarationShape.Kinds)]
+    [InlineData("en", false, ChangeDeclarationShape.Kinds)]
+    [InlineData("pt-BR", false, ChangeDeclarationShape.Kinds)]
+    [InlineData("en", true, ChangeDeclarationShape.Wrapper)]
+    [InlineData("pt-BR", true, ChangeDeclarationShape.Wrapper)]
+    public async Task AskFormMap_DraftBindsToTheCompileErrorOfACreateChange(string language, bool bound, ChangeDeclarationShape shape)
     {
         SetupExistingParents(language);
         EnableChangePlan(FeatureFlagKeys.AiBlockFirst, FeatureFlagKeys.AiConversationRecording);
+        _changeShape = shape;
         var create = new CreateHabitTool(_userDateService, _mediator);
-        var handler = CreateHandler(create, RealAskTool());
+        var handler = CreateHandler(create, new BulkCreateHabitsTool(_mediator), RealAskTool());
         var title = language == "en" ? "Walking habit" : "Hábito de caminhada";
         var clarificationId = Guid.NewGuid();
         _pendingClarificationStore.CreateAsync(UserId, create.Name, Arg.Any<string>(), Arg.Any<string>(),
             Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(clarificationId);
         var issued = new List<IssuedAiBlock>();
         _blockStore.AddAsync(Arg.Do<IssuedAiBlock>(issued.Add), Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
-        SetupAiResponse(ToolResponse(create.Name, "new-draft", JsonSerializer.Serialize(new { title })) with { ConversationContext = new() });
+        SetupAiResponse(ChangeList(shape, null, false, ("new-draft", "bulk_create_habits", new { habits = new[] { new { title } } })));
         var conversations = new List<AiConversationContext>();
+        var toolResults = new List<IReadOnlyList<AiToolCallResult>>();
         _aiIntentService.ContinueWithToolResultsAsync(Arg.Do<AiConversationContext>(conversations.Add),
-                Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+                Arg.Do<IReadOnlyList<AiToolCallResult>>(results => toolResults.Add([.. results])),
+                Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(ToolResponse("ask", "setup", JsonSerializer.Serialize(new
             {
                 input = new
@@ -254,18 +264,21 @@ public partial class ProcessUserChatCommandHandlerTests
             ClientContext: new AgentClientContext(SupportsParts: true, PartKinds: ["choice"], Locale: language)), default);
 
         result.IsSuccess.Should().BeTrue(result.Error);
+        var compiled = toolResults[0].Should().ContainSingle().Subject;
+        compiled.Success.Should().BeFalse();
+        compiled.Error.Should().Be(ChangeListCompiler.NotPrepared);
+        JsonSerializer.SerializeToElement(compiled.Payload).GetProperty("errors").Deserialize<ChangeError[]>().Should()
+            .Equal(new ChangeError("new-draft", "frequency_unit", ChangeListCompiler.MissingField,
+                $"The new habit {title} needs a value for frequency_unit."));
         conversations.Should().OnlyContain(conversation => conversation.ToolDeclarationUpdates.Count == 0,
             "the flag-path ask schema never changes during a turn");
+        result.Value.PendingOperations.Should().BeNullOrEmpty();
+        result.Value.Actions.Should().NotContain(action => action.Status == ActionStatus.NeedsClarification);
         var definition = issued.Should().ContainSingle().Subject.ReadDefinition();
         if (bound)
-        {
             definition.DraftClarification.Should().Be(new AiDraftClarification("new-draft", "frequency_unit", clarificationId));
-            result.Value.Actions.Should().NotContain(action => action.Status == ActionStatus.NeedsClarification);
-        }
         else
-        {
             definition.DraftClarification.Should().BeNull();
-        }
     }
 
     [Fact]
