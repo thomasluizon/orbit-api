@@ -49,16 +49,16 @@ public partial class ProcessUserChatCommandHandler
     /// <summary>
     /// A write that failed, that the ownership check turned down, or that a guard turned down and no prepared write of the
     /// turn carries (<see cref="CarriesRefusedWrite"/>), beside a change of the turn leaves part of the request. So does an
-    /// exception other than a cancellation (<paramref name="failed"/>), which can stop a round before the turn records it.
-    /// A turn that ends with a question leaves a refusal to the answer. A plan, feature or policy denial does not withdraw.
+    /// exception other than a cancellation (<paramref name="failed"/>), and on the <c>ai_change_plan</c> path a last change
+    /// list that failed. A question leaves a refusal to its answer. A plan, feature or policy denial does not withdraw.
     /// </summary>
     private bool LeavesPartOfTheRequest(ToolExecutionAccumulator results, bool failed) =>
-        failed || results.Previews.HoldsChange
+        failed || (results.ChangePlan ? results.ChangesNotPrepared && results.AskBlock is null : results.Previews.HoldsChange
         && (results.OperationResults.Any(operation => IsOwnershipWriteDenial(operation)
                 || operation.Status == AgentOperationStatus.Failed && operation.ErrorCode != ErrorCodes.HabitLimitReached
                 && (operation.Access == "write" || ai.ToolRegistry.GetTool(operation.OperationId) is { IsReadOnly: false }))
             || results.PendingSelection is null && results.AskBlock is null
-            && results.RefusedWrites.Any(refused => !CarriesRefusedWrite(refused.Call, results)));
+            && results.RefusedWrites.Any(refused => !CarriesRefusedWrite(refused.Call, results))));
 
     /// <summary>
     /// A write that a guard of the handler turned down before dispatch, so it has no operation result: repeated single

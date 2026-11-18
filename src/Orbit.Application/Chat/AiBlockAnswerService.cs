@@ -1,3 +1,4 @@
+using Orbit.Application.Chat.Tools;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -34,7 +35,8 @@ public sealed class AiBlockAnswerService(
     TimeSpan? claimLifetime = null,
     Action<PreparedAiBlockAnswer>? observePrepared = null,
     Action<ConversationToolCall>? observeTool = null,
-    IPendingClarificationStore? clarifications = null)
+    IPendingClarificationStore? clarifications = null,
+    AiToolRegistry? registry = null)
 {
     public async Task<Result<ChatResponse>> ExecuteAsync(ProcessUserChatCommand request,
         Func<PreparedAiBlockAnswer, Task<Result<ChatResponse>>> produceResponse, CancellationToken ct,
@@ -297,29 +299,59 @@ public sealed class AiBlockAnswerService(
         using var compositionPhase = ChatTurnTimer.Measure(ChatPhase.Composition);
         var chosen = definition.Items.Where(item => answer.SelectedIds.Contains(item.Id)).ToArray();
         var arguments = AskTool.BuildBulkArguments(definition.Action!, chosen);
-        AgentExecuteOperationResponse preview;
+        var flags = await featureFlags.GetEnabledKeysForUserAsync(request.UserId, token);
+        var change = new ProposedChange("block-preview", "bulk_" + definition.Action, arguments);
+        PendingAgentOperation? pending;
         using (ChatTurnTimer.Measure(ChatPhase.ToolCall))
-            preview = await executor.ExecuteAsync(new AgentExecuteOperationRequest(
-                request.UserId, "bulk_" + definition.Action,
-                arguments, AgentExecutionSurface.Chat,
-                request.AuthMethod, request.GrantedScopes, request.IsReadOnlyCredential,
-                CorrelationId: request.CorrelationId, IncludeChangePreview: true, PreviewOnly: true), token);
-        observeTool?.Invoke(new ConversationToolCall("block-preview", "bulk_" + definition.Action,
+            pending = flags.Contains(FeatureFlagKeys.AiChangePlan) && registry is not null
+                ? await CompilePickListAsync(request, change, chosen.Length, registry, token)
+                : await PreviewPickListAsync(request, change.Kind, change.Arguments, chosen.Length, token);
+        if (pending is null)
+            throw new AnswerRejectedException(Failure(ErrorCodes.AiBlockPreviewUnavailable));
+        if (flags.Contains(FeatureFlagKeys.AiBlockFirst))
+            return ChatResponseNegotiation.ForClient(new ChatResponse(null, [],
+                PendingOperations: [pending], CorrelationId: request.CorrelationId, Parts: []),
+                request.ClientContext, flags, ChatLocale.Resolve(request.ClientContext, user?.Language));
+        var line = LocaleHelper.IsPortuguese(ChatLocale.Resolve(request.ClientContext, user?.Language)) ? "Nada foi salvo." : "Nothing has been saved.";
+        return new ChatResponse(line, [], PendingOperations: [pending],
+            CorrelationId: request.CorrelationId,
+            Parts: request.ClientContext?.SupportsParts == true ? [new ChatTextPart(line)] : null);
+    }
+
+    /// <summary>
+    /// The preview of a pickList answer: the bulk operation of its action, through the executor, with no model call. It
+    /// holds one item for each chosen item, or the answer has no preview.
+    /// </summary>
+    private async Task<PendingAgentOperation?> PreviewPickListAsync(ProcessUserChatCommand request, string operation,
+        JsonElement arguments, int chosen, CancellationToken token)
+    {
+        var preview = await executor.ExecuteAsync(new AgentExecuteOperationRequest(
+            request.UserId, operation,
+            arguments, AgentExecutionSurface.Chat,
+            request.AuthMethod, request.GrantedScopes, request.IsReadOnlyCredential,
+            CorrelationId: request.CorrelationId, IncludeChangePreview: true, PreviewOnly: true), token);
+        observeTool?.Invoke(new ConversationToolCall("block-preview", operation,
             arguments.Clone(), preview.Operation.Status == AgentOperationStatus.Succeeded,
             preview.Operation.PolicyReason ?? (preview.Operation.Status == AgentOperationStatus.Succeeded
                 ? null : preview.Operation.Status.ToString())));
-        if (preview.Operation.Status != AgentOperationStatus.PendingConfirmation
-            || preview.PendingOperation?.Items?.Count != chosen.Length)
-            throw new AnswerRejectedException(Failure(ErrorCodes.AiBlockPreviewUnavailable));
-        var flags = await featureFlags.GetEnabledKeysForUserAsync(request.UserId, token);
-        if (flags.Contains(FeatureFlagKeys.AiBlockFirst))
-            return ChatResponseNegotiation.ForClient(new ChatResponse(null, [],
-                PendingOperations: [preview.PendingOperation], CorrelationId: request.CorrelationId, Parts: []),
-                request.ClientContext, flags, ChatLocale.Resolve(request.ClientContext, user?.Language));
-        var line = LocaleHelper.IsPortuguese(ChatLocale.Resolve(request.ClientContext, user?.Language)) ? "Nada foi salvo." : "Nothing has been saved.";
-        return new ChatResponse(line, [], PendingOperations: [preview.PendingOperation],
-            CorrelationId: request.CorrelationId,
-            Parts: request.ClientContext?.SupportsParts == true ? [new ChatTextPart(line)] : null);
+        return preview.Operation.Status == AgentOperationStatus.PendingConfirmation
+            && preview.PendingOperation?.Items?.Count == chosen ? preview.PendingOperation : null;
+    }
+
+    /// <summary>
+    /// The preview of a pickList answer on the <c>ai_change_plan</c> path: the chosen items as one change of the bulk
+    /// kind of the action, compiled with the compiler of the chat round. The executor call is the one of the old path.
+    /// </summary>
+    private async Task<PendingAgentOperation?> CompilePickListAsync(ProcessUserChatCommand request, ProposedChange change,
+        int chosen, AiToolRegistry registry, CancellationToken token)
+    {
+        var compiled = await new ChangeListCompiler(registry).CompileAsync(request.UserId, [change], new HashSet<Guid>(),
+            async (call, ct) => await PreviewPickListAsync(request, call.Name, call.Args, chosen, ct) is { } preview
+                ? new ChangeResult(call.Id, preview, null)
+                : new ChangeResult(call.Id, null, new ChangeError(call.Id, string.Empty, ErrorCodes.AiBlockPreviewUnavailable,
+                    "The chosen items have no preview.")),
+            pendingOperations, token);
+        return compiled.IsSuccess && compiled.Previews is [var preview] ? preview : null;
     }
 
     private async Task<ChatResponse?> ReadReplayAsync(IssuedAiBlock? block, AiBlockAnswer answer, ProcessUserChatCommand request, CancellationToken ct)

@@ -466,7 +466,7 @@ public partial class ProcessUserChatCommandHandler
         var writeCalls = orderedCalls
             .Where(call => call.Name != "ask" && ai.ToolRegistry.GetTool(call.Name)?.IsReadOnly != true)
             .ToList();
-        var deferredCreations = readOnlyCalls.Count > 0
+        var deferredCreations = readOnlyCalls.Count > 0 && !executionResults.ChangePlan
             ? writeCalls.Where(call => call.Name == "bulk_create_habits").ToArray() : [];
         executionResults.RequiresCreationProposal |= deferredCreations.Length > 0;
         writeCalls.RemoveAll(call => deferredCreations.Contains(call));
