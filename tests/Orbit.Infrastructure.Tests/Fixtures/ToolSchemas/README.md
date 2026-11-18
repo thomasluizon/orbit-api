@@ -61,6 +61,13 @@ comparison. All other constraints and descriptions must compare equal. The recur
 provider schema admits deeper shapes; the unchanged bounded server check rejects them.
 The command handlers also retain the configured depth check against existing parents.
 
+The short references of thomasluizon/orbit-tickets#2154 change the description of each typed ID
+argument in the chat declarations: the word `ID` or `GUID` becomes `reference`, and `IDs` or
+`GUIDs` becomes `references`. The amendment applies that same rule (`ReferenceArguments.NameReferences`)
+at 114 existing description sites of the legacy, composition and offer streams. The `source/`
+entries keep their descriptions, because MCP reads the tool classes. Every type, constraint,
+enum, required entry and inlined structure is retained.
+
 ## Regenerate the inlined fixture
 
 Run this from the repository root. The exporter is independent of the new compactor,
