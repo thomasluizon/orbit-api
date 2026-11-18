@@ -50,6 +50,7 @@
     <ProjectReference Include="..\..\src\Orbit.Domain\Orbit.Domain.csproj" />
     <ProjectReference Include="..\..\src\Orbit.Api\Orbit.Api.csproj" />
     <ProjectReference Include="..\..\bench\Orbit.RateLimitProof\Orbit.RateLimitProof.csproj" />
+    <ProjectReference Include="..\..\bench\Orbit.ChangeListProbe\Orbit.ChangeListProbe.csproj" />
   </ItemGroup>
 
   <ItemGroup>
