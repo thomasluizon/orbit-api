@@ -23,6 +23,7 @@ namespace Orbit.Infrastructure.Tests.Behaviors;
 public class IdempotencyBehaviorDbTests : IDisposable
 {
     private readonly SqliteConnection _connection;
+    private readonly DbContextOptions<OrbitDbContext> _options;
     private readonly OrbitDbContext _dbContext;
     private readonly UnitOfWork _unitOfWork;
     private readonly RecordingIdempotencyStore _store;
@@ -35,11 +36,11 @@ public class IdempotencyBehaviorDbTests : IDisposable
         _connection = new SqliteConnection("Data Source=:memory:");
         _connection.Open();
 
-        var options = new DbContextOptionsBuilder<OrbitDbContext>()
+        _options = new DbContextOptionsBuilder<OrbitDbContext>()
             .UseSqlite(_connection)
             .Options;
 
-        _dbContext = new SqliteCompatOrbitDbContext(options);
+        _dbContext = new SqliteCompatOrbitDbContext(_options);
         _dbContext.Database.EnsureCreated();
 
         var user = User.Create("Test User", "idem@example.com").Value;
@@ -111,6 +112,95 @@ public class IdempotencyBehaviorDbTests : IDisposable
         await failed.Should().ThrowAsync<InvalidOperationException>();
         (await _dbContext.ProcessedRequests.CountAsync()).Should().Be(0);
         (await behavior.Handle(new(true), CountingHandler("answer"), default)).Should().Be("answer");
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Handle_RetryWithTheSameKeyWhileTheFirstCallRuns_RunsTheHandlerOnce(bool callsProvider)
+    {
+        var behavior = new IdempotencyBehavior<ProviderRequest, string>(
+            new StubIdempotencyContext(true, _userId, "in-flight"), _store, _unitOfWork);
+        await using var retryContext = new SqliteCompatOrbitDbContext(_options);
+        var retry = new IdempotencyBehavior<ProviderRequest, string>(
+            new StubIdempotencyContext(true, _userId, "in-flight"), new IdempotencyStore(retryContext),
+            new UnitOfWork(retryContext, new DatabaseConnectionSettings()));
+        Exception? retryFailure = null;
+        RequestHandlerDelegate<string> firstCall = async _ =>
+        {
+            _handlerCalls++;
+            retryFailure = await Record.ExceptionAsync(() => retry.Handle(new(callsProvider), CountingHandler("second"), default));
+            return "first";
+        };
+
+        var firstFailure = await Record.ExceptionAsync(() => behavior.Handle(new(callsProvider), firstCall, default));
+
+        _handlerCalls.Should().Be(1, "a retry with the same key must not run the call again while the first call runs");
+        firstFailure.Should().BeNull();
+        retryFailure.Should().NotBeNull("the key is in flight, so the retry has no stored response to return");
+        (await retry.Handle(new(callsProvider), CountingHandler("second"), default)).Should().Be("first");
+        _handlerCalls.Should().Be(1);
+        (await _dbContext.ProcessedRequests.AsNoTracking().CountAsync()).Should().Be(1);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Handle_ReservationThatAStoppedCallLeft_GivesTheConflictAnswerAndRunsNoHandler(bool callsProvider)
+    {
+        _dbContext.ProcessedRequests.Add(ProcessedRequest.Create(_userId, "stopped-call", typeof(ProviderRequest).FullName!, 0));
+        await _dbContext.SaveChangesAsync();
+        _dbContext.ChangeTracker.Clear();
+        var behavior = new IdempotencyBehavior<ProviderRequest, string>(
+            new StubIdempotencyContext(true, _userId, "stopped-call"), _store, _unitOfWork);
+
+        var retry = () => behavior.Handle(new(callsProvider), CountingHandler("second"), default);
+
+        await retry.Should().ThrowAsync<DbUpdateException>();
+        _handlerCalls.Should().Be(0, "the first call can hold committed writes, so the key never runs a second call");
+        (await _dbContext.ProcessedRequests.AsNoTracking().Select(saved => saved.ResponseBody).ToListAsync())
+            .Should().Equal("");
+    }
+
+    [Fact]
+    public async Task Handle_ProviderCallCommandThatThrows_ReleasesTheReservationAndSavesNoPendingWrite()
+    {
+        var behavior = new IdempotencyBehavior<ProviderRequest, string>(
+            new StubIdempotencyContext(true, _userId, "provider-call-pending-write"), _store, _unitOfWork);
+        var reservationsDuringTheCall = -1;
+        RequestHandlerDelegate<string> failingCall = async _ =>
+        {
+            reservationsDuringTheCall = await _dbContext.ProcessedRequests.AsNoTracking().CountAsync();
+            _dbContext.Tags.Add(Tag.Create(_userId, "pending-tag", "#ff0000").Value);
+            throw new InvalidOperationException("The provider failed");
+        };
+
+        var failed = () => behavior.Handle(new(true), failingCall, default);
+
+        await failed.Should().ThrowAsync<InvalidOperationException>();
+        reservationsDuringTheCall.Should().Be(1, "the key is reserved before the provider call");
+        _dbContext.ChangeTracker.Clear();
+        (await _dbContext.ProcessedRequests.CountAsync()).Should().Be(0);
+        (await _dbContext.Tags.CountAsync()).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Handle_RequestCanceledAfterTheProviderCallCommits_StillStoresTheResponse()
+    {
+        var behavior = new IdempotencyBehavior<ProviderRequest, string>(
+            new StubIdempotencyContext(true, _userId, "provider-call-canceled"), _store, _unitOfWork);
+        using var canceled = new CancellationTokenSource();
+        RequestHandlerDelegate<string> committedCall = async _ =>
+        {
+            _handlerCalls++;
+            await canceled.CancelAsync();
+            return "answer";
+        };
+
+        (await behavior.Handle(new(true), committedCall, canceled.Token)).Should().Be("answer");
+
+        (await behavior.Handle(new(true), CountingHandler("second"), default)).Should().Be("answer");
+        _handlerCalls.Should().Be(1);
     }
 
     [Fact]

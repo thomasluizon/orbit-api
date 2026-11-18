@@ -34,5 +34,22 @@ public sealed class IdempotencyStore(OrbitDbContext context) : IIdempotencyStore
                 context.ProcessedRequests.Attach(record);
             record.SetResponseBody(responseBody);
         }
+
+        public Task StoreResponseBodyAsync(string responseBody, CancellationToken cancellationToken)
+        {
+            context.Entry(record).State = EntityState.Detached;
+            return context.ProcessedRequests
+                .Where(request => request.Id == record.Id)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(request => request.ResponseBody, responseBody),
+                    cancellationToken);
+        }
+
+        public Task ReleaseAsync(CancellationToken cancellationToken)
+        {
+            context.Entry(record).State = EntityState.Detached;
+            return context.ProcessedRequests
+                .Where(request => request.Id == record.Id)
+                .ExecuteDeleteAsync(cancellationToken);
+        }
     }
 }

@@ -47,10 +47,10 @@ public interface IArgumentCheckTool
 }
 
 /// <summary>
-/// A write tool whose database writes share the executor's unit of work for every argument shape, so it joins a
-/// change set. Its effects outside the database wait for the commit through AfterCommit. The referral reward job
-/// is the exception: it is enqueued before the commit and fails while the referral stays pending. A call to a
-/// model provider does not wait for the commit: the tool declares it with <see cref="IProviderCallTool"/>.
+/// A write tool whose database writes share the executor's unit of work, so it joins a change set. Its effects
+/// outside the database wait for the commit through AfterCommit. The referral reward job is the exception: it is
+/// enqueued before the commit and fails while the referral stays pending. A provider call does not wait for the
+/// commit (<see cref="IProviderCallTool"/>). A shape that writes no row joins no set (<see cref="IExternalShapeTool"/>).
 /// </summary>
 public interface ITransactionalAiTool;
 
