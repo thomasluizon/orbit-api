@@ -207,7 +207,7 @@ public sealed partial class AiProactiveCheckinMessageService(
             if (match.Groups["goal"].Success && !string.IsNullOrWhiteSpace(facts.GoalTitle))
             {
                 referencedGoals.Add(facts.GoalTitle);
-                return facts.GoalTitle;
+                return Quoted(facts.GoalTitle);
             }
             if (match.Groups["index"].Success
                 && int.TryParse(match.Groups["index"].Value, NumberStyles.None, CultureInfo.InvariantCulture, out var index)
@@ -219,7 +219,7 @@ public sealed partial class AiProactiveCheckinMessageService(
                 if (phrase.Length > 0)
                 {
                     phrases.Add(new(title, phrase));
-                    return phrase;
+                    return IsTitleCopy(phrase, title) ? TitleBoundary(title).Replace(phrase, Quoted(title)) : phrase;
                 }
             }
             invalidPlaceholder = true;
@@ -228,9 +228,14 @@ public sealed partial class AiProactiveCheckinMessageService(
         return invalidPlaceholder ? null : rendered;
     }
 
+    private static Regex TitleBoundary(string title) => new(@"(?<!\p{L})" + Regex.Escape(title) + @"(?!\p{L})",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
+
+    private static bool IsTitleCopy(string phrase, string title) => ContainsTitle(phrase, title)
+        && (phrase.Equals(title, StringComparison.OrdinalIgnoreCase) || title.Any(char.IsWhiteSpace));
+
     private static bool ContainsTitle(string text, string title) => !string.IsNullOrWhiteSpace(title)
-        && Regex.IsMatch(text, @"(?<!\p{L})" + Regex.Escape(title) + @"(?!\p{L})",
-            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
+        && TitleBoundary(title).IsMatch(text);
 
     private static bool HasOnlyAllowedNames(string text, string language, ISet<string> titleWords)
     {
