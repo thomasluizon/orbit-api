@@ -57,6 +57,7 @@ public sealed class ChangeListCompiler(AiToolRegistry registry)
     public const string WaitsForAnswer = "waits_for_answer";
     public const string TooManyPreviews = "too_many_previews";
     public const string MissingField = "missing_field";
+    public const string InvalidArguments = "invalid_arguments";
 
     /// <summary>
     /// Checks the list before any write runs. A change of an unknown kind and a change id that repeats are errors. A
@@ -77,7 +78,7 @@ public sealed class ChangeListCompiler(AiToolRegistry registry)
             else if (!kinds.Contains(change.Kind))
                 errors.Add(new(change.Id, "kind", UnknownKind, $"{change.Kind} is not a change kind.", [.. kinds.Order(StringComparer.Ordinal)]));
             else if (change.Arguments.ValueKind != JsonValueKind.Object)
-                errors.Add(new(change.Id, "arguments", "invalid_arguments", "The arguments of a change are an object."));
+                errors.Add(new(change.Id, "arguments", InvalidArguments, "The arguments of a change are an object."));
             else if (RecordIds(change.Arguments).Where(askRecords.Contains).ToArray() is { Length: > 0 } held)
                 waiting.Add(new(change.Id, "arguments", WaitsForAnswer, "This change names a record of the question in the same response.",
                     Candidates: [.. held.Select(id => id.ToString())]));
@@ -133,6 +134,13 @@ public sealed class ChangeListCompiler(AiToolRegistry registry)
         return new([], errors, check.Waiting);
     }
 
+    /// <summary>
+    /// The typed error of a change call that holds no readable change. <paramref name="callId"/> is the id of the call,
+    /// because the list has no change to name.
+    /// </summary>
+    public static ChangeError EmptyList(string callId) => new(callId, ChangeDeclarations.ChangesArgument, InvalidArguments,
+        $"The change list holds no change. Send one item in {ChangeDeclarations.ChangesArgument} for each change.");
+
     /// <summary>Withdraws a preview that a failed change list prepared.</summary>
     public static void Withdraw(Guid userId, Guid pendingOperationId, IPendingAgentOperationStore store)
     {
@@ -151,7 +159,7 @@ public sealed class ChangeListCompiler(AiToolRegistry registry)
         {
             { ErrorCode: { Length: > 0 } errorCode } => errorCode,
             { Status: AgentOperationStatus.Denied or AgentOperationStatus.UnsupportedByPolicy, PolicyReason: { Length: > 0 } reason } => reason,
-            _ => failureKey ?? "invalid_arguments"
+            _ => failureKey ?? InvalidArguments
         };
         return new(changeId, string.Empty, code, message);
     }

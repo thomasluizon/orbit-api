@@ -12,9 +12,9 @@ public partial class ProcessUserChatCommandHandler
 {
     /// <summary>
     /// One round of the <c>ai_change_plan</c> path. The change calls of the response form one typed change list, which
-    /// the compiler runs as one unit beside the reads. A list with an error holds nothing, issues no <c>ask</c> of the
-    /// response, and returns every error in one typed list. The model gets one repair round; a second failed list ends
-    /// the turn with no preview of it, and the answer says that the request was not prepared.
+    /// the compiler runs as one unit beside the reads. A list with an error, or a change call with no change, holds
+    /// nothing, issues no <c>ask</c> of the response, and returns every error in one typed list. The model gets one
+    /// repair round; a second failed list ends the turn with no preview, and the answer says so.
     /// </summary>
     private async Task<ToolRoundResult> ProcessChangeListRoundAsync(AiResponse response, ProcessUserChatCommand request,
         ChatContext context, ToolExecutionAccumulator results, int iteration, string? language,
@@ -24,7 +24,9 @@ public partial class ProcessUserChatCommandHandler
         var calls = response.ToolCalls!;
         LogToolCallingIteration(logger, iteration, calls.Count);
         var changeCalls = calls.Where(IsChangeListCall).ToArray();
-        var changes = changeCalls.SelectMany(call => ChangeDeclarations.Read(call, shape)).ToArray();
+        var lists = changeCalls.Select(call => (Call: call, Changes: ChangeDeclarations.Read(call, shape))).ToArray();
+        var changes = lists.SelectMany(list => list.Changes).ToArray();
+        var emptyLists = lists.Where(list => list.Changes.Count == 0).Select(list => list.Call).ToArray();
         var ask = calls.FirstOrDefault(call => call.Name == "ask");
         var askRecords = ask is null ? new HashSet<Guid>()
             : ChangeListCompiler.RecordIds(AskTool.ExecutionArguments(ask.Args)).ToHashSet();
@@ -40,8 +42,8 @@ public partial class ProcessUserChatCommandHandler
             await ExecuteToolCallsAsync(ordered, request, results, language, ct), StringComparer.Ordinal);
 
         var changeResults = writes.Select(call => ChangeResultOf(call, outcomes[call.Id], results)).ToArray();
-        var errors = check.Errors.Concat(await compiler.SettleAsync(request.UserId, changeResults,
-            execution.PendingOperationStore, ct)).ToArray();
+        var errors = emptyLists.Select(call => ChangeListCompiler.EmptyList(call.Id)).Concat(check.Errors)
+            .Concat(await compiler.SettleAsync(request.UserId, changeResults, execution.PendingOperationStore, ct)).ToArray();
         if (errors.Length > 0)
             HoldNothing(request, writes, outcomes, errors, results);
         else if (changes.Length > 0)
@@ -61,11 +63,13 @@ public partial class ProcessUserChatCommandHandler
         foreach (var waiting in check.Waiting)
             outcomes[waiting.Change] = TypedChangeOutcome(changes.First(change => change.Id == waiting.Change), waiting.Code,
                 new { error = waiting.Code, errors = new[] { waiting } });
-        foreach (var change in changes.Where(change => !outcomes.ContainsKey(change.Id)))
+        var unprepared = changes.Where(change => !outcomes.ContainsKey(change.Id))
+            .Concat(emptyLists.Select(call => new ProposedChange(call.Id, call.Name, call.Args))).ToArray();
+        foreach (var change in unprepared)
             outcomes[change.Id] = TypedChangeOutcome(change, ChangeListCompiler.NotPrepared,
                 new { error = ChangeListCompiler.NotPrepared, errors });
 
-        var traced = ordered.Where(call => writes.All(write => write.Id != call.Id))
+        var traced = ordered.Where(call => writes.All(write => write.Id != call.Id)).Concat(emptyLists)
             .Concat(changes.Select(change => new AiToolCall(change.Kind, change.Id, change.Arguments))).ToArray();
         RecordToolRound(response with { ToolCalls = traced }, ordered, outcomes, results, isCorrection: false);
         RecordReadOfferIntents(response, request, results);

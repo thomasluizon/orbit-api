@@ -228,6 +228,47 @@ public partial class ProcessUserChatCommandHandlerTests
         run.Result.Value.AiMessage.Should().Be(NotPreparedFor(language));
     }
 
+    /// <summary>
+    /// A chat round gets the status <c>Succeeded</c> for a write before approval only when the write changes nothing: the
+    /// executor closes the row of a bulk change with no change and returns the no-changes result. A list with that change
+    /// first and a failed change second saves nothing and holds nothing, and the error list names the failed change only.
+    /// </summary>
+    [Theory]
+    [InlineData(ChangeDeclarationShape.Kinds, "en")]
+    [InlineData(ChangeDeclarationShape.Kinds, "pt-BR")]
+    [InlineData(ChangeDeclarationShape.Wrapper, "en")]
+    [InlineData(ChangeDeclarationShape.Wrapper, "pt-BR")]
+    public async Task ChangeList_AWriteWithNoChangeBesideAFailedChangeSavesNothingAndHoldsNothing(ChangeDeclarationShape shape, string language)
+    {
+        const string sameTitle = "Water - 710ml";
+        var writes = new List<AgentExecuteOperationRequest>();
+        var run = await RunChangeListAsync(shape, language,
+            children => ChangeList(shape, null, true, RenameChange("no-change", [children[0].Id], sameTitle),
+                RenameChange("unknown", [Guid.NewGuid()])),
+            _ => [Text(language)],
+            arrange: (_, _) => _operationExecutor.ExecuteAsync(Arg.Is<AgentExecuteOperationRequest>(request =>
+                    request.OperationId == "bulk_update_habits" && request.Arguments.GetRawText().Contains(sameTitle)),
+                    Arg.Any<CancellationToken>())
+                .Returns(call =>
+                {
+                    var request = call.Arg<AgentExecuteOperationRequest>();
+                    writes.Add(request);
+                    return new AgentExecuteOperationResponse(new AgentOperationResult(request.OperationId, request.OperationId,
+                        AgentRiskClass.Low, AgentConfirmationRequirement.FreshConfirmation, AgentOperationStatus.Succeeded,
+                        Payload: BulkNoChangesOutcome.For(request.OperationId, request.Arguments), Access: "write"));
+                }));
+
+        run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
+        writes.Should().ContainSingle("the change with no change ran first").Which.ConfirmationToken.Should().BeNull();
+        run.Result.Value.PendingOperations.Should().BeNullOrEmpty();
+        run.Result.Value.Actions.Should().NotContain(action => action.Status == ActionStatus.Success);
+        (await run.Store.GetAwaitingAsync(UserId)).Should().BeEmpty("the server holds nothing of a list with an error");
+        run.ToolResults.Should().ContainSingle().Subject.Where(result => !result.Success).SelectMany(ErrorsOf).Distinct()
+            .Should().ContainSingle().Which.Should().Match<ChangeError>(error => error.Change == "unknown"
+                && error.Code == "target_not_owned:bulk_update_habits:habit");
+        run.Result.Value.AiMessage.Should().Be(NotPreparedFor(language));
+    }
+
     [Theory]
     [InlineData(ChangeDeclarationShape.Kinds, "en")]
     [InlineData(ChangeDeclarationShape.Kinds, "pt-BR")]
@@ -258,6 +299,58 @@ public partial class ProcessUserChatCommandHandlerTests
         var failing = (Habit[] children) => ChangeList(shape, null, true, DeleteChange("delete", children[4..]),
             RenameChange("rename", [children[0].Id, CutShort(children[1].Id)]));
         var run = await RunChangeListAsync(shape, language, failing, children => [failing(children), Text(language)]);
+
+        run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
+        run.ToolResults.Should().ContainSingle("the model gets one repair round and no third call");
+        run.Result.Value.PendingOperations.Should().BeNullOrEmpty();
+        (await run.Store.GetAwaitingAsync(UserId)).Should().BeEmpty();
+        run.Result.Value.AiMessage.Should().Be(NotPreparedFor(language));
+    }
+
+    private static AiResponse WrapperCall(string arguments) => new()
+    {
+        ConversationContext = new(),
+        ToolCalls = [new AiToolCall(ChangeDeclarations.WrapperName, "list", JsonDocument.Parse(arguments).RootElement.Clone())]
+    };
+
+    /// <summary>
+    /// A <c>propose_changes</c> call with no readable change is a typed error of the list, not a prepared list. The model
+    /// gets its one repair round, and the eval trace records the failed call.
+    /// </summary>
+    [Theory]
+    [InlineData("""{"changes":[],"plan_title":null,"orbit_write_complete":true}""")]
+    [InlineData("""{"plan_title":null,"orbit_write_complete":true}""")]
+    [InlineData("""{"changes":"none","plan_title":null,"orbit_write_complete":true}""")]
+    public async Task ChangeList_AWrapperCallWithNoChangeReturnsATypedErrorAndKeepsTheRepairRound(string arguments)
+    {
+        var run = await RunChangeListAsync(ChangeDeclarationShape.Wrapper, "en", _ => WrapperCall(arguments),
+            children => [ChangeList(ChangeDeclarationShape.Wrapper, null, true, DeleteChange("delete", children[5..])), Text("en")],
+            trace: true);
+
+        run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
+        var refused = run.ToolResults.Should().ContainSingle("the repaired list is complete and ends the turn").Subject
+            .Should().ContainSingle().Subject;
+        refused.Name.Should().Be(ChangeDeclarations.WrapperName);
+        refused.Success.Should().BeFalse();
+        refused.Error.Should().Be(ChangeListCompiler.NotPrepared);
+        ErrorsOf(refused).Should().Equal(new ChangeError("list", ChangeDeclarations.ChangesArgument,
+            ChangeListCompiler.InvalidArguments, "The change list holds no change. Send one item in changes for each change."));
+        run.Result.Value.PendingOperations.Should().ContainSingle().Which.Items!.Select(item => item.EntityId)
+            .Should().Equal(run.Children[5].Id);
+        var traced = run.Result.Value.EvalTrace!.ToolCalls;
+        traced.Select(call => (call.Id, call.Name, call.Status)).Should().Equal(
+            ("list", ChangeDeclarations.WrapperName, "Failed"),
+            ("delete", "bulk_delete_habits", nameof(AgentOperationStatus.PendingConfirmation)));
+    }
+
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task ChangeList_ASecondWrapperCallWithNoChangeEndsTheTurnWithNoPreviewAndSaysSo(string language)
+    {
+        const string empty = """{"changes":[],"plan_title":null,"orbit_write_complete":true}""";
+        var run = await RunChangeListAsync(ChangeDeclarationShape.Wrapper, language, _ => WrapperCall(empty),
+            _ => [WrapperCall(empty), Text(language)]);
 
         run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
         run.ToolResults.Should().ContainSingle("the model gets one repair round and no third call");

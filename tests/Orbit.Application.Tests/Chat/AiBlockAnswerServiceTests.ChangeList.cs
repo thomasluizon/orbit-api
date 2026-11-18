@@ -73,8 +73,13 @@ public partial class AiBlockAnswerServiceTests
         await _quota.DidNotReceiveWithAnyArgs().TryConsumeAiMessage(default, default!, default);
     }
 
+    /// <summary>
+    /// A preview that misses a chosen item is no preview of the answer, on both paths. The compiler gets no preview of
+    /// that change, so it withdraws nothing. The refusal leaves the transaction of the answer with an exception, so the
+    /// unit of work rolls back the claim of the block and the row of the preview together.
+    /// </summary>
     [Fact]
-    public async Task PickListAnswer_OnTheChangePlanPathWithdrawsAPreviewThatMissesAChosenItem()
+    public async Task PickListAnswer_OnTheChangePlanPathRefusesAPreviewThatMissesAChosenItemInsideTheAnswerTransaction()
     {
         var items = Enumerable.Range(0, 2).Select(i => new AiBlockItem(i.ToString(), "Habit " + i,
             JsonSerializer.SerializeToElement(new { habit_id = Guid.NewGuid(), date = "2026-04-03" }))).ToArray();
@@ -89,11 +94,29 @@ public partial class AiBlockAnswerServiceTests
                 AgentConfirmationRequirement.FreshConfirmation, AgentOperationStatus.PendingConfirmation), pending));
         _featureFlags.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>())
             .Returns([FeatureFlagKeys.AiBlockFirst, FeatureFlagKeys.AiChangePlan]);
+        var transactionFailed = false;
+        _work.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task<Result<PreparedAiBlockAnswer>>>>(), Arg.Any<CancellationToken>())
+            .Returns(async call =>
+            {
+                try
+                {
+                    return await call.Arg<Func<CancellationToken, Task<Result<PreparedAiBlockAnswer>>>>()(default);
+                }
+                catch
+                {
+                    transactionFailed = true;
+                    throw;
+                }
+            });
+        var pendingOperations = Substitute.For<IPendingAgentOperationStore>();
         var service = new AiBlockAnswerService(_store, _work, _quota, _executor, _users, _analytics, _featureFlags,
-            Substitute.For<IPendingAgentOperationStore>(), _dates, clarifications: _clarifications, registry: PickListKinds);
+            pendingOperations, _dates, clarifications: _clarifications, registry: PickListKinds);
 
         var result = await service.PrepareAsync(Request(block.Id, ["0", "1"]) with { ClientContext = new(SupportsParts: true) }, default);
 
         result.ErrorCode.Should().Be(ErrorCodes.AiBlockPreviewUnavailable);
+        transactionFailed.Should().BeTrue("the refusal leaves the transaction with an exception, so the unit of work rolls it back");
+        pendingOperations.DidNotReceiveWithAnyArgs().Withdraw(default, default, default!, default);
+        await _store.DidNotReceiveWithAnyArgs().RecordAnswerAsync(default, default, default, default!, default, default, default);
     }
 }

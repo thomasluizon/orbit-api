@@ -3,6 +3,7 @@
 using System.ClientModel.Primitives;
 using System.Reflection;
 using System.Text.Json;
+using MediatR;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -12,6 +13,7 @@ using Orbit.Application.Chat;
 using Orbit.Application.Chat.Commands;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Common;
+using Orbit.Application.Goals.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -63,12 +65,19 @@ public static class ChangeListCatalogs
         pending.GetAwaitingAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Array.Empty<PendingAgentOperationExecution>());
         var quota = Substitute.For<IPayGateService>();
         quota.TryConsumeAiMessage(Arg.Any<Guid>(), Arg.Any<IUnitOfWork>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
-        var execution = new ChatExecutionDependencies(Substitute.For<IUserDateService>(), null!, quota,
-            Substitute.For<IUnitOfWork>(), null!, null!, null!, null!, null!, null!, null!, null!, null!, pending,
+        var data = new ChatDataDependencies(Substitute.For<IGenericRepository<Habit>>(), Substitute.For<IGenericRepository<Goal>>(),
+            Substitute.For<IGenericRepository<User>>(), Substitute.For<IGenericRepository<Tag>>(),
+            Substitute.For<IGenericRepository<ChecklistTemplate>>(), Substitute.For<IFeatureFlagService>());
+        var execution = new ChatExecutionDependencies(Substitute.For<IUserDateService>(), Substitute.For<IUserStreakService>(), quota,
+            Substitute.For<IUnitOfWork>(), Substitute.For<IServiceScopeFactory>(), Substitute.For<IAgentOperationExecutor>(),
+            Substitute.For<IPendingClarificationStore>(), Substitute.For<IGoalProgressReadSyncer>(),
+            Substitute.For<IGamificationService>(), Substitute.For<IMediator>(), Substitute.For<IProductAnalytics>(),
+            Substitute.For<IHabitScheduleLogReader>(), Substitute.For<IIssuedAiBlockStore>(), pending,
             Substitute.For<IPendingOperationChangePreviewer>());
-        var handler = new ProcessUserChatCommandHandler(null!, new(intent, registry, Substitute.For<ISystemPromptBuilder>(),
+        var handler = new ProcessUserChatCommandHandler(data, new(intent, registry, Substitute.For<ISystemPromptBuilder>(),
                 Substitute.For<IAgentCatalogService>(), shape ?? ChangeDeclarationShape.Kinds), execution,
-            NullLogger<ProcessUserChatCommandHandler>.Instance, null!, null!);
+            NullLogger<ProcessUserChatCommandHandler>.Instance, Substitute.For<IAppConfigService>(),
+            Substitute.For<IContentModerationService>());
         var handlerType = typeof(ProcessUserChatCommandHandler);
         var todayFacts = Activator.CreateInstance(handlerType.Assembly.GetType("Orbit.Application.Chat.HabitTodaySnapshot", true)!,
             new object?[] { new HashSet<Guid>(), new HashSet<Guid>(), new HashSet<Guid>(), null });

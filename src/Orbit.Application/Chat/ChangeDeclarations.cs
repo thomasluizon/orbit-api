@@ -116,7 +116,8 @@ public static class ChangeDeclarations
 
     /// <summary>
     /// The changes of one change call. A wrapper call holds the list; a change without a readable id gets the id of its
-    /// call and its place. A kind call is one change with the id of the call.
+    /// call and its place. A wrapper call with no readable list holds no change, which the round returns as a typed
+    /// error. A kind call is one change with the id of the call.
     /// </summary>
     public static IReadOnlyList<ProposedChange> Read(AiToolCall call, ChangeDeclarationShape shape)
     {

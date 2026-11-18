@@ -216,29 +216,36 @@ public partial class ProcessUserChatCommandHandlerTests
             .Should().BeEquivalentTo(run.Children.Select(child => child.Id.ToString()));
     }
 
+    private sealed record DraftCreateTurn(ProcessUserChatCommandHandler Handler, Result<ChatResponse> Result, string Title,
+        Guid ClarificationId, List<IssuedAiBlock> Issued, List<IReadOnlyList<AiToolCallResult>> ToolResults,
+        List<AiConversationContext> Conversations, CreateHabitTool Create, BulkCreateHabitsTool Bulk);
+
     /// <summary>
-    /// The draft binding of the change list: a create change with a missing required field is a compile error that names
-    /// the field, the list holds nothing, and an <c>ask</c> binds to the change id and that field. An <c>ask</c> that names
-    /// another draft binds to nothing.
+    /// One turn on the <c>ai_change_plan</c> path: the model sends a create change with a title only, gets the compile
+    /// error, and asks for the frequency with <paramref name="draftCallId"/>. The clarification store keeps the draft that
+    /// the turn stashes, as the real store does.
     /// </summary>
-    [Theory]
-    [InlineData("en", true, ChangeDeclarationShape.Kinds)]
-    [InlineData("pt-BR", true, ChangeDeclarationShape.Kinds)]
-    [InlineData("en", false, ChangeDeclarationShape.Kinds)]
-    [InlineData("pt-BR", false, ChangeDeclarationShape.Kinds)]
-    [InlineData("en", true, ChangeDeclarationShape.Wrapper)]
-    [InlineData("pt-BR", true, ChangeDeclarationShape.Wrapper)]
-    public async Task AskFormMap_DraftBindsToTheCompileErrorOfACreateChange(string language, bool bound, ChangeDeclarationShape shape)
+    private async Task<DraftCreateTurn> RunDraftCreateTurnAsync(string language, ChangeDeclarationShape shape, string draftCallId)
     {
         SetupExistingParents(language);
         EnableChangePlan(FeatureFlagKeys.AiBlockFirst, FeatureFlagKeys.AiConversationRecording);
         _changeShape = shape;
         var create = new CreateHabitTool(_userDateService, _mediator);
-        var handler = CreateHandler(create, new BulkCreateHabitsTool(_mediator), RealAskTool());
+        var bulk = new BulkCreateHabitsTool(_mediator);
+        var handler = CreateHandler(create, bulk, RealAskTool());
         var title = language == "en" ? "Walking habit" : "Hábito de caminhada";
         var clarificationId = Guid.NewGuid();
+        PendingClarificationData? stashed = null;
         _pendingClarificationStore.CreateAsync(UserId, create.Name, Arg.Any<string>(), Arg.Any<string>(),
-            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(clarificationId);
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                stashed = new(create.Name, call.ArgAt<string>(2), call.ArgAt<string>(3),
+                    [.. JsonSerializer.Deserialize<QuickAction[]>(call.ArgAt<string>(5))!.Select(action => action.Value)],
+                    DateTime.UtcNow.AddMinutes(30));
+                return clarificationId;
+            });
+        _pendingClarificationStore.GetForResolutionAsync(clarificationId, UserId, Arg.Any<CancellationToken>()).Returns(_ => stashed);
         var issued = new List<IssuedAiBlock>();
         _blockStore.AddAsync(Arg.Do<IssuedAiBlock>(issued.Add), Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
         SetupAiResponse(ChangeList(shape, null, false, ("new-draft", "bulk_create_habits", new { habits = new[] { new { title } } })));
@@ -253,7 +260,7 @@ public partial class ProcessUserChatCommandHandlerTests
                 {
                     form = "choice",
                     missing_input = "habit_setup",
-                    draft_call_id = bound ? "new-draft" : "another-draft",
+                    draft_call_id = draftCallId,
                     missing_field = "frequency_unit",
                     question = language == "en" ? "How often?" : "Com que frequência?",
                     options = new[] { new { id = "day", label = language == "en" ? "Daily" : "Todo dia" }, new { id = "week", label = language == "en" ? "Weekly" : "Toda semana" } }
@@ -263,22 +270,98 @@ public partial class ProcessUserChatCommandHandlerTests
         var result = await handler.Handle(new(UserId, "Continue.",
             ClientContext: new AgentClientContext(SupportsParts: true, PartKinds: ["choice"], Locale: language)), default);
 
-        result.IsSuccess.Should().BeTrue(result.Error);
-        var compiled = toolResults[0].Should().ContainSingle().Subject;
+        return new(handler, result, title, clarificationId, issued, toolResults, conversations, create, bulk);
+    }
+
+    /// <summary>
+    /// The draft binding of the change list: a create change with a missing required field is a compile error that names
+    /// the field, the list holds nothing, and an <c>ask</c> binds to the change id and that field. An <c>ask</c> that names
+    /// another draft binds to nothing.
+    /// </summary>
+    [Theory]
+    [InlineData("en", true, ChangeDeclarationShape.Kinds)]
+    [InlineData("pt-BR", true, ChangeDeclarationShape.Kinds)]
+    [InlineData("en", false, ChangeDeclarationShape.Kinds)]
+    [InlineData("pt-BR", false, ChangeDeclarationShape.Kinds)]
+    [InlineData("en", true, ChangeDeclarationShape.Wrapper)]
+    [InlineData("pt-BR", true, ChangeDeclarationShape.Wrapper)]
+    public async Task AskFormMap_DraftBindsToTheCompileErrorOfACreateChange(string language, bool bound, ChangeDeclarationShape shape)
+    {
+        var turn = await RunDraftCreateTurnAsync(language, shape, bound ? "new-draft" : "another-draft");
+
+        turn.Result.IsSuccess.Should().BeTrue(turn.Result.Error);
+        var compiled = turn.ToolResults[0].Should().ContainSingle().Subject;
         compiled.Success.Should().BeFalse();
         compiled.Error.Should().Be(ChangeListCompiler.NotPrepared);
         JsonSerializer.SerializeToElement(compiled.Payload).GetProperty("errors").Deserialize<ChangeError[]>().Should()
             .Equal(new ChangeError("new-draft", "frequency_unit", ChangeListCompiler.MissingField,
-                $"The new habit {title} needs a value for frequency_unit."));
-        conversations.Should().OnlyContain(conversation => conversation.ToolDeclarationUpdates.Count == 0,
+                $"The new habit {turn.Title} needs a value for frequency_unit."));
+        turn.Conversations.Should().OnlyContain(conversation => conversation.ToolDeclarationUpdates.Count == 0,
             "the flag-path ask schema never changes during a turn");
-        result.Value.PendingOperations.Should().BeNullOrEmpty();
-        result.Value.Actions.Should().NotContain(action => action.Status == ActionStatus.NeedsClarification);
-        var definition = issued.Should().ContainSingle().Subject.ReadDefinition();
+        turn.Result.Value.PendingOperations.Should().BeNullOrEmpty();
+        turn.Result.Value.Actions.Should().NotContain(action => action.Status == ActionStatus.NeedsClarification);
+        var definition = turn.Issued.Should().ContainSingle().Subject.ReadDefinition();
         if (bound)
-            definition.DraftClarification.Should().Be(new AiDraftClarification("new-draft", "frequency_unit", clarificationId));
+            definition.DraftClarification.Should().Be(new AiDraftClarification("new-draft", "frequency_unit", turn.ClarificationId));
         else
             definition.DraftClarification.Should().BeNull();
+    }
+
+    /// <summary>
+    /// The last step of the draft binding: the answer of the bound question starts a turn that holds the stored draft with
+    /// the answered field. The model sends the create change of that draft, and the change list prepares the preview of
+    /// the new habit. The answer saves no habit.
+    /// </summary>
+    [Theory]
+    [InlineData("en", ChangeDeclarationShape.Kinds)]
+    [InlineData("pt-BR", ChangeDeclarationShape.Kinds)]
+    [InlineData("en", ChangeDeclarationShape.Wrapper)]
+    [InlineData("pt-BR", ChangeDeclarationShape.Wrapper)]
+    public async Task AskFormMap_TheAnswerOfABoundDraftCreatesThePreviewOfTheCreateChange(string language, ChangeDeclarationShape shape)
+    {
+        var turn = await RunDraftCreateTurnAsync(language, shape, "new-draft");
+        turn.Result.IsSuccess.Should().BeTrue(turn.Result.Error);
+        var block = turn.Issued.Should().ContainSingle().Subject;
+        block.ReadDefinition().DraftClarification.Should().Be(new AiDraftClarification("new-draft", "frequency_unit", turn.ClarificationId));
+        _unitOfWork.PassThroughTransactions<Result<PreparedAiBlockAnswer>>();
+        _blockStore.GetAsync(block.Id, UserId, Arg.Any<CancellationToken>()).Returns(block);
+        _blockStore.MarkAnsweredAsync(block.Id, UserId, Arg.Any<DateTime>(), Arg.Any<CancellationToken>())
+            .Returns(call => { block.MarkAnswered(call.ArgAt<DateTime>(2)); return true; });
+        _blockStore.CheckpointAnswerAsync(block.Id, UserId, Arg.Any<DateTime>(), Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(true);
+        var outcomes = R9fWriteExecutor(turn.Create, turn.Bulk);
+        var requests = new List<AiToolRequest>();
+        _aiIntentService.SendWithToolsAsync(Arg.Do<AiToolRequest>(requests.Add), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(call => Result.Success(ChangeList(shape, null, true,
+                ("answered-draft", "bulk_create_habits", new { habits = new[] { ValidatedDraft(call.Arg<AiToolRequest>()) } }))));
+
+        var answer = await turn.Handler.Handle(new(UserId, string.Empty, BlockAnswer: new AiBlockAnswer(block.Id, ["day"]),
+            ClientContext: new AgentClientContext(SupportsParts: true, SupportsPendingOperationChanges: true, PartKinds: ["choice"], Locale: language)), default);
+
+        answer.IsSuccess.Should().BeTrue(answer.Error);
+        var draft = ValidatedDraft(requests.Should().ContainSingle().Subject);
+        draft.GetProperty("title").GetString().Should().Be(turn.Title);
+        draft.GetProperty("frequency_unit").GetString().Should().Be("Day");
+        var held = outcomes.Should().ContainSingle().Subject;
+        held.Operation.OperationId.Should().Be(turn.Create.Name);
+        held.Operation.Status.Should().Be(AgentOperationStatus.PendingConfirmation);
+        var preview = answer.Value.PendingOperations.Should().ContainSingle().Subject;
+        preview.Id.Should().Be(held.PendingOperation!.Id);
+        var item = preview.Items.Should().ContainSingle().Subject;
+        item.EntityName.Should().Be(turn.Title);
+        item.Fields.Should().Contain(field => field.Field == "frequency_unit" && field.NewValue == "Day");
+        answer.Value.Actions.Should().NotContain(action => action.Status == ActionStatus.Success);
+        answer.Value.AiMessage.Should().NotBe(NotPreparedFor(language));
+        await _habitRepo.DidNotReceiveWithAnyArgs().AddAsync(default!, default);
+        await _pendingClarificationStore.Received(1).GetForResolutionAsync(turn.ClarificationId, UserId, Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>The arguments of the habit draft that the server gives the model in the turn of a draft answer.</summary>
+    private static JsonElement ValidatedDraft(AiToolRequest request)
+    {
+        const string prefix = "Validated habit draft: ";
+        var context = request.DynamicContext!;
+        using var draft = JsonDocument.Parse(context[(context.IndexOf(prefix, StringComparison.Ordinal) + prefix.Length)..]);
+        return draft.RootElement.GetProperty("arguments").Clone();
     }
 
     [Fact]
