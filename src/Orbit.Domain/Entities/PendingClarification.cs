@@ -16,6 +16,12 @@ public class PendingClarification : Entity
     public string MissingArgumentKey { get; private set; } = null!;
     public string Question { get; private set; } = null!;
     public string QuickActionsJson { get; private set; } = "[]";
+
+    /// <summary>
+    /// The client context of the chat turn that stashed the clarification, as JSON. A resolve binds its preview with
+    /// this context, because the resolve request body holds no context. Null for a row stashed before the column existed.
+    /// </summary>
+    public string? ClientContextJson { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
     public DateTime ExpiresAtUtc { get; private set; }
 
@@ -40,7 +46,8 @@ public class PendingClarification : Entity
         string missingArgumentKey,
         string question,
         string quickActionsJson,
-        DateTime expiresAtUtc)
+        DateTime expiresAtUtc,
+        string? clientContextJson = null)
     {
         if (userId == Guid.Empty)
             throw new ArgumentException("userId cannot be empty.", nameof(userId));
@@ -63,6 +70,7 @@ public class PendingClarification : Entity
             MissingArgumentKey = missingArgumentKey,
             Question = question,
             QuickActionsJson = string.IsNullOrWhiteSpace(quickActionsJson) ? "[]" : quickActionsJson,
+            ClientContextJson = string.IsNullOrWhiteSpace(clientContextJson) ? null : clientContextJson,
             CreatedAtUtc = createdAtUtc,
             ExpiresAtUtc = expiresAtUtc
         };

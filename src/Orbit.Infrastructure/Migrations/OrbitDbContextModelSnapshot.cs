@@ -1554,7 +1554,7 @@ namespace Orbit.Infrastructure.Migrations
                     b.ToTable("HabitSkipUndos");
                 });
 
-            modelBuilder.Entity("Orbit.Domain.Entities.IssuedAstraBlock", b =>
+            modelBuilder.Entity("Orbit.Domain.Entities.IssuedAiBlock", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -1602,7 +1602,7 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.HasIndex("UserId", "CreatedAtUtc");
 
-                    b.ToTable("IssuedAstraBlocks");
+                    b.ToTable("IssuedAstraBlocks", (string)null);
                 });
 
             modelBuilder.Entity("Orbit.Domain.Entities.MarketingContact", b =>
@@ -2127,6 +2127,9 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
+
+                    b.Property<string>("ClientContextJson")
+                        .HasColumnType("jsonb");
 
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
@@ -2848,8 +2851,9 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<bool>("HasSeenImportPrompt")
                         .HasColumnType("boolean");
 
-                    b.Property<bool>("HasTriedAstra")
-                        .HasColumnType("boolean");
+                    b.Property<bool>("HasTriedAi")
+                        .HasColumnType("boolean")
+                        .HasColumnName("HasTriedAstra");
 
                     b.Property<bool>("IsAdmin")
                         .HasColumnType("boolean");
@@ -2929,9 +2933,10 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<DateOnly?>("PreGapLastActiveDate")
                         .HasColumnType("date");
 
-                    b.Property<bool>("ProactiveAstraEnabled")
+                    b.Property<bool>("ProactiveAiEnabled")
                         .HasColumnType("boolean")
-                        .HasDefaultValue(true);
+                        .HasDefaultValue(true)
+                        .HasColumnName("ProactiveAstraEnabled");
 
                     b.Property<bool>("PublicProfileShowAchievements")
                         .HasColumnType("boolean");
@@ -3498,7 +3503,7 @@ namespace Orbit.Infrastructure.Migrations
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("Orbit.Domain.Entities.IssuedAstraBlock", b =>
+            modelBuilder.Entity("Orbit.Domain.Entities.IssuedAiBlock", b =>
                 {
                     b.HasOne("Orbit.Domain.Entities.User", null)
                         .WithMany()

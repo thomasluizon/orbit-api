@@ -257,6 +257,13 @@ public record AgentExecuteOperationRequest(
 {
     [JsonIgnore]
     public PendingOperationConversation? PendingOperationConversation { get; init; }
+
+    /// <summary>
+    /// Set by the execute route of a stored pending operation: a confirmation token that confirms no stored operation
+    /// is then a stale approval, and the executor creates no new pending operation for it.
+    /// </summary>
+    [JsonIgnore]
+    public bool RequiresConfirmedOperation { get; init; }
 }
 
 public record AgentOperationResult(

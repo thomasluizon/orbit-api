@@ -23,7 +23,8 @@ public class PendingClarificationStore(OrbitDbContext dbContext) : IPendingClari
         string missingArgumentKey,
         string question,
         string quickActionsJson,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        AgentClientContext? clientContext = null)
     {
         var entity = PendingClarification.Create(
             userId,
@@ -32,7 +33,8 @@ public class PendingClarificationStore(OrbitDbContext dbContext) : IPendingClari
             missingArgumentKey,
             question,
             quickActionsJson,
-            DateTime.UtcNow.AddMinutes(AppConstants.PendingClarificationTtlMinutes));
+            DateTime.UtcNow.AddMinutes(AppConstants.PendingClarificationTtlMinutes),
+            clientContext is null ? null : JsonSerializer.Serialize(clientContext));
 
         dbContext.PendingClarifications.Add(entity);
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -65,7 +67,8 @@ public class PendingClarificationStore(OrbitDbContext dbContext) : IPendingClari
             entity.PartialArgumentsJson,
             entity.MissingArgumentKey,
             ExtractQuickActionValues(entity.QuickActionsJson),
-            entity.ExpiresAtUtc);
+            entity.ExpiresAtUtc,
+            entity.ClientContextJson is null ? null : JsonSerializer.Deserialize<AgentClientContext>(entity.ClientContextJson));
     }
 
     public async Task<bool> MarkResolvedAsync(

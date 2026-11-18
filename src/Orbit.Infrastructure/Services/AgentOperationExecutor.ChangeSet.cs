@@ -40,7 +40,7 @@ public partial class AgentOperationExecutor
     private async Task<(OperationExecutionContext? Member, string? Error)> PrepareChangeSetMemberAsync(
         OperationExecutionContext execution, AccountChangeSet.Member member, CancellationToken ct)
     {
-        if (!IsCurrentMember(execution, member)) return (null, "stale_preview");
+        if (!IsCurrentMember(execution, member)) return (null, StalePreviewReason);
         var operation = catalogService.GetOperation(member.OperationId);
         var capability = operation is null ? null : catalogService.GetCapability(operation.CapabilityId);
         if (operation is not { IsMutation: true, IsAgentExecutable: true } || capability is null
@@ -71,7 +71,7 @@ public partial class AgentOperationExecutor
         var current = await changePreviewer.PreviewAsync(userId, member.OperationId, member.Arguments, ct, clientContext);
         if (current.IsFailure || current.Value?.PreviewFingerprint != member.PreviewFingerprint
             || current.Value.Items is not { Count: > 0 } items)
-            return "stale_preview";
+            return StalePreviewReason;
         var error = items.SelectMany(item => item.ValidationErrors ?? []).FirstOrDefault();
         if (error is not null) return error.ErrorCode;
         if (toolRegistry.GetTool(member.OperationId) is not IArgumentCheckTool check) return null;

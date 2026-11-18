@@ -707,7 +707,8 @@ public sealed partial class PendingOperationChangePreviewer(
             var entityEmoji = existing is not null ? existing.Emoji : AgentArgumentPreview.DraftEmoji(habit);
             fields = fields.Select(field => field with { EntityEmoji = entityEmoji }).ToList();
             items.Add(new PendingOperationItem(itemId, existing?.Id,
-                existing?.Title ?? name, fields, AgentOperationFingerprint.Compute(BulkCreateHabits + parentFingerprint, habit.GetRawText()),
+                existing?.Title ?? name, fields, AgentOperationFingerprint.Compute(BulkCreateHabits + parentFingerprint,
+                    ProactiveProposal.StripMetadata(habit).GetRawText()),
                 RemovesData: false, ValidationErrors: errors.Count > 0 ? errors : null,
                 FieldOptions: parentOptions is null && reuseOptions is null ? null
                     : new[] { parentOptions, reuseOptions }.OfType<PendingOperationFieldOptions>().ToArray(),

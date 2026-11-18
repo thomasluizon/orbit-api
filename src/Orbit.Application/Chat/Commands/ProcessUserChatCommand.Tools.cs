@@ -956,7 +956,8 @@ public partial class ProcessUserChatCommandHandler
             payload.MissingArgumentKey,
             payload.Question,
             quickActionsJson,
-            cancellationToken);
+            cancellationToken,
+            request.ClientContext);
         LogClarificationRequested(logger, call.Name, stashedId, payload.MissingArgumentKey);
         var clarification = new ClarificationRequest(
             payload.Question,

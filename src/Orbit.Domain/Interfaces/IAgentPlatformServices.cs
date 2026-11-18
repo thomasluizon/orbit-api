@@ -107,6 +107,10 @@ public interface IPendingAgentOperationStore
 
 public interface IPendingClarificationStore
 {
+    /// <summary>
+    /// Stashes the partial arguments of a tool call that needs a clarification, with the client context of the chat
+    /// turn that the resolve binds with.
+    /// </summary>
     Task<Guid> CreateAsync(
         Guid userId,
         string toolName,
@@ -114,7 +118,8 @@ public interface IPendingClarificationStore
         string missingArgumentKey,
         string question,
         string quickActionsJson,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        AgentClientContext? clientContext = null);
 
     Task<PendingClarificationData?> GetForResolutionAsync(
         Guid operationId,

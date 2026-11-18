@@ -649,6 +649,7 @@ public class OrbitDbContext : DbContext
             entity.Property(item => item.Question).HasMaxLength(500);
             entity.Property(item => item.PartialArgumentsJson).HasColumnType(JsonbColumnType);
             entity.Property(item => item.QuickActionsJson).HasColumnType(JsonbColumnType);
+            entity.Property(item => item.ClientContextJson).HasColumnType(JsonbColumnType);
             entity.Property(item => item.ResolvedAtUtc).HasField("_resolvedAtUtc");
             entity.HasOne<User>().WithMany().HasForeignKey(item => item.UserId).OnDelete(DeleteBehavior.Cascade);
         });
