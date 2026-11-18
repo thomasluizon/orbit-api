@@ -3,15 +3,20 @@ import { fileURLToPath } from 'node:url'
 
 export const checkName = 'stripe-webhook-version'
 
-/** Stripe.net accepts an event when its version is the library version or ends in the same major release name. */
+/** The segment after the first dot of `<date>.<release>`, which Stripe.net calls the major release. */
 export function releaseName(version) {
-  const dot = version.lastIndexOf('.')
-  return dot < 0 ? null : version.slice(dot + 1)
+  return version.split('.')[1] ?? null
 }
 
+/**
+ * The rule of Stripe.net `EventUtility.IsCompatibleApiVersion(sdkApiVersion, eventApiVersion)`, which
+ * `EventUtility.ParseEvent` applies: the same version, or the same major release unless the library is a preview.
+ * `stripe-webhook-version.cases.json` holds the rows that this test and the C# test both check.
+ */
 export function accepts(libraryVersion, endpointVersion) {
+  if (endpointVersion === libraryVersion) return true
   const major = releaseName(libraryVersion)
-  return endpointVersion === libraryVersion || (major !== null && releaseName(endpointVersion) === major)
+  return major !== null && major !== 'preview' && releaseName(endpointVersion) === major
 }
 
 function stripeCheck(body, url) {
@@ -20,14 +25,28 @@ function stripeCheck(body, url) {
   return check
 }
 
+function describe(error) {
+  const cause = error?.cause ? ` (${error.cause.message ?? error.cause})` : ''
+  return `${error?.message ?? error}${cause}`
+}
+
 export async function readHealth(baseUrl, fetchImpl = fetch) {
   const url = `${baseUrl}/health/stripe`
-  const response = await fetchImpl(url, { signal: AbortSignal.timeout(30_000), redirect: 'error' })
+  let response
+  try {
+    response = await fetchImpl(url, { signal: AbortSignal.timeout(30_000), redirect: 'error' })
+  } catch (error) {
+    throw new Error(`${url}: ${describe(error)}`)
+  }
   if (response.status === 404) {
     await response.body?.cancel()
     return { url, missing: true }
   }
-  return { url, missing: false, body: await response.json() }
+  try {
+    return { url, missing: false, body: await response.json() }
+  } catch (error) {
+    throw new Error(`${url}: HTTP ${response.status} body is not JSON: ${describe(error)}`)
+  }
 }
 
 /**

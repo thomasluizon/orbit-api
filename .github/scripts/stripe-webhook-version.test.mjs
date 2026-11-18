@@ -23,13 +23,47 @@ function server(routes) {
   return { calls, fetchImpl }
 }
 
-test('the version rule matches what Stripe.net 52.4.2 EventUtility.ParseEvent accepts', () => {
-  assert.equal(accepts(library, '2026-08-26.dahlia'), true)
-  assert.equal(accepts(library, '2026-10-28.dahlia'), true)
-  assert.equal(accepts(library, '2026-02-25.clover'), false)
-  assert.equal(accepts(library, '2027-01-27.elm'), false)
-  assert.equal(accepts(library, '2026-08-26'), false)
-  assert.equal(accepts(library, 'account-default'), false)
+test('the version rule is the rule of Stripe.net EventUtility, row for row with the C# table test', () => {
+  const cases = JSON.parse(readFileSync(new URL('./stripe-webhook-version.cases.json', import.meta.url), 'utf8'))
+  const [date, release] = library.split('.')
+  const expand = value => value.replaceAll('{library}', library).replaceAll('{date}', date).replaceAll('{release}', release)
+  assert.ok(cases.length > 0)
+  for (const row of cases) {
+    const libraryVersion = expand(row.library)
+    const endpointVersion = expand(row.endpoint)
+    assert.equal(accepts(libraryVersion, endpointVersion), row.accepted, `${libraryVersion} with ${endpointVersion}`)
+  }
+})
+
+test('a refused connection names the URL and the cause', async () => {
+  const fetchImpl = async () => {
+    throw new TypeError('fetch failed', { cause: new Error('connect ECONNREFUSED 127.0.0.1:443') })
+  }
+  await assert.rejects(verify(staging, production, sha, fetchImpl), error => {
+    assert.equal(error.message, `${staging}/health/stripe: fetch failed (connect ECONNREFUSED 127.0.0.1:443)`)
+    return true
+  })
+})
+
+test('a refused connection on the endpoint side names the endpoint URL', async () => {
+  const fetchImpl = async url => {
+    if (url === `${production}/health/stripe`) throw new DOMException('The operation was aborted due to timeout', 'TimeoutError')
+    return Response.json(health({ libraryApiVersion: library, endpointApiVersions: [library] }))
+  }
+  await assert.rejects(verify(staging, production, sha, fetchImpl), error => {
+    assert.equal(error.message, `${production}/health/stripe: The operation was aborted due to timeout`)
+    return true
+  })
+})
+
+test('a body that is not JSON names the URL and the HTTP status', async () => {
+  const fetchImpl = async url => url === `${production}/health/stripe`
+    ? new Response('<!DOCTYPE html><title>Bad gateway</title>', { status: 502, headers: { 'content-type': 'text/html' } })
+    : Response.json(health({ libraryApiVersion: library, endpointApiVersions: [library] }))
+  await assert.rejects(verify(staging, production, sha, fetchImpl), error => {
+    assert.match(error.message, new RegExp(`^${production.replaceAll('.', '\\.')}/health/stripe: HTTP 502 body is not JSON: `))
+    return true
+  })
 })
 
 test('production before the deploy refuses the clover endpoint that broke staging', async () => {

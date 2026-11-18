@@ -18,38 +18,57 @@ public sealed partial class StripeWebhookVersionHealthCheck(
     public const string WebhookPath = "/api/subscriptions/webhook";
 
     /// <summary>
-    /// Reported for an endpoint with no pinned version. Stripe then sends events at the account default version,
-    /// which the API cannot read, so the check never accepts it.
+    /// Reported for an endpoint with no pinned version. Stripe then sends events at the account default version. The
+    /// check cannot read that default through the API, and a Dashboard upgrade can change it outside a release, so the
+    /// check never accepts an endpoint without a pinned version.
     /// </summary>
     public const string AccountDefaultVersion = "account-default";
 
-    /// <summary>How long one Stripe read is reused, so the anonymous route cannot multiply Stripe API calls.</summary>
+    /// <summary>
+    /// How long one completed Stripe read is reused. All callers share one read, and a caller's cancellation does not
+    /// cancel it, so the anonymous route makes at most one Stripe read per lifetime.
+    /// </summary>
     internal static readonly TimeSpan ResultLifetime = TimeSpan.FromMinutes(1);
 
-    private readonly SemaphoreSlim _gate = new(1, 1);
-    private HealthCheckResult? _result;
-    private long _resultTimestamp;
+    private readonly Lock _readLock = new();
+    private readonly CancellationTokenSource _disposal = new();
+    private Task<HealthCheckResult>? _read;
+    private long _readCompletedTimestamp;
 
-    public async Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default)
+    /// <summary>
+    /// Waits on the shared read. <paramref name="cancellationToken"/> stops only this wait; the read continues and its
+    /// result serves the next caller. The Stripe client timeout limits the read, and <see cref="Dispose"/> cancels it.
+    /// </summary>
+    public Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default)
     {
-        await _gate.WaitAsync(cancellationToken);
+        Task<HealthCheckResult> read;
+        lock (_readLock)
+        {
+            if (_read is null || (_read.IsCompleted && timeProvider.GetElapsedTime(_readCompletedTimestamp) >= ResultLifetime))
+                _read = ReadAndStampAsync(_disposal.Token);
+            read = _read;
+        }
+
+        return read.WaitAsync(cancellationToken);
+    }
+
+    public void Dispose()
+    {
+        _disposal.Cancel();
+        _disposal.Dispose();
+    }
+
+    private async Task<HealthCheckResult> ReadAndStampAsync(CancellationToken cancellationToken)
+    {
         try
         {
-            if (_result is { } cached && timeProvider.GetElapsedTime(_resultTimestamp) < ResultLifetime)
-                return cached;
-
-            var result = await ReadEndpointsAsync(cancellationToken);
-            _result = result;
-            _resultTimestamp = timeProvider.GetTimestamp();
-            return result;
+            return await ReadEndpointsAsync(cancellationToken);
         }
         finally
         {
-            _gate.Release();
+            _readCompletedTimestamp = timeProvider.GetTimestamp();
         }
     }
-
-    public void Dispose() => _gate.Dispose();
 
     private async Task<HealthCheckResult> ReadEndpointsAsync(CancellationToken cancellationToken)
     {

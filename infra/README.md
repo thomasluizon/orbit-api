@@ -813,11 +813,30 @@ Release API reads `/health/stripe` three times:
 3. After the staging deploy, it checks staging against its own endpoints. The staging
    deployment record, which production needs, waits for this check.
 
-Before you release a `Stripe.net` update that changes the major release, create a
-new endpoint at the new version in each Stripe mode. Use the same URL and the same
-five events. Put the new signing secret in `/orbit/<environment>/api/Stripe__WebhookSecret`
-and in the matching Render environment group. Keep the old endpoint enabled until
-the new build delivers, then disable it.
+Before you release a `Stripe.net` update that changes the major release, change the
+endpoint version in each environment. Production uses Stripe live mode, the group
+`orbit-production-api` and the service `orbit-api`. Staging uses Stripe test mode,
+the group `orbit-staging-api` and the service `orbit-api-staging`. Do these steps in
+this order:
+
+1. In the Stripe Dashboard, in the mode of the environment, open **Developers >
+   Webhooks** and add an endpoint at the new version. Use the same URL and the
+   same five events. Keep the old endpoint enabled.
+2. Write the signing secret of the new endpoint to the SSM SecureString
+   `/orbit/<environment>/api/Stripe__WebhookSecret` in `us-east-2`.
+3. Save and review a plan targeted only to `render_env_group.production_api` or
+   `render_env_group.staging_api`. Its only change must be the masked
+   `Stripe__WebhookSecret`. Apply only that reviewed plan.
+4. In **Render > the service > Environment**, confirm that `Stripe__WebhookSecret`
+   comes from the linked group and that no service override exists.
+5. Run **GitHub > orbit-api > Actions > Release API** from `main` for the
+   environment. The API reads `Stripe__WebhookSecret` only when the process starts,
+   so the deploy of this run loads the new secret. Do this step directly after
+   step 3: until the new process runs, the signature check can refuse events.
+   Stripe retries a refused live event for up to three days.
+6. Confirm that the check after the deploy passes and that the next event of the
+   new endpoint gets a 2xx in **Developers > Webhooks**. Then disable the old
+   endpoint.
 
 Configure GitHub Actions environment secrets `SMOKE_TEST_EMAIL`,
 `SMOKE_TEST_CODE` and `SMOKE_BOT_BYPASS` in both `staging` and `production`. On staging, provision that

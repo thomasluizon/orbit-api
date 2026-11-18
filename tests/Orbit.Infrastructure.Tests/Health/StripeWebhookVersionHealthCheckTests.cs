@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Routing;
@@ -149,6 +150,123 @@ public class StripeWebhookVersionHealthCheckTests
     }
 
     [Fact]
+    public async Task AbortedCallers_ShareOneStripeRead_AndTheNextCallerGetsItsResult()
+    {
+        var stripeReplies = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _endpoints.ListAutoPagingAsync(Arg.Any<WebhookEndpointListOptions>(), Arg.Any<RequestOptions>(), Arg.Any<CancellationToken>())
+            .Returns(call => ListAfter(stripeReplies.Task, call.ArgAt<CancellationToken>(2), Endpoint(StripeConfiguration.ApiVersion)));
+        using var check = CreateCheck();
+
+        for (var attempt = 0; attempt < 10; attempt++)
+        {
+            using var aborted = new CancellationTokenSource();
+            var call = check.CheckHealthAsync(new HealthCheckContext(), aborted.Token);
+            await aborted.CancelAsync();
+            await call.Invoking(task => task).Should().ThrowAsync<OperationCanceledException>();
+        }
+
+        stripeReplies.SetResult();
+        (await RunAsync(check)).Status.Should().Be(HealthStatus.Healthy);
+        (await RunAsync(check)).Status.Should().Be(HealthStatus.Healthy);
+        _endpoints.Received(1).ListAutoPagingAsync(Arg.Any<WebhookEndpointListOptions>(), Arg.Any<RequestOptions>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Dispose_CancelsTheSharedRead()
+    {
+        var stripeReplies = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _endpoints.ListAutoPagingAsync(Arg.Any<WebhookEndpointListOptions>(), Arg.Any<RequestOptions>(), Arg.Any<CancellationToken>())
+            .Returns(call => ListAfter(stripeReplies.Task, call.ArgAt<CancellationToken>(2)));
+        var check = CreateCheck();
+
+        var call = RunAsync(check);
+        check.Dispose();
+
+        await call.Invoking(task => task).Should().ThrowAsync<OperationCanceledException>();
+    }
+
+    [Fact]
+    public async Task UnexpectedReadFailure_IsReusedForOneMinute_SoItCannotMultiplyStripeCalls()
+    {
+        _endpoints.ListAutoPagingAsync(Arg.Any<WebhookEndpointListOptions>(), Arg.Any<RequestOptions>(), Arg.Any<CancellationToken>())
+            .Throws(new InvalidOperationException("unexpected"));
+        using var check = CreateCheck();
+
+        await check.Invoking(RunAsync).Should().ThrowAsync<InvalidOperationException>();
+        await check.Invoking(RunAsync).Should().ThrowAsync<InvalidOperationException>();
+        _endpoints.Received(1).ListAutoPagingAsync(Arg.Any<WebhookEndpointListOptions>(), Arg.Any<RequestOptions>(), Arg.Any<CancellationToken>());
+
+        _clock.Advance(StripeWebhookVersionHealthCheck.ResultLifetime);
+        await check.Invoking(RunAsync).Should().ThrowAsync<InvalidOperationException>();
+        _endpoints.Received(2).ListAutoPagingAsync(Arg.Any<WebhookEndpointListOptions>(), Arg.Any<RequestOptions>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// The rows of <c>.github/scripts/stripe-webhook-version.cases.json</c>, which the release script test also reads,
+    /// with <c>{library}</c>, <c>{date}</c> and <c>{release}</c> taken from the pinned <c>Stripe.net</c>.
+    /// </summary>
+    private static IEnumerable<(string Library, string Endpoint, bool Accepted)> ReadVersionCases()
+    {
+        var library = StripeConfiguration.ApiVersion;
+        var parts = library.Split('.');
+        string Expand(string value) => value
+            .Replace("{library}", library, StringComparison.Ordinal)
+            .Replace("{date}", parts[0], StringComparison.Ordinal)
+            .Replace("{release}", parts[1], StringComparison.Ordinal);
+        var path = Path.Combine(RepositoryRoot(), ".github", "scripts", "stripe-webhook-version.cases.json");
+        return JsonNode.Parse(System.IO.File.ReadAllText(path))!.AsArray().Select(row => (
+            Expand(row!["library"]!.GetValue<string>()),
+            Expand(row["endpoint"]!.GetValue<string>()),
+            row["accepted"]!.GetValue<bool>()));
+    }
+
+    public static TheoryData<string, string, bool> VersionCases()
+    {
+        var data = new TheoryData<string, string, bool>();
+        foreach (var (library, endpoint, accepted) in ReadVersionCases())
+            data.Add(library, endpoint, accepted);
+        return data;
+    }
+
+    public static TheoryData<string, bool> LibraryVersionCases()
+    {
+        var data = new TheoryData<string, bool>();
+        foreach (var (library, endpoint, accepted) in ReadVersionCases().Where(row => row.Library == StripeConfiguration.ApiVersion))
+            data.Add(endpoint, accepted);
+        return data;
+    }
+
+    [Theory]
+    [MemberData(nameof(VersionCases))]
+    public void VersionTable_IsTheRuleOfEventUtility(string library, string endpoint, bool accepted)
+    {
+        EventUtility.IsCompatibleApiVersion(library, endpoint).Should().Be(accepted);
+        if (library != StripeConfiguration.ApiVersion)
+            return;
+
+        var parse = () => EventUtility.ParseEvent(
+            """{"id":"evt_probe","object":"event","api_version":""" + JsonSerializer.Serialize(endpoint)
+                + ""","type":"ping","data":{"object":{}}}""",
+            throwOnApiVersionMismatch: true);
+        if (accepted)
+            parse.Should().NotThrow();
+        else
+            parse.Should().Throw<StripeException>();
+    }
+
+    [Theory]
+    [MemberData(nameof(LibraryVersionCases))]
+    public async Task HealthCheck_FollowsTheVersionTable(string endpoint, bool accepted)
+    {
+        ListEndpoints(Endpoint(endpoint));
+        using var check = CreateCheck();
+
+        var result = await RunAsync(check);
+
+        result.Status.Should().Be(accepted ? HealthStatus.Healthy : HealthStatus.Unhealthy);
+    }
+
+    [Fact]
     public void WebhookPath_IsTheRouteOfTheWebhookAction()
     {
         var controllerRoute = typeof(SubscriptionController).GetCustomAttribute<RouteAttribute>()!.Template;
@@ -156,6 +274,22 @@ public class StripeWebhookVersionHealthCheckTests
             .GetCustomAttribute<HttpPostAttribute>()!.Template;
 
         StripeWebhookVersionHealthCheck.WebhookPath.Should().Be($"/{controllerRoute}/{actionRoute}");
+    }
+
+    private static async IAsyncEnumerable<WebhookEndpoint> ListAfter(
+        Task stripeReplies, CancellationToken cancellationToken, params WebhookEndpoint[] endpoints)
+    {
+        await stripeReplies.WaitAsync(cancellationToken);
+        foreach (var endpoint in endpoints)
+            yield return endpoint;
+    }
+
+    private static string RepositoryRoot()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null && !System.IO.File.Exists(Path.Combine(directory.FullName, "Orbit.slnx")))
+            directory = directory.Parent;
+        return directory?.FullName ?? throw new InvalidOperationException("Repository root is missing.");
     }
 
     private sealed class SteppingClock : TimeProvider
