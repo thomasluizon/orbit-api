@@ -85,10 +85,7 @@ public static class AgentArgumentPreview
             target?.StateFingerprint ?? AgentOperationFingerprint.Compute(operationId, itemId),
             RemovesData: operationId is "create_habit" or "log_habit" or "unlog_habit" or "skip_habit" or "update_habit"
                 ? false : null, EntityEmoji: entityEmoji);
-        var fingerprint = AgentOperationFingerprint.Compute(
-            operationId, JsonSerializer.Serialize<IReadOnlyList<PendingOperationItem>>([item]));
-
-        return new PendingOperationChangePreview(fields, 1, [item], fingerprint);
+        return new PendingOperationChangePreview(fields, 1, [item], PreviewHashView.Compute(operationId, [item]));
     }
 
     internal static PendingOperationChange SkipAction(Guid entityId, string entityName, string? entityEmoji) =>

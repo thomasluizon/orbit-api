@@ -106,6 +106,44 @@ public sealed partial class PreviewGoldenTests : IDisposable
         text.Should().Be((await File.ReadAllTextAsync(GoldenPath())).TrimEnd('\n'));
     }
 
+    [Theory]
+    [InlineData("13-change-set")]
+    [InlineData("03-single-update-reminder")]
+    [InlineData("12-offer-repeat")]
+    public async Task Fingerprint_IsEqualInEnAndPtBrWithTheSameCapabilityFlags(string name)
+    {
+        var (_, operationId, arguments, offers) = Cases().Single(item => item.Name == name);
+
+        var fingerprints = await FingerprintsAsync(operationId, arguments, offers);
+
+        fingerprints.Should().OnlyHaveUniqueItems().And.HaveCount(1);
+    }
+
+    [Fact]
+    public async Task Golden_EachItemBuilderGivesOneFingerprintAcrossLocales()
+    {
+        var split = new List<string>();
+        foreach (var (name, operationId, arguments, offers) in Cases())
+            if ((await FingerprintsAsync(operationId, arguments, offers)).Count != 1)
+                split.Add(name);
+
+        split.Should().BeEmpty();
+    }
+
+    private async Task<IReadOnlyCollection<string?>> FingerprintsAsync(string operationId, string arguments, bool offers)
+    {
+        var fingerprints = new HashSet<string?>();
+        foreach (var locale in Locales)
+        {
+            var result = await _previewer.PreviewAsync(UserId, operationId,
+                JsonDocument.Parse(arguments).RootElement.Clone(), default, Client(locale, offers));
+            result.IsSuccess.Should().BeTrue(result.Error);
+            result.Value!.PreviewFingerprint.Should().NotBeNullOrWhiteSpace();
+            fingerprints.Add(result.Value.PreviewFingerprint);
+        }
+        return fingerprints;
+    }
+
     private async Task<JsonNode> ValuesAsync(string operationId, string arguments, AgentClientContext client)
     {
         var result = await _previewer.PreviewAsync(UserId, operationId, JsonDocument.Parse(arguments).RootElement.Clone(),

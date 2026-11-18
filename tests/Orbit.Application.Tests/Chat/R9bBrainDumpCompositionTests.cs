@@ -79,7 +79,7 @@ public partial class ProcessUserChatCommandHandlerTests
             item.Fields.Single(candidate => candidate.Field == field.Field).ProposedValue!.Value.GetRawText()
                 .Should().Be(field.ProposedValue!.Value.GetRawText());
         }
-        preview.PreviewFingerprint.Should().Be(AgentOperationFingerprint.Compute(bulk.Name, JsonSerializer.Serialize(preview.Items)));
+        preview.PreviewFingerprint.Should().Be(PreviewHashView.Compute(bulk.Name, preview.Items!));
         var withoutEndClear = JsonNode.Parse(bound.GetRawText())!.AsObject();
         withoutEndClear["habits"]![2]!["clear_fields"] = oneTime ? new JsonArray("frequency_unit") : new JsonArray();
         var preserved = (await previewer.PreviewAsync(UserId, bulk.Name, JsonSerializer.SerializeToElement(withoutEndClear))).Value!;
