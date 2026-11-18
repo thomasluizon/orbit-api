@@ -152,8 +152,11 @@ public partial class ProcessUserChatCommandHandlerTests
     /// The second round sends the writes, and the third round ends the turn with text.
     /// </summary>
     private async Task<ShortRequestRun> RunShortRequestAsync(string message, string language, Func<Habit[], AiToolCall[]> writes,
-        AiToolCall[]? firstRound = null, bool parts = true)
+        AiToolCall[]? firstRound = null, bool parts = true, string lookup = """{"search":"Water 710ml","orbit_read_complete":false}""",
+        bool changePlan = false)
     {
+        if (changePlan)
+            EnableChangePlan();
         var user = User.Create("Reader", "reader@example.test").Value;
         user.SetLanguage(language);
         SetupUserAndPayGate(user);
@@ -169,8 +172,7 @@ public partial class ProcessUserChatCommandHandlerTests
         SetupAiResponse(new AiResponse
         {
             ConversationContext = TestConversationContext,
-            ToolCalls = [new(query.Name, "lookup", ParseArguments("""{"search":"Water 710ml","orbit_read_complete":false}""")),
-                .. firstRound ?? []]
+            ToolCalls = [new(query.Name, "lookup", ParseArguments(lookup)), .. firstRound ?? []]
         });
         var toolResults = new List<IReadOnlyList<AiToolCallResult>>();
         _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
