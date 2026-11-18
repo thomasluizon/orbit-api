@@ -91,13 +91,16 @@ public partial class ProcessUserChatCommandHandlerTests
     /// </summary>
     private async Task<ChangeListRun> RunChangeListAsync(ChangeDeclarationShape shape, string language,
         Func<Habit[], AiResponse> first, Func<Habit[], AiResponse[]> continuations, Action<PendingAgentOperationStore, Habit[]>? arrange = null,
-        string[]? partKinds = null, params IAiTool[] tools)
+        string[]? partKinds = null, bool trace = false, params IAiTool[] tools)
     {
         var database = new OrbitDbContext(new DbContextOptionsBuilder<OrbitDbContext>()
             .UseInMemoryDatabase("ChangeList_" + Guid.NewGuid()).Options);
         _changeListDatabases.Add(database);
         _mediator.Send(Arg.Any<CheckChatCommandQuery>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
-        EnableChangePlan(FeatureFlagKeys.AiBlockFirst);
+        if (trace)
+            EnableChangePlan(FeatureFlagKeys.AiBlockFirst, FeatureFlagKeys.AiEvalTrace);
+        else
+            EnableChangePlan(FeatureFlagKeys.AiBlockFirst);
         _changeShape = shape;
         var user = User.Create("Reader", "reader@example.test").Value;
         user.SetLanguage(language);
@@ -123,6 +126,7 @@ public partial class ProcessUserChatCommandHandlerTests
             .Returns(replies[0], replies[1..]);
         var events = new List<ChatStreamEvent>();
         var result = await handler.Handle(new ProcessUserChatCommand(UserId, language == "en" ? OwnerSplitMessageEn : OwnerSplitMessagePt,
+            EvalTraceRequested: trace,
             ClientContext: new(SupportsParts: true, SupportsPendingOperationChanges: true, PartKinds: partKinds ?? ["choice", "question"], Locale: language),
             StreamSink: item =>
             {
@@ -424,5 +428,24 @@ public partial class ProcessUserChatCommandHandlerTests
         var actual = after.Value.PendingOperations.Should().ContainSingle().Subject;
         Fields(actual).Should().BeEquivalentTo(Fields(expected), options => options.WithStrictOrdering());
         actual.Items!.Single().Fields.Should().Contain(field => field.Provenance == "suggested" && field.Removal != null);
+    }
+
+    [Theory]
+    [InlineData(ChangeDeclarationShape.Kinds)]
+    [InlineData(ChangeDeclarationShape.Wrapper)]
+    public async Task ChangeList_TheEvalTraceRecordsEachChangeWithItsKindAndArguments(ChangeDeclarationShape shape)
+    {
+        var run = await RunChangeListAsync(shape, "en",
+            children => ChangeList(shape, null, true, DeleteChange("delete", children[4..]),
+                RenameChange("rename", children[..4].Select(child => (object)child.Id))),
+            _ => [Text("en")], trace: true);
+
+        run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
+        var calls = run.Result.Value.EvalTrace!.ToolCalls;
+        calls.Select(call => (call.Id, call.Name)).Should().Equal(("delete", "bulk_delete_habits"), ("rename", "bulk_update_habits"));
+        calls[0].Arguments.GetProperty("habit_ids").EnumerateArray().Select(id => id.GetString())
+            .Should().Equal(run.Children[4..].Select(child => child.Id.ToString()));
+        calls[1].Arguments.GetProperty("updates").GetProperty("title").GetString().Should().Be(RenameTitle);
+        calls.Should().OnlyContain(call => call.Status == nameof(AgentOperationStatus.PendingConfirmation));
     }
 }
