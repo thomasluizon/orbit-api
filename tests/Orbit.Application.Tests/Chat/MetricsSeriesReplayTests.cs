@@ -31,6 +31,7 @@ public partial class ProcessUserChatCommandHandlerTests
             .IsSuccess.Should().BeTrue();
         _habitRepo.FindOneTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>()).Returns(habit);
+        SetupSelectionHabits(habit);
         var metricsHandler = new GetHabitMetricsQueryHandler(_habitRepo, _userRepo, _userDateService);
         _mediator.Send(Arg.Any<GetHabitMetricsQuery>(), Arg.Any<CancellationToken>())
             .Returns(call => metricsHandler.Handle(call.Arg<GetHabitMetricsQuery>(), call.Arg<CancellationToken>()));

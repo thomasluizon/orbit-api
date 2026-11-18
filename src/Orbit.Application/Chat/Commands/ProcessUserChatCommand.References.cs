@@ -36,10 +36,10 @@ public partial class ProcessUserChatCommandHandler
         switch (type)
         {
             case ReferenceRecordType.Habit:
-                return (await data.HabitRepository.FindAsync(habit => habit.UserId == userId, ct))
+                return (await data.HabitRepository.FindAsync(habit => habit.UserId == userId, null, ct))
                     .Select(habit => new ReferenceRecord(habit.Id, habit.Title)).ToArray();
             case ReferenceRecordType.Goal:
-                return (await data.GoalRepository.FindAsync(goal => goal.UserId == userId, ct))
+                return (await data.GoalRepository.FindAsync(goal => goal.UserId == userId, null, ct))
                     .Select(goal => new ReferenceRecord(goal.Id, goal.Title)).ToArray();
             case ReferenceRecordType.Tag:
                 return (await data.TagRepository.FindAsync(tag => tag.UserId == userId, ct))
@@ -54,9 +54,8 @@ public partial class ProcessUserChatCommandHandler
                 return await references.ApiKeys.ProjectAsync(key => key.UserId == userId,
                     query => query.Select(key => new ReferenceRecord(key.Id, key.Name)), ct);
             case ReferenceRecordType.Skip when references is not null:
-                return (await references.Skips.ProjectAsync(skip => skip.UserId == userId && !skip.IsUndone,
-                        query => query.Select(skip => new { skip.Id, skip.PreviousDueDate }), ct))
-                    .Select(skip => new ReferenceRecord(skip.Id, $"skip of {skip.PreviousDueDate:yyyy-MM-dd}")).ToArray();
+                return await references.Skips.ProjectAsync(skip => skip.UserId == userId && !skip.IsUndone,
+                    query => query.Select(skip => new ReferenceRecord(skip.Id, "skip")), ct);
             case ReferenceRecordType.PendingOperation:
                 return (await execution.PendingOperationStore.GetAwaitingAsync(userId, ct))
                     .Select(pending => new ReferenceRecord(pending.PendingOperationId, pending.OperationId)).ToArray();

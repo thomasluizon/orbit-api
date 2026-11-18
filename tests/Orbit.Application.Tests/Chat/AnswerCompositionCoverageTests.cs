@@ -42,7 +42,7 @@ public partial class ProcessUserChatCommandHandlerTests
         var handler = CreateHandler(tool);
         UseProductionReadExecutor(tool);
         SetupAiResponse(ToolResponse(toolName, "answer", JsonSerializer.Serialize(new
-        { habit_id = Guid.NewGuid(), date_from = Today.AddDays(-6).ToString("yyyy-MM-dd"), date_to = Today.ToString("yyyy-MM-dd") })));
+        { habit_id = OwnedHabitId(), date_from = Today.AddDays(-6).ToString("yyyy-MM-dd"), date_to = Today.ToString("yyyy-MM-dd") })));
         var question = $"Can you show my {subject} again using the same scope?";
         ContinueWithReadDirective("Duplicated prose.\n[[orbit:followups]]\n" + question);
         var client = new AgentClientContext(SupportsParts: true, PartKinds: [kind],

@@ -1,5 +1,10 @@
+using System.Linq.Expressions;
 using System.Text.Json;
 using FluentAssertions;
+using NSubstitute;
+using Orbit.Application.Chat.References;
+using Orbit.Domain.Common;
+using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 
 namespace Orbit.Application.Tests.Commands.Chat;
@@ -27,4 +32,14 @@ public partial class ProcessUserChatCommandHandlerTests
             .Should().Equal(run.Children[0].Id.ToString(), run.Children[1].Id.ToString());
         run.Result.Value.PendingOperations.Should().NotBeNullOrEmpty();
     }
+
+    /// <summary>
+    /// The person owns these records of a type that the turn context does not read, so a reference to one resolves at the
+    /// chat boundary. The repository answers the projection that the handler reads.
+    /// </summary>
+    private static void OwnRecords<T>(IGenericRepository<T> repository, Func<T, ReferenceRecord> record, params T[] records) where T : Entity =>
+        repository.ProjectAsync(Arg.Any<Expression<Func<T, bool>>>(), Arg.Any<Func<IQueryable<T>, IQueryable<ReferenceRecord>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call => (IReadOnlyList<ReferenceRecord>)records.Where(call.ArgAt<Expression<Func<T, bool>>>(0).Compile())
+                .Select(record).ToArray());
 }

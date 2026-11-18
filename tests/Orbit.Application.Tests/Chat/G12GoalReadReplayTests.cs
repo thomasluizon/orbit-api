@@ -28,7 +28,7 @@ public partial class ProcessUserChatCommandHandlerTests
     [InlineData("pt-BR", "write")]
     public async Task G12_GoalReadOwnershipDenialOffersOneReadOnlyCorrection(string language, string recovery)
     {
-        SetupExistingParents(language);
+        var parents = SetupExistingParents(language);
         EnableComposition();
         var goal = Goal.Create(UserId, language == "en" ? "Consistent hydration" : "Hidratação constante", 10, "sessions").Value;
         _goalRepo.FindAsync(Arg.Any<Expression<Func<Goal, bool>>>(),
@@ -36,6 +36,7 @@ public partial class ProcessUserChatCommandHandlerTests
         var goals = new QueryGoalsTool(_goalRepo, _userDateService, _goalProgressReadSyncer);
         var metrics = new GetHabitMetricsTool(_mediator);
         var habit = CreateHabit("Water");
+        SetupSelectionHabits([.. parents, habit]);
         _mediator.Send(Arg.Any<GetHabitMetricsQuery>(), Arg.Any<CancellationToken>()).Returns(Result.Success(
             new HabitMetrics(1, 1, 1, 1, 1, Today, habit.Id, habit.Title)));
         var write = new CreateHabitTool(_userDateService, _mediator);
