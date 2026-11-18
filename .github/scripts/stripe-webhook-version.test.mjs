@@ -61,7 +61,9 @@ test('a body that is not JSON names the URL and the HTTP status', async () => {
     ? new Response('<!DOCTYPE html><title>Bad gateway</title>', { status: 502, headers: { 'content-type': 'text/html' } })
     : Response.json(health({ libraryApiVersion: library, endpointApiVersions: [library] }))
   await assert.rejects(verify(staging, production, sha, fetchImpl), error => {
-    assert.match(error.message, new RegExp(`^${production.replaceAll('.', '\\.')}/health/stripe: HTTP 502 body is not JSON: `))
+    const prefix = `${production}/health/stripe: HTTP 502 body is not JSON: `
+    assert.equal(error.message.slice(0, prefix.length), prefix)
+    assert.ok(error.message.length > prefix.length, error.message)
     return true
   })
 })
