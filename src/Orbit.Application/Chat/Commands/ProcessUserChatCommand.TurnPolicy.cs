@@ -245,9 +245,8 @@ public partial class ProcessUserChatCommandHandler
         public override MessageIntent ReadIntent(ProcessUserChatCommand request, ChatContext context) => MessageIntent.None;
 
         public override void SeedProposedNames(
-            ProcessUserChatCommandHandler handler, ProcessUserChatCommand request, ToolExecutionAccumulator results)
-        {
-        }
+            ProcessUserChatCommandHandler handler, ProcessUserChatCommand request, ToolExecutionAccumulator results) =>
+            handler.SeedPendingHabitNames(request, results);
 
         public override Task<Result<ChatResponse>?> RecoverExplicitHeadingsAsync(
             ProcessUserChatCommandHandler handler, ProcessUserChatCommand request, ChatContext context,

@@ -41,20 +41,38 @@ public partial class ProcessUserChatCommandHandler
         var asksForReplacement = Regex.IsMatch(normalizedMessage,
             @"\b(nova|new|outra|another)\s+(previa|preview)\b|\b(prepare|preparar|make)\s+(?:(?:um|uma|a)\s+)?(?:nova|new|outra|another)(?: one)?$|\b(again|de novo|reprepare)\b",
             RegexOptions.None, TimeSpan.FromSeconds(1));
+        var replaced = new HashSet<PendingHabitCreation>();
         foreach (var name in proposals)
         {
             var named = HabitNameMatcher.Matches(request.Message, name.Title);
-            if (asksForReplacement && (named || proposals.Count == 1))
+            if (!asksForReplacement || !named && proposals.Count != 1) continue;
+            if (execution.PendingOperationStore.FindHabitCreationReplacement(request.UserId, name.Title, name.ParentHabitId)
+                is { Count: > 0 } replacedIds)
             {
-                if (execution.PendingOperationStore.FindHabitCreationReplacement(request.UserId, name.Title, name.ParentHabitId)
-                    is { Count: > 0 } replaced)
-                {
-                    ReplaceWithTheTurn(request.UserId, replaced, results);
-                    continue;
-                }
-                results.BlockedReplacementNames.Add(name.Title);
-                results.PendingDuplicateNames.Add(name.Title);
+                ReplaceWithTheTurn(request.UserId, replacedIds, results);
+                replaced.Add(name);
+                continue;
             }
+            results.BlockedReplacementNames.Add(name.Title);
+            results.PendingDuplicateNames.Add(name.Title);
+        }
+        SeedPendingHabitNames(proposals.Where(name => !replaced.Contains(name)), results);
+    }
+
+    /// <summary>
+    /// Seeds the habit names of the creation previews that wait from earlier turns, so a create that repeats one of them
+    /// holds no second preview. It reads stored previews, not the words of the person.
+    /// </summary>
+    private void SeedPendingHabitNames(ProcessUserChatCommand request, ToolExecutionAccumulator results)
+    {
+        if (request.History is not { Count: > 0 }) return;
+        SeedPendingHabitNames(execution.PendingOperationStore.GetPendingHabitCreations(request.UserId), results);
+    }
+
+    private static void SeedPendingHabitNames(IEnumerable<PendingHabitCreation> proposals, ToolExecutionAccumulator results)
+    {
+        foreach (var name in proposals)
+        {
             var key = (name.ParentHabitId, HabitNameMatcher.TitleKey(name.Title));
             results.ProposedHabitNames.Add(key);
             results.PendingHabitNames[key] = name.Title;
