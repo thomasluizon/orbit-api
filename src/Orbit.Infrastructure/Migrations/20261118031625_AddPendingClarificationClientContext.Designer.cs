@@ -1557,7 +1557,7 @@ namespace Orbit.Infrastructure.Migrations
                     b.ToTable("HabitSkipUndos");
                 });
 
-            modelBuilder.Entity("Orbit.Domain.Entities.IssuedAiBlock", b =>
+            modelBuilder.Entity("Orbit.Domain.Entities.IssuedAstraBlock", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -1605,7 +1605,7 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.HasIndex("UserId", "CreatedAtUtc");
 
-                    b.ToTable("IssuedAstraBlocks", (string)null);
+                    b.ToTable("IssuedAstraBlocks");
                 });
 
             modelBuilder.Entity("Orbit.Domain.Entities.MarketingContact", b =>
@@ -2854,9 +2854,8 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<bool>("HasSeenImportPrompt")
                         .HasColumnType("boolean");
 
-                    b.Property<bool>("HasTriedAi")
-                        .HasColumnType("boolean")
-                        .HasColumnName("HasTriedAstra");
+                    b.Property<bool>("HasTriedAstra")
+                        .HasColumnType("boolean");
 
                     b.Property<bool>("IsAdmin")
                         .HasColumnType("boolean");
@@ -2936,10 +2935,9 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<DateOnly?>("PreGapLastActiveDate")
                         .HasColumnType("date");
 
-                    b.Property<bool>("ProactiveAiEnabled")
+                    b.Property<bool>("ProactiveAstraEnabled")
                         .HasColumnType("boolean")
-                        .HasDefaultValue(true)
-                        .HasColumnName("ProactiveAstraEnabled");
+                        .HasDefaultValue(true);
 
                     b.Property<bool>("PublicProfileShowAchievements")
                         .HasColumnType("boolean");
@@ -3506,7 +3504,7 @@ namespace Orbit.Infrastructure.Migrations
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("Orbit.Domain.Entities.IssuedAiBlock", b =>
+            modelBuilder.Entity("Orbit.Domain.Entities.IssuedAstraBlock", b =>
                 {
                     b.HasOne("Orbit.Domain.Entities.User", null)
                         .WithMany()
