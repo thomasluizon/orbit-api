@@ -41,6 +41,18 @@ public partial class ProcessUserChatCommandHandler
         _referenceTurn?.Book.Seed(ReferenceRecordType.PendingOperation,
             awaiting.Select(pending => new ReferenceRecord(pending.PendingOperationId, pending.OperationId)));
 
+    /// <summary>
+    /// Tells the book of the turn that a tool round wrote a record: a write that ran, or a write that a preview holds. A
+    /// later miss then reads the types that the book read before the write.
+    /// </summary>
+    private void NoteReferenceWrites(IEnumerable<ToolCallOutcome> outcomes)
+    {
+        if (_referenceTurn is { } turn && outcomes.Any(outcome => outcome.PendingOperation is not null
+            || outcome.OperationResult is { Status: AgentOperationStatus.Succeeded } operation
+            && ai.ToolRegistry.GetTool(operation.OperationId) is { IsReadOnly: false }))
+            turn.Book.NoteWrite();
+    }
+
     private async Task<IReadOnlyList<ReferenceRecord>> LoadReferenceRecordsAsync(Guid userId, ReferenceRecordType type, CancellationToken ct)
     {
         switch (type)

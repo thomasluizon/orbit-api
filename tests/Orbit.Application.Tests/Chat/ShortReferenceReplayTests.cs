@@ -410,6 +410,68 @@ public partial class ProcessUserChatCommandHandlerTests
         JsonSerializer.Serialize(Shape(on.Response)).Should().Be(JsonSerializer.Serialize(Shape(off.Response)));
     }
 
+    /// <summary>
+    /// The book read the skips of the person before the turn made a skip. A later call of the same turn names that skip
+    /// by its full id or by its reference. The write makes the book read the skips again, so the model text shows the
+    /// reference of the new skip and the undo reaches the executor with its full id.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ShortReference_ARecordThatTheTurnMadeResolvesInALaterCallOfTheTurn(bool byReference)
+    {
+        SetupUserAndPayGate();
+        _shortReferences = true;
+        var water = CreateHabit("Water");
+        SetupSelectionHabits(water);
+        _promptBuilder.BuildAccountContext(Arg.Any<PromptBuildRequest>())
+            .Returns($"- \"Water\" | {water.Id}\n- calendar event | {Guid.NewGuid()}");
+        var skips = new List<HabitSkipUndo>();
+        _skipRepo.ProjectAsync(Arg.Any<Expression<Func<HabitSkipUndo, bool>>>(),
+                Arg.Any<Func<IQueryable<HabitSkipUndo>, IQueryable<ReferenceRecord>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => (IReadOnlyList<ReferenceRecord>)skips.Where(call.ArgAt<Expression<Func<HabitSkipUndo, bool>>>(0).Compile())
+                .Select(skip => new ReferenceRecord(skip.Id, "skip")).ToArray());
+        var skipId = Guid.NewGuid();
+        var skip = WriteTool("skip_habit", () =>
+        {
+            skips.Add(HabitSkipUndo.Create(skipId, water).Value);
+            return new ToolResult(true, EntityId: water.Id.ToString(), EntityName: water.Title, Payload: new { skip_id = skipId });
+        });
+        var undo = WriteTool("undo_skip_habit", () => new ToolResult(true, EntityId: water.Id.ToString()));
+        var handler = CreateHandler(skip, undo);
+        SetupAiResponse(ToolResponse("skip_habit", "skip", JsonSerializer.Serialize(new { habit_id = Reference(water.Id) })));
+        var results = new List<IReadOnlyList<AiToolCallResult>>();
+        _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
+                Arg.Do<IReadOnlyList<AiToolCallResult>>(round => results.Add([.. round])), Arg.Any<Func<AiStreamEvent, Task>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(
+                Result.Success(ToolResponse("undo_skip_habit", "undo", JsonSerializer.Serialize(new
+                {
+                    habit_id = Reference(water.Id),
+                    skip_id = byReference ? Reference(skipId) : skipId.ToString()
+                }))),
+                Result.Success(new AiResponse { TextMessage = "Done." }));
+
+        var result = await handler.Handle(new(UserId, "Skip Water, then undo the skip"), default);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        Dispatched("undo_skip_habit").Should().ContainSingle().Which.GetProperty("skip_id").GetGuid().Should().Be(skipId);
+        results.Should().HaveCount(2);
+        ModelText(results[0]).Should().Contain($"\"{Reference(skipId)}\"").And.NotContain(skipId.ToString());
+        results[1].Should().ContainSingle(item => item.Id == "undo").Which.Success.Should().BeTrue();
+    }
+
+    private static IAiTool WriteTool(string name, Func<ToolResult> execute)
+    {
+        var tool = Substitute.For<IAiTool>();
+        tool.Name.Returns(name);
+        tool.Description.Returns(name);
+        tool.IsReadOnly.Returns(false);
+        tool.GetParameterSchema().Returns(new { type = "object" });
+        tool.ExecuteAsync(Arg.Any<JsonElement>(), UserId, Arg.Any<CancellationToken>()).Returns(_ => execute());
+        return tool;
+    }
+
     /// <summary>The rename that the model sent in run 4 of #2129, with the second id cut short.</summary>
     private static AiToolCall Run4CutRename(Habit[] children) => new("bulk_update_habits", "rename", JsonSerializer.SerializeToElement(new
     {

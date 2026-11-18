@@ -197,6 +197,7 @@ public partial class ProcessUserChatCommandHandler
             RejectedCallCorrection rejected => await ExecuteCorrectionsAsync(orderedCalls, rejected, request, executionResults, cancellationToken),
             _ => await ExecuteToolCallsAsync(orderedCalls, request, executionResults, language, cancellationToken)
         };
+        NoteReferenceWrites(outcomesByCallId.Values);
         if (correction is null)
             ReplaceResentDeniedWrites(orderedCalls, outcomesByCallId, executionResults);
         await CompletePlanCallsAsync(outcomesByCallId, request, executionResults);

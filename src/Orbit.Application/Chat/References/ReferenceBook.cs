@@ -20,11 +20,12 @@ public sealed partial class ReferenceBook(Func<ReferenceRecordType, Cancellation
     ];
 
     private readonly Dictionary<ReferenceRecordType, IReadOnlyList<ReferenceRecord>> _records = [];
-    private readonly HashSet<ReferenceRecordType> _reloaded = [];
+    private readonly Dictionary<ReferenceRecordType, int> _readAt = [];
     private readonly HashSet<ReferenceRecordType> _partial = [];
     private readonly HashSet<Guid> _unlisted = [];
     private readonly SemaphoreSlim _gate = new(1, 1);
     private Dictionary<Guid, int> _lengths = [];
+    private int _writes;
 
     /// <summary>
     /// Gives the book the records of one type that the turn already read. A part of the list, such as the active goals,
@@ -36,6 +37,7 @@ public sealed partial class ReferenceBook(Func<ReferenceRecordType, Cancellation
         try
         {
             _records[type] = records.ToArray();
+            _readAt.Remove(type);
             if (complete)
                 _partial.Remove(type);
             else
@@ -46,8 +48,20 @@ public sealed partial class ReferenceBook(Func<ReferenceRecordType, Cancellation
     }
 
     /// <summary>
-    /// Resolves a reference among the person's records of one type. A miss reads the type once more in the turn, so a
-    /// record that the turn made after the first read resolves too.
+    /// Tells the book that the turn wrote a record. A later miss reads each type again that the book read before the
+    /// write, so a record that the write made resolves and shows its reference.
+    /// </summary>
+    public void NoteWrite()
+    {
+        _gate.Wait();
+        try { _writes++; }
+        finally { _gate.Release(); }
+    }
+
+    /// <summary>
+    /// Resolves a reference among the person's records of one type. A miss reads the type again when the book holds a
+    /// seed of the type or read it before the last write of the turn. A seeded type reads once, and each write allows one
+    /// more read.
     /// </summary>
     public async Task<ReferenceResolution> ResolveAsync(ReferenceRecordType type, string text, CancellationToken ct)
     {
@@ -68,10 +82,10 @@ public sealed partial class ReferenceBook(Func<ReferenceRecordType, Cancellation
         {
             if (ids.Any(IsUnclassified))
             {
-                foreach (var type in BookTypes.Where(type => !_records.ContainsKey(type) || _partial.Contains(type)))
+                foreach (var type in BookTypes.Where(type => !_records.ContainsKey(type) || _partial.Contains(type) || ReadBeforeLastWrite(type)))
                 {
                     _records[type] = Merge(_records.GetValueOrDefault(type), await load(type, ct));
-                    _reloaded.Add(type);
+                    _readAt[type] = _writes;
                     _partial.Remove(type);
                 }
                 RebuildLengths();
@@ -80,6 +94,7 @@ public sealed partial class ReferenceBook(Func<ReferenceRecordType, Cancellation
             {
                 _records[ReferenceRecordType.PendingOperation] = Merge(_records[ReferenceRecordType.PendingOperation],
                     await load(ReferenceRecordType.PendingOperation, ct));
+                _readAt[ReferenceRecordType.PendingOperation] = _writes;
                 RebuildLengths();
                 _unlisted.UnionWith(ids.Where(IsUnclassified));
             }
@@ -92,16 +107,20 @@ public sealed partial class ReferenceBook(Func<ReferenceRecordType, Cancellation
 
     private bool IsUnclassified(Guid id) => !_lengths.ContainsKey(id) && !_unlisted.Contains(id);
 
+    private bool ReadBeforeLastWrite(ReferenceRecordType type) => _readAt.TryGetValue(type, out var readAt) && readAt < _writes;
+
+    private bool CanReadAgain(ReferenceRecordType type) => !_readAt.TryGetValue(type, out var readAt) || readAt < _writes;
+
     private async Task<IReadOnlyList<ReferenceRecord>> RecordsAsync(ReferenceRecordType type, bool reload, CancellationToken ct)
     {
         await _gate.WaitAsync(ct);
         try
         {
-            if (_records.TryGetValue(type, out var loaded) && (!reload || !_reloaded.Add(type)))
+            if (_records.TryGetValue(type, out var loaded) && (!reload || !CanReadAgain(type)))
                 return loaded;
             var records = Merge(loaded, await load(type, ct));
             _records[type] = records;
-            _reloaded.Add(type);
+            _readAt[type] = _writes;
             _partial.Remove(type);
             RebuildLengths();
             return records;
