@@ -42,8 +42,8 @@ public partial class HabitSuggestionTests
         result.IsSuccess.Should().BeTrue(result.Error);
         result.Value.Drafts.Should().BeEquivalentTo(drafts, comparison => comparison.WithStrictOrdering());
         result.Value.Drafts[0].ExistingHabitId.Should().Be(existing.Id);
-        var executor = Substitute.For<Orbit.Domain.Interfaces.IAgentOperationExecutor>();
-        await new PreviewHabitSuggestionCommandHandler(service, executor).Handle(new(_userId, result.Value.Drafts[0]), default);
+        var executor = HeldPreviewExecutor.Create();
+        await new PreviewHabitSuggestionCommandHandler(service, executor, SameTitleDetailWriters.NoHabits()).Handle(new(_userId, result.Value.Drafts[0]), default);
         await executor.Received(1).ExecuteAsync(Arg.Is<AgentExecuteOperationRequest>(request =>
             request.OperationId == "update_habit" && request.PreviewOnly
             && request.Arguments.GetProperty("habit_id").GetGuid() == existing.Id), Arg.Any<CancellationToken>());

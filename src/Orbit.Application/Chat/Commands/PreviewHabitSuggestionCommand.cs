@@ -16,8 +16,8 @@ public sealed record PreviewHabitSuggestionCommand(Guid UserId, HabitSuggestionD
     AgentAuthMethod AuthMethod = AgentAuthMethod.Jwt, IReadOnlyList<string>? GrantedScopes = null,
     bool IsReadOnlyCredential = false) : IRequest<Result<AgentExecuteOperationResponse>>;
 
-public sealed class PreviewHabitSuggestionCommandHandler(HabitSuggestionService suggestions, IAgentOperationExecutor executor)
-    : IRequestHandler<PreviewHabitSuggestionCommand, Result<AgentExecuteOperationResponse>>
+public sealed class PreviewHabitSuggestionCommandHandler(HabitSuggestionService suggestions, IAgentOperationExecutor executor,
+    SameTitleDetailWriter sameTitleDetail) : IRequestHandler<PreviewHabitSuggestionCommand, Result<AgentExecuteOperationResponse>>
 {
     public async Task<Result<AgentExecuteOperationResponse>> Handle(PreviewHabitSuggestionCommand request, CancellationToken ct)
     {
@@ -28,7 +28,7 @@ public sealed class PreviewHabitSuggestionCommandHandler(HabitSuggestionService 
             draft.ExistingHabitId.HasValue ? "update_habit" : "create_habit", arguments,
             AgentExecutionSurface.Chat, request.AuthMethod, request.GrantedScopes, request.IsReadOnlyCredential,
             IncludeChangePreview: true, PreviewOnly: true, ClientContext: ClientContext(request.Language)), ct);
-        return Result.Success(result);
+        return Result.Success(await sameTitleDetail.WriteAsync(request.UserId, result, ClientContext(request.Language), ct));
     }
 
     /// <summary>

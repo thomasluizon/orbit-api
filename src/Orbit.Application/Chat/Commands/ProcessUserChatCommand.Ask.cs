@@ -85,8 +85,9 @@ public partial class ProcessUserChatCommandHandler
         var user = await data.UserRepository.GetByIdAsync(request.UserId, ct);
         definition = AskBlockNegotiation.Definition(definition, request.ClientContext!, call.Args);
         var locale = ChatLocale.Resolve(request.ClientContext, user?.Language);
-        definition = GroundDuplicateRecordOptions(definition, results, locale);
-        var card = HoldTheAnswer(call.Args, definition, request, results, locale);
+        var places = new SameTitlePlaces(await ReadAccountHabitsAsync(request.UserId, ct));
+        definition = GroundDuplicateRecordOptions(definition, results, locale, places);
+        var card = HoldTheAnswer(call.Args, definition, request, results, locale, places);
         if (card.Definition is null)
             return Failed("ask_selection_incomplete", card.Error!);
         definition = card.Definition;
@@ -260,10 +261,10 @@ public partial class ProcessUserChatCommandHandler
 
     /// <summary>
     /// Choice options for records that share a title show the record title and the first detail that tells the
-    /// records apart. When no detail does, each option shows the place of its record in the read.
+    /// records apart. When no detail does, each option shows the place of its record in its same-title group.
     /// </summary>
     private static AiBlockDefinition GroundDuplicateRecordOptions(AiBlockDefinition definition,
-        ToolExecutionAccumulator results, string? language)
+        ToolExecutionAccumulator results, string? language, SameTitlePlaces places)
     {
         if (definition.Form != AiBlockKinds.Choice)
             return definition;
@@ -282,14 +283,13 @@ public partial class ProcessUserChatCommandHandler
             };
             var distinction = details.FirstOrDefault(detail => candidates.All(item => detail(item) is { Length: > 0 and <= 24 })
                 && candidates.Select(detail).Distinct(StringComparer.Ordinal).Count() == candidates.Length);
-            var sameTitle = SameTitleRecords(group.Key, results);
             foreach (var option in group)
             {
                 var item = results.ReadHabitItems[option.Id];
                 options[Array.IndexOf(options, option)] = option with
                 {
                     Label = Shorten(item.Title, 20),
-                    Description = distinction?.Invoke(item) ?? PlaceInGroup(sameTitle, option.Id, LocaleHelper.IsPortuguese(language))
+                    Description = distinction?.Invoke(item) ?? PlaceInGroup(places, option.Id, LocaleHelper.IsPortuguese(language))
                 };
             }
         }

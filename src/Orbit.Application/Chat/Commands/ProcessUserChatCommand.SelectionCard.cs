@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Text.Json;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Common;
@@ -38,7 +37,7 @@ public partial class ProcessUserChatCommandHandler
     /// refuses the card when the client can show neither.
     /// </summary>
     private static SelectionCardVerdict HoldTheAnswer(JsonElement args, AiBlockDefinition definition,
-        ProcessUserChatCommand request, ToolExecutionAccumulator results, string? language)
+        ProcessUserChatCommand request, ToolExecutionAccumulator results, string? language, SameTitlePlaces places)
     {
         var keep = new SelectionCardVerdict(definition, null);
         if (!IsRecordSelectionAsk(args) || definition.DraftClarification is not null
@@ -51,17 +50,17 @@ public partial class ProcessUserChatCommandHandler
         if (group.All(candidate => named.Contains(candidate.Id)) && card.OptionTargets.All(targets => targets.Length > 0))
             return card.OptionTargets.All(targets => targets.Length == 1) && several && !card.PicksSeveral
                 ? new(TakeSeveral(definition), null) : keep;
-        return CompleteRecordCard(card, OfferedRecords(named, group, results), group, several,
+        return CompleteRecordCard(card, OfferedRecords(named, group, results, places), new(group, places), several,
             request.ClientContext?.PartKinds ?? [], LocaleHelper.IsPortuguese(language));
     }
 
     /// <summary>
-    /// The records that a completed card offers, in the order of the read: every record that the card offered and
+    /// The records that a completed card offers, in the app list order: every record that the card offered and
     /// each member of the group, or, when the options name no record, every candidate of the selections that hold
     /// the group.
     /// </summary>
     private static HabitListCardItem[] OfferedRecords(IReadOnlySet<string> named, HabitListCardItem[] group,
-        ToolExecutionAccumulator results)
+        ToolExecutionAccumulator results, SameTitlePlaces places)
     {
         var members = group.Select(candidate => candidate.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var offered = named.Count > 0
@@ -69,7 +68,8 @@ public partial class ProcessUserChatCommandHandler
             : Selections(results).Where(selection => selection.Candidates.Any(candidate => members.Contains(candidate.Id)))
                 .SelectMany(selection => selection.Candidates).Select(candidate => candidate.Id)
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        return [.. TurnRecords(results).Where(record => offered.Contains(record.Id))];
+        return [.. TurnRecords(results).Where(record => offered.Contains(record.Id))
+            .OrderBy(record => Guid.TryParse(record.Id, out var id) ? places.ListIndex(id) : int.MaxValue)];
     }
 
     /// <summary>
@@ -88,31 +88,35 @@ public partial class ProcessUserChatCommandHandler
         _ => null
     };
 
+    /// <summary>The same-titled group of a card, with the place of each habit of the account in its group.</summary>
+    private sealed record CardGroup(HabitListCardItem[] Members, SameTitlePlaces Places)
+    {
+        public string? PlaceOf(string id, bool portuguese) =>
+            Members.Any(member => string.Equals(member.Id, id, StringComparison.OrdinalIgnoreCase))
+                ? PlaceInGroup(Places, id, portuguese) : null;
+    }
+
     private static SelectionCardVerdict CompleteRecordCard(RecordCard card, HabitListCardItem[] offered,
-        HabitListCardItem[] group, bool several, IReadOnlyCollection<string> kinds, bool portuguese)
+        CardGroup group, bool several, IReadOnlyCollection<string> kinds, bool portuguese)
     {
         if (offered.Length <= 4 && kinds.Contains(AiBlockKinds.Choice, StringComparer.Ordinal) && card.Prompt.Length <= 120)
             return new(new AiBlockDefinition(AiBlockKinds.Choice, card.Prompt,
-                [.. offered.Select(record => new AiBlockOption(record.Id, Shorten(record.Title, 20), PlaceInGroup(group, record.Id, portuguese)))],
+                [.. offered.Select(record => new AiBlockOption(record.Id, Shorten(record.Title, 20), group.PlaceOf(record.Id, portuguese)))],
                 [], several, card.AllowFreeText), null);
         if (offered.Length <= 10 && kinds.Contains(AiBlockKinds.Question, StringComparer.Ordinal))
             return new(new AiBlockDefinition(AiBlockKinds.Question, string.Empty, [], [],
                 Questions: [new AiQuestion(RecordQuestionId, several ? "multipleChoice" : "singleChoice", card.Prompt,
-                    [.. offered.Select(record => new AiQuestionOption(record.Id, PlaceInGroup(group, record.Id, portuguese) is { } place
+                    [.. offered.Select(record => new AiQuestionOption(record.Id, group.PlaceOf(record.Id, portuguese) is { } place
                         ? $"{Shorten(record.Title, 100)} ({place})" : Shorten(record.Title, 120)))], card.AllowFreeText)]), null);
-        return new(null, $"This card cannot hold the answer: the person must be able to select each of the {offered.Length} habits that the card is about, {group.Length} of them titled \"{group[0].Title}\", and this client cannot show one option for each of them. Use form choice with 2 to 4 options whose target_ids together hold each of those habit IDs, and set multiSelect=true when the person picks several options. The card was not shown.");
+        return new(null, $"This card cannot hold the answer: the person must be able to select each of the {offered.Length} habits that the card is about, {group.Members.Length} of them titled \"{group.Members[0].Title}\", and this client cannot show one option for each of them. Use form choice with 2 to 4 options whose target_ids together hold each of those habit IDs, and set multiSelect=true when the person picks several options. The card was not shown.");
     }
 
     /// <summary>
-    /// The place of a record among the records that share its title, in the order the read returned them: "2 of 6",
-    /// or "2º de 6" in Portuguese. Null when the record is not a member of the group.
+    /// The place of a record among the habits of the account that share its title, in the app list order: "2 of 6",
+    /// or "2º de 6" in Portuguese. Null when no second habit of the account shares the title.
     /// </summary>
-    private static string? PlaceInGroup(HabitListCardItem[] group, string id, bool portuguese)
-    {
-        var index = Array.FindIndex(group, member => string.Equals(member.Id, id, StringComparison.OrdinalIgnoreCase));
-        return index < 0 ? null
-            : string.Format(CultureInfo.InvariantCulture, portuguese ? "{0}º de {1}" : "{0} of {1}", index + 1, group.Length);
-    }
+    private static string? PlaceInGroup(SameTitlePlaces places, string id, bool portuguese) =>
+        Guid.TryParse(id, out var habitId) ? places.Find(habitId)?.PlaceText(portuguese) : null;
 
     /// <summary>
     /// The same-titled group that a record card is about: the one group that the options name, or, when the options
@@ -137,12 +141,6 @@ public partial class ProcessUserChatCommandHandler
     private static IEnumerable<HabitListCardItem> TurnRecords(ToolExecutionAccumulator results) => results.ReadHabitItems.Values
         .Concat(Selections(results).SelectMany(selection => selection.Candidates))
         .DistinctBy(record => record.Id, StringComparer.OrdinalIgnoreCase);
-
-    /// <summary>
-    /// The records of the turn that share the title, in the order the reads returned them.
-    /// </summary>
-    private static HabitListCardItem[] SameTitleRecords(string titleKey, ToolExecutionAccumulator results) =>
-        [.. TurnRecords(results).Where(record => HabitNameMatcher.TitleKey(record.Title) == titleKey)];
 
     private static HabitListCardItem[][] SameTitleGroups(IEnumerable<HabitListCardItem> candidates) => [.. candidates
         .DistinctBy(candidate => candidate.Id, StringComparer.OrdinalIgnoreCase)

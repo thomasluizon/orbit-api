@@ -378,7 +378,7 @@ public partial class AgentChatWriteHoldTests : IDisposable
         var controller = new AiController(_catalogService, _policyEvaluator,
             new AgentPendingStores(_pendingOperationStore, Substitute.For<IPendingClarificationStore>()),
             Substitute.For<IAgentStepUpService>(), Substitute.For<IAgentAuditService>(),
-            executor, revisions, new ResolveClarificationRequestValidator())
+            executor, revisions, new ResolveClarificationRequestValidator(), SameTitleDetailWriters.NoHabits())
         {
             ControllerContext = new ControllerContext
             {

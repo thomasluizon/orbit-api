@@ -35,7 +35,8 @@ public partial class AgentChatWriteHoldTests
         var registry = new AiToolRegistry([new CreateHabitTool(dates, mediator), new UpdateHabitTool(habits, dates, mediator)]);
         var previewer = new PendingOperationChangePreviewer(habits, goals, new GenericRepository<Tag>(_dbContext), dates, registry);
         var handler = new PreviewHabitSuggestionCommandHandler(
-            new(habits, goals, dates, Substitute.For<IHabitDraftGenerator>()), CreateExecutor(registry, previewer));
+            new(habits, goals, dates, Substitute.For<IHabitDraftGenerator>()), CreateExecutor(registry, previewer),
+            SameTitleDetailWriters.NoHabits());
 
         var result = await handler.Handle(new(_userId, draft), default);
 

@@ -54,7 +54,7 @@ public class ConversationEndpointTests
         flags.GetEnabledKeysForUserAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(new[] { FeatureFlagKeys.AiConversationRecording });
         var mediator = Substitute.For<IMediator>();
         mediator.Send(Arg.Any<GetLatestConversationQuery>(), Arg.Any<CancellationToken>()).Returns(call =>
-            new GetLatestConversationQueryHandler(fixture.Store, flags).Handle(call.Arg<GetLatestConversationQuery>(), default));
+            new GetLatestConversationQueryHandler(fixture.Store, flags, SameTitleDetailWriters.NoHabits()).Handle(call.Arg<GetLatestConversationQuery>(), default));
         mediator.Send(Arg.Any<GetConversationImageQuery>(), Arg.Any<CancellationToken>()).Returns(call =>
             new GetConversationImageQueryHandler(fixture.Store, flags).Handle(call.Arg<GetConversationImageQuery>(), default));
         var controller = Controller(mediator, fixture.User.Id);

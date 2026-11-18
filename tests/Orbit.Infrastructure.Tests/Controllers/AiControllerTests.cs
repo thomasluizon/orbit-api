@@ -46,7 +46,7 @@ public class AiControllerTests
                 _changePreviewer,
                 Substitute.For<IValidator<RevisePendingOperationRequest>>(),
                 new AiToolRegistry([])),
-            _resolveClarificationValidator);
+            _resolveClarificationValidator, SameTitleDetailWriters.NoHabits());
 
         var claims = new[] { new Claim(ClaimTypes.NameIdentifier, UserId.ToString()) };
         var identity = new ClaimsIdentity(claims, "Test");
@@ -399,7 +399,7 @@ public class AiControllerTests
             _stepUpService, _auditService, _operationExecutor,
             new PendingOperationRevisionService(_pendingOperationStore, previewer,
                 Substitute.For<IValidator<RevisePendingOperationRequest>>(), new AiToolRegistry([])),
-            _resolveClarificationValidator)
+            _resolveClarificationValidator, SameTitleDetailWriters.NoHabits())
         {
             ControllerContext = _controller.ControllerContext
         };

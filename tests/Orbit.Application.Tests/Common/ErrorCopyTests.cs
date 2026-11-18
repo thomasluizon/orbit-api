@@ -28,7 +28,11 @@ public class ErrorCopyTests
     /// Product terms the shipped pt-BR client uses unchanged (its "tags" and "xp" strings), so the
     /// fallback copies them instead of inventing a translation the app never shows.
     /// </summary>
-    private static readonly HashSet<string> SameInBothLanguages = ["chat.read.tags", "chat.read.xp"];
+    private static readonly HashSet<string> SameInBothLanguages =
+    [
+        "chat.read.tags", "chat.read.xp",
+        "chat.preview.sameTitleDetail", "chat.preview.sameTitleName", "chat.preview.sameTitleRename"
+    ];
 
     private static readonly Regex BareCodePattern = new("[A-Z]{2,}_[A-Z_]+", RegexOptions.None, TimeSpan.FromSeconds(1));
     private static readonly Regex PlaceholderPattern = new(@"\{[A-Za-z0-9]+\}", RegexOptions.None, TimeSpan.FromSeconds(1));

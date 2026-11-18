@@ -68,7 +68,7 @@ public sealed partial class FirstTryPreviewTests
             case "suggestion-update":
                 {
                     var draft = route == "suggestion-create" ? Draft("Journal") : Draft("Read", existing, new TimeOnly(6, 0));
-                    var result = await new PreviewHabitSuggestionCommandHandler(_suggestions, _executor)
+                    var result = await new PreviewHabitSuggestionCommandHandler(_suggestions, _executor, _sameTitleDetail)
                         .Handle(new(_userId, draft, "en"), default);
                     result.IsSuccess.Should().BeTrue(result.Error);
                     return Pending(result.Value);
@@ -78,7 +78,7 @@ public sealed partial class FirstTryPreviewTests
                 {
                     IReadOnlyList<HabitSuggestionDraft> drafts = route == "preview-all-one"
                         ? [Draft("Journal")] : [Draft("Read", existing, new TimeOnly(6, 0)), Draft("Journal")];
-                    var result = await new PreviewAllHabitSuggestionsCommandHandler(_suggestions, _executor, _changeSets, _store)
+                    var result = await new PreviewAllHabitSuggestionsCommandHandler(_suggestions, _executor, _changeSets, _store, _sameTitleDetail)
                         .Handle(new(_userId, drafts, "en"), default);
                     result.IsSuccess.Should().BeTrue(result.Error);
                     return Pending(result.Value);

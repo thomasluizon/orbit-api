@@ -168,8 +168,8 @@ public partial class HabitSuggestionTests
     {
         var draft = Draft();
         var existing = draft.ToHabit(_userId).Value;
-        var executor = Substitute.For<IAgentOperationExecutor>();
-        var handler = new PreviewHabitSuggestionCommandHandler(Service(duplicate ? [existing] : []), executor);
+        var executor = HeldPreviewExecutor.Create();
+        var handler = new PreviewHabitSuggestionCommandHandler(Service(duplicate ? [existing] : []), executor, SameTitleDetailWriters.NoHabits());
         var result = await handler.Handle(new(_userId, draft), default);
         result.IsSuccess.Should().BeTrue();
         await executor.Received(1).ExecuteAsync(Arg.Is<AgentExecuteOperationRequest>(request =>
@@ -186,8 +186,8 @@ public partial class HabitSuggestionTests
         var existing = Habit.Create(new HabitCreateParams(schedule, _userId, "Read", FrequencyUnit.Day, 1,
             _today, DueTime: new(22, 0), DueEndTime: new(22, 15), IntervalWeeks: intervalWeeks)).Value;
         var draft = Draft() with { Days = schedule == HabitSchedule.Flexible ? [DayOfWeek.Monday] : [] };
-        var executor = Substitute.For<IAgentOperationExecutor>();
-        var handler = new PreviewHabitSuggestionCommandHandler(Service(existing), executor);
+        var executor = HeldPreviewExecutor.Create();
+        var handler = new PreviewHabitSuggestionCommandHandler(Service(existing), executor, SameTitleDetailWriters.NoHabits());
 
         var preview = await handler.Handle(new(_userId, draft), default);
 
@@ -217,8 +217,8 @@ public partial class HabitSuggestionTests
         var parent = Habit.Create(new HabitCreateParams(HabitSchedule.General, _userId, "Reading", null, null, _today)).Value;
         var existing = Habit.Create(new HabitCreateParams(HabitSchedule.General, _userId, "Read", null, null,
             _today, ParentHabitId: parent.Id)).Value;
-        var executor = Substitute.For<IAgentOperationExecutor>();
-        var handler = new PreviewHabitSuggestionCommandHandler(Service(parent, existing), executor);
+        var executor = HeldPreviewExecutor.Create();
+        var handler = new PreviewHabitSuggestionCommandHandler(Service(parent, existing), executor, SameTitleDetailWriters.NoHabits());
 
         var result = await handler.Handle(new(_userId, Draft()), default);
 
@@ -248,9 +248,9 @@ public partial class HabitSuggestionTests
             "checklist" => draft with { ChecklistItems = [] },
             _ => draft with { ReminderMinutesBefore = null }
         };
-        var executor = Substitute.For<IAgentOperationExecutor>();
+        var executor = HeldPreviewExecutor.Create();
 
-        var result = await new PreviewHabitSuggestionCommandHandler(Service(existing), executor)
+        var result = await new PreviewHabitSuggestionCommandHandler(Service(existing), executor, SameTitleDetailWriters.NoHabits())
             .Handle(new(_userId, draft), default);
 
         result.IsSuccess.Should().BeTrue(result.Error);
@@ -283,8 +283,8 @@ public partial class HabitSuggestionTests
             FrequencyQuantity = unit.HasValue ? 1 : null,
             DueDate = _today.AddDays(5)
         };
-        var executor = Substitute.For<IAgentOperationExecutor>();
-        var handler = new PreviewHabitSuggestionCommandHandler(Service(existing), executor);
+        var executor = HeldPreviewExecutor.Create();
+        var handler = new PreviewHabitSuggestionCommandHandler(Service(existing), executor, SameTitleDetailWriters.NoHabits());
 
         var result = await handler.Handle(new(_userId, draft), default);
 
@@ -311,8 +311,8 @@ public partial class HabitSuggestionTests
         existing.Log(_today, advanceDueDate: false).IsSuccess.Should().BeTrue();
         var busy = (Draft("Appointment") with { Type = "Task", FrequencyUnit = null, FrequencyQuantity = null })
             .ToHabit(_userId).Value;
-        var executor = Substitute.For<IAgentOperationExecutor>();
-        var handler = new PreviewHabitSuggestionCommandHandler(Service(existing, busy), executor);
+        var executor = HeldPreviewExecutor.Create();
+        var handler = new PreviewHabitSuggestionCommandHandler(Service(existing, busy), executor, SameTitleDetailWriters.NoHabits());
 
         var result = await handler.Handle(new(_userId, Draft()), default);
 

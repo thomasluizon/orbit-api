@@ -159,6 +159,13 @@ public partial class ProcessUserChatCommandHandlerTests
             Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
     }
 
+    private static readonly DateTime FirstCreatedAtUtc = DateTime.UtcNow.AddMinutes(-10);
+    private static long _createdHabits;
+
+    /// <summary>
+    /// Each habit gets a later creation time than the habit before it, so the app list order of the habits of a test
+    /// is the order in which the test creates them.
+    /// </summary>
     private static Habit CreateHabit(string title, bool isCompleted = false)
     {
         var habit = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime,
@@ -166,7 +173,8 @@ public partial class ProcessUserChatCommandHandlerTests
             title,
             null,
             null,
-            DueDate: Today)).Value;
+            DueDate: Today,
+            CreatedAtUtc: FirstCreatedAtUtc.AddTicks(Interlocked.Increment(ref _createdHabits)))).Value;
 
         if (isCompleted)
             habit.Log(Today);

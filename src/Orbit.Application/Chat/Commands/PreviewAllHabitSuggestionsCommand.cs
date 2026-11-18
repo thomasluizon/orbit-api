@@ -22,10 +22,17 @@ public sealed record PreviewAllHabitSuggestionsCommand(Guid UserId, IReadOnlyLis
     bool IsReadOnlyCredential = false) : IRequest<Result<AgentExecuteOperationResponse>>;
 
 public sealed class PreviewAllHabitSuggestionsCommandHandler(HabitSuggestionService suggestions, IAgentOperationExecutor executor,
-    AccountChangeSetService changeSets, IPendingAgentOperationStore store)
+    AccountChangeSetService changeSets, IPendingAgentOperationStore store, SameTitleDetailWriter sameTitleDetail)
     : IRequestHandler<PreviewAllHabitSuggestionsCommand, Result<AgentExecuteOperationResponse>>
 {
     public async Task<Result<AgentExecuteOperationResponse>> Handle(PreviewAllHabitSuggestionsCommand request, CancellationToken ct)
+    {
+        var result = await PreviewAsync(request, ct);
+        return result.IsFailure ? result : Result.Success(await sameTitleDetail.WriteAsync(request.UserId, result.Value,
+            PreviewHabitSuggestionCommandHandler.ClientContext(request.Language), ct));
+    }
+
+    private async Task<Result<AgentExecuteOperationResponse>> PreviewAsync(PreviewAllHabitSuggestionsCommand request, CancellationToken ct)
     {
         if (request.Drafts is null || !HabitSuggestionsCard.IsValidDraftCount(request.Drafts.Count))
             return Result.Failure<AgentExecuteOperationResponse>("Invalid suggestion count.", ValidationErrorCodes.HabitSuggestionCount);
