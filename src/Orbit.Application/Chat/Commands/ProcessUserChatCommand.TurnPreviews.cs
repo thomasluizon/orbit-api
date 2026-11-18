@@ -96,7 +96,7 @@ public partial class ProcessUserChatCommandHandler
         ToolExecutionAccumulator results, CancellationToken cancellationToken)
     {
         var tool = (RevisePendingChangesTool)ai.ToolRegistry.GetTool(call.Name)!;
-        return results.Previews.CloseAsync(discard.PendingOperationId,
+        return results.Previews.DiscardAsync(discard.PendingOperationId,
             ct => tool.DiscardAsync(request.UserId, discard, request.ClientContext, ct), cancellationToken);
     }
 
@@ -138,11 +138,22 @@ public partial class ProcessUserChatCommandHandler
         /// at once and leaves the answer when the store closes it. An earlier preview leaves the answer now and closes
         /// when the turn ends with its answer, or when a failed answer turn replays its checkpoint.
         /// </summary>
-        public async Task CloseAsync(Guid id, Func<CancellationToken, Task<bool>> close, CancellationToken ct)
+        public Task CloseAsync(Guid id, Func<CancellationToken, Task<bool>> close, CancellationToken ct) =>
+            CloseAsync(id, close, ct, byRead: false);
+
+        /// <summary>
+        /// Closes a preview that a read call of the turn discards, as <see cref="CloseAsync"/> does. A failed change list
+        /// of the same response does not take this close back, because the discard is not a write of that list and its
+        /// result already went to the model.
+        /// </summary>
+        public Task DiscardAsync(Guid id, Func<CancellationToken, Task<bool>> close, CancellationToken ct) =>
+            CloseAsync(id, close, ct, byRead: true);
+
+        private async Task CloseAsync(Guid id, Func<CancellationToken, Task<bool>> close, CancellationToken ct, bool byRead)
         {
             if (earlierIds.Contains(id))
             {
-                _closes.Add(new DeferredClose(id, results.PendingWriteCalls.TryGetValue(id, out var card) ? card : null, close));
+                _closes.Add(new DeferredClose(id, results.PendingWriteCalls.TryGetValue(id, out var card) ? card : null, close, byRead));
                 results.SupersedePendingOperation(id);
             }
             else if (await close(ct))
@@ -158,7 +169,7 @@ public partial class ProcessUserChatCommandHandler
         {
             if (_closes.All(item => item.Id != id))
                 _closes.Add(new DeferredClose(id, null,
-                    async ct => results.PendingOperations.All(pending => pending.Id != id) && await close(ct)));
+                    async ct => results.PendingOperations.All(pending => pending.Id != id) && await close(ct), ByRead: false));
         }
 
         /// <summary>
@@ -226,17 +237,23 @@ public partial class ProcessUserChatCommandHandler
 
         /// <summary>
         /// Withdraws only what one failed change list prepared, so each preview of an earlier round stays. The store
-        /// withdraws each preview that a write of the list created. A preview from before the turn stays in the store,
-        /// and leaves the cards of the turn unless a revision of the turn holds it. Each close and each write guard
-        /// after <paramref name="mark"/> is dropped, so the repair round can send the same change again.
+        /// withdraws each preview that a write of the list created. A preview from before the turn stays in the store.
+        /// Each close that a write added and each write guard after <paramref name="mark"/> is dropped, so the repair
+        /// round can send the same change again. A close that a read call made, such as a discard, commits with the turn.
         /// </summary>
         public void WithdrawList(Guid userId, IPendingAgentOperationStore store, ChangeListMark mark,
             IReadOnlyCollection<Guid> listPreviewIds)
         {
+            var surviving = new List<DeferredClose>();
             foreach (var close in _closes.Skip(mark.HeldCloses))
-                if (close.Card is var (toolName, card))
+            {
+                if (close.ByRead)
+                    surviving.Add(close);
+                else if (close.Card is var (toolName, card))
                     results.KeepPendingOperation(toolName, card);
+            }
             _closes.RemoveRange(mark.HeldCloses, _closes.Count - mark.HeldCloses);
+            _closes.AddRange(surviving);
             foreach (var id in listPreviewIds)
             {
                 if (!earlierIds.Contains(id))
@@ -339,10 +356,11 @@ public partial class ProcessUserChatCommandHandler
         /// <summary>
         /// An earlier preview that this turn closes when it ends with its answer, or when a failed answer turn replays its
         /// checkpoint. <paramref name="Card"/> is its card in the answer of this turn, when a call of the turn returned it,
-        /// and <paramref name="Close"/> closes it in the store.
+        /// and <paramref name="Close"/> closes it in the store. <paramref name="ByRead"/> is true when a read call of the turn
+        /// made the close, and false when a write of the turn did.
         /// </summary>
         private sealed record DeferredClose(Guid Id, (string ToolName, PendingAgentOperation Preview)? Card,
-            Func<CancellationToken, Task<bool>> Close);
+            Func<CancellationToken, Task<bool>> Close, bool ByRead);
     }
 
     /// <summary>
