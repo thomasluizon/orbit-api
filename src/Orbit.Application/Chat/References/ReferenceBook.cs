@@ -21,17 +21,25 @@ public sealed partial class ReferenceBook(Func<ReferenceRecordType, Cancellation
 
     private readonly Dictionary<ReferenceRecordType, IReadOnlyList<ReferenceRecord>> _records = [];
     private readonly HashSet<ReferenceRecordType> _reloaded = [];
+    private readonly HashSet<ReferenceRecordType> _partial = [];
     private readonly HashSet<Guid> _unlisted = [];
     private readonly SemaphoreSlim _gate = new(1, 1);
     private Dictionary<Guid, int> _lengths = [];
 
-    /// <summary>Gives the book the complete list of one type that the turn already read.</summary>
-    public void Seed(ReferenceRecordType type, IEnumerable<ReferenceRecord> records)
+    /// <summary>
+    /// Gives the book the records of one type that the turn already read. A part of the list, such as the active goals,
+    /// is read in full when model text holds a GUID that the book cannot classify.
+    /// </summary>
+    public void Seed(ReferenceRecordType type, IEnumerable<ReferenceRecord> records, bool complete = true)
     {
         _gate.Wait();
         try
         {
             _records[type] = records.ToArray();
+            if (complete)
+                _partial.Remove(type);
+            else
+                _partial.Add(type);
             RebuildLengths();
         }
         finally { _gate.Release(); }
@@ -60,10 +68,11 @@ public sealed partial class ReferenceBook(Func<ReferenceRecordType, Cancellation
         {
             if (ids.Any(IsUnclassified))
             {
-                foreach (var type in BookTypes.Where(type => !_records.ContainsKey(type)))
+                foreach (var type in BookTypes.Where(type => !_records.ContainsKey(type) || _partial.Contains(type)))
                 {
-                    _records[type] = await load(type, ct);
+                    _records[type] = Merge(_records.GetValueOrDefault(type), await load(type, ct));
                     _reloaded.Add(type);
+                    _partial.Remove(type);
                 }
                 RebuildLengths();
             }
@@ -93,6 +102,7 @@ public sealed partial class ReferenceBook(Func<ReferenceRecordType, Cancellation
             var records = Merge(loaded, await load(type, ct));
             _records[type] = records;
             _reloaded.Add(type);
+            _partial.Remove(type);
             RebuildLengths();
             return records;
         }

@@ -22,14 +22,24 @@ public partial class ProcessUserChatCommandHandler
         return _referenceTurn = new ShortReferenceTurn(book, normalizer, references?.ShortReferences == true, ai.IntentService);
     }
 
-    /// <summary>Gives the book of the turn the habits and the tags that the turn context already read.</summary>
+    /// <summary>
+    /// Gives the book of the turn the records that the turn context already read: every habit and tag, and the active
+    /// goals. A goal reference that misses, or a goal GUID in model text, reads every goal of the person once.
+    /// </summary>
     private void SeedReferences(ChatContext context)
     {
         if (_referenceTurn is not { } turn)
             return;
         turn.Book.Seed(ReferenceRecordType.Habit, context.UserHabits.Select(habit => new ReferenceRecord(habit.Id, habit.Title)));
         turn.Book.Seed(ReferenceRecordType.Tag, context.UserTags.Select(tag => new ReferenceRecord(tag.Id, tag.Name)));
+        turn.Book.Seed(ReferenceRecordType.Goal, context.ActiveGoals.Select(goal => new ReferenceRecord(goal.Id, goal.Title)),
+            complete: false);
     }
+
+    /// <summary>Gives the book of the turn the previews that await approval, which the prompt already read.</summary>
+    private void SeedPendingReferences(IEnumerable<PendingAgentOperationExecution> awaiting) =>
+        _referenceTurn?.Book.Seed(ReferenceRecordType.PendingOperation,
+            awaiting.Select(pending => new ReferenceRecord(pending.PendingOperationId, pending.OperationId)));
 
     private async Task<IReadOnlyList<ReferenceRecord>> LoadReferenceRecordsAsync(Guid userId, ReferenceRecordType type, CancellationToken ct)
     {

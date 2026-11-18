@@ -82,6 +82,29 @@ public class ShortReferenceTests
     }
 
     [Fact]
+    public async Task Book_ReadsAPartialSeedInFullForAGuidThatItCannotClassify()
+    {
+        var loads = new List<ReferenceRecordType>();
+        using var book = Book(new() { [ReferenceRecordType.Goal] = [Fitness, Health] }, loads);
+        book.Seed(ReferenceRecordType.Goal, [Fitness], complete: false);
+
+        (await book.WriteAsync(Fitness.Id.ToString(), default)).Should().Be("17263544");
+        loads.Should().BeEmpty("the seeded goal classifies the GUID");
+        (await book.WriteAsync(Health.Id.ToString(), default)).Should().Be("9e8d7c6b", "a goal that is not active is a goal too");
+        loads.Should().Contain(ReferenceRecordType.Goal);
+        (await book.ResolveAsync(ReferenceRecordType.Goal, "17263544", default)).Record.Should().Be(Fitness);
+    }
+
+    [Fact]
+    public async Task Book_ResolvesAGoalOutsideThePartialSeed()
+    {
+        using var book = Book(new() { [ReferenceRecordType.Goal] = [Fitness, Health] });
+        book.Seed(ReferenceRecordType.Goal, [Fitness], complete: false);
+
+        (await book.ResolveAsync(ReferenceRecordType.Goal, "9e8d7c6b", default)).Record.Should().Be(Health);
+    }
+
+    [Fact]
     public async Task Normalizer_ResolvesAReferenceAndACutIdOfOneArgument()
     {
         using var book = Book([]);
