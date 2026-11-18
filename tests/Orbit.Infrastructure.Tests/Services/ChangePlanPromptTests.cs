@@ -16,6 +16,9 @@ public class ChangePlanPromptTests(ITestOutputHelper output)
     /// </summary>
     private const int ShortPromptTokenCap = 4_600;
 
+    private static string ShortPrompt(SystemPromptBuilder builder, PromptBuildRequest request) =>
+        builder.BuildStatic(request with { ChangePlan = true });
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -24,7 +27,7 @@ public class ChangePlanPromptTests(ITestOutputHelper output)
         var builder = new SystemPromptBuilder();
         var request = new PromptBuildRequest([], BlockFirstComposition: composition);
 
-        var shortTokens = O200kTokenCounter.Shared.CountTokens(builder.BuildChangePlanStatic(request));
+        var shortTokens = O200kTokenCounter.Shared.CountTokens(ShortPrompt(builder, request));
         var oldTokens = O200kTokenCounter.Shared.CountTokens(builder.BuildStatic(request));
         output.WriteLine($"composition={composition}: short={shortTokens} old={oldTokens} cap={ShortPromptTokenCap}");
 
@@ -37,7 +40,7 @@ public class ChangePlanPromptTests(ITestOutputHelper output)
     [InlineData(true)]
     public void ShortPrompt_HoldsTheActOrAskRuleOneTime(bool composition)
     {
-        var prompt = new SystemPromptBuilder().BuildChangePlanStatic(new PromptBuildRequest([], BlockFirstComposition: composition));
+        var prompt = ShortPrompt(new SystemPromptBuilder(), new PromptBuildRequest([], BlockFirstComposition: composition));
 
         prompt.Split(ChangePlanRulesSection.ActOrAskRule, StringSplitOptions.None).Should().HaveCount(2);
         ChangePlanRulesSection.ActOrAskRule.Should().Be("Act on the most likely interpretation. Ask only when two or more records fit equally and nothing in the message, the conversation or the account tells them apart, or when a required value has no sensible default. Never ask what the preview lets the person edit.");
@@ -46,7 +49,7 @@ public class ChangePlanPromptTests(ITestOutputHelper output)
     [Fact]
     public void ShortPrompt_KeepsTheLanguageGroundingSafetyAndProposalRules()
     {
-        var prompt = new SystemPromptBuilder().BuildChangePlanStatic(new PromptBuildRequest([]));
+        var prompt = ShortPrompt(new SystemPromptBuilder(), new PromptBuildRequest([]));
 
         prompt.Should().ContainAll(
             "# You are Orbit",
@@ -65,7 +68,7 @@ public class ChangePlanPromptTests(ITestOutputHelper output)
     [Fact]
     public void ShortPrompt_HoldsNoOtherOwnerOfTheActOrAskDecision()
     {
-        var prompt = new SystemPromptBuilder().BuildChangePlanStatic(new PromptBuildRequest([]));
+        var prompt = ShortPrompt(new SystemPromptBuilder(), new PromptBuildRequest([]));
 
         prompt.Should().NotContainAny(
             "for_selection",
@@ -85,7 +88,7 @@ public class ChangePlanPromptTests(ITestOutputHelper output)
         var builder = new SystemPromptBuilder();
         var request = new PromptBuildRequest([], UserToday: new DateOnly(2026, 11, 1));
 
-        builder.BuildChangePlanStatic(request with { UserToday = new DateOnly(2026, 11, 2), HasImage = true })
-            .Should().Be(builder.BuildChangePlanStatic(request));
+        ShortPrompt(builder, request with { UserToday = new DateOnly(2026, 11, 2), HasImage = true })
+            .Should().Be(ShortPrompt(builder, request));
     }
 }

@@ -43,10 +43,9 @@ public class SystemPromptBuilder : ISystemPromptBuilder
         ];
     }
 
-    public string BuildStatic(PromptBuildRequest request) =>
-        Render(_staticSections, ToContext(request)) + Environment.NewLine + GlobalRulesSection.BuildFormat(ToContext(request));
-
-    public string BuildChangePlanStatic(PromptBuildRequest request) => Render(_changePlanSections, ToContext(request));
+    public string BuildStatic(PromptBuildRequest request) => request.ChangePlan
+        ? Render(_changePlanSections, ToContext(request))
+        : Render(_staticSections, ToContext(request)) + Environment.NewLine + GlobalRulesSection.BuildFormat(ToContext(request));
 
     public string BuildDynamic(PromptBuildRequest request) => BuildAccountContext(request) + BuildTurnContext(request);
 

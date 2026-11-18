@@ -25,7 +25,7 @@ public partial class ProcessUserChatCommandHandlerTests
         if (changePlan)
             EnableChangePlan();
         SetupUserAndPayGate();
-        _promptBuilder.BuildChangePlanStatic(Arg.Any<PromptBuildRequest>()).Returns("short prompt");
+        _promptBuilder.BuildStatic(Arg.Is<PromptBuildRequest>(prompt => prompt.ChangePlan)).Returns("short prompt");
         SetupAiResponse(new AiResponse { TextMessage = "Here they are." });
         var query = new QueryHabitsTool(_habitRepo, _userRepo, _userDateService, _scheduleLogReader);
         var handler = CreateHandler(query, RealAskTool());
@@ -49,7 +49,8 @@ public partial class ProcessUserChatCommandHandlerTests
         request.ChangePlan.Should().BeTrue();
         request.Purpose.Should().Be("chat");
         request.SystemPrompt.Should().StartWith("short prompt");
-        _promptBuilder.DidNotReceive().BuildStatic(Arg.Any<PromptBuildRequest>());
+        _promptBuilder.Received().BuildStatic(Arg.Is<PromptBuildRequest>(prompt => prompt.ChangePlan));
+        _promptBuilder.DidNotReceive().BuildStatic(Arg.Is<PromptBuildRequest>(prompt => !prompt.ChangePlan));
         var query = Declaration(request, "query_habits");
         query.GetProperty("description").GetString().Should().Be(ChangePlanToolDescriptions.QueryHabits);
         query.GetProperty("parameters").GetProperty("properties").GetProperty("for_selection").GetProperty("description").GetString()
@@ -72,7 +73,7 @@ public partial class ProcessUserChatCommandHandlerTests
 
         request.ChangePlan.Should().BeFalse();
         request.SystemPrompt.Should().StartWith("static prompt");
-        _promptBuilder.DidNotReceive().BuildChangePlanStatic(Arg.Any<PromptBuildRequest>());
+        _promptBuilder.DidNotReceive().BuildStatic(Arg.Is<PromptBuildRequest>(prompt => prompt.ChangePlan));
         var query = new QueryHabitsTool(_habitRepo, _userRepo, _userDateService, _scheduleLogReader);
         Declaration(request, "query_habits").GetProperty("description").GetString().Should().Be(query.Description);
         var ask = Declaration(request, "ask");

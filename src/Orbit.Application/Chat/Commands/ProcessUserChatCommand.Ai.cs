@@ -32,7 +32,8 @@ public partial class ProcessUserChatCommandHandler
             TodayHabitIds: context.TodayFacts.TodayIds,
             OverdueHabitIds: context.TodayFacts.OverdueIds,
             DoneTodayHabitIds: context.TodayFacts.DoneTodayIds,
-            BlockFirstComposition: UsesComposition(request, context));
+            BlockFirstComposition: UsesComposition(request, context),
+            ChangePlan: context.ChangePlan);
         var agentSnapshot = BuildAgentContextSnapshot(
             context.User,
             request.ClientContext,
@@ -46,7 +47,7 @@ public partial class ProcessUserChatCommandHandler
 
         var systemPrompt = string.Join(
             Environment.NewLine,
-            StaticPrompt(promptRequest, context),
+            ai.PromptBuilder.BuildStatic(promptRequest),
             ai.CatalogService.BuildStaticSupplement(), PlanToolDeclaration.Instruction);
         var accountContext = string.Join(
             Environment.NewLine,
@@ -214,10 +215,6 @@ public partial class ProcessUserChatCommandHandler
             ? string.Join(Environment.NewLine, accountContext, HabitTargetContext.Instruction, habitTargets.Context)
             : accountContext;
     }
-
-    /// <summary>The static rules: the one short prompt on the <c>ai_change_plan</c> path, the rule sections otherwise.</summary>
-    private string StaticPrompt(PromptBuildRequest promptRequest, ChatContext context) => context.ChangePlan
-        ? ai.PromptBuilder.BuildChangePlanStatic(promptRequest) : ai.PromptBuilder.BuildStatic(promptRequest);
 
     private static string TurnToolDescription(Orbit.Application.Chat.Tools.IAiTool tool, ChatContext context) =>
         context.ChangePlan ? ChangePlanToolDescriptions.For(tool, ChatToolDescription(tool)) : ChatToolDescription(tool);
