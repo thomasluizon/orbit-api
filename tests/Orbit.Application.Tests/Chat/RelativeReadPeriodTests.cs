@@ -149,10 +149,12 @@ public sealed class RelativeReadPeriodTests
     public void ToolFailureCode_IsTheWireValueTheModelReceives(string code, string wire) =>
         code.Should().Be(wire);
 
-    [Fact]
-    public void RetrospectivePeriodCopy_NamesEveryKnownPeriod()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void RetrospectivePeriodCopy_NamesEveryKnownPeriod(bool isPtBr)
     {
-        var copy = ErrorCopy.Resolve(ValidationErrorCodes.PeriodSupported, false);
+        var copy = ErrorCopy.Resolve(ValidationErrorCodes.PeriodSupported, isPtBr);
         foreach (var period in RetrospectivePeriodRange.KnownPeriods) copy.Should().Contain(period);
     }
 
