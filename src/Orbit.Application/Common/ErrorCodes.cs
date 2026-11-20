@@ -4,8 +4,6 @@ namespace Orbit.Application.Common;
 
 public static class ErrorCodes
 {
-    public const string InvalidArguments = "invalid_arguments";
-
     public const string AiBlockIdRequired = "ASTRA_BLOCK_ID_REQUIRED";
     public const string AiBlockSelectionRequired = "ASTRA_BLOCK_SELECTION_REQUIRED";
     public const string AiBlockInvalidSelection = "ASTRA_BLOCK_INVALID_SELECTION";

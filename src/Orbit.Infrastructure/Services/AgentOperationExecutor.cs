@@ -167,7 +167,7 @@ public partial class AgentOperationExecutor(
         if (toolRegistry.GetTool(operation.Id) is IArgumentCheckTool check)
         {
             var validation = await check.CheckArgumentsAsync(effective, request.UserId, ct);
-            if (validation.IsFailure) return Result.Failure<JsonElement>(validation.ErrorCode is { } code ? $"{code}: {validation.Error}" : validation.Error, validation.ErrorCode ?? ErrorCodes.InvalidArguments);
+            if (validation.IsFailure) return Result.Failure<JsonElement>(validation.ErrorCode is { } code ? $"{code}: {validation.Error}" : validation.Error, validation.ErrorCode ?? ToolFailureCodes.InvalidArguments);
         }
         return Result.Success(effective);
     }

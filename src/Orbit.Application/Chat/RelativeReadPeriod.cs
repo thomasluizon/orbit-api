@@ -74,7 +74,7 @@ public static class RelativeReadPeriod
         if (selected.Value is not { } named) return Result.Success();
         var period = named.ToLowerInvariant();
         if (period is not ("today" or "yesterday"))
-            return Result.Failure("A dated habit list requires today or yesterday, not a period range.", ErrorCodes.InvalidArguments);
+            return Result.Failure("A dated habit list requires today or yesterday, not a period range.", ToolFailureCodes.InvalidArguments);
         var (date, _) = RetrospectivePeriodRange.Resolve(period, today, 1);
         node["date"] = date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         if (period == "today") node["include_overdue"] ??= true;
@@ -109,15 +109,15 @@ public static class RelativeReadPeriod
         if (selected.Value is not { } period)
         {
             return counted.Value.HasValue
-                ? Result.Failure("A relative period is required with a period count.", ErrorCodes.InvalidArguments)
+                ? Result.Failure("A relative period is required with a period count.", ToolFailureCodes.InvalidArguments)
                 : Result.Success();
         }
         var count = counted.Value;
         var validation = new RelativeReadPeriodSelectionValidator().Validate(new RelativeReadPeriodSelection(period, count));
         if (!validation.IsValid)
-            return Result.Failure(string.Join(" ", validation.Errors.Select(error => error.ErrorMessage).Distinct()), ErrorCodes.InvalidArguments);
+            return Result.Failure(string.Join(" ", validation.Errors.Select(error => error.ErrorMessage).Distinct()), ToolFailureCodes.InvalidArguments);
         if (exclusive && (node["query_token"] is not null || node["cursor"] is not null || node["window"] is not null || node["months"] is not null))
-            return Result.Failure("A relative ranking period cannot override a bound query or month window.", ErrorCodes.InvalidArguments);
+            return Result.Failure("A relative ranking period cannot override a bound query or month window.", ToolFailureCodes.InvalidArguments);
         var (from, to) = RetrospectivePeriodRange.Resolve(period, today, weekStartDay, count);
         node[fromKey] = from.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         node[toKey] = (exclusive ? to.AddDays(1) : to).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);

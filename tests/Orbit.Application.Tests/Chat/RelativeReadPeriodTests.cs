@@ -21,6 +21,8 @@ public sealed class RelativeReadPeriodTests
     private readonly IUserDateService _dates = Substitute.For<IUserDateService>();
     private readonly ReadBlockFactory _blocks;
     private static readonly DateOnly Monday = new(2026, 10, 26);
+    private static readonly string PeriodRule = $"period must be one of {string.Join(", ", RetrospectivePeriodRange.KnownPeriods)}.";
+    private const string CountRule = "period_count requires a bounded positive count for last_n_days or last_n_weeks only.";
 
     public RelativeReadPeriodTests()
     {
@@ -138,16 +140,21 @@ public sealed class RelativeReadPeriodTests
         var scope = await _blocks.ResolveAsync(tool, Json(json), _userId, default);
         scope.IsFailure.Should().BeTrue();
         scope.Error.Should().Contain(rule);
-        scope.ErrorCode.Should().Be(ErrorCodes.InvalidArguments);
+        scope.ErrorCode.Should().Be(ToolFailureCodes.InvalidArguments);
     }
 
+    [Theory]
+    [InlineData(ToolFailureCodes.InvalidArguments, "invalid_arguments")]
+    [InlineData(ToolFailureCodes.UnexpectedError, "unexpected_error")]
+    public void ToolFailureCode_IsTheWireValueTheModelReceives(string code, string wire) =>
+        code.Should().Be(wire);
+
     [Fact]
-    public void InvalidArgumentsCode_IsTheWireValueTheModelReceives() =>
-        ErrorCodes.InvalidArguments.Should().Be("invalid_arguments");
-
-    private const string PeriodRule = "period must be one of week, month, quarter, semester, year.";
-
-    private const string CountRule = "period_count requires a bounded positive count for last_n_days or last_n_weeks only.";
+    public void RetrospectivePeriodCopy_NamesEveryKnownPeriod()
+    {
+        var copy = ErrorCopy.Resolve(ValidationErrorCodes.PeriodSupported, false);
+        foreach (var period in RetrospectivePeriodRange.KnownPeriods) copy.Should().Contain(period);
+    }
 
     [Theory]
     [InlineData("get_period_analytics", "{\"period_count\":3}")]
@@ -157,7 +164,7 @@ public sealed class RelativeReadPeriodTests
         var scope = await _blocks.ResolveAsync(tool, Json(json), _userId, default);
         scope.IsFailure.Should().BeTrue();
         scope.Error.Should().Be("A relative period is required with a period count.");
-        scope.ErrorCode.Should().Be(ErrorCodes.InvalidArguments);
+        scope.ErrorCode.Should().Be(ToolFailureCodes.InvalidArguments);
     }
 
     [Theory]
@@ -174,7 +181,7 @@ public sealed class RelativeReadPeriodTests
         var scope = await _blocks.ResolveAsync("get_habit_ranking", args, _userId, default);
         scope.IsFailure.Should().BeTrue();
         scope.Error.Should().Be("A relative ranking period cannot override a bound query or month window.");
-        scope.ErrorCode.Should().Be(ErrorCodes.InvalidArguments);
+        scope.ErrorCode.Should().Be(ToolFailureCodes.InvalidArguments);
     }
 
     [Fact]
@@ -183,7 +190,7 @@ public sealed class RelativeReadPeriodTests
         var scope = await _blocks.ResolveAsync("query_habits", Json("""{"relative_period":"this_week"}"""), _userId, default);
         scope.IsFailure.Should().BeTrue();
         scope.Error.Should().Be("A dated habit list requires today or yesterday, not a period range.");
-        scope.ErrorCode.Should().Be(ErrorCodes.InvalidArguments);
+        scope.ErrorCode.Should().Be(ToolFailureCodes.InvalidArguments);
     }
 
     [Theory]
@@ -194,7 +201,7 @@ public sealed class RelativeReadPeriodTests
         var scope = await _blocks.ResolveAsync("get_daily_summary", Json(json), _userId, default);
         scope.IsFailure.Should().BeTrue();
         scope.Error.Should().Be(rule);
-        scope.ErrorCode.Should().Be(ErrorCodes.InvalidArguments);
+        scope.ErrorCode.Should().Be(ToolFailureCodes.InvalidArguments);
     }
 
     [Theory]
@@ -207,14 +214,23 @@ public sealed class RelativeReadPeriodTests
     [InlineData("get_period_analytics", "{\"relative_period\":\"this_week\",\"baseline_relative_period\":\"last_n_days\",\"baseline_period_count\":[3]}", "baseline_period_count must be an integer.")]
     [InlineData("get_retrospective", "{\"period\":7}", "period must be a string.")]
     [InlineData("get_daily_summary", "{\"language\":7}", "language must be a string.")]
-    [InlineData("get_retrospective", "{\"period\":\"decade\"}", PeriodRule)]
-    [InlineData("get_retrospective", "{\"relative_period\":\"today\",\"period\":\"decade\"}", PeriodRule)]
     public async Task UnreadableReadArgument_FailsNamingTheArgument(string tool, string json, string rule)
     {
         var scope = await _blocks.ResolveAsync(tool, Json(json), _userId, default);
         scope.IsFailure.Should().BeTrue();
         scope.Error.Should().Be(rule);
-        scope.ErrorCode.Should().Be(ErrorCodes.InvalidArguments);
+        scope.ErrorCode.Should().Be(ToolFailureCodes.InvalidArguments);
+    }
+
+    [Theory]
+    [InlineData("{\"period\":\"decade\"}")]
+    [InlineData("{\"relative_period\":\"today\",\"period\":\"decade\"}")]
+    public async Task UnknownRetrospectivePeriod_FailsListingTheKnownPeriods(string json)
+    {
+        var scope = await _blocks.ResolveAsync("get_retrospective", Json(json), _userId, default);
+        scope.IsFailure.Should().BeTrue();
+        scope.Error.Should().Be(PeriodRule);
+        scope.ErrorCode.Should().Be(ToolFailureCodes.InvalidArguments);
     }
 
     [Fact]

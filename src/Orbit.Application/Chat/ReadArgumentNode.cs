@@ -1,5 +1,5 @@
 using System.Text.Json.Nodes;
-using Orbit.Application.Common;
+using Orbit.Application.Chat.Tools;
 using Orbit.Domain.Common;
 
 namespace Orbit.Application.Chat;
@@ -14,13 +14,13 @@ internal static class ReadArgumentNode
     {
         null => Result.Success<string?>(null),
         JsonValue value when value.TryGetValue<string>(out var text) => Result.Success<string?>(text),
-        _ => Result.Failure<string?>($"{key} must be a string.", ErrorCodes.InvalidArguments)
+        _ => Result.Failure<string?>($"{key} must be a string.", ToolFailureCodes.InvalidArguments)
     };
 
     public static Result<int?> OptionalInt(JsonObject node, string key) => node[key] switch
     {
         null => Result.Success<int?>(null),
         JsonValue value when value.TryGetValue<int>(out var number) => Result.Success<int?>(number),
-        _ => Result.Failure<int?>($"{key} must be an integer.", ErrorCodes.InvalidArguments)
+        _ => Result.Failure<int?>($"{key} must be an integer.", ToolFailureCodes.InvalidArguments)
     };
 }
