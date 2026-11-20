@@ -41,10 +41,10 @@ public sealed class RelativeReadPeriodTests
     [InlineData("get_habit_ranking")]
     public async Task RelativeRead_OverridesModelDatesAndFreezesScope(string tool)
     {
-        var scope = await _blocks.ResolveAsync(tool, Json("""
+        var scope = (await _blocks.ResolveAsync(tool, Json("""
             {"relative_period":"this_week","date_from":"2026-10-19","date_to":"2026-10-25",
              "date_to_exclusive":"2026-10-26","window_from_utc":"2026-10-19T00:00:00Z","window_to_utc":"2026-10-26T00:00:00Z"}
-            """), _userId, default);
+            """), _userId, default)).Value;
 
         scope.GetProperty("date_from").GetString().Should().Be("2026-10-26");
         var endKey = tool == "get_habit_ranking" ? "date_to_exclusive" : "date_to";
@@ -57,7 +57,7 @@ public sealed class RelativeReadPeriodTests
         }
         _dates.GetUserTodayAsync(_userId, Arg.Any<CancellationToken>()).Returns(Monday.AddDays(8));
         _dates.GetUserWeekStartDayAsync(_userId, Arg.Any<CancellationToken>()).Returns(0);
-        var replay = await _blocks.ResolveAsync(tool, scope, _userId, default);
+        var replay = (await _blocks.ResolveAsync(tool, scope, _userId, default)).Value;
         replay.GetRawText().Should().Be(scope.GetRawText());
     }
 
@@ -97,7 +97,7 @@ public sealed class RelativeReadPeriodTests
     [InlineData("get_period_analytics")]
     public async Task AbsoluteDates_RemainAvailable(string tool)
     {
-        var scope = await _blocks.ResolveAsync(tool, Json("""{"date_from":"2026-10-19","date_to":"2026-10-25"}"""), _userId, default);
+        var scope = (await _blocks.ResolveAsync(tool, Json("""{"date_from":"2026-10-19","date_to":"2026-10-25"}"""), _userId, default)).Value;
         scope.GetProperty("date_from").GetString().Should().Be("2026-10-19");
         scope.GetProperty("date_to").GetString().Should().Be("2026-10-25");
     }
@@ -105,7 +105,7 @@ public sealed class RelativeReadPeriodTests
     [Fact]
     public async Task RelativeMonth_UsesCalendarDatesAndPreservesInsightPeriodContract()
     {
-        var scope = await _blocks.ResolveAsync("get_retrospective", Json("""{"relative_period":"last_month","period":"week"}"""), _userId, default);
+        var scope = (await _blocks.ResolveAsync("get_retrospective", Json("""{"relative_period":"last_month","period":"week"}"""), _userId, default)).Value;
         scope.GetProperty("date_from").GetString().Should().Be("2026-09-01");
         scope.GetProperty("date_to").GetString().Should().Be("2026-09-30");
         scope.GetProperty("period").GetString().Should().Be("month");
@@ -117,23 +117,40 @@ public sealed class RelativeReadPeriodTests
     public async Task DatedHabitList_ResolvesRelativeDayWithoutModelArithmetic(string period, string day, bool overdue)
     {
         var args = JsonSerializer.SerializeToElement(new { relative_period = period, date = "2026-10-19" });
-        var scope = await _blocks.ResolveAsync("query_habits", args, _userId, default);
+        var scope = (await _blocks.ResolveAsync("query_habits", args, _userId, default)).Value;
         scope.GetProperty("date").GetString().Should().Be(day);
         scope.GetProperty("include_overdue").GetBoolean().Should().Be(overdue);
         scope.TryGetProperty("relative_period", out _).Should().BeFalse();
     }
 
     [Theory]
-    [InlineData("{\"relative_period\":\"week\"}")]
-    [InlineData("{\"relative_period\":\"decade\"}")]
-    [InlineData("{\"relative_period\":\"last_n_weeks\"}")]
-    [InlineData("{\"relative_period\":\"last_n_weeks\",\"period_count\":0}")]
-    [InlineData("{\"period_count\":3}")]
-    [InlineData("{\"baseline_relative_period\":\"decade\"}")]
-    public async Task InvalidPeriod_FailsBeforeARead(string json)
+    [InlineData("get_period_analytics", "{\"relative_period\":\"week\"}", "Unknown relative period.")]
+    [InlineData("get_period_analytics", "{\"relative_period\":\"decade\"}", "Unknown relative period.")]
+    [InlineData("get_period_analytics", "{\"relative_period\":\"last_n_weeks\"}", CountRule)]
+    [InlineData("get_period_analytics", "{\"relative_period\":\"last_n_weeks\",\"period_count\":0}", CountRule)]
+    [InlineData("get_period_analytics", "{\"baseline_relative_period\":\"decade\"}", "Unknown relative period.")]
+    [InlineData("get_period_analytics", "{\"relative_period\":\"this_week\",\"baseline_relative_period\":\"last_7_days\",\"baseline_period_count\":7}", CountRule)]
+    [InlineData("get_habit_metrics", "{\"relative_period\":\"last_7_days\",\"period_count\":7}", CountRule)]
+    [InlineData("get_habit_metrics", "{\"relative_period\":\"last_n_days\",\"period_count\":3660}", CountRule)]
+    public async Task InvalidSelection_FailsWithTheValidatorMessageBeforeARead(string tool, string json, string rule)
     {
-        var resolve = () => _blocks.ResolveAsync("get_period_analytics", Json(json), _userId, default);
-        await resolve.Should().ThrowAsync<ArgumentException>();
+        var scope = await _blocks.ResolveAsync(tool, Json(json), _userId, default);
+        scope.IsFailure.Should().BeTrue();
+        scope.Error.Should().Contain(rule);
+        scope.ErrorCode.Should().Be(RelativeReadPeriod.InvalidArgumentsCode);
+    }
+
+    private const string CountRule = "period_count requires a bounded positive count for last_n_days or last_n_weeks only.";
+
+    [Theory]
+    [InlineData("get_period_analytics", "{\"period_count\":3}")]
+    [InlineData("get_period_analytics", "{\"baseline_period_count\":3}")]
+    public async Task CountWithoutAPeriod_FailsNamingTheRule(string tool, string json)
+    {
+        var scope = await _blocks.ResolveAsync(tool, Json(json), _userId, default);
+        scope.IsFailure.Should().BeTrue();
+        scope.Error.Should().Be("A relative period is required with a period count.");
+        scope.ErrorCode.Should().Be(RelativeReadPeriod.InvalidArgumentsCode);
     }
 
     [Theory]
@@ -147,8 +164,40 @@ public sealed class RelativeReadPeriodTests
             ["relative_period"] = "this_week",
             [field] = "bound"
         });
-        var resolve = () => _blocks.ResolveAsync("get_habit_ranking", args, _userId, default);
-        await resolve.Should().ThrowAsync<ArgumentException>();
+        var scope = await _blocks.ResolveAsync("get_habit_ranking", args, _userId, default);
+        scope.IsFailure.Should().BeTrue();
+        scope.Error.Should().Be("A relative ranking period cannot override a bound query or month window.");
+        scope.ErrorCode.Should().Be(RelativeReadPeriod.InvalidArgumentsCode);
+    }
+
+    [Fact]
+    public async Task DatedHabitList_RefusesAPeriodRange()
+    {
+        var scope = await _blocks.ResolveAsync("query_habits", Json("""{"relative_period":"this_week"}"""), _userId, default);
+        scope.IsFailure.Should().BeTrue();
+        scope.Error.Should().Be("A dated habit list requires today or yesterday, not a period range.");
+        scope.ErrorCode.Should().Be(RelativeReadPeriod.InvalidArgumentsCode);
+    }
+
+    [Theory]
+    [InlineData("""{"date_from":"2026-10-19","date_to":17}""", "Read dates must be strings.")]
+    [InlineData("""{"date_from":"next week"}""", "Read dates must be absolute ISO dates.")]
+    public async Task NonIsoReadDate_FailsNamingTheRule(string json, string rule)
+    {
+        var scope = await _blocks.ResolveAsync("get_daily_summary", Json(json), _userId, default);
+        scope.IsFailure.Should().BeTrue();
+        scope.Error.Should().Be(rule);
+        scope.ErrorCode.Should().Be(RelativeReadPeriod.InvalidArgumentsCode);
+    }
+
+    [Fact]
+    public async Task HabitMonth_WithABrokenWindow_FailsWithTheWindowMessage()
+    {
+        var scope = await _blocks.ResolveAsync("get_habit_month",
+            Json("""{"date_from":"2026-10-20","date_to":"2026-10-19"}"""), _userId, default);
+        scope.IsFailure.Should().BeTrue();
+        scope.Error.Should().Be(DomainErrors.HabitCalendarRangeInvalid.Message);
+        scope.ErrorCode.Should().Be(DomainErrors.HabitCalendarRangeInvalid.Code);
     }
 
     [Fact]

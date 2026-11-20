@@ -154,24 +154,24 @@ public sealed class ReadBlockScopeTests
         user.SetLanguage("pt-BR");
         _users.GetByIdAsync(_userId, Arg.Any<CancellationToken>()).Returns(user);
 
-        var scope = await _blocks.ResolveAsync(tool, Json("{\"language\":\"en\"}"), _userId, default);
+        var scope = (await _blocks.ResolveAsync(tool, Json("{\"language\":\"en\"}"), _userId, default)).Value;
 
         scope.GetProperty("language").GetString().Should().Be("pt-BR");
         user.SetLanguage("en");
-        (await _blocks.ResolveAsync(tool, scope, _userId, default))
+        (await _blocks.ResolveAsync(tool, scope, _userId, default)).Value
             .GetProperty("language").GetString().Should().Be("en");
     }
 
     [Fact]
     public async Task RollingDatesResolveOnceAndCalendarUsesAccountZone()
     {
-        var original = await _blocks.ResolveAsync("query_habits", Json("{\"date\":\"today\",\"is_completed\":true}"), _userId, default);
+        var original = (await _blocks.ResolveAsync("query_habits", Json("{\"date\":\"today\",\"is_completed\":true}"), _userId, default)).Value;
         _dates.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(_day.AddDays(1));
-        var replay = await _blocks.ResolveAsync("query_habits", original, _userId, default);
+        var replay = (await _blocks.ResolveAsync("query_habits", original, _userId, default)).Value;
         replay.GetRawText().Should().Be(original.GetRawText());
         replay.GetProperty("date").GetString().Should().Be("2026-04-01");
         replay.GetProperty("include_overdue").GetBoolean().Should().BeTrue();
-        var calendar = await _blocks.ResolveAsync("get_calendar_overview", Json("{\"date_from\":\"2026-04-01\"}"), _userId, default);
+        var calendar = (await _blocks.ResolveAsync("get_calendar_overview", Json("{\"date_from\":\"2026-04-01\"}"), _userId, default)).Value;
         calendar.GetProperty("window_from_utc").GetString().Should().StartWith("2026-04-01T03:00:00");
         calendar.GetProperty("window_to_utc").GetString().Should().StartWith("2026-04-02T03:00:00");
     }
@@ -184,26 +184,26 @@ public sealed class ReadBlockScopeTests
     [InlineData("2026-11-06T15:00:00.0000000Z", "2026-11-06T15:00:00.0000000Z")]
     public async Task CalendarScopeWritesEachAcceptedModelWindowAsUtcRoundTrip(string sent, string expected)
     {
-        var scope = await _blocks.ResolveAsync("get_calendar_overview",
-            JsonSerializer.SerializeToElement(new { window_from_utc = sent, window_to_utc = "2026-11-08T00:00:00+02:00" }), _userId, default);
+        var scope = (await _blocks.ResolveAsync("get_calendar_overview",
+            JsonSerializer.SerializeToElement(new { window_from_utc = sent, window_to_utc = "2026-11-08T00:00:00+02:00" }), _userId, default)).Value;
 
         scope.GetProperty("window_from_utc").GetString().Should().Be(expected);
         scope.GetProperty("window_to_utc").GetString().Should().Be("2026-11-07T22:00:00.0000000Z");
-        var replay = await _blocks.ResolveAsync("get_calendar_overview", scope, _userId, default);
+        var replay = (await _blocks.ResolveAsync("get_calendar_overview", scope, _userId, default)).Value;
         replay.GetProperty("window_from_utc").GetString().Should().Be(expected);
     }
 
     [Fact]
     public async Task CalendarScopeReplacesAnUnparseableModelWindowWithTheDefaultWindow()
     {
-        var dated = await _blocks.ResolveAsync("get_calendar_overview",
-            Json("""{"date_from":"2026-04-01","date_to":"2026-04-02","window_from_utc":"soon","window_to_utc":17}"""), _userId, default);
+        var dated = (await _blocks.ResolveAsync("get_calendar_overview",
+            Json("""{"date_from":"2026-04-01","date_to":"2026-04-02","window_from_utc":"soon","window_to_utc":17}"""), _userId, default)).Value;
         dated.GetProperty("window_from_utc").GetString().Should().Be("2026-04-01T03:00:00.0000000Z");
         dated.GetProperty("window_to_utc").GetString().Should().Be("2026-04-03T03:00:00.0000000Z");
 
         var beforeAtUtc = TimeProvider.System.GetUtcNow().UtcDateTime;
-        var open = await _blocks.ResolveAsync("get_calendar_overview",
-            Json("""{"window_from_utc":"next week","window_to_utc":"2026-11-08T00:00:00Z"}"""), _userId, default);
+        var open = (await _blocks.ResolveAsync("get_calendar_overview",
+            Json("""{"window_from_utc":"next week","window_to_utc":"2026-11-08T00:00:00Z"}"""), _userId, default)).Value;
         var fromAtUtc = DateTime.Parse(open.GetProperty("window_from_utc").GetString()!, System.Globalization.CultureInfo.InvariantCulture,
             System.Globalization.DateTimeStyles.RoundtripKind);
         fromAtUtc.Kind.Should().Be(DateTimeKind.Utc);
@@ -214,16 +214,16 @@ public sealed class ReadBlockScopeTests
     [Fact]
     public async Task CalendarScopeKeepsTheApiFilledDefaultAndDateWindows()
     {
-        var single = await _blocks.ResolveAsync("get_calendar_overview", Json("""{"date_from":"2026-04-01"}"""), _userId, default);
+        var single = (await _blocks.ResolveAsync("get_calendar_overview", Json("""{"date_from":"2026-04-01"}"""), _userId, default)).Value;
         single.GetProperty("window_from_utc").GetString().Should().Be("2026-04-01T03:00:00.0000000Z");
         single.GetProperty("window_to_utc").GetString().Should().Be("2026-04-02T03:00:00.0000000Z");
-        var ranged = await _blocks.ResolveAsync("get_calendar_overview", Json("""{"date_to":"2026-04-03"}"""), _userId, default);
+        var ranged = (await _blocks.ResolveAsync("get_calendar_overview", Json("""{"date_to":"2026-04-03"}"""), _userId, default)).Value;
         ranged.GetProperty("date_from").GetString().Should().Be("2026-04-01");
         ranged.GetProperty("window_from_utc").GetString().Should().Be("2026-04-01T03:00:00.0000000Z");
         ranged.GetProperty("window_to_utc").GetString().Should().Be("2026-04-04T03:00:00.0000000Z");
 
         var beforeAtUtc = TimeProvider.System.GetUtcNow().UtcDateTime;
-        var open = await _blocks.ResolveAsync("get_calendar_overview", Json("{}"), _userId, default);
+        var open = (await _blocks.ResolveAsync("get_calendar_overview", Json("{}"), _userId, default)).Value;
         var fromAtUtc = DateTime.Parse(open.GetProperty("window_from_utc").GetString()!, System.Globalization.CultureInfo.InvariantCulture,
             System.Globalization.DateTimeStyles.RoundtripKind);
         var toAtUtc = DateTime.Parse(open.GetProperty("window_to_utc").GetString()!, System.Globalization.CultureInfo.InvariantCulture,
