@@ -5,11 +5,13 @@ using Orbit.Application.ApiKeys.Queries;
 using Orbit.Application.ChecklistTemplates.Queries;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Tools.Implementations;
+using Orbit.Application.Common;
 using Orbit.Application.Habits.Queries;
 using Orbit.Application.Notifications.Queries;
 using Orbit.Application.Profile.Queries;
 using Orbit.Application.Referrals.Queries;
 using Orbit.Application.Tags.Queries;
+using Orbit.Domain.Common;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Models;
@@ -24,13 +26,19 @@ public sealed class ReadBlockFactory(IUserDateService dates, IReadQueryTokenServ
         or "get_notifications" or "list_tags" or "get_checklist_templates" or "get_api_keys"
         or "get_profile" or "get_subscription_overview" or "get_referral_overview";
 
-    public async Task<JsonElement> ResolveAsync(string tool, JsonElement args, Guid userId, CancellationToken ct)
+    /// <summary>
+    /// Resolves the scope of a read. A failure is a rule of the read that the model's arguments broke. Its message
+    /// names the rule, so the model can correct the call. An exception is an unexpected fault.
+    /// </summary>
+    public async Task<Result<JsonElement>> ResolveAsync(string tool, JsonElement args, Guid userId, CancellationToken ct)
     {
         var node = JsonNode.Parse(args.GetRawText())!.AsObject();
         var today = await dates.GetUserTodayAsync(userId, ct);
-        await RelativeReadPeriod.ResolveAsync(tool, node, today, dates, userId, ct);
+        var period = await RelativeReadPeriod.ResolveAsync(tool, node, today, dates, userId, ct);
+        if (period.IsFailure) return period.PropagateError<JsonElement>();
         args = JsonSerializer.SerializeToElement(node);
-        ValidateDates(args);
+        var datesCheck = ValidateDates(args);
+        if (datesCheck.IsFailure) return datesCheck.PropagateError<JsonElement>();
         if (tool == "query_habits" && node["date"]?.GetValue<string>() is { } date)
         {
             if (date.Equals("today", StringComparison.OrdinalIgnoreCase))
@@ -44,25 +52,37 @@ public sealed class ReadBlockFactory(IUserDateService dates, IReadQueryTokenServ
             var from = tool == "get_habit_metrics" ? today.AddDays(-29) : today;
             var to = today;
             if (tool == "get_retrospective")
-                (from, to) = RetrospectivePeriodRange.Resolve(node["period"]?.GetValue<string>() ?? "week", today,
+            {
+                var named = ReadArgumentNode.OptionalString(node, "period");
+                if (named.IsFailure) return named.PropagateError<JsonElement>();
+                var retrospectivePeriod = named.Value ?? "week";
+                if (!RetrospectivePeriodRange.IsKnownPeriod(retrospectivePeriod))
+                    return Result.Failure<JsonElement>(RetrospectivePeriodRule, ToolFailureCodes.InvalidArguments);
+                (from, to) = RetrospectivePeriodRange.Resolve(retrospectivePeriod, today,
                     await dates.GetUserWeekStartDayAsync(userId, ct));
+            }
             node["date_from"] ??= Iso(from);
             node["date_to"] ??= tool == "get_daily_summary" ? node["date_from"]!.DeepClone() : Iso(to);
         }
-        ResolveHabitMonth(tool, node, args, today);
+        var month = ResolveHabitMonth(tool, node, args, today);
+        if (month.IsFailure) return month.PropagateError<JsonElement>();
         ApplyDefaults(tool, node);
         if (tool is "get_daily_summary" or "get_retrospective")
         {
+            var language = ReadArgumentNode.OptionalString(node, "language");
+            if (language.IsFailure) return language.PropagateError<JsonElement>();
             var user = await users.GetByIdAsync(userId, ct);
-            node["language"] = !string.IsNullOrWhiteSpace(user?.Language)
-                ? user.Language : node["language"]?.GetValue<string>() ?? "en";
+            node["language"] = !string.IsNullOrWhiteSpace(user?.Language) ? user.Language : language.Value ?? "en";
         }
         if (tool is "query_goals" or "review_goals" or "get_gamification_overview" or "get_calendar_overview" or "get_habit_metrics")
             node["as_of"] ??= Iso(today);
         if (tool == "get_calendar_overview")
             await ResolveCalendarAsync(node, args, today, userId, ct);
-        return JsonSerializer.SerializeToElement(node);
+        return Result.Success(JsonSerializer.SerializeToElement(node));
     }
+
+    private static readonly string RetrospectivePeriodRule =
+        $"period must be one of {string.Join(", ", RetrospectivePeriodRange.KnownPeriods)}.";
 
     private static string Iso(DateOnly day) => day.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 
@@ -97,28 +117,31 @@ public sealed class ReadBlockFactory(IUserDateService dates, IReadQueryTokenServ
         return (nowAtUtc, nowAtUtc.AddDays(60));
     }
 
-    private static void ResolveHabitMonth(string tool, JsonObject node, JsonElement args, DateOnly today)
+    private static Result ResolveHabitMonth(string tool, JsonObject node, JsonElement args, DateOnly today)
     {
-        if (tool != "get_habit_month") return;
+        if (tool != "get_habit_month") return Result.Success();
         var window = HabitCalendarWindow.Resolve(JsonArgumentParser.ParseDateOnly(args, "date_from"),
             JsonArgumentParser.ParseDateOnly(args, "date_to"), today);
-        if (window.IsFailure) throw new ArgumentException(window.Error);
+        if (window.IsFailure) return window.PropagateError();
         node["date_from"] = window.Value.From.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         node["date_to"] = window.Value.To.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         node["language"] ??= "en";
+        return Result.Success();
     }
 
-    private static void ValidateDates(JsonElement args)
+    private static Result ValidateDates(JsonElement args)
     {
         foreach (var key in new[] { "date", "date_from", "date_to", "date_to_exclusive", "baseline_from", "baseline_to", "as_of" })
         {
             if (!args.TryGetProperty(key, out var value) || value.ValueKind == JsonValueKind.Null) continue;
-            if (value.ValueKind != JsonValueKind.String) throw new ArgumentException("Read dates must be strings.");
+            if (value.ValueKind != JsonValueKind.String)
+                return Result.Failure("Read dates must be strings.", ToolFailureCodes.InvalidArguments);
             var text = value.GetString();
             if (key == "date" && string.Equals(text, "today", StringComparison.OrdinalIgnoreCase)) continue;
             if (!DateOnly.TryParseExact(text, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out _))
-                throw new ArgumentException("Read dates must be absolute ISO dates.");
+                return Result.Failure("Read dates must be absolute ISO dates.", ToolFailureCodes.InvalidArguments);
         }
+        return Result.Success();
     }
 
     private static void ApplyDefaults(string tool, JsonObject node)
