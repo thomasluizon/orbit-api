@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Orbit.Application.Chat;
 using Orbit.Application.Chat.Tools;
+using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Models;
 
@@ -76,7 +77,7 @@ public partial class AgentOperationExecutor
         if (error is not null) return error.ErrorCode;
         if (toolRegistry.GetTool(member.OperationId) is not IArgumentCheckTool check) return null;
         var validation = await check.CheckArgumentsAsync(member.Arguments, userId, ct);
-        return validation.IsFailure ? validation.ErrorCode ?? "invalid_arguments" : null;
+        return validation.IsFailure ? validation.ErrorCode ?? ErrorCodes.InvalidArguments : null;
     }
 
     private async Task<ToolResult> ExecuteChangeSetAsync(OperationExecutionContext execution,

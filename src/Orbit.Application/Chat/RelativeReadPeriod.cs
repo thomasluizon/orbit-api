@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json.Nodes;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Validators;
+using Orbit.Application.Common;
 using Orbit.Application.Habits.Queries;
 using Orbit.Domain.Common;
 using Orbit.Domain.Interfaces;
@@ -10,8 +11,6 @@ namespace Orbit.Application.Chat;
 
 public static class RelativeReadPeriod
 {
-    public const string InvalidArgumentsCode = "invalid_arguments";
-
     public const string Instruction = "For every relative period phrase in English or Portuguese on a read, use relative_period and let the server resolve the person's local dates and week start. "
         + "For these reads, use absolute dates only when the person names dates. Never calculate calendar boundaries yourself. "
         + "Map this week / esta semana to this_week, last week / semana passada to last_week, "
@@ -54,8 +53,12 @@ public static class RelativeReadPeriod
         if (!Supports(tool)) return Result.Success();
         if (tool == "query_habits") return ResolveDay(node, today);
         var weekStartDay = await dates.GetUserWeekStartDayAsync(userId, ct);
-        if (tool == "get_retrospective" && node["relative_period"]?.GetValue<string>() is { } period)
-            SetRetrospectivePeriod(node, period);
+        if (tool == "get_retrospective")
+        {
+            var selected = ReadArgumentNode.OptionalString(node, "relative_period");
+            if (selected.IsFailure) return selected.PropagateError();
+            if (selected.Value is { } period) SetRetrospectivePeriod(node, period);
+        }
         var window = ResolveWindow(node, "relative_period", "period_count", "date_from",
             tool == "get_habit_ranking" ? "date_to_exclusive" : "date_to", today, weekStartDay,
             exclusive: tool == "get_habit_ranking");
@@ -66,10 +69,12 @@ public static class RelativeReadPeriod
 
     private static Result ResolveDay(JsonObject node, DateOnly today)
     {
-        if (node["relative_period"] is null) return Result.Success();
-        var period = node["relative_period"]!.GetValue<string>().ToLowerInvariant();
+        var selected = ReadArgumentNode.OptionalString(node, "relative_period");
+        if (selected.IsFailure) return selected.PropagateError();
+        if (selected.Value is not { } named) return Result.Success();
+        var period = named.ToLowerInvariant();
         if (period is not ("today" or "yesterday"))
-            return Result.Failure("A dated habit list requires today or yesterday, not a period range.", InvalidArgumentsCode);
+            return Result.Failure("A dated habit list requires today or yesterday, not a period range.", ErrorCodes.InvalidArguments);
         var (date, _) = RetrospectivePeriodRange.Resolve(period, today, 1);
         node["date"] = date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         if (period == "today") node["include_overdue"] ??= true;
@@ -97,19 +102,22 @@ public static class RelativeReadPeriod
     private static Result ResolveWindow(JsonObject node, string selector, string countKey, string fromKey, string toKey,
         DateOnly today, int weekStartDay, bool exclusive = false)
     {
-        if (node[selector] is null)
+        var selected = ReadArgumentNode.OptionalString(node, selector);
+        if (selected.IsFailure) return selected.PropagateError();
+        var counted = ReadArgumentNode.OptionalInt(node, countKey);
+        if (counted.IsFailure) return counted.PropagateError();
+        if (selected.Value is not { } period)
         {
-            return node[countKey] is not null
-                ? Result.Failure("A relative period is required with a period count.", InvalidArgumentsCode)
+            return counted.Value.HasValue
+                ? Result.Failure("A relative period is required with a period count.", ErrorCodes.InvalidArguments)
                 : Result.Success();
         }
-        var period = node[selector]!.GetValue<string>();
-        var count = node[countKey]?.GetValue<int>();
+        var count = counted.Value;
         var validation = new RelativeReadPeriodSelectionValidator().Validate(new RelativeReadPeriodSelection(period, count));
         if (!validation.IsValid)
-            return Result.Failure(string.Join(" ", validation.Errors.Select(error => error.ErrorMessage).Distinct()), InvalidArgumentsCode);
+            return Result.Failure(string.Join(" ", validation.Errors.Select(error => error.ErrorMessage).Distinct()), ErrorCodes.InvalidArguments);
         if (exclusive && (node["query_token"] is not null || node["cursor"] is not null || node["window"] is not null || node["months"] is not null))
-            return Result.Failure("A relative ranking period cannot override a bound query or month window.", InvalidArgumentsCode);
+            return Result.Failure("A relative ranking period cannot override a bound query or month window.", ErrorCodes.InvalidArguments);
         var (from, to) = RetrospectivePeriodRange.Resolve(period, today, weekStartDay, count);
         node[fromKey] = from.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         node[toKey] = (exclusive ? to.AddDays(1) : to).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);

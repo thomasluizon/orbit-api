@@ -52,8 +52,15 @@ public sealed class ReadBlockFactory(IUserDateService dates, IReadQueryTokenServ
             var from = tool == "get_habit_metrics" ? today.AddDays(-29) : today;
             var to = today;
             if (tool == "get_retrospective")
-                (from, to) = RetrospectivePeriodRange.Resolve(node["period"]?.GetValue<string>() ?? "week", today,
+            {
+                var named = ReadArgumentNode.OptionalString(node, "period");
+                if (named.IsFailure) return named.PropagateError<JsonElement>();
+                var retrospectivePeriod = named.Value ?? "week";
+                if (!RetrospectivePeriodRange.IsKnownPeriod(retrospectivePeriod))
+                    return Result.Failure<JsonElement>(RetrospectivePeriodRule, ErrorCodes.InvalidArguments);
+                (from, to) = RetrospectivePeriodRange.Resolve(retrospectivePeriod, today,
                     await dates.GetUserWeekStartDayAsync(userId, ct));
+            }
             node["date_from"] ??= Iso(from);
             node["date_to"] ??= tool == "get_daily_summary" ? node["date_from"]!.DeepClone() : Iso(to);
         }
@@ -62,9 +69,10 @@ public sealed class ReadBlockFactory(IUserDateService dates, IReadQueryTokenServ
         ApplyDefaults(tool, node);
         if (tool is "get_daily_summary" or "get_retrospective")
         {
+            var language = ReadArgumentNode.OptionalString(node, "language");
+            if (language.IsFailure) return language.PropagateError<JsonElement>();
             var user = await users.GetByIdAsync(userId, ct);
-            node["language"] = !string.IsNullOrWhiteSpace(user?.Language)
-                ? user.Language : node["language"]?.GetValue<string>() ?? "en";
+            node["language"] = !string.IsNullOrWhiteSpace(user?.Language) ? user.Language : language.Value ?? "en";
         }
         if (tool is "query_goals" or "review_goals" or "get_gamification_overview" or "get_calendar_overview" or "get_habit_metrics")
             node["as_of"] ??= Iso(today);
@@ -72,6 +80,8 @@ public sealed class ReadBlockFactory(IUserDateService dates, IReadQueryTokenServ
             await ResolveCalendarAsync(node, args, today, userId, ct);
         return Result.Success(JsonSerializer.SerializeToElement(node));
     }
+
+    private const string RetrospectivePeriodRule = "period must be one of week, month, quarter, semester, year.";
 
     private static string Iso(DateOnly day) => day.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 
@@ -111,7 +121,7 @@ public sealed class ReadBlockFactory(IUserDateService dates, IReadQueryTokenServ
         if (tool != "get_habit_month") return Result.Success();
         var window = HabitCalendarWindow.Resolve(JsonArgumentParser.ParseDateOnly(args, "date_from"),
             JsonArgumentParser.ParseDateOnly(args, "date_to"), today);
-        if (window.IsFailure) return Result.Failure(window.Error, window.ErrorCode, window.ErrorArgs);
+        if (window.IsFailure) return window.PropagateError();
         node["date_from"] = window.Value.From.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         node["date_to"] = window.Value.To.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         node["language"] ??= "en";
@@ -124,11 +134,11 @@ public sealed class ReadBlockFactory(IUserDateService dates, IReadQueryTokenServ
         {
             if (!args.TryGetProperty(key, out var value) || value.ValueKind == JsonValueKind.Null) continue;
             if (value.ValueKind != JsonValueKind.String)
-                return Result.Failure("Read dates must be strings.", RelativeReadPeriod.InvalidArgumentsCode);
+                return Result.Failure("Read dates must be strings.", ErrorCodes.InvalidArguments);
             var text = value.GetString();
             if (key == "date" && string.Equals(text, "today", StringComparison.OrdinalIgnoreCase)) continue;
             if (!DateOnly.TryParseExact(text, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out _))
-                return Result.Failure("Read dates must be absolute ISO dates.", RelativeReadPeriod.InvalidArgumentsCode);
+                return Result.Failure("Read dates must be absolute ISO dates.", ErrorCodes.InvalidArguments);
         }
         return Result.Success();
     }

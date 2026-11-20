@@ -7,6 +7,7 @@ using Orbit.Application.Chat;
 using Orbit.Application.Chat.Commands;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Tools.Implementations;
+using Orbit.Application.Common;
 using Orbit.Application.Tests.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -208,7 +209,7 @@ public partial class ProcessUserChatCommandHandlerTests
         _operationExecutor.ExecuteAsync(Arg.Any<AgentExecuteOperationRequest>(), Arg.Any<CancellationToken>())
             .Returns(new RepairableArgumentResponse(new(new(tool.Name, tool.Name, AgentRiskClass.Low,
                 AgentConfirmationRequirement.FreshConfirmation, AgentOperationStatus.Failed,
-                PolicyReason: "Invalid schedule.", ErrorCode: "invalid_arguments", Access: "write"))));
+                PolicyReason: "Invalid schedule.", ErrorCode: ErrorCodes.InvalidArguments, Access: "write"))));
         _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(),
             Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>()).Returns(Result.Success(new AiResponse
             { ToolCalls = [repair], ConversationContext = TestConversationContext }));

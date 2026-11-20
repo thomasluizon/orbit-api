@@ -7,6 +7,7 @@ using NSubstitute;
 using Orbit.Application.Chat;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Tools.Implementations;
+using Orbit.Application.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
@@ -66,7 +67,7 @@ public sealed class AgentOperationExecutorReadArgumentTests
         response.Operation.Status.Should().Be(AgentOperationStatus.Failed);
         response.Operation.PolicyReason.Should().Be(
             "period_count requires a bounded positive count for last_n_days or last_n_weeks only.");
-        response.Operation.ErrorCode.Should().Be("invalid_arguments");
+        response.Operation.ErrorCode.Should().Be(ErrorCodes.InvalidArguments);
         logger.ReceivedCalls().Where(call => call.GetMethodInfo().Name == nameof(ILogger.Log))
             .Select(call => (LogLevel)call.GetArguments()[0]!).Should().NotContain(LogLevel.Error);
         await mediator.DidNotReceiveWithAnyArgs().Send<object>(default!, default);
