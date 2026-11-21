@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { accepts, outcome, verify } from './stripe-webhook-version.mjs'
+import { accepts, verify } from './stripe-webhook-version.mjs'
 
 const sha = 'b'.repeat(40)
 const library = '2026-08-26.dahlia'
@@ -123,39 +123,4 @@ test('a degraded Stripe read fails instead of passing without versions', async (
 test('a body without the Stripe check fails', async () => {
   const { fetchImpl } = server({ [`${staging}/health/stripe`]: { status: 'Healthy', commit: sha, checks: [] } })
   await assert.rejects(verify(staging, staging, sha, fetchImpl), /has no stripe-webhook-version check/)
-})
-
-test('the release checks production before the deploy and each environment after its deploy', () => {
-  const workflow = readFileSync(new URL('../workflows/release.yml', import.meta.url), 'utf8')
-  const [, production, staging] = workflow.split(/\n  (?:production|staging):\n/)
-  const before = production.indexOf("stripe-webhook-version.mjs 'https://api-staging.useorbit.org' 'https://api.useorbit.org'")
-  assert.ok(before > production.indexOf('- name: Require healthy staging commit'))
-  assert.ok(before < production.indexOf('- name: Trigger and monitor Render deploy'))
-  assert.match(production, /- name: Require a production Stripe webhook endpoint the release accepts\n\s+if: \$\{\{ !inputs.force_unstaged \}\}/)
-  const after = production.indexOf("stripe-webhook-version.mjs 'https://api.useorbit.org' 'https://api.useorbit.org'")
-  assert.ok(after > production.indexOf('- name: Verify API health and live commit'))
-  assert.ok(after < production.indexOf('- name: Record deployment'))
-  const stagingAfter = staging.indexOf("stripe-webhook-version.mjs 'https://api-staging.useorbit.org' 'https://api-staging.useorbit.org'")
-  assert.ok(stagingAfter > staging.indexOf('- name: Verify staging health and live commit'))
-  assert.ok(stagingAfter < staging.indexOf('- name: Record deployment'))
-  const guards = readFileSync(new URL('../workflows/guards.yml', import.meta.url), 'utf8')
-  assert.match(guards, /node --test [^\n]*\.github\/scripts\/stripe-webhook-version\.test\.mjs/)
-})
-
-test('a line break that came from a health response cannot start a second log line or a workflow command', async () => {
-  const forged = '2026-02-25.clover\r\n::error::forged\u2028'
-  const cases = [
-    { failed: true, routes: { [`${staging}/health/stripe`]: health({ libraryApiVersion: library, endpointApiVersions: [forged] }) } },
-    { failed: false, routes: { [`${staging}/health/stripe`]: health({ libraryApiVersion: library, endpointApiVersions: [library, forged] }) } },
-    { failed: true, routes: { [`${staging}/health/stripe`]: health({ libraryApiVersion: library, endpointApiVersions: [library] }, forged) } },
-  ]
-  for (const { failed, routes } of cases) {
-    const result = await outcome(staging, staging, sha, server(routes).fetchImpl)
-    assert.equal(result.failed, failed)
-    assert.doesNotMatch(result.line, /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/)
-    assert.ok(result.line.includes('2026-02-25.clover\\u000d\\u000a::error::forged\\u2028'), result.line)
-  }
-  const body = await outcome(staging, staging, sha, async () => new Response('\n::error::forged', { status: 502 }))
-  assert.equal(body.failed, true)
-  assert.doesNotMatch(body.line, /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/)
 })

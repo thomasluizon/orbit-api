@@ -1,21 +1,11 @@
 #!/usr/bin/env python3
-"""Fail CI on non-idempotent raw index SQL in EF migrations.
+"""Fail CI on a raw CREATE INDEX without IF NOT EXISTS or a raw DROP INDEX without IF EXISTS in migrationBuilder.Sql(...).
 
-EF applies migrations at startup on Render; a raw CREATE INDEX for an index that
-already exists throws Postgres 42P07 and fails the deploy. Every raw CREATE INDEX
-inside migrationBuilder.Sql(...) must carry IF NOT EXISTS, and every raw DROP
-INDEX must carry IF EXISTS. The fluent migrationBuilder.CreateIndex(...) /
-DropIndex(...) API is already idempotent-safe and is not flagged (its method
-names carry no whitespace, so they never match the raw-SQL patterns).
-
-Mirrors checkEfMigrationRawIndex in the orbit-ui-mobile consumer repo
-(.claude/hooks/_lib/rules-source.mjs): only the balanced-paren body of each
-migrationBuilder.Sql(...) call is scanned, split into ;-separated statements so
-one statement's IF [NOT] EXISTS clause cannot mask a sibling that lacks its own.
+A re-applied index statement throws Postgres 42P07 at startup and fails the deploy.
+Each ;-separated statement is checked alone. The fluent CreateIndex/DropIndex API is not flagged.
 
     check_migration_idempotency.py <migration.cs> [<migration.cs> ...]
 """
-import os
 import re
 import sys
 
@@ -50,30 +40,11 @@ def find_violations(path: str, contents: str) -> list[str]:
     return findings
 
 
-def _confine(candidate: str, base: str) -> str:
-    """Resolve candidate and confirm it stays within base, rejecting path traversal."""
-    resolved = os.path.realpath(candidate)
-    if resolved != base and not resolved.startswith(base + os.sep):
-        raise ValueError(f"Refusing path outside {base}: {candidate}")
-    return resolved
-
-
 def main() -> int:
-    base = os.path.realpath(os.getcwd())
     violations: list[str] = []
     for path in sys.argv[1:]:
-        try:
-            safe_path = _confine(path, base)
-        except ValueError as error:
-            print(error, file=sys.stderr)
-            continue
-        try:
-            with open(safe_path, encoding="utf-8") as handle:
-                contents = handle.read()
-        except (OSError, UnicodeDecodeError) as error:
-            print(f"Skipping unreadable file {path}: {error}", file=sys.stderr)
-            continue
-        violations.extend(find_violations(path, contents))
+        with open(path, encoding="utf-8") as handle:
+            violations.extend(find_violations(path, handle.read()))
 
     if violations:
         print("::error::Non-idempotent raw index SQL in EF migration(s). Use CREATE INDEX IF NOT EXISTS / DROP INDEX IF EXISTS so a startup re-apply cannot throw Postgres 42P07 and fail the Render deploy.")
