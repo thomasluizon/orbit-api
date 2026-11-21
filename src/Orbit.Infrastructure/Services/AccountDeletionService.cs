@@ -81,10 +81,8 @@ public partial class AccountDeletionService(
 
         return await dbContext.Users
             .IgnoreQueryFilters()
-#pragma warning disable ORBIT0004 // GetUsersScheduledForDeletionAsync compares ScheduledDeletionAt with the current instant to find expired deletion grace periods. https://github.com/thomasluizon/orbit-tickets/issues/230
             .Where(u => u.StripeCustomerPendingDeletionId != null
                 || u.IsDeactivated && u.ScheduledDeletionAt.HasValue && u.ScheduledDeletionAt.Value <= DateTime.UtcNow)
-#pragma warning restore ORBIT0004
             .Select(u => u.Id)
             .ToListAsync(ct);
     }
@@ -287,9 +285,7 @@ public partial class AccountDeletionService(
 
         var deletedSlipAlerts = await BatchedDelete.ExecuteAsync(dbContext.SentSlipAlerts.Where(a => a.WeekStart < cutoff), ct);
 
-#pragma warning disable ORBIT0004 // processedRequestCutoff expires ProcessedRequests by elapsed retention days against CreatedAtUtc. https://github.com/thomasluizon/orbit-tickets/issues/230
         var processedRequestCutoff = DateTime.UtcNow.AddDays(-ProcessedRequestRetentionDays);
-#pragma warning restore ORBIT0004
         var deletedProcessedRequests = await BatchedDelete.ExecuteAsync(dbContext.ProcessedRequests.Where(r => r.CreatedAtUtc < processedRequestCutoff), ct);
 
         if ((deletedReminders > 0 || deletedSlipAlerts > 0 || deletedProcessedRequests > 0) && logger.IsEnabled(LogLevel.Information))

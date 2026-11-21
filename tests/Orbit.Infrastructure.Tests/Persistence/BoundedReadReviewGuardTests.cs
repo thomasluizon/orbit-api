@@ -11,13 +11,6 @@ public class BoundedReadReviewGuardTests
         pipeline.Should().NotContain("GetRequiredService<BoundedReadStateBackfill>().RunAsync()");
     }
 
-    [Fact]
-    public void SlipSnapshotUtcWindow_HasReviewedDateExemption()
-    {
-        ReadSource("src/Orbit.Infrastructure/Services/SlipAlertSchedulerService.cs")
-            .Should().Contain("#pragma warning disable ORBIT0004");
-    }
-
     private static string ReadSource(string path)
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

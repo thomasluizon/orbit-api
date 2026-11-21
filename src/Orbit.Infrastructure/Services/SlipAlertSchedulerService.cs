@@ -67,9 +67,7 @@ public partial class SlipAlertSchedulerService(
         using var scope = scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
         var nowAtUtc = Clock.GetUtcNow().UtcDateTime;
-#pragma warning disable ORBIT0004
         var utcDate = DateOnly.FromDateTime(nowAtUtc);
-#pragma warning restore ORBIT0004
         var probe = await ReadProbeAsync(db, utcDate, ct);
         if (_snapshot is null || _snapshot.UtcDate != utcDate || _snapshot.Probe != probe)
             _snapshot = await LoadSnapshotAsync(db, utcDate, probe, ct);

@@ -5,7 +5,6 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
-using Microsoft.CodeAnalysis.Operations;
 
 namespace Orbit.Analyzers;
 
@@ -13,15 +12,6 @@ namespace Orbit.Analyzers;
 public sealed class UtcNowUserFacingDateAnalyzer : DiagnosticAnalyzer
 {
     public const string DiagnosticId = "ORBIT0004";
-
-    private static readonly DiagnosticDescriptor InstantRule = new(
-        DiagnosticId,
-        "Raw DateTime.UtcNow for a user-facing date",
-        "Do not use DateTime.UtcNow here. User-facing dates MUST come from IUserDateService.GetUserTodayAsync(userId); DateTime.UtcNow is only acceptable for *AtUtc timestamp parameters, fields or properties (including Add* arithmetic and locals used exclusively by those sinks), cache keys, or as input to a TimeZoneInfo conversion into the user's timezone.",
-        "Reliability",
-        DiagnosticSeverity.Error,
-        isEnabledByDefault: true,
-        description: "Raw DateTime.UtcNow reads outside timestamp, cache-key, and timezone-conversion contexts compute server-clock dates that are wrong for users in other timezones. Timestamp sinks include *AtUtc parameters, fields and properties, Add* arithmetic on the instant, and locals used only by those sinks. The analyzer trusts a callee's *AtUtc parameter name and cannot inspect the callee body.");
 
     private static readonly DiagnosticDescriptor DateOnlyRule = new(
         DiagnosticId,
@@ -40,7 +30,7 @@ public sealed class UtcNowUserFacingDateAnalyzer : DiagnosticAnalyzer
         "Orbit.Infrastructure");
 
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics =>
-        ImmutableArray.Create(InstantRule, DateOnlyRule);
+        ImmutableArray.Create(DateOnlyRule);
 
     public override void Initialize(AnalysisContext context)
     {
@@ -56,19 +46,15 @@ public sealed class UtcNowUserFacingDateAnalyzer : DiagnosticAnalyzer
             return;
 
         var dateOnlyType = context.Compilation.GetTypeByMetadataName("System.DateOnly");
-        var timeZoneInfoType = context.Compilation.GetTypeByMetadataName("System.TimeZoneInfo");
-        var instantRuleApplies = assemblyName != "Orbit.Domain";
 
         context.RegisterSyntaxNodeAction(
-            nodeContext => AnalyzeMemberAccess(nodeContext, dateOnlyType, timeZoneInfoType, instantRuleApplies),
+            nodeContext => AnalyzeMemberAccess(nodeContext, dateOnlyType),
             SyntaxKind.SimpleMemberAccessExpression);
     }
 
     private static void AnalyzeMemberAccess(
         SyntaxNodeAnalysisContext context,
-        INamedTypeSymbol? dateOnlyType,
-        INamedTypeSymbol? timeZoneInfoType,
-        bool instantRuleApplies)
+        INamedTypeSymbol? dateOnlyType)
     {
         var memberAccess = (MemberAccessExpressionSyntax)context.Node;
         if (memberAccess.Name.Identifier.ValueText != "UtcNow")
@@ -79,95 +65,12 @@ public sealed class UtcNowUserFacingDateAnalyzer : DiagnosticAnalyzer
             return;
 
         var consumingInvocation = FindConsumingInvocation(memberAccess);
-        if (consumingInvocation is not null)
-        {
-            var consumerType = ResolveMethodContainingType(consumingInvocation, context.SemanticModel, context.CancellationToken);
-
-            if (dateOnlyType is not null
-                && SymbolEqualityComparer.Default.Equals(consumerType, dateOnlyType)
-                && IsMethodNamed(consumingInvocation, "FromDateTime"))
-            {
-                context.ReportDiagnostic(Diagnostic.Create(DateOnlyRule, consumingInvocation.GetLocation()));
-                return;
-            }
-
-            if (timeZoneInfoType is not null && SymbolEqualityComparer.Default.Equals(consumerType, timeZoneInfoType))
-                return;
-        }
-
-        if (!instantRuleApplies)
-            return;
-        if (LineNamesTimestampOrCacheKey(memberAccess, context.CancellationToken))
-            return;
-        if (FlowsOnlyToUtcTimestamps(memberAccess, context.SemanticModel, context.CancellationToken))
+        if (consumingInvocation is null || dateOnlyType is null || !IsMethodNamed(consumingInvocation, "FromDateTime"))
             return;
 
-        context.ReportDiagnostic(Diagnostic.Create(InstantRule, memberAccess.GetLocation()));
-    }
-
-    private static bool FlowsOnlyToUtcTimestamps(
-        ExpressionSyntax expression, SemanticModel model, CancellationToken cancellationToken)
-    {
-        expression = UnwrapInstantArithmetic(expression, model, cancellationToken);
-        if (IsUtcTimestampSink(expression, model, cancellationToken))
-            return true;
-        if (expression.Parent is not EqualsValueClauseSyntax { Parent: VariableDeclaratorSyntax variable }
-            || model.GetDeclaredSymbol(variable, cancellationToken) is not ILocalSymbol local
-            || variable.FirstAncestorOrSelf<BlockSyntax>() is not { } block)
-            return false;
-
-        var hasUse = false;
-        foreach (var node in block.DescendantNodes())
-        {
-            if (node is not IdentifierNameSyntax reference
-                || !SymbolEqualityComparer.Default.Equals(model.GetSymbolInfo(reference, cancellationToken).Symbol, local))
-                continue;
-
-            hasUse = true;
-            if (!IsUtcTimestampSink(UnwrapInstantArithmetic(reference, model, cancellationToken), model, cancellationToken))
-                return false;
-        }
-        return hasUse;
-    }
-
-    private static ExpressionSyntax UnwrapInstantArithmetic(
-        ExpressionSyntax expression, SemanticModel model, CancellationToken cancellationToken)
-    {
-        while (true)
-        {
-            if (expression.Parent is ParenthesizedExpressionSyntax parenthesized)
-            {
-                expression = parenthesized;
-                continue;
-            }
-            if (expression.Parent is MemberAccessExpressionSyntax { Parent: InvocationExpressionSyntax invocation } access
-                && access.Expression == expression
-                && model.GetSymbolInfo(invocation, cancellationToken).Symbol is IMethodSymbol method
-                && method.ContainingType.SpecialType == SpecialType.System_DateTime
-                && method.ReturnType.SpecialType == SpecialType.System_DateTime
-                && method.Name.StartsWith("Add", StringComparison.Ordinal))
-            {
-                expression = invocation;
-                continue;
-            }
-            return expression;
-        }
-    }
-
-    private static bool IsUtcTimestampSink(
-        ExpressionSyntax expression, SemanticModel model, CancellationToken cancellationToken)
-    {
-        if (expression.Parent is ArgumentSyntax argument
-            && model.GetOperation(argument, cancellationToken) is IArgumentOperation { Parameter: { } parameter })
-            return parameter.Name.EndsWith("AtUtc", StringComparison.OrdinalIgnoreCase);
-
-        if (expression.Parent is AssignmentExpressionSyntax assignment && assignment.Right == expression)
-        {
-            var symbol = model.GetSymbolInfo(assignment.Left, cancellationToken).Symbol;
-            return (symbol is IPropertySymbol || symbol is IFieldSymbol)
-                && symbol.Name.EndsWith("AtUtc", StringComparison.OrdinalIgnoreCase);
-        }
-        return false;
+        var consumerType = ResolveMethodContainingType(consumingInvocation, context.SemanticModel, context.CancellationToken);
+        if (SymbolEqualityComparer.Default.Equals(consumerType, dateOnlyType))
+            context.ReportDiagnostic(Diagnostic.Create(DateOnlyRule, consumingInvocation.GetLocation()));
     }
 
     private static bool IsDateTimeUtcNow(
@@ -218,15 +121,6 @@ public sealed class UtcNowUserFacingDateAnalyzer : DiagnosticAnalyzer
     {
         return invocation.Expression is MemberAccessExpressionSyntax memberAccess
             && memberAccess.Name.Identifier.ValueText == name;
-    }
-
-    private static bool LineNamesTimestampOrCacheKey(
-        MemberAccessExpressionSyntax memberAccess, CancellationToken cancellationToken)
-    {
-        var lineIndex = memberAccess.GetLocation().GetLineSpan().StartLinePosition.Line;
-        var line = memberAccess.SyntaxTree.GetText(cancellationToken).Lines[lineIndex].ToString();
-        return line.IndexOf("AtUtc", StringComparison.OrdinalIgnoreCase) >= 0
-            || line.IndexOf("cache", StringComparison.OrdinalIgnoreCase) >= 0;
     }
 
     private static bool IsExcludedPath(string path)

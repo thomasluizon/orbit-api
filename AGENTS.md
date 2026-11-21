@@ -18,7 +18,7 @@ file on its own head. Nothing here configures that review.
 - After tests pass, open or update the pull request and put the intended approach in
   its body: the change made, the files it landed in, and why that shape was chosen.
 - Analyzer gates (silent in local builds, CI-fatal): ORBIT0001 narration comments,
-  ORBIT0004 raw `DateTime.UtcNow` for user-facing dates (use `IUserDateService.GetUserTodayAsync`).
+  ORBIT0004 `DateOnly.FromDateTime(DateTime.UtcNow...)` (use `IUserDateService.GetUserTodayAsync`).
   Grep for bare `//` comments before pushing.
 - The dash ban is CI-enforced (`tools/check-dashes.mjs`): never type an em dash
   anywhere, including commits and PR text.
@@ -93,9 +93,8 @@ five are P0/P1, and no gate sees them.
    fields; breaking changes use expand-contract plus `AppConfig.MinSupportedVersion`.
 2. **`MinSupportedVersion` raised before the carrying build is live in the fleet.**
 3. **A user-facing date computed from a UTC instant without the user's timezone**
-   in a NEW pattern ORBIT0004's exemptions happen to admit (an `*AtUtc` name carrying
-   display data, a "cache key" that reaches a user). The analyzer checks names, not
-   intent.
+   in a pattern that ORBIT0004 does not match. ORBIT0004 matches only
+   `DateOnly.FromDateTime(DateTime.UtcNow...)`.
 4. **A background job or notification that assumes server-local "today"** (schedule
    windows, streak cutoffs): correctness depends on per-user timezones and no test
    asserts the boundary hour.

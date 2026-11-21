@@ -14,7 +14,7 @@ Clean architecture, four projects: `Orbit.Api` → `Orbit.Application` → `Orbi
 
 These apply everywhere — they override project-local conventions if they conflict.
 
-- **Timezone:** All user-facing dates MUST use `IUserDateService.GetUserTodayAsync(userId)`. `DateTime.UtcNow` is only for `*AtUtc` timestamp parameters, fields and properties (including `Add*` arithmetic on the instant and locals used exclusively by those sinks), cache keys, and `TimeZoneInfo` conversion into the user's timezone - Roslyn `ORBIT0004` (`src/Orbit.Analyzers`) blocks other raw `DateTime.UtcNow` reads in Api/Application/Infrastructure and blocks `DateOnly.FromDateTime(DateTime.UtcNow...)` in all four projects with no exemption.
+- **Timezone:** Every user-facing date comes from `IUserDateService.GetUserTodayAsync(userId)`. `ORBIT0004` fails CI on `DateOnly.FromDateTime(DateTime.UtcNow...)` in any project.
 - **Authorization:** A fallback policy requires an authenticated user on every endpoint. Mark a public endpoint with `[AllowAnonymous]` or `.AllowAnonymous()`: `/health`, `/api/auth/*`, signature-verified webhooks, `/mcp` (its own gate).
 - **Validation:** Every new feature needs validators in `Orbit.Application/<Feature>/Validators/` AND domain-entity guards in factory/update methods. The backend is the source of truth — never trust the frontend.
 - **Logging levels.** Inject `ILogger<T>`; structured properties in PascalCase, English only (`logger.LogInformation("Action {Property}", value)`). Reserve each level so prod logs carry only signal:
@@ -26,7 +26,6 @@ These apply everywhere — they override project-local conventions if they confl
 - **No workarounds.** Root-cause every bug. No `TODO`/`FIXME`/`HACK` in committed code. No empty `catch {}`. No `as any`-equivalents like unjustified `null!`.
 - **No dead code.** Delete unused methods, types, parameters, branches the moment they become orphaned by your change.
 - **Narration comments are `ORBIT0001` build errors** (`src/Orbit.Analyzers`; only `///`/`/** */` XML-doc or a URL-linked WHY note survive; autofix via `dotnet format`). The analyzer is silent in local builds but fails CI — grep for bare `//` before pushing.
-- **Raw `DateTime.UtcNow` for user-facing dates (`ORBIT0004`, Reliability) is a build error too** (`src/Orbit.Analyzers`). It is silent in local builds but fails CI; run `dotnet test tests/Orbit.Analyzers.Tests` for local proof. The timestamp exemption trusts a callee's `*AtUtc` parameter name and cannot inspect the callee body; that name must represent an instant, never a user-facing date. Other deliberate UTC-instant/UTC-window sites need targeted `#pragma warning disable ORBIT0004` blocks.
 
 ## Cross-repo parity contract
 
