@@ -16,7 +16,7 @@ for production and `app-staging.useorbit.org` for staging.
 
 ## Mobile inputs
 
-In AWS Systems Manager > Parameter Store in `us-east-2`, the orchestrator supplies
+In AWS Systems Manager > Parameter Store in `us-east-2`, create
 the following parameters beneath `/orbit/<environment>/api/`. Use SecureString for
 credentials. Array suffixes start at zero; create further numbered parameters for
 additional accepted values.
