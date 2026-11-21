@@ -40,57 +40,10 @@ billing credentials are not reused implicitly.
 
 ## Apply and release
 
-Load `RENDER_API_KEY` from Render Account Settings > API Keys and
-`CLOUDFLARE_API_TOKEN` from the existing operator credential, with AWS access to
-the Terraform backend and SSM. Use the existing ignored `local.tfvars` containing
-the live infrastructure inputs. From the repository root:
+Run a targeted Terraform plan for the environment, then review it and apply it:
 
 ```sh
-terraform -chdir=infra init -input=false
-terraform -chdir=infra plan -input=false -var-file=local.tfvars \
-  -target=render_env_group.staging_api \
-  -target=aws_ssm_parameter.onboarding_signing_secret_staging \
-  -out=local.onboarding-staging.tfplan
-terraform -chdir=infra show local.onboarding-staging.tfplan
-terraform -chdir=infra show -json local.onboarding-staging.tfplan | node infra/check-web-plan.mjs
-terraform -chdir=infra apply local.onboarding-staging.tfplan
+terraform -chdir=infra plan -input=false -var-file=local.tfvars -target=render_env_group.staging_api -target=aws_ssm_parameter.onboarding_signing_secret_staging -out=local.onboarding.tfplan
 ```
 
-Before applying, require that the plan only creates the selected environment's
-onboarding password and SSM parameter and adds onboarding entries to its API
-environment group. Stop on any unrelated change, removal, replacement, web service
-update, or production change in the staging plan. Do not apply an unreviewed plan.
-
-Release the carrying commit through GitHub Actions > Release API with environment
-`staging` and its explicit commit SHA. The release applies `SeedOnboardingBudgets`.
-In Render > staging Postgres > Connections, use the external connection details
-and existing operator network access to read:
-
-```sql
-SELECT "Key", "Value"
-FROM "AppConfigs"
-WHERE "Key" IN (
-  'OnboardingIpCallsPerHour', 'OnboardingInstallCallsPerHour',
-  'OnboardingCallsPerDay', 'OnboardingTokensPerDay'
-)
-ORDER BY "Key";
-```
-
-Expect `10`, `10`, `1000` and `16384000` for the corresponding keys. Existing
-processes can retain an AppConfig read for 30 minutes; verify with the released
-process. In Render > Environment Groups > orbit-staging-api, confirm the indexed
-origins and hostnames and the signing-secret entry without exposing its value.
-
-From `https://app-staging.useorbit.org`, complete enrollment with a fresh Turnstile
-proof, then request a schedule with another fresh proof and the signed install id.
-Verify a reused proof, forged install id and unlisted origin are refused. Follow
-the [request contract](../src/Orbit.Api/OpenApi/Onboarding.md) for credential rotation.
-The orchestrator gathers this acceptance evidence; the worker does not start or
-open the app.
-
-After staging acceptance, repeat the reviewed targeted plan and apply for
-`render_env_group.production_api` and
-`aws_ssm_parameter.onboarding_signing_secret_production`. Release the same
-carrying commit from `main` through Release API with environment `production`.
-Read back the four keys through Render > production Postgres > Connections and
-confirm the production entries in Environment Groups > orbit-production-api.
+Stop on any change that the plan does not need. Then run the Release API workflow for the commit.
