@@ -48,13 +48,15 @@ planner reads the target commit and its catalog. A published identity or path ca
 removed, renamed or substituted. An artifact that is absent from the target is a first
 publication with no prior comparison.
 
-The required `OpenAPI Breaking-Change Gate` keeps the pinned v1 action and the ERR failure
-threshold. It requires the inventory and each additional stream comparison to succeed. A
-failed, cancelled or skipped dependent comparison cannot satisfy the gate.
+When an OpenAPI input changes, the required `OpenAPI Breaking-Change Gate` runs the oasdiff
+release that `test.yml` pins by checksum, with the ERR failure threshold. It validates the
+inventory, then compares the v1 document and each additional stream. One failed comparison
+fails the gate. When no OpenAPI input changes, the gate passes without a comparison.
 
 The tooling rebuilds each canonical path from a validated ASCII catalog identity. It rejects
 a file whose symlink leaves the repository. It never resolves a path that the generator cache
-supplies. It accepts only a full 40-character hexadecimal commit.
+supplies. A target ref must resolve to a full 40-character hexadecimal commit before the
+tooling reads a file at that commit.
 
 ## Contract documents
 
