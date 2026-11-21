@@ -1,5 +1,4 @@
 {
-  ".github/workflows/dependabot-auto-merge.yml": 1,
   "bench/Orbit.Benchmarks/BenchmarkFixtures.cs": 1,
   "bench/Orbit.Benchmarks/HabitMetricsBenchmarks.cs": 2,
   "bench/Orbit.Benchmarks/RetrospectiveMetricsBenchmarks.cs": 2,

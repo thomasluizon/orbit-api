@@ -16,8 +16,6 @@ public class BoundedReadReviewGuardTests
     {
         ReadSource("src/Orbit.Infrastructure/Services/SlipAlertSchedulerService.cs")
             .Should().Contain("#pragma warning disable ORBIT0004");
-        ReadSource("tools/suppression-allowlist.json")
-            .Should().Contain("src/Orbit.Infrastructure/Services/SlipAlertSchedulerService.cs");
     }
 
     private static string ReadSource(string path)

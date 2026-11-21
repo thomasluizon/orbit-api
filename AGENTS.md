@@ -24,7 +24,6 @@ file on its own head. Nothing here configures that review.
   ORBIT0002 redundant rollbacks, ORBIT0003 controller authorization, ORBIT0004 raw
   `DateTime.UtcNow` for user-facing dates (use `IUserDateService.GetUserTodayAsync`),
   ORBIT0005 unconfigured DbSet. Grep for bare `//` comments before pushing.
-- Write rules, docs and comments timelessly: no dates except load-bearing data, names or attributions, incident stories, or machine paths. `tools/check-timeless.mjs` enforces this when installed.
 - The dash ban is CI-enforced (`tools/check-dashes.mjs`): never type an em dash
   anywhere, including commits and PR text.
 - New features need FluentValidation validators AND domain-entity guards; the backend
@@ -34,10 +33,8 @@ file on its own head. Nothing here configures that review.
 
 ### Guardrails you must not trip
 
-These hold for EVERY worker and every engine. They are enforced by CI, GitHub branch
-protection, and the lefthook pre-commit/pre-push hooks, NOT by the Claude Code session
-hooks (those do not run under `codex exec` or a raw shell). This list is the readable
-copy; the gates are the enforcement.
+These hold for EVERY worker and every engine. They are enforced by CI and GitHub branch
+protection. This list is the readable copy; the gates are the enforcement.
 
 - Never push or force-push to `main`/`master`. Branch to `feature/`|`fix/`|`chore/`,
   open a PR, squash-merge only. Never reuse a squash-merged branch.

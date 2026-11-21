@@ -14,10 +14,10 @@ set -euo pipefail
 pattern() {
   case "$1" in
     # Unit Tests: the C# test projects read src/, their fixtures under tests/ and evals/,
-    # infra/configuration.tf, the memory guard script, the suppression allowlist and the
+    # infra/configuration.tf, the memory guard script and the
     # migration contracts. LegacyNameGuardTests reads every path in the repository, so a path
     # that carries the retired product name is an input as well.
-    tests) echo '^(src|tests|bench|infra|evals)/|^(Orbit\.slnx|Directory\.Build\.(props|targets)|global\.json|CodeMetricsConfig\.txt|coverlet\.runsettings)$|^\.config/dotnet-tools\.json$|^tools/suppression-allowlist\.json$|^\.github/(migration-(contracts|locks)\.json|scripts/(api-memory-container\.sh|check_coverage\.py|openapi_artifacts\.py|changed-inputs\.sh)|workflows/test\.yml)$|Astra|ASTRA|(^|[^A-Za-z])astra' ;;
+    tests) echo '^(src|tests|bench|infra|evals)/|^(Orbit\.slnx|Directory\.Build\.(props|targets)|global\.json|CodeMetricsConfig\.txt|coverlet\.runsettings)$|^\.config/dotnet-tools\.json$|^\.github/(migration-(contracts|locks)\.json|scripts/(api-memory-container\.sh|check_coverage\.py|openapi_artifacts\.py|changed-inputs\.sh)|workflows/test\.yml)$|Astra|ASTRA|(^|[^A-Za-z])astra' ;;
     # Docker migration bundle: the image copies only src/; Orbit.Memory.Tests links files from
     # tests/Shared and tests/Orbit.Infrastructure.Tests.
     docker) echo '^(src|tests/(Shared|Orbit\.Memory\.Tests|Orbit\.Infrastructure\.Tests))/|^(Dockerfile|\.dockerignore|Directory\.Build\.(props|targets)|global\.json|CodeMetricsConfig\.txt)$|^\.github/(scripts/(api-memory-[^/]+|changed-inputs\.sh)|workflows/test\.yml)$' ;;
