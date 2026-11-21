@@ -1,71 +1,63 @@
 # Orbit API
 
-.NET 10 / EF Core / MediatR CQRS REST API. Hosts at `api.useorbit.org`.
+The REST API of Orbit. It runs at `api.useorbit.org`.
 
 ## Stack
 
-.NET 10, C# 14 (net10.0's default language version), PostgreSQL via EF Core 10, MediatR 14, FluentValidation 12, JWT Bearer, OpenAI .NET SDK 2.14.0 Responses API with GPT-6 Luna for chat and sub-tasks at low reasoning, BCrypt, Firebase Admin SDK (FCM), Lib.Net.Http.WebPush (VAPID).
+.NET 10, C# 14, PostgreSQL through EF Core 10, MediatR 14, FluentValidation 12, JWT Bearer, OpenAI .NET SDK 2.15.0 (Responses API, GPT-6 Luna at low reasoning), Stripe.net 52, Firebase Admin SDK (FCM), Lib.Net.Http.WebPush (VAPID).
 
-## Architecture (one-pager)
+## Architecture
 
-Clean architecture, four projects: `Orbit.Api` → `Orbit.Application` → `Orbit.Domain` ← `Orbit.Infrastructure`. CQRS via MediatR. Commands and queries live per-feature folder in `Orbit.Application`. Domain entities use factory methods (`Habit.Create()`, `User.Create()`). Generic repository + Unit of Work in Infrastructure. Each project has a scoped `CLAUDE.md` — read those when editing inside that project.
+The four projects are `Orbit.Api` → `Orbit.Application` → `Orbit.Domain` ← `Orbit.Infrastructure`. MediatR runs the commands and the queries. Each feature has its own folder in `Orbit.Application`. Infrastructure holds a generic repository and a Unit of Work. `Orbit.Api`, `Orbit.Application` and `Orbit.Infrastructure` each have a `CLAUDE.md`. Read it before you edit that project.
 
-## Cross-cutting hard rules
+- Build a domain entity only through its factory method, for example `Habit.Create()`. Give the entity no public setter.
+- Keep Domain free of EF. Configure each entity in Infrastructure.
 
-These apply everywhere — they override project-local conventions if they conflict.
+## Rules for all projects
 
-- **Timezone:** Every user-facing date comes from `IUserDateService.GetUserTodayAsync(userId)`. `ORBIT0004` fails CI on `DateOnly.FromDateTime(DateTime.UtcNow...)` in any project.
-- **Authorization:** A fallback policy requires an authenticated user on every endpoint. Mark a public endpoint with `[AllowAnonymous]` or `.AllowAnonymous()`: `/health`, `/api/auth/*`, signature-verified webhooks, `/mcp` (its own gate).
-- **Validation:** Every new feature needs validators in `Orbit.Application/<Feature>/Validators/` AND domain-entity guards in factory/update methods. The backend is the source of truth — never trust the frontend.
-- **Logging levels.** Inject `ILogger<T>`; structured properties in PascalCase, English only (`logger.LogInformation("Action {Property}", value)`). Reserve each level so prod logs carry only signal:
-  - **Trace/Debug** — routine per-operation success, AI call lifecycle + token usage, per-step progress, per-delivery sends. Filtered out in prod.
-  - **Information** — low-frequency business/lifecycle events only: signup, subscription change, sync-completed-with-N (gate the log on `N > 0`), account deletion, streak-freeze activation, the daily AI-cost summary, service start/stop. Never internal steps.
-  - **Warning** — recoverable/degraded paths (retries, empty AI response, best-effort metric-write failure).
-  - **Error** — actionable failures. Let Sentry capture exceptions; don't add a redundant manual `LogError(ex)` that mirrors a captured exception — keep exactly one Sentry issue + one console error per unhandled exception (the `UnhandledExceptionHandler` console log is held off Sentry via its `Logging:Sentry.AspNetCore.SentryAspNetCoreLoggerProvider:LogLevel` category; Sentry 6.13.0 removed the `Sentry` alias from that provider, so a `Logging:Sentry` rule no longer reaches it).
-  - Prod minimum levels (framework namespaces → `Warning`) live in `appsettings.Production.json`.
-- **No workarounds.** Root-cause every bug. No `TODO`/`FIXME`/`HACK` in committed code. No empty `catch {}`. No `as any`-equivalents like unjustified `null!`.
-- **No dead code.** Delete unused methods, types, parameters, branches the moment they become orphaned by your change.
-- **Narration comments are `ORBIT0001` build errors** (`src/Orbit.Analyzers`; only `///`/`/** */` XML-doc or a URL-linked WHY note survive; autofix via `dotnet format`). The analyzer is silent in local builds but fails CI — grep for bare `//` before pushing.
+These rules override a project rule that conflicts with them.
 
-## Cross-repo parity contract
+- **Timezone:** Get each user-facing date from `IUserDateService.GetUserTodayAsync(userId)`. The analyzer `ORBIT0004` fails CI on `DateOnly.FromDateTime(DateTime.UtcNow...)`.
+- **Authorization:** A fallback policy requires an authenticated user on each endpoint. Mark a public endpoint with `[AllowAnonymous]` or `.AllowAnonymous()`.
+- **Validation:** Add a validator in `Orbit.Application/<Feature>/Validators/` and a guard in the entity factory or update method. The backend is the source of truth.
+- **Logging:** Inject `ILogger<T>`. Write the message in English with PascalCase properties. Use Debug for routine success and AI call detail. Use Information only for a rare business event. Use Warning for a recoverable fault. Use Error for a fault that needs action. Do not add a `LogError` that repeats an exception that Sentry captures.
+- **No workaround:** Find the root cause of each bug. Do not commit `TODO`, `FIXME`, `HACK`, an empty `catch`, or an unjustified `null!`.
+- **No dead code:** Delete a method, a type, a parameter or a branch when your change leaves it unused.
+- **Comments:** `ORBIT0001` fails CI on a narration comment. Keep only XML documentation and a WHY note with a URL. `dotnet format` fixes the rest.
+- **Migrations:** A migration is append-only and idempotent. A raw `CREATE INDEX` needs `IF NOT EXISTS`. A raw `DROP INDEX` needs `IF EXISTS`. The Guard Migrations job enforces this. The rolling migration rules are in `tests/Orbit.Infrastructure.Tests/Persistence/RollingMigrations.md`.
 
-The TypeScript consumer is `thomasluizon/orbit-ui-mobile` (Turborepo: Next.js web + Expo mobile + `@orbit/shared`). When you change an endpoint here, the consumer side MUST update in lockstep:
+## Defects that no gate catches
+
+Check these four defects before you open a pull request.
+
+1. A DTO field that you rename, remove or retype while a shipped client still reads it. Also `MinSupportedVersion` that you raise before the carrying build is live.
+2. A user-facing date that the code computes from a UTC instant.
+3. A background job that assumes the server-local "today".
+4. A field, a flag, an exit code or a response shape from an external interface, with no evidence in the pull request body. Confirm it against a real response or the installed source.
+
+## Cross-repo parity
+
+The TypeScript consumer is `thomasluizon/orbit-ui-mobile`. It holds the Next.js web app, the Expo mobile app and `@orbit/shared`. Update the consumer in the same session as the API change.
 
 | API change | Consumer change |
 |---|---|
-| New endpoint | `packages/shared/src/api/endpoints.ts` constant + Server Action (web) + apiClient call (mobile) + query key (if read) |
-| New DTO field | `packages/shared/src/types/*.ts` Zod schema |
-| Renamed/removed field | Both Zod schema AND every callsite in both apps |
+| New endpoint | `packages/shared/src/api/endpoints.ts` constant, a Server Action (web), an apiClient call (mobile), and a query key if the endpoint reads |
+| New DTO field | The Zod schema in `packages/shared/src/types/*.ts` |
+| Renamed or removed field | The Zod schema and each callsite in both apps |
 
-If you're launched from `orbit-ui-mobile`, do the consumer edits in the same session.
-
-## LSP
-
-C# LSP (Roslyn, via the CWM.RoslynNavigator MCP server — install once with `dotnet tool install -g CWM.RoslynNavigator`) is wired into Claude Code through the **mobile repo's** `.mcp.json` (sessions are almost always launched from there), pointed at this repo's `Orbit.slnx`. It exposes symbol-level tools (`find_symbol`, `find_references`, `find_implementations`, `get_type_hierarchy`, `get_diagnostics`, ...) instead of reading whole files. When launched directly from orbit-api, no LSP — fall back to grep/glob/read.
+Make a DTO change append-only and deploy the API first. A breaking change uses expand-contract and `AppConfig.MinSupportedVersion`. The procedure to raise the floor is in `infra/minimum-supported-version.md`.
 
 ## Git workflow
 
-Branch protection on `main`: no direct pushes, no force pushes, no branch deletion. Branches: `feature/xxx`, `fix/xxx`, `chore/xxx`. **Squash merge only.** **`main` requires zero approving reviews, and `pullfrog-approval` is a required status check pinned to app id `1768019`**: the blocking path is the required contexts, which hold the deterministic `guards.yml` jobs plus `pullfrog-approval`. Pullfrog is the only pull request reviewer. Its review instructions live in the Pullfrog console, never in a repository file, because a pull request can edit any file on its own head. Never reuse a branch after its PR is squash-merged. Never `--no-verify`/`--no-gpg-sign`. **Never perform an admin merge in any shape**: no `gh pr merge --admin`, no direct `PUT /repos/{owner}/{repo}/pulls/{number}/merge`, and no direct GraphQL `mergePullRequest` mutation. Naming the two raw API calls is deliberate; forbidding only the CLI flag leaves both API paths open. The admin override belongs to the owner alone: if a merge genuinely needs one, STOP and ask the owner to merge it.
-
-Pre-commit hook: a git-level `pre-commit` (lefthook, `lefthook.yml`) runs `dotnet format Orbit.slnx --include <staged .cs>` on staged `.cs` files and re-stages the fixes. This repo has no Node, so there is no auto-install — bootstrap once per machine with `winget install evilmartians.lefthook` (fallbacks: `scoop install lefthook`, or a GitHub-release binary + `lefthook self-update`), then run `lefthook install` inside the clone to write `.git/hooks/pre-commit`.
+- Name a branch `feature/`, `fix/` or `chore/`. Squash merge only. Never reuse a merged branch.
+- Never use `--no-verify` or `--no-gpg-sign`.
+- Write `Tracks thomasluizon/orbit-tickets#N` in the pull request body. Never write `Closes`.
+- The server refuses an admin merge and a direct push to `main`. If a merge needs an override, stop and ask the owner.
+- The Pullfrog prompt lives in its console. It changes only by an owner decision.
+- `lefthook.yml` runs `dotnet format` and the dash check on the staged files. Run `lefthook install` once in each clone.
 
 ## Testing
 
-- xUnit + FluentAssertions. Unit tests only — the integration suite was removed as outdated; do not add integration tests or a real-DB harness.
-- Every new feature needs unit tests: commands, queries, validators, domain logic.
-- Test accounts bypass email verification via the `TEST_ACCOUNTS` env var (`email:code` pairs) — see `tests/CLAUDE.md`.
-- **Query-shape / N+1 guard:** `tests/Orbit.Infrastructure.Tests/Persistence/QueryRoundTripCountTests.cs` runs the filtered-include and batched reads (`GetRetrospectiveQuery`, `GetDailySummaryQuery`, `ExportUserDataQuery` shapes) over SQLite in-memory with a `CountingDbCommandInterceptor` and asserts the SQL round-trip count is invariant to row volume — the tripwire for an N+1 regression. Reuses the shared `SqliteOrbitDbContextFactory` shim (extracted for these tests; the ~6 inline copies remain a dedup follow-up).
-- **Benchmarks (not tests):** `bench/Orbit.Benchmarks` is a BenchmarkDotNet console (`net10.0`, `[MemoryDiagnoser][ShortRunJob]`) over the three pure hot paths (`HabitScheduleService`, `HabitMetricsCalculator.Calculate`, `RetrospectiveMetricsCalculator.Compute`). It is deliberately outside `dotnet test` and coverage, and no CI job runs it. Run locally: `dotnet run -c Release --project bench/Orbit.Benchmarks -- --filter '*'` (or `--list flat` to enumerate).
-
-## Deployment
-
-Render (Docker, manual API releases through `release.yml`) + Supabase PostgreSQL (session pooler) + Amazon SES (email) + Firebase (FCM) + Stripe.
-
-Release admission requires completed successful `API Tests` and `Guards` runs from
-`push` or `workflow_dispatch` on `main` at exactly the selected SHA, plus successful
-check runs. For a bot-merged commit without push CI, confirm `main` is still at that
-commit, run `gh workflow run test.yml --ref main --repo thomasluizon/orbit-api` and
-`gh workflow run guards.yml --ref main --repo thomasluizon/orbit-api`, verify both
-runs succeed with that `head_sha`, then rerun Release API. Runs for another SHA or
-branch, including pull request runs, do not qualify. See
-[API release admission](infra/README.md#api-release-admission) for recovery details.
+- Use xUnit and FluentAssertions. Each new feature needs unit tests for its commands, queries, validators and domain logic.
+- A handler test mocks at the ports. A relational query-shape test uses `SqliteOrbitDbContextFactory`. A test that needs Postgres behavior uses `tests/Orbit.Infrastructure.Tests/Persistence/PostgresTestDatabase.cs`.
+- `tests/Orbit.Infrastructure.Tests/Persistence/QueryRoundTripCountTests.cs` guards against N+1 queries. Read `tests/CLAUDE.md` for the test accounts and the run commands.
