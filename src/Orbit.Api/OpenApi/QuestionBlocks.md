@@ -1,9 +1,7 @@
 # AI question blocks
 
-Tracks thomasluizon/orbit-tickets#1827. Deploy the API before the renderer in
-thomasluizon/orbit-tickets#1828 advertises `question` in `clientContext.partKinds`.
-The client must also send `supportsParts: true`. Both the ask-block and parts
-kill switches apply. Other clients continue using `choice` or prose.
+A client receives the block only when it sends `supportsParts: true` and lists `question` in
+`clientContext.partKinds`. Both the ask-block and parts kill switches apply. Other clients receive `choice` or prose.
 
 ## Tool and response
 
@@ -46,10 +44,10 @@ with no heading contains one scale:
 }
 ```
 
-The timestamp placeholder represents an absolute expiry instant. Blocks expire after 24 hours.
-`title`, `intro` and `progress` are omitted when absent. An ask call ends the tool
-round and issues at most one interactive block. Asking never authorizes a write.
-Question text, including scale labels and slider units, uses the person's language.
+`expiresAtUtc` is an absolute instant, 24 hours after issue. `title`, `intro` and
+`progress` are omitted when absent. An ask call ends the tool round and issues at most
+one interactive block. Asking never authorizes a write. Question text, including scale
+labels and slider units, uses the person's language.
 
 ## Answer on the next turn
 
@@ -83,9 +81,5 @@ question order and selected-option order do not affect identity. Changed typed
 values cannot replay a previous response. A replay on a client without support
 becomes text containing prompts, choices and numeric bounds.
 
-All four published OpenAPI artifacts include `AstraQuestionBlock`, its nested
-types, and `AstraBlockAnswer` with optional `answers`. These component names are
-wire names: `PublishedSchemaNames` keeps them for the C# `AiQuestionBlock` and
-`AiBlockAnswer` types. The existing `block` object
-and multipart JSON strings retain their schemas. No migration, environment
-setting or version-floor change is required.
+The published artifacts name the schemas `AstraQuestionBlock` and `AstraBlockAnswer`.
+`PublishedSchemaNames` keeps these wire names for the C# `AiQuestionBlock` and `AiBlockAnswer` types.

@@ -80,6 +80,20 @@ public class FeatureExplanationDriftTests
     }
 
     [Fact]
+    public void Gamification_DescribesUncappedLevelsBeyondTheTable()
+    {
+        var body = Body("gamification");
+        var firstLevelPastTable = LevelDefinitions.XpRequiredForLevel(LevelDefinitions.TableMaxLevel + 1);
+
+        LevelDefinitions.GetXpToNextLevel(firstLevelPastTable).Should().BePositive();
+        body.Should().Contain(firstLevelPastTable.ToString("N0", CultureInfo.InvariantCulture),
+            "gamification.md must give the XP of the first level past the table");
+        body.Should().Contain("Levels have no cap");
+        body.Should().NotContain("no XP-to-next", "XP-to-next exists at every level");
+        body.Should().NotContain("is the top", "levels continue past the last table row");
+    }
+
+    [Fact]
     public void Paygate_MatchesPlanLimitConstants()
     {
         var body = Body("paygate");

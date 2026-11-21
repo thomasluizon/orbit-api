@@ -79,7 +79,7 @@ test('a published OpenAPI document selects the breaking-change gate', t => {
   assert.equal(flags.tests, 'true')
 })
 
-for (const path of ['infra/configuration.tf', 'tools/suppression-allowlist.json', '.github/migration-locks.json', 'evals/astra/dates.json', 'coverlet.runsettings']) {
+for (const path of ['infra/configuration.tf', '.github/migration-locks.json', 'evals/astra/dates.json', 'coverlet.runsettings']) {
   test(`${path} is an input of the C# tests`, t => {
     assert.equal(changedOnly(t, path).tests, 'true')
   })
@@ -100,7 +100,7 @@ for (const path of ['Directory.Build.props', 'Directory.Build.targets']) {
 }
 
 test('a memory guard script selects the image job but not the C# analysis', t => {
-  const flags = changedOnly(t, '.github/scripts/api-memory-soak.sh')
+  const flags = changedOnly(t, '.github/scripts/api-memory-container.sh')
   assert.equal(flags.docker, 'true')
   assert.equal(flags.csharp, 'false')
 })

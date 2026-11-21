@@ -9,7 +9,7 @@ namespace Orbit.Application.Gamification;
 /// Pure achievement-evaluation rules shared by <see cref="Services.GamificationService"/>: given the
 /// already-loaded user, earned-achievement set, and habit context, each check records any newly
 /// qualifying achievement into <c>newAchievements</c>. The caller awards each achievement's XP through
-/// the audited funnel when persisting. No I/O, no injected dependencies — every input is passed in.
+/// the audited funnel when persisting. No I/O, no injected dependencies: every input is passed in.
 /// </summary>
 public static class AchievementChecks
 {
@@ -18,7 +18,7 @@ public static class AchievementChecks
     /// <summary>
     /// The single source of truth for a linear-threshold achievement: its <see cref="AchievementDefinition.ProgressTarget"/>.
     /// Throws if the id is unknown or the achievement has no target, since every caller here passes a
-    /// compile-time-known quantifiable achievement id — a miss is a programming error, not a runtime state.
+    /// compile-time-known quantifiable achievement id: a miss is a programming error, not a runtime state.
     /// </summary>
     public static int TargetFor(string achievementId) =>
         AchievementDefinitions.GetById(achievementId)?.ProgressTarget

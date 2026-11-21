@@ -108,8 +108,8 @@ public class EncouragingToneSectionTests
         var ctx = new PromptContext(new List<Habit>(), false, null, null, null, null);
         var result = new EncouragingToneSection().Build(ctx);
 
-        result.Should().NotContain("—");
-        result.Should().NotContain("–");
+        result.Should().NotContain("\u2014");
+        result.Should().NotContain("\u2013");
     }
 }
 

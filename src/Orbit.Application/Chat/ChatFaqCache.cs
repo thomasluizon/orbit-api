@@ -30,7 +30,7 @@ public static class ChatFaqCache
     /// <summary>
     /// Returns the curated FAQ key plus the language the question was asked in ("en"/"pt") when the
     /// message is one of the recognised general feature questions, or null otherwise. The locale is
-    /// derived from which language's phrase matched, since the model answers in the message's language —
+    /// derived from which language's phrase matched, since the model answers in the message's language,
     /// so the answer is cached and served under the locale it was actually written in.
     /// </summary>
     public static (string Key, string Locale)? TryMatchFaqKey(string message)

@@ -294,6 +294,7 @@ public static partial class ServiceCollectionExtensions
         });
 
         builder.Services.AddAuthorizationBuilder()
+            .SetFallbackPolicy(new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build())
             .AddPolicy(EvalAccountRequirement.PolicyName, policy =>
                 policy.RequireAuthenticatedUser().AddRequirements(new EvalAccountRequirement()))
             .AddPolicy(AdminPolicy.Name, policy =>

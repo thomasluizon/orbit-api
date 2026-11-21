@@ -8,7 +8,7 @@ prompt indexes, and prior turns do not supply facts.
 
 `ChatResponse.GroundingFacts` exposes normalized facts and their tool name and call ID to
 in-process evaluation callers. It is excluded from JSON, so the mobile contract is unchanged.
-The harness can also call `TurnFactSet.FromToolResults` and `GroundednessChecker.Check`.
+`GroundednessCheckerTests` call `TurnFactSet.FromToolResults` and `GroundednessChecker.Check` directly.
 
 ## Mode switch
 
@@ -36,21 +36,7 @@ Cached FAQ text must pass against an empty current-turn fact set before reuse.
 
 ## Deterministic coverage
 
-Numbers are compared as decimal values. Mixed decimal and grouping separators identify pt-BR
-or English formatting directly; the user's language resolves ambiguous single separators.
-Full ISO, Brazilian numeric, and English or Portuguese prose dates are compared as whole
-dates, preventing individual date components from authorizing a different date. List markers
-and GUIDs are excluded. Typed payload numbers use invariant JSON formatting. Prose tool
-outputs use the invariant formatting emitted by the habit and goal query tools.
-
-Entity matching ignores case and accents, and uses word boundaries. It scans names loaded
-for the turn plus quoted names and explicit single-quoted habit or goal references. Successful
-entity targets, payload name/title fields, and quoted names in prose tool outputs ground names.
-
-This is lexical screening, not semantic entailment. It cannot establish that a returned number
-belongs to the asserted metric, detect every unmarked invented name, or recognize arbitrary
-numbers written as words or translated names. Quoted non-entity text and ambiguous entity
-titles can produce warnings. Keep log-only mode while evaluating recorded conversations.
-The unit suite includes clean conversational examples and output from the real habit tool;
-the repository supplies no recorded production conversation corpus. The evaluation harness
-owns that corpus and its scenarios.
+The checker compares numbers as decimal values and dates as whole dates. It matches entity
+names without case and accents, at word boundaries. This is lexical screening, not semantic
+entailment: a number can match the wrong metric, and an invented name without a marker can
+pass. Quoted non-entity text can warn. Keep log-only mode while you evaluate conversations.

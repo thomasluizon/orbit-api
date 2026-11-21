@@ -18,11 +18,11 @@ Your streak counts how many consecutive **scheduled days** you stayed active. A 
 - you completed at least one eligible habit that day (a real completion, not a skip), or
 - a streak freeze covered that day.
 
-The streak is measured by walking your scheduled days in order and counting the unbroken run that reaches today. A scheduled day with a completion or a freeze keeps the run going; the first scheduled day you missed (no completion and no freeze) breaks it. Days where nothing was scheduled are simply skipped over — they neither extend nor break the streak. If today is scheduled but has no completion yet, it is treated as not-yet-missed, so an unfinished today never breaks the run.
+The streak is measured by walking your scheduled days in order and counting the unbroken run that reaches today. A scheduled day with a completion or a freeze keeps the run going; the first scheduled day you missed (no completion and no freeze) breaks it. Days where nothing was scheduled are simply skipped over; they neither extend nor break the streak. If today is scheduled but has no completion yet, it is treated as not-yet-missed, so an unfinished today never breaks the run.
 
 ## What counts as a completion
 
-A completion is any log with a value greater than zero on a habit that is not deleted and not a bad habit. Skips (a zero value) do not count. Bad habits never **add** scheduled days to your streak, but completing a regular habit on the same day still counts normally — bad habits just don't create the "must do something today" expectation.
+A completion is any log with a value greater than zero on a habit that is not deleted and not a bad habit. Skips (a zero value) do not count. Bad habits never **add** scheduled days to your streak, but completing a regular habit on the same day still counts normally; bad habits just don't create the "must do something today" expectation.
 
 ## Which habits create scheduled days
 

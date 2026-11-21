@@ -114,7 +114,7 @@ internal static class AgentOperationResponseFactory
             confirmationRequirement,
             AgentOperationStatus.Failed,
             Summary: summary,
-            PolicyReason: "unexpected_error",
+            PolicyReason: ToolFailureCodes.UnexpectedError,
             Access: isMutation ? "write" : "read"));
     }
 

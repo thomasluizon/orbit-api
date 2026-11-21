@@ -3,7 +3,7 @@ using Orbit.Domain.Common;
 namespace Orbit.Domain.Entities;
 
 /// <summary>
-/// Server-side stash for a tool call that returned NeedsClarification — holds the partial
+/// Server-side stash for a tool call that returned NeedsClarification and holds the partial
 /// arguments and a description of the missing field. Resolved by POST /api/ai/clarifications/{id}/resolve,
 /// which merges the user's chosen value into the partial args and re-invokes the original tool.
 /// One-shot: <see cref="ResolvedAtUtc"/> is set on resolution; subsequent resolves are rejected.

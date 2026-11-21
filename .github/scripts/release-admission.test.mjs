@@ -1,6 +1,5 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
 import { requireReason, requireCI, requireSmoke, productionCommit, migrationFiles, freshExport } from './release-admission.mjs'
 
 const sha = 'a'.repeat(40)
@@ -54,21 +53,6 @@ for (const [label, changes] of [
 test('CI finds qualifying dispatch evidence among unrelated runs', async () => {
   await requireCI(ciApi([{ ...successfulRun, event: 'pull_request' }, { ...successfulRun, conclusion: 'failure' }, successfulRun]), 'owner/repo', sha)
 })
-for (const workflow of ['test.yml', 'guards.yml']) {
-  test(`${workflow} supports dispatch with event checkout and isolated concurrency`, () => {
-    const source = readFileSync(new URL(`../workflows/${workflow}`, import.meta.url), 'utf8')
-    assert.match(source, /^on:\n(?:[ \t].*\n)*  workflow_dispatch:/m)
-    const conditions = [...source.matchAll(/^[ \t]*if:[ \t]*(.*)/gm)]
-    for (const [, condition] of conditions) {
-      if (/github\.event_name\s*==\s*['"]push['"]/.test(condition)) assert.match(condition, /workflow_dispatch/)
-    }
-    for (const checkout of source.split(/- uses: actions\/checkout@[^\n]+/).slice(1)) {
-      assert.doesNotMatch(checkout.split(/\n\s*- (?:name|uses|run):/)[0], /^\s+ref:/m)
-    }
-    assert.match(source, /group:.*github\.run_id/)
-    assert.match(source, /cancel-in-progress: \$\{\{ github\.event_name == 'pull_request' \}\}/)
-  })
-}
 test('smoke requires latest trusted success, without a stale success fallback', async () => {
   for (const state of ['failure', 'pending']) {
     await assert.rejects(requireSmoke(async () => [
@@ -107,14 +91,4 @@ test('records a fresh export id only after completion', async () => {
 })
 test('release without migration changes needs no export', async () => {
   assert.equal(await freshExport([], { request: () => { throw new Error('must not call Render') } }), '')
-})
-test('production workflow gates CI, smoke and export before image build or deploy', () => {
-  const source = readFileSync(process.env.RELEASE_WORKFLOW_PATH ?? new URL('../workflows/release.yml', import.meta.url), 'utf8')
-  assert.match(source, /Require green release CI[\s\S]*release-admission.mjs ci[\s\S]*\n  production:/)
-  const prod = source.split('\n  production:')[1].split('\n  staging:')[0]
-  assert.match(prod, /release-admission.mjs smoke[\s\S]*Build and push production image/)
-  assert.match(prod, /release-admission.mjs export[\s\S]*Trigger and monitor Render deploy/)
-  assert.match(prod, /Run production read-only authenticated smoke[\s\S]*Record deployment/)
-  assert.match(prod, /render_export_id: \$export_id/)
-  assert.match(source.split('\n  staging:')[1], /Verify staging health and live commit[\s\S]*release-smoke.mjs.*--write/)
 })

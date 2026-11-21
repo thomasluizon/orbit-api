@@ -14,21 +14,9 @@ derived_from:
 
 # Schedule and Overdue Math
 
-## Where to set it
-
-Open Today, open the habit's details and choose Edit habit. Use Frequency to choose the repeat interval or a flexible target, and adjust the habit's date, weekdays and end date in the same form. The due date anchors the recurrence; an end date and weekday restrictions limit which dates are scheduled.
-
-A few scheduling rules surprise people because the calendar isn't uniform. Here is exactly how Orbit handles the tricky cases.
-
-## Where to set the time
-
-The create and edit forms on web and mobile use the same time controls. Open Time and reminder, set Exact time and optionally End Time, then choose Done and Save (or Create for a new habit). Tasks in General do not show the time fields.
-
-Os formulários de criação e edição na web e no aplicativo usam os mesmos campos de horário. Abra Horário e lembrete, defina Horário exato e, se quiser, Horário final; escolha Concluir e Salvar (ou Criar para um novo hábito). Tarefas em Geral não mostram os campos de horário.
-
 ## Monthly habits clamp to the last valid day
 
-A monthly habit fires on the same day-of-month as its anchor (due) date. When a month is too short for that day, it clamps to the **last valid day** of that month instead of drifting. A habit anchored on the 31st fires on March 31 — never March 28 — and on the last day of shorter months. This keeps "the 31st" meaning the end of the month rather than slipping earlier permanently.
+A monthly habit fires on the same day-of-month as its anchor (due) date. When a month is too short for that day, it clamps to the **last valid day** of that month instead of drifting. A habit anchored on the 31st fires on March 31, never March 28, and on the last day of shorter months. This keeps "the 31st" meaning the end of the month rather than slipping earlier permanently.
 
 ## Yearly leap-day habits
 
@@ -40,7 +28,7 @@ The "every N" interval (every 2 weeks, every 3 months, and so on) is measured fr
 
 ## When a habit is overdue
 
-A habit is **overdue when its due date has fallen before today**. The due date rests on the oldest unresolved occurrence; logging or skipping advances it past today. This single signal — due date earlier than today — is what marks a recurring habit overdue everywhere in the app.
+A habit is **overdue when its due date has fallen before today**. The due date rests on the oldest unresolved occurrence; logging or skipping advances it past today. This single signal (due date earlier than today) is what marks a recurring habit overdue everywhere in the app.
 
 Bad habits are never overdue (there's no "must do" expectation to miss), and flexible habits use their window instead of an overdue date.
 

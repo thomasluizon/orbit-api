@@ -1,12 +1,3 @@
 src/Orbit.Api/openapi*.json text eol=lf
 src/Orbit.Api/OpenApi/artifacts.json text eol=lf
-# Every markdown file under .claude/ checks out LF here, exactly as it does in
-# orbit-ui-mobile. Without this line core.autocrlf=true materializes the identical
-# committed blob as CRLF here and LF there. The two checkouts then hold different
-# bytes for the same content, and `git status` stays clean in both, so nothing looks
-# wrong.
-.claude/**/*.md text eol=lf
-.claude/skills/**/*.mjs text eol=lf
 tools/*.mjs text eol=lf
-architecture.json text eol=lf
-architecture.html text eol=lf

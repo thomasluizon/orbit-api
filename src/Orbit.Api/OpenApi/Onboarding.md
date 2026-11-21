@@ -1,8 +1,5 @@
 # Anonymous onboarding setup
 
-Tracks thomasluizon/orbit-tickets#1782. Deploy this additive producer before the
-paired consumer adopts its OpenAPI revision and shared contract snapshot.
-
 `POST /api/onboarding/suggest-setup` returns the existing `HabitSetupSuggestion`
 object on HTTP 200. HTTP 429 has `{ "code": "ONBOARDING_LIMIT" }`; HTTP 503 has
 `{ "code": "ONBOARDING_UNAVAILABLE" }`. Both codes select the existing local
@@ -79,14 +76,11 @@ are refused. iOS extension values, when supplied by the platform, must match the
 configured bundle versions and validation categories.
 
 The dedicated `OnboardingSecurity:AllowedOrigins` CORS policy does not inherit
-the shared app/agent origin list. All credentials and platform configuration are
-empty by default and fail closed. Live Turnstile, Play Integrity and App Attest
-enrollment require environment configuration and device acceptance before rollout.
+the shared app/agent origin list. All credentials and platform configuration are empty
+by default and fail closed.
 
-Apple verification follows [server validation](https://developer.apple.com/documentation/devicecheck/validating-apps-that-connect-to-your-server),
-the [attestation format guide](https://developer.apple.com/documentation/devicecheck/attestation-object-validation-guide)
-and [receipt verification](https://developer.apple.com/documentation/devicecheck/assessing-fraud-risk).
-The attestation trust anchor is pinned from [Apple Private PKI](https://www.apple.com/certificateauthority/private/).
+Apple verification follows [server validation](https://developer.apple.com/documentation/devicecheck/validating-apps-that-connect-to-your-server), the [attestation format guide](https://developer.apple.com/documentation/devicecheck/attestation-object-validation-guide)
+and [receipt verification](https://developer.apple.com/documentation/devicecheck/assessing-fraud-risk). The trust anchor is pinned from [Apple Private PKI](https://www.apple.com/certificateauthority/private/).
 
 The validation guide's published sample appends raw `example_server_challenge`
 bytes to its authenticator data to produce the published nonce. Its prose and the

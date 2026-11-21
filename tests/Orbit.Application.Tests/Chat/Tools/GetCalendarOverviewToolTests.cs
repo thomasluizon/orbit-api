@@ -70,8 +70,8 @@ public class GetCalendarOverviewToolTests
             .Returns(TimeZoneInfo.FindSystemTimeZoneById("America/Sao_Paulo"));
         var blocks = new ReadBlockFactory(dates, Substitute.For<IReadQueryTokenService>(), Substitute.For<IGenericRepository<User>>());
 
-        var scope = await blocks.ResolveAsync("get_calendar_overview", JsonSerializer.SerializeToElement(
-            new { date_from = "2026-04-01", date_to = "2026-11-10", window_from_utc = sent }), userId, default);
+        var scope = (await blocks.ResolveAsync("get_calendar_overview", JsonSerializer.SerializeToElement(
+            new { date_from = "2026-04-01", date_to = "2026-11-10", window_from_utc = sent }), userId, default)).Value;
         (await new GetCalendarOverviewTool(mediator).ExecuteAsync(scope, userId, default)).Success.Should().BeTrue();
 
         read.Should().NotBeNull();

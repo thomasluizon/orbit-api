@@ -171,7 +171,7 @@ jobs:
             /d:sonar.token="${SONAR_TOKEN}" \
             /d:sonar.cs.opencover.reportsPaths="**/coverage.opencover.xml" \
             /d:sonar.javascript.lcov.reportPaths="coverage/web-plan.lcov,coverage/staging-pinger.lcov,coverage/production-plan.lcov" \
-            /d:sonar.exclusions="tools/**,**/Migrations/**,**/bin/**,**/obj/**,**/OAuth/OAuthLoginPage.cs,**/.claude/**,**/Email/Templates/**,**/load-tests/**,**/bench/**" \
+            /d:sonar.exclusions="tools/**,**/Migrations/**,**/bin/**,**/obj/**,**/OAuth/OAuthLoginPage.cs,**/Email/Templates/**,**/bench/**" \
             /d:sonar.cpd.exclusions="**/Chat/Tools/Implementations/CreateHabitTool.cs,**/Chat/Tools/Implementations/UpdateHabitTool.cs,**/Services/AgentCatalogService.UserDataCatalog.cs,**/Services/SlipAlertSchedulerService.cs,**/Services/ProactiveCheckinSchedulerService.cs" \
             /d:sonar.coverage.exclusions="**/Program.cs,**/Extensions/ServiceCollectionExtensions*.cs,**/Extensions/WebApplicationExtensions.cs,**/Middleware/**,**/OpenApi/**,**/OAuth/**,**/Persistence/OrbitDbContext.cs,**/Persistence/OrbitDbContextFactory.cs,**/Persistence/GenericRepository.cs,**/Persistence/UnitOfWork.cs,**/Persistence/AccountResetRepository.cs,**/Configuration/**,**/Services/ReminderSchedulerService.cs,**/Services/SlipAlertSchedulerService.cs,**/Services/GoalDeadlineNotificationService.cs,**/Services/HabitDueDateAdvancementService.cs,**/Services/DataEncryptionMigrationService.cs,**/Services/PushNotificationService.cs,**/Services/AccountDeletionService.cs,**/Services/GoogleTokenService.cs,**/Services/BackgroundServiceHealthCheck.cs,**/Services/StripeCouponRewardService.cs,**/Services/StripeBillingService.cs,**/Services/GooglePlayBillingService.cs,**/Services/Calendar/**,**/AI/AiCompletionClient.cs,**/AI/AudioTranscriptionService.cs,**/Services/GeoLocationService.cs,**/BackgroundJobs/HangfireRecurringJobRegistrar.cs,**/Orbit.Analyzers/**,**/Orbit.Analyzers.CodeFixes/**,**/.github/**,**/bench/**,**/Profile/Models/PublicProfileSettings.cs"
 
@@ -256,23 +256,13 @@ jobs:
         env:
           BASE_REF: ${{ github.base_ref }}
         run: |
-          # https://github.com/thomasluizon/orbit-tickets/issues/1555 records that this migration never applied in any environment.
-          unapplied_migration=src/Orbit.Infrastructure/Migrations/20261023054236_CascadeRetiredFeatureParents.cs
-          violations=$(git diff --name-status --diff-filter=MDR "origin/$BASE_REF...HEAD" -- ':(glob)**/Migrations/**' ':(glob,exclude)**/*ModelSnapshot.cs' |
-            while IFS= read -r change; do
-              if [ "$change" = $'M\t'"$unapplied_migration" ] &&
-                [ "$(git rev-parse "origin/$BASE_REF:$unapplied_migration")" = 976ae916e5f23a3b578281fabcef93489098642a ] &&
-                [ "$(git rev-parse "HEAD:$unapplied_migration")" = 0f5a8102b16ce59b7ebfe98768bc673a3298941c ]; then
-                continue
-              fi
-              printf '%s\n' "$change"
-            done)
+          violations=$(git diff --name-status --diff-filter=MDR "origin/$BASE_REF...HEAD" -- ':(glob)**/Migrations/**' ':(glob,exclude)**/*ModelSnapshot.cs')
           if [ -n "$violations" ]; then
             echo "::error::An already-applied EF migration was modified, deleted, or renamed. Migrations are append-only: add a NEW migration instead of editing an existing one (the ModelSnapshot is the only file EF regenerates)."
             echo "$violations"
             exit 1
           fi
-          echo "OK: no applied migration was edited; the pinned unapplied correction is allowed."
+          echo "OK: no applied migration was edited."
 
       - name: Fail on non-idempotent raw index SQL in new migrations
         env:

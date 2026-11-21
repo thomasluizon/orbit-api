@@ -6,8 +6,8 @@ using Orbit.Domain.Models;
 namespace Orbit.Benchmarks;
 
 /// <summary>
-/// <see cref="HabitMetricsCalculator.Calculate"/> — the per-habit streak/completion-rate rollup rendered
-/// on every habit detail screen — over a daily habit with a year of completion logs.
+/// <see cref="HabitMetricsCalculator.Calculate"/> (the per-habit streak/completion-rate rollup rendered
+/// on every habit detail screen) over a daily habit with a year of completion logs.
 /// </summary>
 [MemoryDiagnoser]
 [ShortRunJob]

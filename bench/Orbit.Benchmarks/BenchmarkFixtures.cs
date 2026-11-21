@@ -6,7 +6,7 @@ namespace Orbit.Benchmarks;
 /// <summary>
 /// Builds the representative, in-memory inputs the hot-path benchmarks measure against: a daily habit
 /// carrying a year of completion logs, a portfolio of such habits, and the pre-materialized date sets
-/// the streak walker consumes. No database or I/O — the three targets are pure functions, so the
+/// the streak walker consumes. No database or I/O: the three targets are pure functions, so the
 /// fixtures exist only to give them realistic (roughly a year of dates, twenty habits) work to chew.
 /// </summary>
 internal static class BenchmarkFixtures

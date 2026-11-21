@@ -76,7 +76,7 @@ public partial class AgentOperationExecutor
         if (error is not null) return error.ErrorCode;
         if (toolRegistry.GetTool(member.OperationId) is not IArgumentCheckTool check) return null;
         var validation = await check.CheckArgumentsAsync(member.Arguments, userId, ct);
-        return validation.IsFailure ? validation.ErrorCode ?? "invalid_arguments" : null;
+        return validation.IsFailure ? validation.ErrorCode ?? ToolFailureCodes.InvalidArguments : null;
     }
 
     private async Task<ToolResult> ExecuteChangeSetAsync(OperationExecutionContext execution,

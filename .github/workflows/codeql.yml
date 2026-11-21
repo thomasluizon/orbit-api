@@ -1,27 +1,9 @@
 name: CodeQL
 
-# CodeQL advanced setup, replacing default setup (ORB-164).
-#
-#
-# The job name is load bearing. A matrix job produces one check run per leg,
-# named by interpolating the job name, so "Analyze (${{ matrix.language }})"
-# reproduces the required contexts verbatim. Renaming this job, or changing a
-# matrix language value, silently makes main unmergeable for every pull request.
-# A leg skips its steps, never the job, when its inputs did not change: a
-# skipped matrix job reports its unexpanded name and leaves the context missing.
-#
-# The language set matches what default setup covered: csharp,
-# javascript-typescript and actions. The javascript-typescript leg analyzes
-# the Node tools, scripts, hooks and tests in tools/, infra/ (with its
-# workers), .github/scripts/, .claude/ and load-tests/, and the three OAuth
-# page script tests in tests/Orbit.Infrastructure.Tests/. No JavaScript file
-# is under src/. The leg runs on main and on the weekly schedule and not on
-# pull requests. C# is analyzed with a real build
-# rather than buildless extraction, because this repository generates code at
-# build time (LoggerMessage source generators, openapi.json) and because a
-# GitHub-side feature flag can turn build-mode "none" into "autobuild" without
-# warning. The build compiles Orbit.Api, which references Domain, Application,
-# Infrastructure and the analyzers; the test projects are not analyzed.
+# The job name is load bearing: each matrix leg reports "Analyze (<language>)", which
+# the required checks name. Never rename the job or a language value.
+# A leg skips its steps, never the job, so the check context always exists.
+# C# builds Orbit.Api for real, because the build generates code that buildless extraction misses.
 
 on:
   push:
@@ -52,18 +34,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        language: ${{ fromJSON(github.event_name == 'pull_request' && '["csharp","actions"]' || '["csharp","javascript-typescript","actions"]') }}
+        language: ["csharp", "actions"]
 
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 2
 
-      # The javascript-typescript leg never runs on a pull request, so it has no inputs to
-      # select, and Initialize and Analyze run unless a selection says "false".
       - name: Select the inputs that changed
         id: inputs
-        if: matrix.language != 'javascript-typescript'
         env:
           LANGUAGE: ${{ matrix.language }}
         run: bash .github/scripts/changed-inputs.sh "$LANGUAGE"

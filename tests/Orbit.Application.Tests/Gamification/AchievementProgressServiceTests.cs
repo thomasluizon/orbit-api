@@ -64,7 +64,7 @@ public class AchievementProgressServiceTests
 
     /// <summary>
     /// Builds a daily BAD habit with NO logs and a backdated creation, so its abstinence "streak"
-    /// (consecutive non-logged expected days) runs long — the value that must NOT count toward streak progress.
+    /// (consecutive non-logged expected days) runs long: the value that must NOT count toward streak progress.
     /// </summary>
     private static Habit CreateBadHabitWithAbstinenceStreak()
     {

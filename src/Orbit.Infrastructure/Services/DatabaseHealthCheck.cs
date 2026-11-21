@@ -8,7 +8,7 @@ namespace Orbit.Infrastructure.Services;
 /// Reports the <c>/health</c> endpoint as unhealthy when the API cannot reach PostgreSQL, so a load balancer
 /// or uptime monitor observes a database outage instead of a superficially-live process. Uses EF Core's
 /// <see cref="Microsoft.EntityFrameworkCore.Infrastructure.DatabaseFacade.CanConnectAsync"/>, which opens a
-/// pooled connection and runs a trivial probe query — a full round trip through the Supavisor pooler.
+/// pooled connection and runs a trivial probe query: a full round trip through the Supavisor pooler.
 /// </summary>
 public sealed class DatabaseHealthCheck(OrbitDbContext dbContext) : IHealthCheck
 {
