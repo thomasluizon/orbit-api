@@ -1,5 +1,4 @@
 {
-  "ticket": "thomasluizon/orbit-tickets#2003",
   "warningLine": {
     "metric": "RssAnon plus RssShmem",
     "bytes": 314572800
@@ -22,33 +21,6 @@
       "idle": "60 seconds after Hangfire starts",
       "load": "at once after the recorded load",
       "after-load-settle": "60 seconds after the recorded load"
-    }
-  },
-  "productionMonitor": {
-    "image": "f84ab32cf",
-    "instance": "srv-d6tc2isr85hc739bf75g-l7q7g",
-    "gcConfiguration": {
-      "ServerGC": false,
-      "ConcurrentGC": true,
-      "HeapCount": 1,
-      "GCHeapHardLimit": 268435456,
-      "GCConserveMem": 7,
-      "GCGen0MaxBudget": 8388608
-    },
-    "warningsFrom13h21To16h49Utc": {
-      "workingSetBytes": [
-        455282688,
-        546770944
-      ],
-      "committedHeapBytes": [
-        119447552,
-        169467904
-      ],
-      "managedBytes": [
-        90682816,
-        144082648
-      ],
-      "outOfMemoryKill": "one, between the 14:25 and 14:30 reads"
     }
   },
   "gcCountersAfterRecordedLoad": {
@@ -140,7 +112,7 @@
       }
     },
     {
-      "label": "soak-prod",
+      "label": "production-image-300-rounds",
       "image": "f84ab32cf (production image)",
       "override": "ROUNDS=300",
       "reads": {
@@ -460,7 +432,7 @@
       }
     },
     {
-      "label": "soak-branch",
+      "label": "fixed-image-300-rounds",
       "image": "this branch",
       "override": "ROUNDS=300",
       "reads": {
@@ -1100,48 +1072,6 @@
       }
     }
   ],
-  "soakSamplesEveryMinute": {
-    "soak-prod": [
-      {
-        "VmRSSKb": 360500,
-        "RssAnonKb": 130168,
-        "RssShmemKb": 103832,
-        "cgroupMemoryCurrentBytes": 248160256
-      },
-      {
-        "VmRSSKb": 382172,
-        "RssAnonKb": 139868,
-        "RssShmemKb": 114808,
-        "cgroupMemoryCurrentBytes": 270123008
-      },
-      {
-        "VmRSSKb": 390288,
-        "RssAnonKb": 140640,
-        "RssShmemKb": 122080,
-        "cgroupMemoryCurrentBytes": 277934080
-      }
-    ],
-    "soak-branch": [
-      {
-        "VmRSSKb": 370784,
-        "RssAnonKb": 125156,
-        "RssShmemKb": 75488,
-        "cgroupMemoryCurrentBytes": 218882048
-      },
-      {
-        "VmRSSKb": 381744,
-        "RssAnonKb": 131748,
-        "RssShmemKb": 79224,
-        "cgroupMemoryCurrentBytes": 225001472
-      },
-      {
-        "VmRSSKb": 386504,
-        "RssAnonKb": 136408,
-        "RssShmemKb": 79324,
-        "cgroupMemoryCurrentBytes": 236343296
-      }
-    ]
-  },
   "containerGuard": {
     "prod-f84ab32cf-arm64": {
       "exitCode": 0,

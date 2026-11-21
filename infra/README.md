@@ -712,15 +712,7 @@ Staging reads Stripe test-mode product and price IDs from SSM and uses staging r
 
 ## Production web routing
 
-Production web serves the promoted `main` build directly through the DNS-only
-`app.useorbit.org` CNAME to `orbit-web-3qmv.onrender.com`. Keep
-`dns_app_target = "orbit-web-3qmv.onrender.com"` and
-`web_custom_domains = ["app.useorbit.org"]` in ignored `local.tfvars`.
-Cookie values do not select an origin. The never-applied build-routing Worker and
-separate redesign Render service configuration are retired.
-
-The [build selection and routing audit](redesign-flag-audit.md) records the
-retired client selectors and infrastructure disposition.
+Production web is the DNS-only CNAME `app.useorbit.org` to `orbit-web-3qmv.onrender.com`. The variables `dns_app_target` and `web_custom_domains` set it.
 
 Run `terraform -chdir=infra init -backend=false -input=false`, then
 `npm test --prefix infra` for the infrastructure tests. They use Node's built-in
