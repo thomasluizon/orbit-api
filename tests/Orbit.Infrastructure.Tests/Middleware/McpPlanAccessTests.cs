@@ -113,6 +113,7 @@ public class McpPlanAccessTests
         builder.Services.AddSingleton(usage);
         builder.Services.AddSingleton(Orbit.Infrastructure.Tests.ModerationTestDouble.Clean());
         builder.Services.AddSingleton(keyRepository);
+        builder.Services.AddSingleton(userRepository);
         builder.Services.AddSingleton(unitOfWork);
         builder.Services.AddSingleton<IPayGateService>(payGate);
         builder.Services.AddSingleton<IAgentCatalogService>(catalog);
