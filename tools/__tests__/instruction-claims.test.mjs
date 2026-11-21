@@ -60,3 +60,21 @@ for (const { name, hasFile } of projects) {
     assert.doesNotMatch(read('CLAUDE.md'), /Each project has a `CLAUDE\.md`/)
   })
 }
+
+const replayReaders = [
+  { test: 'tests/Orbit.Infrastructure.Tests/AI/AiIntentServiceStreamingTests.ServerConversations.cs', fixture: 'pt-BR.json' },
+  { test: 'tests/Orbit.Infrastructure.Tests/Services/AgentChatWriteHoldTests.DateContext.cs', fixture: 'language + ".json"' },
+]
+
+for (const { test: testFile, fixture } of replayReaders) {
+  test(`evals/astra/README.md names ${testFile.split('/').pop()} and only the files that it reads`, () => {
+    const readme = read('evals/astra/README.md')
+    const source = read(testFile)
+    assert.ok(source.includes(fixture))
+    assert.doesNotMatch(source, /large-account/)
+    assert.ok(readme.includes('`' + testFile.split('/').pop() + '`'))
+    assert.match(readme, /replay `en\.json` and `pt-BR\.json`\./)
+    assert.doesNotMatch(readme, /replay these files/)
+    assert.match(readme, /No test reads `large-account\.json`\./)
+  })
+}
