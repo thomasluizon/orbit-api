@@ -1,0 +1,35 @@
+{
+  "caseId": "owner-split-pt-BR",
+  "repeat": 5,
+  "role": "answer turn, round 3: the two writes",
+  "source": "Authored from the owner's screenshot of 12 November 2026 (ticket 2127) and the staging selection cards of thomasluizon/orbit-tickets#2129. Not a provider capture. The test rebinds habit-1 to habit-6 to the six Water - 710ml habits.",
+  "toolCalls": [
+    {
+      "name": "bulk_delete_habits",
+      "arguments": {
+        "habit_ids": [
+          "habit-5",
+          "habit-6"
+        ],
+        "orbit_write_complete": true
+      }
+    },
+    {
+      "name": "bulk_update_habits",
+      "arguments": {
+        "filter": {
+          "habit_ids": [
+            "habit-1",
+            "habit-2",
+            "habit-3",
+            "habit-4"
+          ]
+        },
+        "updates": {
+          "title": "Water - 1.18L"
+        },
+        "orbit_write_complete": true
+      }
+    }
+  ]
+}
