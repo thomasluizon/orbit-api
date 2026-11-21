@@ -106,6 +106,34 @@ Neither is a chat retention control. Disabling the recording rollout flag stops
 new storage and history reads, preserves existing rows for export or deletion,
 and does not silently erase them. Privacy copy must describe these exact rules.
 
+### Data export and account erasure
+
+The profile data export returns the portable data of the account while the account exists. Erasure removes the account and the data that it owns. The obligation to cancel a provider subscription is billing reconciliation data. It survives erasure in `OwedSubscriptionCancellations`. The table has no Orbit user identifier, so no join returns the account. The profile export does not include it, because the erasure creates the record.
+
+Each record keeps these fields:
+
+- a random record ID
+- the provider (Stripe or Google Play)
+- the Stripe subscription ID or the Play purchase token
+- the attempt count
+- the creation time, the last attempt time, the next attempt time and the exhaustion time
+
+A record keeps no name, no email, no Orbit user ID, no payment card and no provider error text. Treat a purchase token and a subscription ID as sensitive billing data. An alert uses only the record ID, the provider and the attempt count.
+
+After the seven-day billing deferral, the erasure commits the cancellation obligation of each retained provider identifier in the same transaction that deletes the account. An error alert reports an erasure with unconfirmed renewals.
+
+The cancellation worker scans every minute in both scheduler modes. It does not depend on the erased account or on the original queued job. It waits one minute, five minutes, then one hour between attempts. After 27 attempts, it tries once each day. These results remove the record at once:
+
+- a successful cancellation
+- a renewal that is already stopped
+- a subscription that the provider confirms as missing
+
+A failed provider does not block the obligation of another provider.
+
+An exhausted record stays until billing reconciliation confirms that the renewal stopped. No time-based expiry removes it, because an expiry could hide an active charge. Exhaustion sends an error alert with the record ID and the provider. The alert repeats each day until the record is resolved. A billing operator must find the record, stop the renewal with the named provider, and remove the record only after the provider confirms the cancellation or confirms that the subscription does not exist.
+
+The next attempt time schedules both the daily attempts and the exhaustion reminders. Each attempt commits before the provider calls, and the provider calls run outside database transactions. An interrupted attempt stays due and retries after the backoff. A provider cancellation that succeeds before a database failure is safe to verify again on the next scan.
+
 ## Copy for coordinator approval
 
 Model-facing copy is English in both runtime locales. Translations below are
