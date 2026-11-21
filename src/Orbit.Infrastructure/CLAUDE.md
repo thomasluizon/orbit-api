@@ -13,7 +13,7 @@ EF Core, PostgreSQL and the external services: OpenAI, Firebase, Stripe, Amazon 
 ## Stripe
 
 - Set `StripeConfiguration.ApiKey` once at startup, in `Orbit.Api/Extensions/ServiceCollectionExtensions.Infrastructure.cs`. Never set it in a controller.
-- Verify the signature in `SubscriptionController.HandleWebhook`. Reject the event when `WebhookSecret` is not set.
+- Verify the signature in `HandleWebhookCommandHandler` (`Orbit.Application/Subscriptions/Commands/HandleWebhookCommand.cs`). Reject the event when `WebhookSecret` is not set.
 - Check a checkout interval against a list of allowed values.
 - Each Stripe webhook endpoint keeps the API version of its creation. `StripeWebhookVersionHealthCheck` serves `/health/stripe`. Release API refuses a deploy when no enabled endpoint matches `Stripe.net`. See [Stripe webhook endpoint version](../../infra/README.md#stripe-webhook-endpoint-version).
 

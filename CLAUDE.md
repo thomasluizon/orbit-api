@@ -8,7 +8,7 @@ The REST API of Orbit. It runs at `api.useorbit.org`.
 
 ## Architecture
 
-The four projects are `Orbit.Api` → `Orbit.Application` → `Orbit.Domain` ← `Orbit.Infrastructure`. MediatR runs the commands and the queries. Each feature has its own folder in `Orbit.Application`. Infrastructure holds a generic repository and a Unit of Work. Each project has a `CLAUDE.md`. Read it before you edit that project.
+The four projects are `Orbit.Api` → `Orbit.Application` → `Orbit.Domain` ← `Orbit.Infrastructure`. MediatR runs the commands and the queries. Each feature has its own folder in `Orbit.Application`. Infrastructure holds a generic repository and a Unit of Work. `Orbit.Api`, `Orbit.Application` and `Orbit.Infrastructure` each have a `CLAUDE.md`. Read it before you edit that project.
 
 - Build a domain entity only through its factory method, for example `Habit.Create()`. Give the entity no public setter.
 - Keep Domain free of EF. Configure each entity in Infrastructure.

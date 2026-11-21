@@ -7,7 +7,7 @@ MediatR commands and queries, validators and application services.
 Each handler returns `Result<T>` from `Orbit.Domain/Common/`. Do not throw for an expected failure.
 
 - Return `Result<T>.Success(value)` for success.
-- Return `Result<T>.Failure(errorCode, message)` for a known failure.
+- Return `Result.Failure<T>(ErrorMessages.<Name>)` from `Common/ErrorMessages.cs` for a known failure.
 - Use `result.PropagateError<T>()` from `Common/ResultExtensions.cs` to pass a failed result to a new type. Do not write an `ErrorCode == "PAY_GATE"` check.
 
 ## Validation
