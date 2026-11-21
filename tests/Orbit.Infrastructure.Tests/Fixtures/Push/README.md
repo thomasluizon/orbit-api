@@ -12,5 +12,3 @@ Delivery outcomes follow Microsoft's
 [WNS response status table](https://learn.microsoft.com/en-us/windows/apps/develop/notifications/push-notifications/push-request-response-headers#response-codes).
 APNs response fixtures follow Apple's
 [response tables and BadDeviceToken exchange](https://developer.apple.com/documentation/usernotifications/handling-notification-responses-from-apns).
-Live exchanges require the owner's Apple and Azure credentials and belong to
-`thomasluizon/orbit-tickets#1560`.
