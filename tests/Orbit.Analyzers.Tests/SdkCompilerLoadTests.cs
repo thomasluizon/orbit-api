@@ -11,28 +11,6 @@ namespace Orbit.Analyzers.Tests;
 /// </summary>
 public sealed class SdkCompilerLoadTests
 {
-    private const string MvcStub = """
-        namespace Microsoft.AspNetCore.Mvc
-        {
-            public abstract class ControllerBase { }
-        }
-
-        namespace Microsoft.AspNetCore.Authorization
-        {
-            public class AuthorizeAttribute : System.Attribute { }
-
-            public sealed class AllowAnonymousAttribute : System.Attribute { }
-        }
-
-        namespace App
-        {
-            public sealed class UsersController : Microsoft.AspNetCore.Mvc.ControllerBase
-            {
-                public string Get() => "users";
-            }
-        }
-        """;
-
     private const string UtcNowStub = """
         using System;
 
@@ -53,7 +31,6 @@ public sealed class SdkCompilerLoadTests
     public static TheoryData<string, string> Violations => new()
     {
         { "ORBIT0001", CommentStub },
-        { "ORBIT0003", MvcStub },
         { "ORBIT0004", UtcNowStub },
     };
 

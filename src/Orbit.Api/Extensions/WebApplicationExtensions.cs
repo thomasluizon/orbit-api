@@ -50,10 +50,10 @@ public static partial class WebApplicationExtensions
 
         if (app.Environment.IsDevelopment())
         {
-            app.MapOpenApi();
+            app.MapOpenApi().AllowAnonymous();
             app.MapScalarApiReference(options => options
                 .AddDocument("v1", "Orbit API v1", isDefault: true)
-                .AddDocument("v2", "Orbit API v2"));
+                .AddDocument("v2", "Orbit API v2")).AllowAnonymous();
         }
 
         app.UseExceptionHandler();
@@ -70,9 +70,13 @@ public static partial class WebApplicationExtensions
 
         app.UseAuthentication();
         app.UseAuthorization();
-        app.MapControllers();
-        app.MapMcp("/mcp").RequireCors("ThirdParty");
+        app.MapOrbitEndpoints();
+    }
 
+    internal static void MapOrbitEndpoints(this IEndpointRouteBuilder app)
+    {
+        app.MapControllers();
+        app.MapMcp("/mcp").RequireCors("ThirdParty").AllowAnonymous();
         app.MapOrbitHealthChecks();
     }
 
