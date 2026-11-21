@@ -207,10 +207,11 @@ test("the image source check accepts only the selected commit reachable from the
     git("-C", "release-source", "commit", "--quiet", "-m", "Planned commit")
     const sha = git("-C", "release-source", "rev-parse", "HEAD")
     git("-C", "release-source", "update-ref", "refs/remotes/origin/main", sha)
-    const source = script(step(staging, "Verify image source")).replace(".github/scripts/render-release.sh", join(root, ".github/scripts/render-release.sh"))
-    assert.equal(replay(source, { COMMIT_SHA: sha, RELEASE_BRANCH: "main" }, directory).status, 0)
-    assert.notEqual(replay(source, { COMMIT_SHA: otherSha, RELEASE_BRANCH: "main" }, directory).status, 0)
-    assert.notEqual(replay(source, { COMMIT_SHA: sha, RELEASE_BRANCH: "other" }, directory).status, 0)
+    const source = script(step(staging, "Verify image source")).replace(".github/scripts/render-release.sh", '"$RENDER_RELEASE_SCRIPT"')
+    const env = { RENDER_RELEASE_SCRIPT: join(root, ".github/scripts/render-release.sh"), RELEASE_BRANCH: "main" }
+    assert.equal(replay(source, { ...env, COMMIT_SHA: sha }, directory).status, 0)
+    assert.notEqual(replay(source, { ...env, COMMIT_SHA: otherSha }, directory).status, 0)
+    assert.notEqual(replay(source, { ...env, COMMIT_SHA: sha, RELEASE_BRANCH: "other" }, directory).status, 0)
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
