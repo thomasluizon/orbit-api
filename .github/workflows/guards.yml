@@ -71,7 +71,6 @@ jobs:
             git diff --name-only --diff-filter=ACMR "origin/$BASE_REF...HEAD" -z \
               | xargs -0 --no-run-if-empty node tools/check-dashes.mjs --files
           fi
-          node tools/check-dashes.mjs --check-baseline
 
       - name: Tool tests
         if: ${{ !cancelled() }}

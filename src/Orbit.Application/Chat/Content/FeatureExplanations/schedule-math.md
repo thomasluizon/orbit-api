@@ -16,7 +16,7 @@ derived_from:
 
 ## Monthly habits clamp to the last valid day
 
-A monthly habit fires on the same day-of-month as its anchor (due) date. When a month is too short for that day, it clamps to the **last valid day** of that month instead of drifting. A habit anchored on the 31st fires on March 31 — never March 28 — and on the last day of shorter months. This keeps "the 31st" meaning the end of the month rather than slipping earlier permanently.
+A monthly habit fires on the same day-of-month as its anchor (due) date. When a month is too short for that day, it clamps to the **last valid day** of that month instead of drifting. A habit anchored on the 31st fires on March 31, never March 28, and on the last day of shorter months. This keeps "the 31st" meaning the end of the month rather than slipping earlier permanently.
 
 ## Yearly leap-day habits
 
@@ -28,7 +28,7 @@ The "every N" interval (every 2 weeks, every 3 months, and so on) is measured fr
 
 ## When a habit is overdue
 
-A habit is **overdue when its due date has fallen before today**. The due date rests on the oldest unresolved occurrence; logging or skipping advances it past today. This single signal — due date earlier than today — is what marks a recurring habit overdue everywhere in the app.
+A habit is **overdue when its due date has fallen before today**. The due date rests on the oldest unresolved occurrence; logging or skipping advances it past today. This single signal (due date earlier than today) is what marks a recurring habit overdue everywhere in the app.
 
 Bad habits are never overdue (there's no "must do" expectation to miss), and flexible habits use their window instead of an overdue date.
 

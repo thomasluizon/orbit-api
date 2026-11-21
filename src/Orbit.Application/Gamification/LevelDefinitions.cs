@@ -91,7 +91,7 @@ public static class LevelDefinitions
     }
 
     /// <summary>
-    /// XP remaining until the next level. With infinite levels this is never null — the curve always
+    /// XP remaining until the next level. With infinite levels this is never null: the curve always
     /// has a next threshold.
     /// </summary>
     public static int GetXpToNextLevel(int totalXp)
