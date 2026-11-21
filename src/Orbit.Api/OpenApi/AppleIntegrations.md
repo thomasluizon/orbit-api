@@ -1,13 +1,6 @@
 # Apple integrations
 
-Tracks thomasluizon/orbit-tickets#1559. Deploy this API before its iOS consumers.
 All capabilities default to disabled. No Apple credentials are included in the repository.
-
-The Apple migrations follow `ExpandHabitNextDueDate` in migration ID order. Their
-generated target models retain its cursor and legacy write compatibility mapping.
-The migration bodies preserve the Apple schema additions and provider coverage
-backfills. Applied migrations on `main` remain unchanged. Normal API startup applies
-the three Apple migrations; no manual migration or backfill is required.
 
 ## Configuration
 
@@ -76,26 +69,6 @@ stops. Do not remove a key from the Render group in the dashboard: the next appl
 restores it. The other Apple capabilities, Stripe, Play, FCM and Web Push keep their
 independent configuration. App Store subscriptions are managed by the customer;
 account deletion does not submit App Store cancellation requests.
-
-## Provider coverage and refund reversals
-
-Each provider retains its verified paid-through instant, interval and pending lapse
-reason. The shared entitlement projects the longest currently valid paid term.
-A shorter provider update cannot replace it, and a refund or cancellation falls
-back to another provider's still-valid coverage. Provider bindings remain linked
-while that coverage is active. The `PreserveProviderPaidCoverage` migration adds
-nullable columns and backfills the currently selected provider from the existing
-subscription projection. Other linked providers acquire coverage on their next
-verified update; the migration does not infer terms from identifiers.
-
-`REFUND_REVERSED` reconciles the verified current subscription state before its
-UUID is recorded, using the same account binding checks as renewals. Apple's
-[notification type documentation](https://developer.apple.com/documentation/appstoreservernotifications/notificationtype)
-identifies the reversal and requires reinstatement after a refund. Its refund
-event table has an empty subtype cell for `REFUND_REVERSED`; no subtype is required.
-The complete table and possible values can be rederived from
-[Apple's documentation JSON](https://developer.apple.com/tutorials/data/documentation/appstoreservernotifications/notificationtype.json).
-
 The sign-in service reads `AppleSignIn__TokenUrl`, `AppleSignIn__KeysUrl` and
 `AppleSignIn__RevokeUrl` from configuration, with Apple's endpoints as defaults.
 No environment override is required. A real response from
@@ -129,41 +102,3 @@ No callback cookie or session token in the redirect URL is required.
 MCP uses its own configured callback and the same verified identity flow, then
 creates an existing MCP consent ticket. It preserves the requesting client's
 redirect, state, PKCE challenge, nonce and scopes in encrypted server storage.
-
-## Protocol evidence
-
-The implementation uses the documented HTTP protocols and .NET cryptography.
-The NuGet packages considered were
-[dotAPNS 4.6.0](https://github.com/alexalok/dotAPNS/blob/ed3dab7f85cb41732281ba0d3c7b255ed83ce51c/dotAPNS/ApnsClient.cs) and
-[Mimo.AppStoreServerLibrary 0.1.1](https://github.com/getmimo/app-store-server-library-dotnet/blob/05fedc5f1c64506e50785ab7a561142da5a2fe92/src/SignedDataVerifier.cs).
-Neither package includes installed source files. Their published repository revisions
-were inspected: dotAPNS's response abstraction discards the HTTP status needed for
-unconditional 410 cleanup; Mimo's verifier embeds decoded payloads in exceptions and
-does not enforce Apple's signing certificate extensions. The direct implementation
-keeps status handling, certificate purpose checks and sanitized failures explicit.
-
-- [APNs connection](https://developer.apple.com/documentation/usernotifications/establishing-a-connection-to-apns): HTTP/2 streams have a variable server limit. One shared connection and an eight-request semaphore bound sends.
-- [APNs token authentication](https://developer.apple.com/documentation/usernotifications/establishing-a-token-based-connection-to-apns): ES256, `kid`, `iss`, `iat`, Base64URL and the 20-to-60-minute refresh window. Tokens are reused for 50 minutes.
-- [APNs request](https://developer.apple.com/documentation/usernotifications/sending-notification-requests-to-apns) and [response](https://developer.apple.com/documentation/usernotifications/handling-notification-responses-from-apns): sandbox/production hosts, device path, topic, alert push type, `reason`, 410, BadDeviceToken, 429 and server failures.
-- [App Store JWT authorization](https://developer.apple.com/documentation/appstoreserverapi/generating-json-web-tokens-for-api-requests): ES256 key, issuer, audience, bundle identifier and short-lived request tokens.
-- [Subscription statuses](https://developer.apple.com/documentation/appstoreserverapi/get-all-subscription-statuses), [response](https://developer.apple.com/documentation/appstoreserverapi/statusresponse), [group](https://developer.apple.com/documentation/appstoreserverapi/subscriptiongroupidentifieritem), [last transaction](https://developer.apple.com/documentation/appstoreserverapi/lasttransactionsitem) and [status values](https://developer.apple.com/documentation/appstoreserverapi/status): current state, signed transactions and renewals, grace and revoked states.
-- [Transaction](https://developer.apple.com/documentation/appstoreserverapi/jwstransactiondecodedpayload) and [renewal](https://developer.apple.com/documentation/appstoreserverapi/jwsrenewalinfodecodedpayload) claims: bundle, product, account token, original transaction, environment, expiration, revocation and grace timestamps.
-- [JWS certificate header](https://developer.apple.com/documentation/appstoreserverapi/jwsdecodedheader), [Apple's verifier](https://github.com/apple/app-store-server-library-python/blob/main/appstoreserverlibrary/signed_data_verifier.py) and [Apple PKI](https://www.apple.com/certificateauthority/): three-certificate chain, Apple signing-purpose OIDs and root trust. Production enables certificate revocation checks; generated test chains disable them only through an internal test constructor.
-- [Notification envelope](https://developer.apple.com/documentation/appstoreservernotifications/responsebodyv2), [decoded payload](https://developer.apple.com/documentation/appstoreservernotifications/responsebodyv2decodedpayload), [data](https://developer.apple.com/documentation/appstoreservernotifications/data) and [types](https://developer.apple.com/documentation/appstoreservernotifications/notificationtype): signed payload, UUID, version, application, environment and nested transaction verification.
-- [Rate limits](https://developer.apple.com/documentation/appstoreserverapi/identifying-rate-limits): subscription lookup is limited to 50 requests per second in production, with sandbox at one tenth of that limit. Provider errors retain local state and return a retriable notification failure.
-- [Firebase sender source](https://github.com/firebase/firebase-admin-dotnet/blob/62553e0f375e77f40f479b7a3a0bbc50808f9216/FirebaseAdmin/FirebaseAdmin/Messaging/FirebaseMessagingClient.cs): the installed SDK's repository revision confirms the `name` success field used by the FCM isolation test. Its `AppOptions` source and installed Google HTTP factory documentation confirm the injectable test transport.
-- [Apple discovery](https://appleid.apple.com/.well-known/openid-configuration) and [public keys](https://appleid.apple.com/auth/keys): actual responses confirmed issuer, endpoints, RS256 and JWKS `keys`, `kid`, `kty`, `use`, `alg`, `n` and `e`.
-- [Identity claims](https://developer.apple.com/documentation/signinwithapplejs/authorizationi/id_token) and [verification](https://developer.apple.com/documentation/signinwithapple/verifying-a-user): issuer, subject, audience, timestamps, nonce and verified email.
-- [Authorization request](https://developer.apple.com/documentation/signinwithapplerestapi/request-an-authorization-to-the-sign-in-with-apple-server.), [token validation](https://developer.apple.com/documentation/signinwithapplerestapi/generate-and-validate-tokens), [token response](https://developer.apple.com/documentation/signinwithapplerestapi/tokenresponse), [client secret](https://developer.apple.com/documentation/accountorganizationaldatasharing/creating-a-client-secret) and [revocation](https://developer.apple.com/documentation/signinwithapplerestapi/revoke-tokens): form encoding, callback fields, one-use code exchange, encrypted refresh token storage and empty successful revocation bodies.
-
-Apple's Markdown representation omits some REST property tables. To rederive those
-fields, read the corresponding JSON documentation at
-`https://developer.apple.com/tutorials/data/documentation/{framework}/{symbol}.json`,
-including `primaryContentSections` with `kind: "properties"` or `"possibleValues"`.
-Tests construct the documented payloads and generate their own signing keys and
-certificate chains. They do not use production tokens or invented provider claims.
-
-The embedded public Apple Root CA G3 certificate is downloaded from
-[Apple's certificate endpoint](https://www.apple.com/certificateauthority/AppleRootCA-G3.cer).
-Its SHA-256 digest is
-`63343abfb89a6a03ebb57e9b3f5fa7be7c4f5c756f3017b3a8c488c3653e9179`.

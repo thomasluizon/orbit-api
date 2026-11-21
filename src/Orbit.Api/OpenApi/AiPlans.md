@@ -1,8 +1,5 @@
 # AI turn plans
 
-Tracks thomasluizon/orbit-tickets#1976. Publish the API before the paired
-web and Android consumer adds its shared Zod schemas and renderer.
-
 Chat responses, conversation display turns and stream events append optional
 `plan`. Its fields are `id` (UUID), `title` and ordered `steps`. Each step has
 `id`, `text`, `status`, `tool` and `phase`, with optional `toolCallId` and
@@ -57,21 +54,16 @@ its plan with the rest of the turn.
 Plan response updates are auxiliary after a committed approval, rejection or
 execution. A failed update logs an error with `PendingOperationId` and preserves
 the primary response; request cancellation still propagates. Confirmation and
-rejection already patch the stored plan atomically with their pending-state
-changes through `PendingAgentOperationStore.SaveChangesWithConversationOutcomes`.
-Their subsequent response update must not invalidate those commits.
+rejection patch the stored plan atomically with their pending-state changes through
+`PendingAgentOperationStore.SaveChangesWithConversationOutcomes`.
 
-Execution cannot universally share that transaction: `ExecuteWithPolicyAsync`
-uses a shared transaction only for transactional tools and account change sets;
-other tools dispatch commands with their own save boundaries or external effects.
-The executor records the actual terminal outcome in the existing agent audit
-store with source `pending_operation_execution` and the pending operation ID as
-`TargetId`, then attempts the auxiliary plan update. The outcome contains no
-conversation text and uses no model call. Audit persistence retains its existing
-independent scope and error reporting. If both the execution audit and the plan
-write are unavailable, the primary response is still preserved and both failures
-are observable; reload leaves the execution unresolved rather than inferring
-success from a consumed confirmation.
+Execution cannot share that transaction: `ExecuteWithPolicyAsync` uses a shared
+transaction only for transactional tools and account change sets. The executor
+records the actual terminal outcome in the agent audit store with source
+`pending_operation_execution` and the pending operation ID as `TargetId`, then
+attempts the auxiliary plan update. If both writes are unavailable, the primary
+response is preserved and reload leaves the execution unresolved rather than
+inferring success from a consumed confirmation.
 
 Conversation display and model-history reads repair unfinished approval steps
 from the owner's pending state and explicit execution outcome. Approval alone
@@ -86,15 +78,3 @@ Old clients may ignore the additional fields and unknown stream event types.
 Old payloads without plans still deserialize. No client capability is needed
 to receive the additive fields, and existing parts and action blocks retain
 their composition and approval behavior.
-
-Offline cost evidence uses the `o200k_base` tokenizer and SDK-serialized
-requests and function calls from the same local transport as the #1916 cache checks. The baseline
-removes only the plan declaration and instruction. A representative two-tool
-turn adds 290 input tokens and 64 output tokens, conservatively including the
-function-call envelopes. With the existing warm static prefix, 47,806 input
-tokens (46,976 cached) and 121 output tokens cost 0.00063401 USD under the
-configured prices, below the 0.0009 USD warm-call
-ceiling. Cold requests retain #1916's separate cold-start bounds. Reproduce with
-`dotnet test tests/Orbit.Infrastructure.Tests --filter FullyQualifiedName~Plan_TwoToolTokenDeltaFitsExistingWarmCallCeiling`.
-The measurement writes `orbit-1976-plan-cost.txt` in the process temporary
-directory and makes no paid provider call.

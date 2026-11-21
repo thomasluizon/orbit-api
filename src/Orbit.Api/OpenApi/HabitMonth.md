@@ -1,19 +1,14 @@
 # Habit month answers
 
-Tracks thomasluizon/orbit-tickets#1747. Deploy this API before the paired UI
-advertises `habitMonth` in `clientContext.partKinds` with `supportsParts: true`.
-Existing clients receive a readable localized schedule and logs. The parts and
-status-block kill flags retain their existing meaning. No minimum client version
-change, migration, feature flag activation or credential is required.
+A client receives the part only when `clientContext.supportsParts` is true and
+`partKinds` includes `habitMonth`. Other clients receive a readable localized schedule.
 
-`get_habit_month` reads Orbit habits. `get_calendar_overview` reads Google Calendar
-events, meetings, connection and sync. The prompt distinguishes both intents in
-English and Brazilian Portuguese without a keyword router or tool removal.
-
-The optional `date_from` and `date_to` arguments are inclusive local ISO dates.
-Without dates, the period is the user's complete current month, including future
-days. An end date alone selects its month's first day; a start date alone selects
-its month's last day. Explicit windows must be ordered and cover at most 62 days.
+The tool requires `window`: `month` or `date_range`, with local inclusive dates. A
+`month` window with no date is the current month, future days included. A start date
+alone runs to the last day of its month; an end date alone starts on the first day.
+`relative_period` sets both dates: `this_month` ends today; `last_month` is the
+previous month. A `date_range` window needs both dates, `date_to` after `date_from`. A
+window covers at most 62 days.
 `language` is `en`, `pt` or `pt-BR`, taken from the person's current message.
 The account date and week start come from `IUserDateService`.
 
@@ -39,21 +34,17 @@ instance marked Completed as a positive log: the existing instance projection al
 uses that state for skips. No grid aggregation or replacement schedule engine is
 introduced in chat. The complete month is returned without sampling or paging.
 
-The model continuation receives only the inclusive window, user-local today and
-one summary per habit, including nested children: identity, title, scheduled,
-completed, skipped and missed day counts. Counts use the calendar's dates and
-logs, with positive logs taking precedence over skips on the same day. Future
-and current unlogged dates are not missed. Positive logs for habits being reduced
-are reported as slip days, never completions or missed days. Flexible habits are
-identified; their day counts describe calendar cells, not frequency targets.
-The complete `CalendarMonthResponse` stays in the block, refresh and legacy text
-fallback. The shared model payload cap shortens oversized results with retained
-facts and omission metadata.
+The model continuation receives only the window, user-local today and one summary
+per habit, nested children included: scheduled, completed, skipped and missed day
+counts. A positive log wins over a skip on the same day. Future and current unlogged
+dates are not missed. Positive logs of habits being reduced count as slip days, never
+as completions or missed days. Flexible habits are identified; their counts describe
+calendar cells, not frequency targets.
+The complete `CalendarMonthResponse` stays in the block, refresh and text fallback.
 
-## Refresh contract for the paired UI
+## Refresh
 
-Tracks thomasluizon/orbit-tickets#1748. Refresh with
-`POST /api/Chat/habit-month/refresh` in both HTTP API versions. Send the original
+Refresh with `POST /api/Chat/habit-month/refresh` in both HTTP API versions. Send the original
 `read.refreshToken` and the negotiated client context:
 
 ```json
@@ -77,39 +68,6 @@ parts/status-block kill flags apply to every refresh.
 `POST /api/Chat/reads/refresh` retains its published response union and rejects
 habit-month tokens before executing the read. Do not use that route for this kind.
 
-Replay negotiates the new kind again and falls back to localized text when the
-client does not advertise it. A successful single month answer has one short
-localized introduction with no figures, then its block. It also survives a failed
-model continuation. Mixed reads retain their produced order and existing outcomes.
-
-Google event rows omit `calendarName` when it contains an email address, preserving
-friendly names such as Work. Event identifiers, titles and time fields retain their
-contract. Gated optional sync reads still allow events and omit the gated sync row.
-The API prompt forbids a vague availability warning: identify the actual unavailable
-action and the returned reason, or omit it. The sentence reported by the owner is
-not an API literal; its consumer rendering belongs to the paired UI change.
-
-## Cases for the existing AI eval
-
-The live corpus is owned by #26 in `orbit-ui-mobile/evals/astra`. This API-only
-change supplies the cases for the coordinator and paired UI ticket to add there;
-unit tests do not claim to prove a real model's tool choice.
-
-| Locale | Prompt | Expected tool and block |
-| --- | --- | --- |
-| en | Show my habit calendar for this month | `get_habit_month`, `habitMonth` |
-| en | Show my month | `get_habit_month`, `habitMonth` |
-| en | How did my month go day by day? | `get_habit_month`, `habitMonth` |
-| pt-BR | Mostre meu calendário de hábitos deste mês | `get_habit_month`, `habitMonth` |
-| pt-BR | Mostre meu mês | `get_habit_month`, `habitMonth` |
-| pt-BR | Como foi meu mês dia a dia? | `get_habit_month`, `habitMonth` |
-| en | Show my calendar events this month | `get_calendar_overview`, `calendar` |
-| en | What meetings do I have this month? | `get_calendar_overview`, `calendar` |
-| pt-BR | Mostre meus eventos do calendário deste mês | `get_calendar_overview`, `calendar` |
-| pt-BR | Quais reuniões tenho neste mês? | `get_calendar_overview`, `calendar` |
-
-On staging, the coordinator checks all cases against the real model, parity with
-Calendário on the same account, and current-message language on a pt-BR profile
-receiving an English request. The paired UI ticket renders `habitMonth` as that
-grid, removes the vague actions sentence, and suppresses account emails in any
-consumer fallback. No browser or server is started by this worker.
+Replay negotiates the kind again and falls back to localized text when the client
+does not advertise it. A successful single month answer has one short introduction
+with no figures, then its block, and survives a failed model continuation.

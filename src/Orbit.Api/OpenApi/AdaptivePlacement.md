@@ -1,8 +1,5 @@
 # Adaptive placement in pending previews
 
-Tracks thomasluizon/orbit-tickets#1758. Deploy this API before the consumer in
-thomasluizon/orbit-tickets#1759 advertises placement controls.
-
 Clients opt in with `clientContext.supportsPendingOperationPlacement: true` only
 when they can render the selected placement, destination, reason and alternatives,
 and distinguish retained draft settings from the changes approval will execute.
@@ -11,9 +8,8 @@ placement support. Omitted, null or false placement support retains the legacy
 creation under the displayed parent, without adaptive placement metadata or
 recommendations. Model-supplied placement cannot override that default.
 
-The consumer in thomasluizon/orbit-tickets#1759 must send this `clientContext` on
-chat JSON requests and in the existing multipart `clientContext` field. Send it
-also in the JSON bodies of pending preview `revise` and `execute` requests. On
+The client must send this `clientContext` on chat JSON requests and in the existing
+multipart `clientContext` field. Send it also in the JSON bodies of pending preview `revise` and `execute` requests. On
 `preview/refresh` and `confirm`, send the same JSON object as the URL-encoded
 `clientContext` query parameter. Each request declares the capabilities of its
 requesting client, including requests for a preview created on another device.
@@ -65,11 +61,9 @@ returns `placement_not_supported`; confirmation and execution return HTTP 400
 validation errors. The operation gateway also rejects such approvals. The client
 must refresh the preview with its own capabilities and show the refreshed changes
 before approving. Refresh binds new arguments and a new fingerprint, invalidating
-any previous confirmation token. Existing clients keep using their unchanged
-confirmation and execution requests for legacy previews.
+any previous confirmation token.
 
 The reason keys are `chat.placement.destinationChecklist`,
 `chat.placement.destinationSubHabits`, `chat.placement.accountChecklists`,
 `chat.placement.accountSubHabits`, `chat.placement.accountFlat`, and
-`chat.placement.newRoutine`. Copy lives in `HabitPlacementRecommendation` in both
-locales. New checklist validation copy lives in `ErrorCopy` in both locales.
+`chat.placement.newRoutine`. Copy lives in `HabitPlacementRecommendation` in both locales.
