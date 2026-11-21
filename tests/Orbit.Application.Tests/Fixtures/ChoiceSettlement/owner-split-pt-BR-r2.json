@@ -1,0 +1,44 @@
+{
+  "caseId": "owner-split-pt-BR",
+  "repeat": 2,
+  "role": "first turn, round 2: the choice question",
+  "source": "Authored from the owner's screenshot of 12 November 2026 (ticket 2127) and the staging selection cards of thomasluizon/orbit-tickets#2129. Not a provider capture. The test rebinds habit-1 to habit-6 to the six Water - 710ml habits.",
+  "toolCalls": [
+    {
+      "name": "ask",
+      "arguments": {
+        "input": {
+          "form": "choice",
+          "missing_input": "record_selection",
+          "question": "Encontrei 6 hábitos chamados Water - 710ml, não 7. Quais você mantém?",
+          "multiSelect": false,
+          "allowFreeText": true,
+          "options": [
+            {
+              "id": "first4",
+              "label": "4 primeiros",
+              "description": "Da lista em ordem",
+              "target_ids": [
+                "habit-1",
+                "habit-2",
+                "habit-3",
+                "habit-4"
+              ]
+            },
+            {
+              "id": "last4",
+              "label": "4 últimos",
+              "description": "Da lista em ordem",
+              "target_ids": [
+                "habit-3",
+                "habit-4",
+                "habit-5",
+                "habit-6"
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

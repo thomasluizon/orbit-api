@@ -1,0 +1,17 @@
+{
+  "scenario": "answered-choice-settles-the-opposite-question",
+  "ticket": "thomasluizon/orbit-tickets#2127",
+  "account": "Six habits called Water - 710ml under one parent. The person says seven.",
+  "messages": {
+    "en": "I have 7 habits called Water - 710ml delete two of them, and rename the other 4 to Water - 1.18L",
+    "pt-BR": "eu tenho 7 habitos chamados Water - 710ml deleta dois desses, e os outros 4 coloca Water - 1.18L"
+  },
+  "answer": "The person keeps the first 4 (option id first4).",
+  "model_rounds": "tests/Orbit.Application.Tests/Fixtures/ChoiceSettlement/owner-split-<language>-r1.json to r5.json",
+  "assertions": [
+    "The first question says that the read found 6 habits and not 7, in the same message as the choice.",
+    "After the answer, the model request holds the question, the options, the 4 kept habit ids and the 2 other habit ids.",
+    "The answer ends in no second choice question. The server refuses the opposite question, delete the first 2 or the last 2.",
+    "The turn ends in one preview that deletes the 2 habits that the person did not keep and renames the 4 kept habits to Water - 1.18L."
+  ]
+}
