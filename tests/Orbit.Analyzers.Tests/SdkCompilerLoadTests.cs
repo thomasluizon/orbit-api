@@ -11,12 +11,12 @@ namespace Orbit.Analyzers.Tests;
 /// </summary>
 public sealed class SdkCompilerLoadTests
 {
-    private const string UtcNowStub = """
+    private const string UtcNowDateOnlyStub = """
         using System;
 
         public sealed class SlipDetector
         {
-            public DateTime Snapshot() => DateTime.UtcNow;
+            public DateOnly Today() => DateOnly.FromDateTime(DateTime.UtcNow);
         }
         """;
 
@@ -31,7 +31,7 @@ public sealed class SdkCompilerLoadTests
     public static TheoryData<string, string> Violations => new()
     {
         { "ORBIT0001", CommentStub },
-        { "ORBIT0004", UtcNowStub },
+        { "ORBIT0004", UtcNowDateOnlyStub },
     };
 
     [Theory]

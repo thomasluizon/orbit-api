@@ -74,9 +74,7 @@ public partial class SyncCleanupService(
 
     private static async Task<int> PurgeCoreAsync(OrbitDbContext dbContext, CancellationToken ct)
     {
-#pragma warning disable ORBIT0004 // cutoff removes sync tombstones by elapsed RetentionPeriod against DeletedAtUtc, independently of user calendar dates. https://github.com/thomasluizon/orbit-tickets/issues/230
         var cutoff = DateTime.UtcNow - RetentionPeriod;
-#pragma warning restore ORBIT0004
         var totalPurged = 0;
 
         await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
@@ -113,9 +111,7 @@ public partial class SyncCleanupService(
         totalPurged += await BatchedDelete.ExecuteAsync(dbContext.Notifications.IgnoreQueryFilters().Where(notification => notification.IsDeleted && notification.DeletedAtUtc < cutoff), ct);
         totalPurged += await BatchedDelete.ExecuteAsync(dbContext.ChecklistTemplates.IgnoreQueryFilters().Where(template => template.IsDeleted && template.DeletedAtUtc < cutoff), ct);
 
-#pragma warning disable ORBIT0004 // suggestionCutoff removes unimported calendar suggestions by DiscoveredAtUtc age after SuggestionRetentionPeriod. https://github.com/thomasluizon/orbit-tickets/issues/230
         var suggestionCutoff = DateTime.UtcNow - SuggestionRetentionPeriod;
-#pragma warning restore ORBIT0004
         totalPurged += await BatchedDelete.ExecuteAsync(dbContext.GoogleCalendarSyncSuggestions
             .Where(suggestion => suggestion.DiscoveredAtUtc < suggestionCutoff && suggestion.ImportedAtUtc == null), ct);
         var registrationCutoffAtUtc = TimeProvider.System.GetUtcNow().UtcDateTime - OAuthRegistrationRetentionPeriod;
