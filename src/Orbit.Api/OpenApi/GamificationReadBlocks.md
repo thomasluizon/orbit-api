@@ -1,26 +1,10 @@
 # Gamification read blocks
 
-The API must deploy before a consumer advertises the `gamification` part kind.
-Tracks thomasluizon/orbit-tickets#1631 and the carrying consumer in
-thomasluizon/orbit-tickets#1619. The consumer can pin any published OpenAPI
-artifact by producer commit and catalog identity as described in [README.md](README.md).
-
 `get_gamification_overview` selects profile, achievement catalogue and streak
 independently. A successful read with at least one selected source projects a
 read block. Projection preserves the existing `streak` kind whenever profile
 and streak are both present. Every other nonempty selection uses the append-only
 `gamification` kind.
-
-| include_profile | include_achievements | include_streak | Kind |
-| --- | --- | --- | --- |
-| true | false | false | gamification |
-| false | true | false | gamification |
-| false | false | true | gamification |
-| true | true | false | gamification |
-| false | true | true | gamification |
-| true | false | true | streak |
-| true | true | true | streak |
-| false | false | false | No block: no source selected |
 
 Omitted include flags retain their existing true defaults. A selected source
 failure still fails the operation; it does not produce a partial success card.
@@ -65,8 +49,7 @@ habits means the field is omitted. The streak info read and both streak repair
 responses use the same query. The overview payload and existing `streak` card keep
 their own `firstEligibleDate` fields with that same value. This date uses current
 active habits even when the streak read supplies a historical `as_of`; it does not
-claim a historical habit snapshot. Deploy this producer before the streak info
-consumer in thomasluizon/orbit-tickets#1900. Tracks thomasluizon/orbit-tickets#1617.
+claim a historical habit snapshot.
 
 ## Scope and refresh
 
@@ -101,6 +84,3 @@ advertises the new kind, without executing the source queries. Conversely, the
 dedicated route rejects tokens for other kinds with 403. Combined `streak` reads
 continue to use the generic refresh route with their original negotiation.
 Missing or invalid tokens retain the existing validation and 410 behavior.
-
-Complete acceptance of #1619 requires this API contract to deploy and its UI
-consumer to land. Its independent merge bar is unchanged.

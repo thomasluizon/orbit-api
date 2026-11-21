@@ -1,15 +1,10 @@
 # Existing parent previews
 
-Tracks thomasluizon/orbit-tickets#1671. The consumer implementation belongs to
-thomasluizon/orbit-tickets#1677, blocked by the API deployment. The real-call eval
-case belongs to thomasluizon/orbit-tickets#1674.
-
 Pending operation items append optional `fieldOptions`. Each entry names an editable
 field, whether a choice is required, and its offered JSON values with display labels.
 It appears only on an item with an unresolved parent choice, with `required: true`.
 An ambiguous parent offers exactly its matching owned habits and an explicit null
-choice. Resolved children and root items omit `fieldOptions` entirely. The size of
-the account never adds options to an item.
+choice. Resolved children and root items omit `fieldOptions` entirely.
 For example, two different habits named Post Lunch produce:
 
 ```json
@@ -88,6 +83,35 @@ choice options from the revised item.
 
 These turns return `pendingOperations` with no `aiMessage`, text parts, follow-ups
 or streamed text deltas. Preview grounding is enforced independently of the global
-`AstraGroundingEnforce` setting. No database migration or configuration change is
-required. Deploy this producer before publishing the consumer that renders
-`fieldOptions`.
+`AstraGroundingEnforce` setting.
+
+## Combined account changes
+
+A chat turn with several held writes returns one pending operation with action key
+`applyAccountChanges`. Its stored operation is `apply_account_changes`. Every member
+keeps its own command, ownership checks, policy and validation. The combined
+operation requires the strongest confirmation required by its members and executes
+inside one transaction. A failed member rolls back the request.
+
+The preview contains every member's items. An item's ID prefixes its original ID
+with the member index, for example `0/0` or `1/<habit ID>`. Submit the returned IDs
+and fingerprint through the existing revise route. Include the items to retain;
+omitting an item removes it from the proposal. Each revision returns the current item
+IDs and fingerprint.
+
+Corrections through `revise_pending_changes` patch the existing preview ID. The tool
+keeps every item and field unless the person explicitly changes or removes it.
+The combined operation reserves its member proposals, including members removed
+from its visible items. Members cannot be confirmed separately. Rejecting the
+combined preview cancels those reservations; executing it consumes them. Neither
+operation leaves an independent proposal available for a later approval.
+
+Habit creation accepts parent IDs, nested children through the supported habit
+depth, checklists, descriptions, emoji, schedule, start and due dates, times, end
+dates, reminders, slip alerts, tags and goal IDs. Initial weekday dates use the same schedule calculation
+for the preview and creation command.
+
+An exact existing habit match is reused through its ID. Multiple exact matches
+require an existing-habit choice inside `fieldOptions`. A suggested existing parent
+has an optional parent choice that includes No parent; an ambiguous named parent
+still requires a choice. These choices are validated again before execution.
