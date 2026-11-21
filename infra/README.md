@@ -96,7 +96,7 @@ Generate each staging secret for staging alone. The staging Stripe secrets hold 
 
 ## Plan and apply
 
-Set `RENDER_API_KEY` and `CLOUDFLARE_API_TOKEN` in the shell, and provide the AWS credentials through the default chain. Make a local `infra/local.tfvars` with the image digests and the approved domain and database network settings. `example.tfvars` shows its shape. Copy the production Postgres IP allow list from the Render Networking screen into `production_postgres_ip_allow_list`. The default `[]` removes the external access of production.
+Set `RENDER_API_KEY` and `CLOUDFLARE_API_TOKEN` in the shell, and provide the AWS credentials through the default chain. Make a local `local.tfvars` file in the `infra` folder with the image digests and the approved domain and database network settings. `example.tfvars` shows its shape. Copy the production Postgres IP allow list from the Render Networking screen into `production_postgres_ip_allow_list`. The default `[]` removes the external access of production.
 
 Check both database resources in each plan. Neither may be replaced, and no operator address may be removed. Terraform ignores later changes to `database_name` and `database_user`.
 

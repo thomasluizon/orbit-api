@@ -1,5 +1,9 @@
 # Existing parent previews
 
+## Contents
+
+- [Combined account changes](#combined-account-changes)
+
 Pending operation items append optional `fieldOptions`. Each entry names an editable
 field, whether a choice is required, and its offered JSON values with display labels.
 It appears only on an item with an unresolved parent choice, with `required: true`.

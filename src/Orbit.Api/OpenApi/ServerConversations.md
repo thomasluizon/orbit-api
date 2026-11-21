@@ -1,5 +1,10 @@
 # Server-owned AI conversations
 
+## Contents
+
+- [HTTP contract](#http-contract)
+- [Retention and export](#retention-and-export)
+
 `astra_conversation_recording` gates synchronous encrypted conversation storage,
 private chat images, server history and conversation reads. Its default remains
 off. Publish the matching privacy and export copy before enabling it for an

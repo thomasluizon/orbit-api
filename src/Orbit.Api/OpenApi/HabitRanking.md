@@ -1,5 +1,11 @@
 # Habit ranking consumer contract
 
+## Contents
+
+- [Query and window](#query-and-window)
+- [HTTP reads](#http-reads)
+- [Response and block](#response-and-block)
+
 Select an identity from [artifacts.json](artifacts.json), following [README.md](README.md).
 
 ## Query and window
