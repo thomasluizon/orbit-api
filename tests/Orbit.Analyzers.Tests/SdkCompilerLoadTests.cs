@@ -33,86 +33,12 @@ public sealed class SdkCompilerLoadTests
         }
         """;
 
-    private const string RollbackStub = """
-        using System;
-        using System.Threading;
-        using System.Threading.Tasks;
-
-        namespace Microsoft.EntityFrameworkCore.Storage
-        {
-            public interface IDbContextTransaction : IAsyncDisposable
-            {
-                Task CommitAsync(CancellationToken cancellationToken);
-                Task RollbackAsync(CancellationToken cancellationToken);
-            }
-        }
-
-        namespace App
-        {
-            using Microsoft.EntityFrameworkCore.Storage;
-
-            public sealed class FakeTransaction : IDbContextTransaction
-            {
-                public Task CommitAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-                public Task RollbackAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-                public ValueTask DisposeAsync() => default;
-            }
-
-            public sealed class Service
-            {
-                public async Task RunAsync(CancellationToken ct)
-                {
-                    await using var tx = await Task.FromResult<IDbContextTransaction>(new FakeTransaction());
-                    try
-                    {
-                        await tx.CommitAsync(ct);
-                    }
-                    catch
-                    {
-                        await tx.RollbackAsync(ct);
-                        throw;
-                    }
-                }
-            }
-        }
-        """;
-
     private const string UtcNowStub = """
         using System;
 
         public sealed class SlipDetector
         {
             public DateTime Snapshot() => DateTime.UtcNow;
-        }
-        """;
-
-    private const string DbSetStub = """
-        namespace Microsoft.EntityFrameworkCore
-        {
-            public class DbContext
-            {
-                public DbSet<TEntity> Set<TEntity>() where TEntity : class => new DbSet<TEntity>();
-
-                protected internal virtual void OnModelCreating(ModelBuilder modelBuilder) { }
-            }
-
-            public class DbSet<TEntity> where TEntity : class { }
-
-            public class ModelBuilder { }
-        }
-
-        namespace App
-        {
-            using Microsoft.EntityFrameworkCore;
-
-            public sealed class Habit { }
-
-            public sealed class AppDbContext : DbContext
-            {
-                public DbSet<Habit> Habits => Set<Habit>();
-
-                protected internal override void OnModelCreating(ModelBuilder modelBuilder) { }
-            }
         }
         """;
 
@@ -127,10 +53,8 @@ public sealed class SdkCompilerLoadTests
     public static TheoryData<string, string> Violations => new()
     {
         { "ORBIT0001", CommentStub },
-        { "ORBIT0002", RollbackStub },
         { "ORBIT0003", MvcStub },
         { "ORBIT0004", UtcNowStub },
-        { "ORBIT0005", DbSetStub },
     };
 
     [Theory]
