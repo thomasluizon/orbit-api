@@ -37,7 +37,6 @@ Run these commands from the repository root:
 dotnet build Orbit.slnx
 python3 .github/scripts/openapi_artifacts.py freshness
 python3 .github/scripts/openapi_artifacts.py plan --base origin/main
-python3 .github/scripts/openapi_artifacts.py evidence
 dotnet test tests/Orbit.Infrastructure.Tests --filter 'FullyQualifiedName~HabitEnumContractTests|FullyQualifiedName~ReminderInputContractTests|FullyQualifiedName~HabitScheduleContractTests|FullyQualifiedName~ApiVersioningTests'
 python3 -m unittest discover -s .github/scripts -p 'test_openapi_artifacts.py'
 ```
