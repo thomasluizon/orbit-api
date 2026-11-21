@@ -4,7 +4,7 @@ using Orbit.Application.Habits.Commands;
 
 namespace Orbit.Application.Chat.Tools.Implementations;
 
-public sealed class UndoSkipHabitTool(IMediator mediator) : IAiTool, IArgumentCheckTool
+public sealed class UndoSkipHabitTool(IMediator mediator) : IAiTool, IArgumentCheckTool, ITransactionalAiTool
 {
     public string Name => "undo_skip_habit";
     public string Description => "Undo skip_id, restoring its schedule and removing its log. Refuses if the habit changed afterward. Safe to repeat.";

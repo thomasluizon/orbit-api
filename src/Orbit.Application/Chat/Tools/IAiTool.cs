@@ -47,24 +47,30 @@ public interface IArgumentCheckTool
 }
 
 /// <summary>
-/// A tool whose database writes share the executor's unit of work.
-/// Atomic bundles additionally require a route that cannot trigger external effects,
-/// including effects dispatched indirectly by application commands.
+/// A write tool whose database writes share the executor's unit of work for every argument shape, so it joins a
+/// change set. Its effects outside the database wait for the commit through AfterCommit. The referral reward job
+/// is the exception: it is enqueued before the commit and fails while the referral stays pending. A call to a
+/// model provider does not wait for the commit: the tool declares it with <see cref="IProviderCallTool"/>.
 /// </summary>
-public interface ITransactionalAiTool
-{
-    bool SupportsAtomicExecution(JsonElement arguments) => false;
+public interface ITransactionalAiTool;
 
-    Task<bool> SupportsAtomicExecutionAsync(Guid userId, JsonElement arguments, CancellationToken ct) =>
-        Task.FromResult(SupportsAtomicExecution(arguments));
+/// <summary>
+/// A transactional tool with an argument shape that calls a model provider. The executor opens no transaction
+/// for such a call, because an open transaction holds its connection and its row locks for the whole provider
+/// call. The tool then commits its own writes. A held call stores arguments that need no provider call, so a
+/// change set member never has this shape.
+/// </summary>
+public interface IProviderCallTool
+{
+    bool CallsProvider(JsonElement arguments);
 }
 
-public static class AiToolAtomicity
-{
-    public static Task<bool> SupportsAsync(IAiTool? tool, Guid userId, JsonElement arguments, CancellationToken ct) =>
-        tool is ITransactionalAiTool transactional
-            ? transactional.SupportsAtomicExecutionAsync(userId, arguments, ct) : Task.FromResult(false);
-}
+/// <summary>
+/// A write tool with an effect outside the database, such as a payment provider, an email or a calendar provider.
+/// It never joins a change set.
+/// </summary>
+[AttributeUsage(AttributeTargets.Class, Inherited = false)]
+public sealed class ExternalEffectToolAttribute : Attribute;
 
 public record ToolResult(
     bool Success,

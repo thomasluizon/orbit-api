@@ -134,6 +134,32 @@ public sealed class AccountEventCollector(IAccountEventBus bus, IHttpContextAcce
         _origin = null;
     }
 
+    public AccountEventCheckpoint Checkpoint() => new State(
+        _pending.ToDictionary(entry => entry.Key, entry => entry.Value.ToList()),
+        [.. _resyncUsers], [.. _revokedSessions], [.. _deletedUsers], [.. _authUsers], _origin);
+
+    public void Restore(AccountEventCheckpoint checkpoint)
+    {
+        if (checkpoint is not State state)
+            throw new ArgumentException("The checkpoint belongs to another collector type.", nameof(checkpoint));
+        Clear();
+        foreach (var (userId, changes) in state.Pending)
+            _pending[userId] = [.. changes];
+        _resyncUsers.UnionWith(state.ResyncUsers);
+        _revokedSessions.UnionWith(state.RevokedSessions);
+        _deletedUsers.UnionWith(state.DeletedUsers);
+        _authUsers.UnionWith(state.AuthUsers);
+        _origin = state.Origin;
+    }
+
+    private sealed record State(
+        IReadOnlyDictionary<Guid, List<AccountChange>> Pending,
+        IReadOnlyCollection<Guid> ResyncUsers,
+        IReadOnlyCollection<Guid> RevokedSessions,
+        IReadOnlyCollection<Guid> DeletedUsers,
+        IReadOnlyCollection<Guid> AuthUsers,
+        string? Origin) : AccountEventCheckpoint;
+
     private static IReadOnlyList<AccountChange> Collapse(List<AccountChange> changes) =>
         changes.GroupBy(change => (change.Kind, change.Op))
             .Select(group => new AccountChange(group.Key.Kind, group.Key.Op,

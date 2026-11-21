@@ -4,6 +4,7 @@ using Orbit.Application.Support.Commands;
 
 namespace Orbit.Application.Chat.Tools.Implementations;
 
+[ExternalEffectTool]
 public class SendSupportRequestTool(IMediator mediator) : IAiTool, IArgumentCheckTool
 {
     public string Name => "send_support_request";

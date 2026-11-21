@@ -8,7 +8,7 @@ namespace Orbit.Application.Chat.Tools.Implementations;
 
 public class DeleteHabitTool(
     IMediator mediator,
-    IGenericRepository<Habit> habitRepository) : IAiTool, IArgumentCheckTool
+    IGenericRepository<Habit> habitRepository) : IAiTool, IArgumentCheckTool, ITransactionalAiTool
 {
     public string Name => "delete_habit";
 

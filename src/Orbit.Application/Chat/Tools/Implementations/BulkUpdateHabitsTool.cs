@@ -8,8 +8,6 @@ namespace Orbit.Application.Chat.Tools.Implementations;
 
 public sealed class BulkUpdateHabitsTool(IMediator mediator) : IAiTool, IArgumentCheckTool, ITransactionalAiTool
 {
-    public bool SupportsAtomicExecution(JsonElement arguments) => true;
-
     public string Name => "bulk_update_habits";
 
     public string Description =>
