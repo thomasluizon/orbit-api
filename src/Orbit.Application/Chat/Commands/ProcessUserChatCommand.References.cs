@@ -76,7 +76,7 @@ public partial class ProcessUserChatCommandHandler
                 return await references.ApiKeys.ProjectAsync(key => key.UserId == userId,
                     query => query.Select(key => new ReferenceRecord(key.Id, key.Name)), ct);
             case ReferenceRecordType.Skip when references is not null:
-                return await references.Skips.ProjectAsync(skip => skip.UserId == userId && !skip.IsUndone,
+                return await references.Skips.ProjectAsync(skip => skip.UserId == userId,
                     query => query.Select(skip => new ReferenceRecord(skip.Id, "skip")), ct);
             case ReferenceRecordType.PendingOperation:
                 return (await execution.PendingOperationStore.GetAwaitingAsync(userId, ct))

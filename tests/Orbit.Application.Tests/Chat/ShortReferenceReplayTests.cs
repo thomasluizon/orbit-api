@@ -474,6 +474,47 @@ public partial class ProcessUserChatCommandHandlerTests
     }
 
     /// <summary>
+    /// An undo of a skip that is already undone is a success on <c>main</c>. The skip is still a record of the person, so
+    /// its full id and its reference resolve, and the undo reaches the executor with the full id.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ShortReference_ASkipThatIsAlreadyUndoneStillResolvesForAnUndo(bool byReference)
+    {
+        SetupUserAndPayGate();
+        _shortReferences = true;
+        var water = CreateHabit("Water");
+        SetupSelectionHabits(water);
+        var skipId = Guid.NewGuid();
+        var undone = HabitSkipUndo.Create(skipId, water).Value;
+        typeof(HabitSkipUndo).GetProperty(nameof(HabitSkipUndo.IsUndone))!.SetValue(undone, true);
+        var skips = new List<HabitSkipUndo> { undone };
+        _skipRepo.ProjectAsync(Arg.Any<Expression<Func<HabitSkipUndo, bool>>>(),
+                Arg.Any<Func<IQueryable<HabitSkipUndo>, IQueryable<ReferenceRecord>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => (IReadOnlyList<ReferenceRecord>)skips.Where(call.ArgAt<Expression<Func<HabitSkipUndo, bool>>>(0).Compile())
+                .Select(skip => new ReferenceRecord(skip.Id, "skip")).ToArray());
+        var undo = WriteTool("undo_skip_habit", () => new ToolResult(true, EntityId: water.Id.ToString()));
+        var handler = CreateHandler(undo);
+        SetupAiResponse(ToolResponse("undo_skip_habit", "undo", JsonSerializer.Serialize(new
+        {
+            habit_id = water.Id.ToString(),
+            skip_id = byReference ? Reference(skipId) : skipId.ToString()
+        })));
+        var results = new List<IReadOnlyList<AiToolCallResult>>();
+        _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
+                Arg.Do<IReadOnlyList<AiToolCallResult>>(round => results.Add([.. round])), Arg.Any<Func<AiStreamEvent, Task>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AiResponse { TextMessage = "Done." }));
+
+        var result = await handler.Handle(new(UserId, "Undo the skip again"), default);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        Dispatched("undo_skip_habit").Should().ContainSingle().Which.GetProperty("skip_id").GetGuid().Should().Be(skipId);
+        results.Should().ContainSingle().Which.Should().ContainSingle(item => item.Id == "undo").Which.Success.Should().BeTrue();
+    }
+
+    /// <summary>
     /// A record selection over two same-titled groups names each habit by the reference that the model reads, so the
     /// server cannot complete the card from one group. The issued card holds the full id of each habit. The answer in the
     /// next turn settles the chosen habit, and its delete reaches a preview with no second ask.
