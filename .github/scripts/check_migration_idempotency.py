@@ -6,6 +6,7 @@ Each ;-separated statement is checked alone. The fluent CreateIndex/DropIndex AP
 
     check_migration_idempotency.py <migration.cs> [<migration.cs> ...]
 """
+import os
 import re
 import sys
 
@@ -40,10 +41,20 @@ def find_violations(path: str, contents: str) -> list[str]:
     return findings
 
 
+def _confine(candidate: str, base: str) -> str:
+    """Resolve candidate and confirm it stays within base, rejecting path traversal."""
+    resolved = os.path.realpath(candidate)
+    if resolved != base and not resolved.startswith(base + os.sep):
+        raise ValueError(f"Refusing path outside {base}: {candidate}")
+    return resolved
+
+
 def main() -> int:
+    base = os.path.realpath(os.getcwd())
     violations: list[str] = []
     for path in sys.argv[1:]:
-        with open(path, encoding="utf-8") as handle:
+        safe_path = _confine(path, base)
+        with open(safe_path, encoding="utf-8") as handle:
             violations.extend(find_violations(path, handle.read()))
 
     if violations:
