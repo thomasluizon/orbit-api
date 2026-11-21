@@ -1,699 +1,112 @@
 # Orbit infrastructure
 
+## Contents
+
+- [Layout and providers](#layout-and-providers)
+- [AI cost controls and evaluation credentials](#ai-cost-controls-and-evaluation-credentials)
+- [Windows push credentials](#windows-push-credentials)
+- [Free-service Terraform updates](#free-service-terraform-updates)
+- [Staging API image source](#staging-api-image-source)
+- [Production API image source](#production-api-image-source)
+- [Startup migrations and long migrations](#startup-migrations-and-long-migrations)
+- [SSM parameters](#ssm-parameters)
+- [Plan and apply](#plan-and-apply)
+- [Production web routing](#production-web-routing)
+- [API release admission](#api-release-admission)
+- [Stripe webhook endpoint version](#stripe-webhook-endpoint-version)
+- [Store-review sign-in](#store-review-sign-in)
+- [Migration lock budget](#migration-lock-budget)
+- [Production plan monitor](#production-plan-monitor)
+- [Landing content security policy](#landing-content-security-policy)
+
+[staging.md](staging.md) covers the staging reseed, the staging database access, and the staging pinger. [email-and-bot-protection.md](email-and-bot-protection.md) covers SES, the dead-letter queue, Turnstile, and the DNS check.
+
+## Layout and providers
+
+The main Terraform state owns the Render production resources and the staging services. It also owns the Cloudflare DNS and Turnstile, and the AWS SSM parameters. These files hold the resources:
+
+- `production.tf` imports the live API and declares the production database, web service, and landing site.
+- `staging.tf` declares the staging API, web service, and landing site.
+- `configuration.tf` owns the service environment groups and their SSM inputs.
+- `cloudflare.tf` owns the zone, the DNS records, and the Turnstile widget.
+- `ses.tf` owns the SES identities, the event routing, and the send credentials.
+- `uploads.tf` owns the S3 uploads bucket and a scoped IAM user for each environment.
+- `variables.tf` holds the inputs. `versions.tf` pins the providers and sets the S3 state.
+- `staging-database/` is a separate Terraform root. It owns only the staging Postgres, its environment group, and the link to the staging API.
+
+The Render provider reads `RENDER_API_KEY`. The Cloudflare provider reads `CLOUDFLARE_API_TOKEN`. The AWS provider uses the default credential chain in `us-east-2`. The main S3 state holds decrypted SecureString values, so restrict access to it. Do not remove the import block of the API.
+
+Apply a change to `aws_iam_user_policy.uploads` before you release the API code that needs it. Without the policy, S3 denies the list call, and account erasures stay scheduled.
+
 ## AI cost controls and evaluation credentials
 
-The owner creates a separate evaluation project in OpenAI Platform, configures its budget,
-and creates a project API key. Store that key as a SecureString in AWS Systems Manager
-Parameter Store under both `/orbit/production/api/AI__EvalApiKey` and
-`/orbit/staging/api/AI__EvalApiKey` when evaluation calls are needed. Terraform reads these
-parameters; it does not create them. Review and apply only the targeted environment groups
-`render_env_group.production_api` and `render_env_group.staging_api`. Confirm the masked
-`AI__EvalApiKey` setting reaches `orbit-production-api` and `orbit-staging-api` in Render,
-then release the API through the normal workflow. An absent parameter omits `AI__EvalApiKey`
-from that environment group without blocking the plan. Terraform checks the names returned
-by the existing per-environment `aws_ssm_parameters_by_path.onboarding_platform` lookup
-before requesting the evaluation parameter with `aws_ssm_parameter`. Other required secrets
-still block planning when absent. An absent or empty runtime key blocks evaluation calls
-before dispatch in `AiEvalCredentials` and `AiCompletionClient`.
+Create a separate evaluation project in OpenAI Platform with its own budget and key. Store the key as a SecureString at `/orbit/<environment>/api/AI__EvalApiKey` for production and for staging. Terraform reads the parameter and does not create it. An absent parameter omits `AI__EvalApiKey` from the environment group, and the plan continues. An absent or empty runtime key blocks each evaluation call before dispatch.
 
-The pinned AWS provider's [single-parameter reader](https://github.com/hashicorp/terraform-provider-aws/blob/v6.66.0/internal/service/ssm/parameter_data_source.go)
-returns an error for a failed lookup. Its [path reader](https://github.com/hashicorp/terraform-provider-aws/blob/v6.66.0/internal/service/ssm/parameters_by_path_data_source.go)
-collects paginated parameter names and returns an empty list when there are no matching
-parameters; permission and service errors still fail the plan.
+The parameter `/orbit/<environment>/api/StagingEval__AccountIds` holds the evaluation account UUIDs, separated by commas. It reaches the API through the environment group. Do not set a service-level override. These accounts use the evaluation key, and their usage label is `eval_<purpose>`.
 
-`StagingEval__AccountIds` selects the accounts that use the evaluation key. Buffered and
-streamed chat, auxiliary completions, moderation and audio transcription select that key
-for those accounts. Completion usage is labeled `eval_<purpose>`,
-so it remains visible separately from ordinary usage. `AI__EvalDailyBudgetUsd` defaults to
-`0.50` in code and in `production_api_values`. `staging_api_values` sets it to `1.20`,
-because the evaluation runs of the AI build go to staging. All evaluation accounts in an
-environment share one UTC daily ceiling, including unsettled reservations, regardless of `astra_eval_unmetered`.
-The reservation takes the UTC-day advisory lock before the account lock. Reservation
-errors prevent dispatch; settlement errors retain the reservation. Existing `eval_` usage
-provides a conservative floor during rollout. The additive `AddEvalDailyBudget` migration
-adds a nullable UTC accounting date and index without changing users' local quota dates.
-Evaluation transcription reserves a local duration estimate at the configured Whisper
-rate, rounds up with one second of headroom, disables automatic retries, and retains
-uncertain dispatch charges. Unreadable durations and unpriced transcription models fail
-before dispatch. Ordinary transcription retains its existing behavior.
-Verify project attribution in OpenAI Platform using the launch gate evidence;
-do not send an extra paid probe to verify the setting.
-
-The additive `AddAiReasoningUsage` migration retains reasoning-token totals. Take the
-required completed Render database export before a production release carrying it.
-The daily `AI cost` line includes every purpose's calls, dollar cost per call, cached
-input, uncached input, output and reasoning totals, plus per-call token averages.
-Uncached input includes cache writes; reasoning is a subset of output and is billed once.
-The cache hit fraction is `cached_input / (cached_input + uncached_input)`. Startup also
-emits the same current UTC day cost line marked `(partial)` through the durable scheduler;
-the partial line is a snapshot, not an additional accounting charge.
-Historical rows default reasoning to zero because past reasoning usage cannot be recovered.
-
-The system message and tool schemas are byte-stable for each client capability set.
-Offer data, account context, shared-title guidance, preview constraints and history follow
-that prefix. Offer schema fields are declared only for clients supporting offers.
-Clients supporting questions receive the full stable `ask` declaration from the first
-request. A successful typed account read or missing-field create result unlocks execution;
-subsequent rounds append constraints without changing the catalog. Earlier tool results
-remain byte-identical after a held preview. Execution still validates client capabilities,
-account reads and draft bindings. See [TESTING.md](../TESTING.md)
-for the warmed and cold cost estimates and cache-prefix tests.
-
-Output caps include reasoning: chat allows 4,096 tokens; offer selection, tag suggestions
-and emoji inference allow 1,024; proactive messages and slip alerts allow 512; date
-interpretation retains 128; habit drafts allow at most 4,096; other auxiliary purposes
-allow at most 2,048. A caller's smaller limit is preserved. The largest captured bulk-create
-payload in `g9i-composition-medical-batch-pt-BR-r3.json` measures 1,189 `o200k_base` tokens,
-leaving 2,907 tokens for reasoning and framing under the chat cap. Daily summaries allow
-600 tokens. Truncation warnings include the purpose for both chat and auxiliary calls.
-The check-in and slip-alert caps remain pending measured provider-output evidence; the
-repository's proactive chat fixtures do not capture those notification services.
-
-After release, record the daily chat cost per call and cache hit fraction on
-`thomasluizon/orbit-tickets#1916`. The release acceptance target is at most $0.0009 per
-ordinary chat call. The coordinator owns the launch-only live gate and its recorded cost;
-repository tests use captured provider output or fake transports without paid calls.
+`AI__EvalDailyBudgetUsd` is `0.50` in code and in `production_api_values`. `staging_api_values` sets it to `1.20`. All evaluation accounts of one environment share one UTC daily ceiling that includes unsettled reservations. This holds when `astra_eval_unmetered` is on. A reservation error prevents the dispatch, and a settlement error keeps the reservation.
 
 ## Windows push credentials
 
-Both API environment groups use the multitenant Orbit Windows Push application:
-`Wns__TenantId` is `d0a72506-23da-4004-afff-9c077a5b72a5` and `Wns__ClientId` is
-`d8d3802e-fed9-4d7e-a7b9-87fdfcf2d0db`. These are public identifiers. Staging inherits
-them from the production values; each environment reads its own `Wns__ClientSecret`.
-
-Before planning, the coordinator copies the macOS Keychain service
-`orbit-wns-client-secret` to AWS Systems Manager Parameter Store in `us-east-2` as
-SecureStrings named `/orbit/production/api/Wns__ClientSecret` and
-`/orbit/staging/api/Wns__ClientSecret`, without printing the secret. Terraform reads
-these required parameters and does not create them. Check their names and SecureString
-types in the Parameter Store console without revealing their values.
-
-After merge, review and apply only `render_env_group.production_api` and
-`render_env_group.staging_api` from API `main`. In Render's Environment Groups screen,
-confirm `orbit-production-api` and `orbit-staging-api` contain the two public identifiers
-and a masked `Wns__ClientSecret`. Release the production API through the normal workflow.
-The coordinator owns Windows live push acceptance under `thomasluizon/orbit-tickets#1861`.
-The desktop channel Object ID remains a separate GitHub environment setting.
-
-## AI answer composition activation
-
-Deploy the query-bound read and ranking producers before this composition producer. Startup
-applies `PersistComposedChatResponses`, which adds encrypted recording storage and seeds
-`astra_block_first` off. It needs no model setting, secret, quota change or backfill.
-
-In the existing admin feature flag screen, add evaluation accounts to `astra_block_first`.
-The backing API is `POST /api/admin/feature-flags`; use `list` and `enable_for_accounts` with the exact key and account emails.
-Verify `GET /api/config` reports that account's flag enabled and a parts-capable chat response
-leads with the requested supported kind without framing prose. Check that complete empty habit
-lists retain an empty `habitList` block with complete metadata and offer Today. Empty record
-lists retain `recordList`, and explicit provider reads retain calendar recovery. Verify that
-no text part contains a serialized composition envelope. Complete typed read
-plans, including rounds of complete empty lists, need no narrative model call only when every
-read declares `orbit_read_complete: true`. Incomplete plans continue to remaining reads or
-approval-gated write previews. Confirm legacy and missing-kind fallbacks separately. Tool selection belongs
-to the model; composition does not route tools or select blocks from message keywords.
-Keep global activation off until #26 records passing English and Portuguese real-pipeline
-composition cases and #1620 supports the consumer contract.
-
-Pending-write text fallback does not require `astra_block_first`. Verify clients without
-parts support and accounts with `astra_parts_disabled` receive readable approval text,
-including after a blank narrative or preview recovery. Supported parts clients receive the
-preview without repeated prose. Compare the final stream event with recorded history.
-Check both English and Brazilian Portuguese through client locale and, for legacy clients
-without a locale, profile language. Missing-kind compound reads retain their facts without
-habit-list or calendar title headings, including stored replay. Legacy compound lists include
-the returned items and omit complete empty sections beside populated results. Goal reads
-render one goal block even when both query and review tools succeed. Verify API-key reads
-return the existing emailed-code verification surface before any key list, including clients
-that support change previews; no narrative call is needed for that pending state.
-Feature help must use only the returned markdown and related `app_surfaces` catalog steps;
-a related screen does not establish editing steps. These fallback and
-feature-help corrections apply independently of `astra_block_first`. #26 owns their live gate.
-
-Verify legacy clients and clients without an ask kind have no `ask` declaration. JWT clients
-with an ask kind retain it unless `astra_ask_blocks_disabled` or `astra_parts_disabled` applies.
-Ask declarations require form-specific content and `missing_input` inside `input`;
-flat calls use the same required reason. Before a successful typed account read, the
-declared schema accepts only habit setup for new drafts. Other reasons unlock on the
-normal continuation after that read; complete reads add no model round. Failed reads,
-feature help, history and write previews do not unlock them. Record selection also
-requires a successful current-turn habit read. Selecting does not approve a write.
-No model or quota setting controls this negotiation.
-
-For composition clients with an ask kind, verify a tool-free clarification continues
-through a typed read and one choice block. Complete text answers use an internal
-terminal envelope without an extra model call; invalid envelopes get one bounded
-correction and never appear in answer deltas or history. Combined suggestion
-previews restore issued draft values, including disabled reminders and empty arrays;
-later requested edits still use the ordinary pending-preview revision. These
-contracts require no new flag, model setting or quota change.
-
-The streak response appends optional `firstEligibleDate` in the account's time zone. Deploy
-the API before the separate UI change uses that date to draw earlier days as neutral. Check
-the local date across midnight and omission for an account without active habits. Frequency
-help returns the existing Today editing steps directly. Parts composition asks for one
-to three complete sentences on separate lines, at most 180 characters per line. The
-server separates sentences after typed feature help, wraps long sentences at word boundaries
-and includes only whole sentences within three lines. It adds no model round and preserves legacy text.
-
-Monitor `astra_answer_composed` family, leading kind, external-text count, fallback reason,
-build failures and duplicate suppression, plus `astra_composition_follow_ups` counts and
-existing model-call telemetry. Do not attach prompt/completion text or arguments.
-
-Rollback in the same screen: use `disable_for_everyone` for `astra_block_first` and `disable_for_accounts` for its account overrides.
-Read the account's resolved config back and verify negotiated directive assembly returns.
-Feature resolution caches for 30 seconds. Contracts and approval gates stay deployed;
-model selection and quotas are independent. See the complete
-[composition contract](../src/Orbit.Api/OpenApi/AnswerComposition.md).
-
-The main Terraform state owns the Render production resources and the staging services, Cloudflare DNS and Turnstile, and AWS SSM parameters. `production.tf` imports the existing API and declares the production database, web service, and landing site. `staging.tf` declares the staging API, web service, and landing site. `configuration.tf` owns the service environment groups and their AWS SSM inputs. `cloudflare.tf` owns the zone, existing DNS records, widget, and its secret parameters. `ses.tf` owns SES identities, new DNS records, event routing, and send credentials. `variables.tf` contains the configuration inputs and image digests. `versions.tf` pins the providers and configures the encrypted S3 state with native locking. `staging-database/` is a separate Terraform root that owns only the staging Postgres, its connection environment group, and the link to the staging API.
-
-`uploads.tf` creates a private, encrypted S3 uploads bucket and a scoped IAM user in each environment. S3 is the only upload, read, and erasure provider. Terraform stores each user's access key in SecureString parameters at `/orbit/<environment>/api/Storage__S3__AccessKeyId` and `/orbit/<environment>/api/Storage__S3__SecretAccessKey`, then passes them to the API environment group. The S3 upload URL expires after 10 minutes. The stable API read URL redirects to a private S3 read URL that expires after 10 minutes. The API checks that the owner still exists before issuing a read redirect and sends `Cache-Control: no-store`. The API allows 600 read redirects per object per minute, so image pages and viewers sharing an IP have separate budgets for each object. Account erasure drains the user's `{userId}/` prefix in the S3 uploads bucket before removing the user row. Startup requires `Storage__S3__Bucket`, `Storage__S3__Region`, `Storage__S3__PublicBaseUrl`, `Storage__S3__AccessKeyId`, and `Storage__S3__SecretAccessKey`. Storage failures leave the account scheduled for another deletion run.
-
-Apply the uploads IAM policy before releasing the API code that uses it. In staging, review a plan targeted to `aws_iam_user_policy.uploads["staging"]`, then apply that reviewed plan before the staging API release carrying account-image erasure. Verify the `uploads-object-access` inline policy on IAM user `orbit-api-uploads-staging` grants `s3:ListBucket` on its uploads bucket and `s3:DeleteObject` on objects in that bucket. After the staging API release, verify an account deletion empties its S3 prefix, removes its user row, and returns 404 for its stable read link. With the owner's explicit approval, apply the matching change to `aws_iam_user_policy.uploads["production"]` before the production API release carrying this change. Verify the same policy scope on `orbit-api-uploads-production`. An API release before its IAM apply leaves erasures scheduled because S3 denies listing. Remove the obsolete `production_storage_provider` and `staging_storage_provider` assignments from ignored `local.tfvars`; no provider switch remains.
-
-The Render provider reads `RENDER_API_KEY` from the environment. The Cloudflare provider reads `CLOUDFLARE_API_TOKEN` from the environment. The AWS provider uses the default credential chain in `us-east-2`. The main S3 state contains decrypted SecureString values, including the Turnstile and SES secrets, so access to that state and its lock file must stay restricted. The staging reseed role can access only the separate staging database state. The existing API is imported with its service ID; do not remove that import block or replace the service.
+Both API environment groups use the multitenant Orbit Windows Push application. `Wns__TenantId` is `d0a72506-23da-4004-afff-9c077a5b72a5` and `Wns__ClientId` is `d8d3802e-fed9-4d7e-a7b9-87fdfcf2d0db`. These identifiers are public. Staging inherits them. Each environment reads its secret from the SecureString `/orbit/<environment>/api/Wns__ClientSecret`. Terraform does not create it.
 
 ## Free-service Terraform updates
 
-Render provider v1.9.1, pinned in `versions.tf`, always sends `MaintenanceMode` in
-the web service update body ([provider source, line 53](https://github.com/render-oss/terraform-provider-render/blob/v1.9.1/internal/provider/webservice/resource/internal/update.go#L53)).
-Render rejects that field for free-plan services with
-"maintenance mode can only be configured for non-free tier services".
-Any targeted apply that updates `render_web_service.staging_api` or the free staging
-web service, `render_web_service.staging_web`, fails until upstream fixes
-[render-oss/terraform-provider-render#80](https://github.com/render-oss/terraform-provider-render/issues/80),
-even when the plan has no shutdown delay change. Change these services through the
-Render API or dashboard instead, and keep the Terraform values matching what the
-API or dashboard sets. Paid services, including the production API and web, are
-unaffected.
+Render provider v1.9.1 always sends `MaintenanceMode` in the web service update body ([provider source](https://github.com/render-oss/terraform-provider-render/blob/v1.9.1/internal/provider/webservice/resource/internal/update.go#L53)), and Render rejects that field for a free-plan service. A targeted apply that updates `render_web_service.staging_api` or `render_web_service.staging_web` fails until [provider issue 80](https://github.com/render-oss/terraform-provider-render/issues/80) is fixed. Change these two services through the Render API or the dashboard, and keep the Terraform values equal to the values that you set there.
 
 ## Staging API image source
 
-The eval account allow-list lives in SSM parameter `/orbit/staging/api/StagingEval__AccountIds` and reaches the API as `StagingEval__AccountIds` through the `orbit-staging-api` environment group. The coordinator creates the parameter with comma-separated account UUIDs, reviews and applies a plan targeted to `render_env_group.staging_api`, then removes the service-level `StagingEval__AccountIds` override through the Render API. A subsequent plan targeted to `render_web_service.staging_api` must show no change.
+`render_web_service.staging_api` declares the public image `ghcr.io/thomasluizon/orbit-api` with `staging_api_digest` as its first digest. Terraform ignores later digest changes, so `.github/workflows/release.yml` owns the releases. The package is public, so the service needs no registry credential. A plan targeted to this service must show no change. Switch an image source through the Render API, never through Terraform.
 
-`render_web_service.staging_api` declares the public
-`ghcr.io/thomasluizon/orbit-api` image with `staging_api_digest` as its initial
-digest. Like the staging web service, it ignores later digest changes so
-`release.yml` owns releases. The service keeps its ID, free plan, domains,
-environment group links and `/health` check. No registry credential is needed.
-
-The staging API source is switched through the Render API because
-[provider issue #80](https://github.com/render-oss/terraform-provider-render/issues/80)
-prevents Terraform updates to free services. The coordinator performs the switch
-after merge and after the first staging release has pushed an image. That first
-run can fail at deployment while the service is still Git-backed; its summary
-contains the published digest. In GitHub, open **thomasluizon > Packages >
-orbit-api > Package settings > Change package visibility** and make the package
-public, then verify an unauthenticated pull of the published digest. Through the
-Render API, switch `orbit-api-staging` (`srv-dasotg8473hc739a5gjg`) to that image
-without replacing the service or changing its environment groups or domains.
-Set `staging_api_digest` in ignored `infra/local.tfvars` to that published digest,
-refresh Terraform state, and review a later plan targeted only to
-`render_web_service.staging_api`; it must show no change and no replacement.
-Do not apply a source update through the affected provider.
-
-Rerun **Actions > Release API** from `main` with `environment=staging`,
-`branch=main` and the planned full `sha`. The staging job builds and pushes before
-requesting `imageUrl=ghcr.io/thomasluizon/orbit-api@sha256:...`, requires HTTP 201
-with that image reference, and polls the returned deploy to `live`. Verify the
-Render deploy has no image build, Render can pull the public image, and
-`https://api-staging.useorbit.org/health` reports `status: Healthy` and the planned
-commit. The existing staging `RENDER_API_KEY` environment secret and repository
-variable `RENDER_STAGING_SERVICE_ID` suffice. Production promotes the staging-verified
-image as described below.
+The staging job of **Actions > Release API** builds and pushes the image. Then it requests `imageUrl=ghcr.io/thomasluizon/orbit-api@sha256:...` and requires HTTP 201 with that image reference. It polls the returned deploy until the deploy is `live`. The job uses the `staging` environment secret `RENDER_API_KEY` and the repository variable `RENDER_STAGING_SERVICE_ID`.
 
 ## Production API image source
 
-`render_web_service.production_api` keeps the imported service
-`srv-d6tc2isr85hc739bf75g`, `orbit-api`, its `starter` plan, `ohio` region,
-`api.useorbit.org`, environment group link, `/health` and 300-second shutdown delay.
-It pulls the public `ghcr.io/thomasluizon/orbit-api` image. `production_api_digest`
-seeds the image; Terraform ignores later digest changes, so `release.yml` owns
-production releases. There is no Render build or pre-deploy command.
+`render_web_service.production_api` keeps the imported service `srv-d6tc2isr85hc739bf75g`, named `orbit-api`. It keeps the `starter` plan, the `ohio` region, the domain `api.useorbit.org`, `/health`, and a shutdown delay of 300 seconds. It pulls the public image `ghcr.io/thomasluizon/orbit-api`. `production_api_digest` seeds the image, and `.github/workflows/release.yml` owns later releases. The service has no Render build and no pre-deploy command.
 
-The staging job builds the selected commit once, deploys its digest, verifies
-public health and Render's live image, and records `payload.image_digest` in a
-successful GitHub staging deployment. Production reads that record for its selected
-commit instead of building or resolving the commit tag again. The existing main-only
-selection and healthy staging admission remain. The recorded `force_unstaged`
-override bypasses current staging health only; it still requires a successful
-staging digest record for the selected commit. A legacy record without a digest
-requires staging to release that commit again. No additional registry secret or
-repository variable is required.
+The staging job builds the selected commit once. It records `payload.image_digest` in a successful GitHub staging deployment. The production job reads that record and does not build the commit again.
 
-The coordinator performs the cutover after merge, with no service replacement:
+Production keeps the main-only selection and the healthy staging admission. The override `force_unstaged` bypasses only the current staging health. It still needs a successful staging digest record for the commit. A legacy record without a digest needs a new staging release of that commit.
 
-1. Release the planned API `main` commit to staging through **GitHub > orbit-api >
-   Actions > Release API** with `environment=staging`, `branch=main`, and its full
-   `sha`. Verify the successful GitHub staging deployment has `payload.image_digest`,
-   staging serves that commit healthy, and Render's staging live deploy names the
-   same immutable image.
-2. Start a fresh export of `dpg-dasotg8473hc739a5gpg-a` with the Render API
-   (`POST /v1/postgres/{postgresId}/export`, the same action as **Render > production
-   Postgres > Recovery > Create export**), then poll `GET /v1/postgres/{postgresId}/export`
-   until it lists the new export, before the first production image release. Record its
-   identity and completion in the release evidence. Repeat before every later
-   production release carrying migrations, following
-   `.claude/specs/orbit-prod-release.md` in `orbit-ui-mobile`.
-3. Through `PATCH /v1/services/srv-d6tc2isr85hc739bf75g`, set `image.ownerId` to
-   the service's existing workspace, `image.imagePath` to
-   `ghcr.io/thomasluizon/orbit-api@<staging-verified digest>`,
-   `serviceDetails.runtime` to `image`, and `serviceDetails.preDeployCommand` to
-   the empty string in the same request. Preserve domains, environment groups,
-   plan, region and shutdown delay. Verify **Render > orbit-api > Settings**
-   shows the image source and no pre-deploy command.
-4. Set `production_api_digest` in ignored `infra/local.tfvars` to that digest.
-   Perform a refresh-only apply targeted to `render_web_service.production_api`.
-   Correct only its `runtime_source.image.image_url` state value to the repository
-   `ghcr.io/thomasluizon/orbit-api`, as for the staging source switch. Provider
-   v1.9.1 can retain the digest-qualified image path in that value; preserve the
-   separate digest and all other state, back up state before correction, and use
-   Terraform's state tooling rather than editing remote storage directly.
-5. Save and review a plan targeted only to `render_web_service.production_api`
-   and `render_env_group.production_api`. It must show only the declared source,
-   pre-deploy removal and `Database__MigrateOnStartup=true` changes, with no
-   replacement. Stop if it changes service identity or any unrelated resource.
-   Apply only that reviewed targeted plan. Never run an untargeted apply.
-   Verify **Render > orbit-api > Environment** resolves
-   `Database__MigrateOnStartup=true` from `orbit-production-api`; remove a stale
-   service-level `Database__MigrateOnStartup=false` override if one exists.
-6. Run **GitHub > orbit-api > Actions > Release API** from `main` with
-   `environment=production`, `branch=main`, and the same full `sha`. Require the
-   promoted digest, a `live` deploy with no Render build or pre-deploy task, and
-   `https://api.useorbit.org/health` reporting that commit and `status: Healthy`.
+## Startup migrations and long migrations
 
-### Recurring jobs and health
+Both API environment groups set `Database__MigrateOnStartup=true`. Remove a service-level override `false` if one exists. The API awaits `Database.MigrateAsync()` before it serves requests. A migration error stops the startup, so `/health` cannot pass. Render keeps the old instance in service until the new instance is ready, so each migration must work with the old instance.
 
-Recurring schedules run through Hangfire in the `hangfire` schema. The API runs six
-general workers and one worker dedicated to the `marketing` queue. `ConnectionStrings__HangfireConnection` can select a dedicated job-store
-connection; otherwise the session endpoint is reused with the `orbit-hangfire`
-application name and a separate pool capped at 12 connections. Job leases use the
-session endpoint with the `orbit-job-locks` application name and a separate pool
-capped at eight connections. These endpoints must support session advisory locks.
+Render gives a new instance [15 minutes to pass the health checks](https://render.com/docs/health-checks#handling-failures). Then it cancels the deploy. The migration command timeout is 180 seconds for each command. The lock waits, the retries, and all migrations that wait to run share the 15 minutes. Review the complete batch before the release. If it cannot fit in 15 minutes, split it into bounded expand-contract migrations and resumable backfills.
 
-`/health` checks database reachability and retains the `status` and `commit` release
-fields. `/health/jobs` checks the enabled recurring jobs against shared
-`BackgroundJobHeartbeats` rows and returns 503 with stale job names. A registration
-without a successful tick becomes stale after its expected interval. Registration
-on another instance preserves that first registration time. A successful occurrence
-records its heartbeat after its work completes. A concurrent occurrence skips when
-its job lease is held; separate job names can run concurrently. Startup removes known
-disabled schedules from Hangfire so operational switches also clear persisted cron
-registrations.
-
-Apply the additive `DurableJobHeartbeats` migration before starting the recurring
-registrar. Startup migration failures or recurring registration failures stop startup.
-A heartbeat write failure logs a warning and leaves the successful job result intact.
-Billing cleanup attempts both provider purges, then propagates any failures so a
-partial purge cannot refresh its successful heartbeat; hosted ticks log and retry.
-Job staleness does not fail Render's `/health` probe.
-
-The `orbit-production-health` Lambda polls both production reports every minute.
-Its `Orbit/ProductionHealth` metrics have separate `Endpoint` dimensions for
-`/health` and `/health/jobs`. CloudWatch alarms after two consecutive failing
-minutes, including missing measurements, and sends alarm and recovery notices to
-the existing production operations SNS topic `orbit-ses-dead-letter-alerts`.
-The confirmed email subscription delivers to `contact@useorbit.org`. Redirects,
-timeouts and non-success responses count as failures. The monitor runs outside
-Render and remains active when the API is unavailable. Its Terraform resources
-live in `production-health.tf`; its dependency-free handler is
-`workers/production-health.mjs`. The staging pinger remains independent.
-
-### Bounded recurring work and email
-
-`BackgroundServices:ScanPageSize` defaults to 400 and accepts at most 500 rows.
-Goal deadlines, streak goal synchronization, period close, streak freezes, proactive
-checks and due-date advancement use keyset pages. `BackgroundServices:TimeoutMinutes`
-sets a deadline by job name. `BackgroundServices:PushParallelism` defaults to four
-and is capped at eight. The proactive engine processes four accounts concurrently,
-with `BackgroundServices:ProactiveUserTimeoutSeconds` per account. It loads rule data
-once per page, computes old standard-goal completion totals in SQL, and queues pushes
-after saving each account. Calendar claims precede network calls to preserve dedupe;
-Google token refresh runs without a transaction or user row lock. Due-date scans
-prefetch dates before the following UTC date, then apply each user's local date guard;
-recently stale habits in eastern timezones remain candidates.
-
-The XP startup backfill saves `XpAwardLogBackfillCursor` after each 200-user page.
-A failed page is retried after the last completed page, and existing XP audit rows
-keep individual replays idempotent. The XP and encryption backfills acquire separate
-nonblocking cluster leases. Encryption uses 50-row keyset pages and retains its
-`EncryptionMigrationComplete_v2` guard until the live flag can be verified.
-
-The `hangfire-history-retention` job runs daily. Failed jobs older than thirty days
-move to Deleted and expire. Successful and deleted jobs also expire after seven days.
-`BackgroundServices:SucceededListSize` and `BackgroundServices:DeletedListSize`, both
-defaulting to 1,000, bound retained finished history by expiring overflow. The storage
-expiration sweep removes expired rows within an hour. State locks prevent a retried
-job from expiring on an obsolete monitoring snapshot. These are application settings;
-the installed PostgreSql provider exposes no options with those list-size names.
-
-Marketing broadcasts persist one `MarketingDelivery` row per recipient, page by page,
-and schedule one `SendMarketingEmailJob.ExecuteRecipientAsync` per row on the `marketing`
-queue. `Marketing:BroadcastPageSize` defaults to 500 and `Marketing:MaxSendsPerSecond`
-to ten. Recipient jobs share a distributed advisory lock; the separate queue keeps
-their waits away from reminder workers. Sends are paced by the greater of
-`Marketing:SendDelayMilliseconds` and the configured rate. The rate is capped at
-fourteen, matching the verified SES quota. SES requests have a thirty-second timeout.
-A retried broadcast sends only pending recipients, including after cancellation or
-a restart. Successful sends set `MarketingDelivery.SentAtUtc`. SES delivery and the
-database commit are separate operations: a process loss after provider acceptance
-but before the commit can still repeat that individual send.
-`BackgroundServices:Retention:MarketingDeliveriesDays` purges sent rows after 31 days
-by default; zero disables the purge. Pending rows stay recoverable. Account erasure
-deletes the account's delivery rows by recipient id and email in the erasure
-transaction. Account reset keeps them so a pending broadcast retry still skips
-delivered recipients. The legacy `SendMarketingBroadcastPageJob` transition shim
-imports unsent recipients from persisted page payloads into `MarketingDeliveries`.
-It reads the unmapped `MarketingBroadcastDeliveries` checkpoints so recorded
-successes are skipped, and the next durable-delivery recovery tick dispatches
-the imported rows through the paced recipient jobs. Replaying a page adds no
-duplicate recipient rows. The legacy Hangfire signature and `MarketingRecipient`
-argument type remain loadable until no legacy page job remains in Hangfire storage.
-In a later release, remove that shim and argument type and drop the unmapped
-`MarketingBroadcastDeliveries` table together, after verifying the Hangfire drain
-and recording the rolling migration barrier for thomasluizon/orbit-tickets#1956.
-Waitlist confirmation is also queued and no longer waits on SES in the request.
-
-### Application history retention
-
-The daily `sync-cleanup` occurrence purges application history using the configured
-`BackgroundServices:Retention` windows. Each delete orders by its primary key and
-commits at most `BackgroundServices:CleanupBatchSize` rows, defaulting to 5,000.
-A window of zero disables that table's age purge. Notification age retention
-soft-deletes live rows and updates their synchronization timestamps. Clients receive
-the deletion on their next sync; tombstone cleanup removes it after the sync window.
-`SessionsDays` controls both sessions and their refresh tokens; an active session keeps its tokens. OAuth state
-expiry runs here instead of on sign-in requests. AI budget rows inside a stored
-allowance period survive the age purge until that period can no longer be active.
-Changing week start from Monday to Sunday can extend that period to thirteen days;
-the guard also carries a timezone margin so a western user's active budget survives.
-The eight-day setting still applies outside that state. Soft-delete cleanup keeps its
-sync-window margin and updates completion watermarks in one set-based statement.
-
-Proactive history keeps recent rows and at most three older ended items per user
-and trigger. Those rows are the evidence for the existing rest rule, whose three
-ignored observations can span more than thirty days. Purging that bounded evidence
-would change which proactive items the engine produces. Calendar-day claims retain
-thirty days. Issued AI blocks are not read to render conversation history;
-conversation turns contain the rendered content.
-
-The `ScheduledJobIndexes` migration builds indexes concurrently outside migration
-transactions. Before releasing it, create its new indexes on staging, inspect
-`EXPLAIN` for active-goal and stale-due-date scans, and compare user-scoped habit
-plans before dropping `IX_Habits_UserId`. Each index is dropped concurrently before
-being recreated concurrently, including valid prebuilt indexes. This repairs invalid
-indexes left by interrupted builds using plain SQL statements outside transactions.
-A five-second lock timeout bounds waits in both migration directions. Existing
-application indexes remain available while the new job indexes are rebuilt.
-Take a database export before enabling the first
-retention sweep; it can remove a backlog.
-
-### Startup migrations and long migrations
-
-Both API environment groups set `Database__MigrateOnStartup=true`.
-`ConfigureOrbitPipeline` awaits `Database.MigrateAsync()` before `Program.cs`
-calls `RunAsync()`. A migration error propagates out of startup, so `/health`
-cannot pass on the new instance. Render's [zero-downtime rollout](https://render.com/docs/deploys#zero-downtime-deploys)
-keeps the old instance serving until the replacement is ready. This does not undo
-schema changes already committed; migrations must remain compatible with the old
-instance during overlap.
-
-The installed EF Core 10.0.14 migrator acquires the database migration lock before
-reading applied migrations. Npgsql 10.0.3 uses a transaction-scoped
-`LOCK TABLE ... IN ACCESS EXCLUSIVE MODE` on the migration history table. Another
-starting instance waits for that lock, then reads the updated history instead of
-applying the same transactional migration twice. Sources pinned by the installed
-NuGet package manifests: [EF migrator](https://github.com/dotnet/dotnet/blob/0427b9abbead3fa64c6655eb4290c537397131fa/src/efcore/src/EFCore.Relational/Migrations/Internal/Migrator.cs#L293)
-and [Npgsql history repository](https://github.com/npgsql/efcore.pg/blob/5e912bf071068a44e5abbdab497b313ba99d3ee1/src/EFCore.PG/Migrations/Internal/NpgsqlHistoryRepository.cs#L33).
-Transaction-suppressed operations still need their own idempotency and rolling
-compatibility review.
-
-Render gives new instances [15 minutes to pass health checks](https://render.com/docs/health-checks#handling-failures)
-and cancels the new deploy while keeping existing instances if they do not.
-The API's migration command timeout defaults to 180 seconds per command, not per
-migration or pending batch; lock waits, retries and all pending migrations share
-the startup window. Production-scale migration duration is not established by
-unit tests or staging alone. Review the complete pending batch before release.
-If it cannot fit comfortably in 15 minutes, postpone traffic promotion and split
-schema work into bounded expand-contract migrations and resumable backfills.
-For an already built long batch, run `/app/efbundle` from the exact staging-verified
-image digest on controlled operator compute with production session credentials,
-a fresh completed export and the required database network access, before starting
-the production release. Require exit code zero and verify migration history before
-proceeding. This runs the existing bundle without starting the API server and
-consumes no Render pipeline minutes. Do not substitute a Render one-off job
-without proving it can run the new digest rather than the service's previous
-artifact. Do not increase the workflow polling budget as a workaround for the
-platform's startup limit.
-
-## Staging lifecycle
-
-The staging web app uses `https://app-staging.useorbit.org`. Keep `staging.useorbit.org` as a custom domain on `orbit-web-staging`; the web proxy redirects requests on that host permanently to the new host. The staging API CORS origins, its Google redirect URIs and the staging upload bucket CORS keep the old host beside the new one, so a tab still running the previous web build keeps working through the cutover. Add the new domain to the live Render service before applying the targeted Terraform changes, and confirm the plan has no update to `render_web_service.staging_web`. Update the `STAGING_NEXT_PUBLIC_SITE_URL` repository variable in `orbit-ui-mobile` to `https://app-staging.useorbit.org`, and add `https://app-staging.useorbit.org/auth-callback` to the Google OAuth web client's redirect URIs. Release the staging API and web from `redesign/main`, then verify the new health route, old-host redirect, email sign-in, and Google authorization.
-
-`staging-pinger.tf` and `workers/staging-pinger.mjs` define the Cloudflare Worker that calls the staging API health endpoint every five minutes from 08:00 through 23:55 in America/Sao_Paulo. See [Staging pinger](#staging-pinger) for deployment, run history, and cutover proof. The Worker is the only staging keepalive.
-
-The reseed workflow checks the Render Postgres creation time daily and replaces the staging database once it is at least 26 days old. A manual dispatch replaces it immediately. The replacement plan is restricted to `render_postgres.staging` and its staging database environment group, and the workflow rejects a plan that changes another resource.
-
-[Render permits only one active free Postgres database per workspace](https://render.com/docs/free#single-instance-limit), so the workflow captures the old database before Terraform deletes it. On its Ubuntu runner, it installs `postgresql-client-17` from the PostgreSQL Apt repository and puts `/usr/lib/postgresql/17/bin` first on the path to match the server's major version. The data helper exports a repeatable-read snapshot, creates a custom-format `pg_dump` archive, and records exact counts for every user table, including empty tables and EF migration history, from that same snapshot. It validates the archive with `pg_restore --list` before allowing replacement. A failed dump, count capture, or archive validation stops the job with the old database intact.
-
-After replacement, the workflow restores the archive in one transaction without the old ownership or grants. It compares the complete table set and each table's row count with the captured counts, then runs pending migrations. Missing or extra tables and differing counts fail the job before migrations, deploy, or seed. Because only one free instance is allowed, this comparison happens after deletion of the old instance. The carry preserves the snapshot taken at capture time; writes committed later are outside that snapshot. Keep staging evaluation and demo writes stopped during a reseed. After migration, the workflow redeploys the currently live API image by immutable digest, requires HTTP 201 naming the same image, waits for that deploy to become live, and runs the existing idempotent owner seed, which reuses copied accounts and sample records.
-
-Connection strings come from the sensitive staging Terraform output populated by Render. The workflow exports `STAGING_DATABASE_URL` to the data helper, which parses it into `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, and the database name in `PGDATABASE`. All PostgreSQL clients receive the same connection environment. `PGSSLMODE` uses the URI's `sslmode` when present and defaults to `require`; the port defaults to `5432`. The restore command also supplies the database name with `--dbname` to select database restore mode. Connection URIs and passwords never enter command arguments or logs. The dump and count files have private permissions under the runner's temporary directory, are never uploaded as artifacts, and are deleted by an `always()` cleanup step on success or failure. A failed restore or verification requires operator recovery before another replacement; the local dump is not retained as a backup.
-
-For the backup, restore and migrations, and owner seed, the workflow temporarily adds the GitHub runner's public IPv4 `/32` to the staging database allow list. After each access window, including when a command fails, it removes only entries tagged `github-actions-staging-reseed` and logs the live operator entries it keeps. If the reseed job times out, `staging-postgres-access-reconcile.yml` runs independently after the reseed run completes, whatever its result, to remove a tagged runner address. A manual dispatch of that workflow does the same. Access windows and reconciliation preserve every other live entry, so an operator address change does not block a reseed or cleanup.
-
-Create the GitHub OIDC provider and staging reseed role from `github_oidc.tf` with a reviewed targeted Terraform apply before enabling the workflow. If the GitHub OIDC provider already exists in the AWS account, import it into this state before applying. Set `RENDER_API_KEY` as a GitHub Actions environment secret in `render-operations` from Render Account Settings > API Keys, and restrict that environment to deployment branch `main`. Set `SEED_OWNER_EMAIL`, `STAGING_ENVIRONMENT_ID`, and `STAGING_API_SERVICE_ID` in GitHub Actions variables. The IDs come from the main Terraform state's `render_project.orbit.environments["Staging"].id` and `render_web_service.staging_api.id`. The role trust policy accepts only workflows on this repository's `main` branch.
-
-The staging allow list is managed through the Render API outside Terraform. Terraform uses `staging_postgres_ip_allow_list` only when creating a database and ignores later changes to `ip_allow_list`. The default `[]` creates a database with external access blocked. A replacement starts with that default; runner access opens for restore, migrations, and seed, and local operator access must be added again when needed.
-
-To give the Mac running this command local `psql` access, obtain an API key from Render Account Settings > API Keys and export it as `RENDER_API_KEY`. From the repository root, after initializing the staging Terraform root, run:
-
-```sh
-STAGING_POSTGRES_ID="$(terraform -chdir=infra/staging-database output -raw staging_postgres_id)" \
-  bash .github/scripts/staging-postgres-access.sh operator-mac
-```
-
-The command reads the Mac's public IPv4 address with `curl -4 https://api.ipify.org`, validates it, and replaces every entry described as `operator mac` with that address's `/32`. It preserves other operators and runner entries, then reads the list back from Render to verify the update. It requires `curl`, `jq`, and `python3`. Run it again after the Mac's public address changes. Confirm the `operator mac` entry in Render > staging Postgres > Networking and connect using the external connection details in the Connections screen. Run this command between staging workflows because Render allow list updates replace the whole list and are not atomic with another update.
-
-Move the staging database state before applying either root. With credentials for the main state and the Render API, record its ID, remove its old state entry, initialize the new root, and import that ID:
-
-```sh
-database_id="$(terraform -chdir=infra state show -no-color render_postgres.staging | awk -F'"' '/^ +id +=/ {print $2; exit}')"
-export TF_VAR_staging_environment_id='<staging environment ID from Render dashboard>'
-export TF_VAR_staging_api_service_id='<staging API service ID from Render dashboard>'
-terraform -chdir=infra state rm render_postgres.staging
-terraform -chdir=infra/staging-database init
-terraform -chdir=infra/staging-database import render_postgres.staging "$database_id"
-```
-
-Before the first apply that creates or updates `orbit-staging-database`, copy the existing staging data from `orbit_staging` into the Render URL database `orbit_staging_jo8c`. Linking the new group changes the staging API connection immediately. Quiesce staging writes before the dump and keep them stopped until both group updates are applied and the copied records are verified. On an operator machine with PostgreSQL client tools, obtain the external host, port, database user, and password from the Render Postgres Connections screen. Set `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, and `PGSSLMODE=require` in the operator shell. Confirm the destination has no independent data, then run the dump and restore from a protected directory outside the repository:
-
-```sh
-pg_dump --dbname=orbit_staging --format=custom --no-owner --no-acl --file=staging-cutover.dump
-pg_restore --dbname=orbit_staging_jo8c --clean --if-exists --no-owner --no-acl staging-cutover.dump
-for database in orbit_staging orbit_staging_jo8c; do
-  psql --dbname="$database" --no-psqlrc -Atc 'SELECT (SELECT count(*) FROM "Users"), (SELECT count(*) FROM "Habits")'
-done
-```
-
-Compare the counts and spot-check the same user and habit records in both databases. Review the staging root plan and confirm `render_postgres.staging` is not replaced, its IP allow list matches the live Render list, and both connection strings name `orbit_staging_jo8c`. Apply the staging root to create and link `orbit-staging-database`, then apply the main root to remove only the two database connection values from `orbit-staging-api`. Review both plans before applying. Confirm the staging API reads the copied records through the new group before allowing writes. Keep `orbit_staging` intact until that verification succeeds; then connect to `orbit_staging_jo8c` and run `DROP DATABASE orbit_staging`. The new group contains only `ConnectionStrings__DefaultConnection` and `ConnectionStrings__SessionConnection`; the existing `orbit-staging-api` group retains the other settings. After the main apply, `staging_environment_id` and `staging_api_service_id` outputs give the values for the GitHub variables. The Render provider documentation for version 1.9.1 confirms that both `render_postgres` and `render_env_group` can be imported by ID. The new group is created, so it needs no import.
-
-After the API has migrated the new database, the workflow invokes the seed command using the database connection returned by the staging Terraform resource. To run the same command manually from the repository root after `terraform -chdir=infra/staging-database init`:
-
-```sh
-ASPNETCORE_ENVIRONMENT=Staging \
-Seed__OwnerEmail=owner@example.com \
-Seed__ExpectedHost="$(terraform -chdir=infra/staging-database output -raw staging_external_host)" \
-Seed__DatabaseUrl="$(terraform -chdir=infra/staging-database output -raw staging_external_connection_string)" \
-dotnet run --project src/Orbit.Api/Orbit.Api.csproj --no-launch-profile -- seed-staging
-```
-
-The command checks the environment, staging host, database name, and database user before opening a connection. It reuses the owner's account by email and adds missing sample records without duplicating existing ones.
-
-## Staging pinger
-
-The Worker `orbit-staging-pinger` belongs to Cloudflare account `29945c90bc934c629c8e5a11cbfd146b`. Its only target is `https://api-staging.useorbit.org/health`. It has a scheduled handler and needs no HTTP route, DNS change, or Render dependency. The two UTC schedules, `*/5 11-23 * * *` and `*/5 0-2 * * *`, produce 192 invocations per day. Both the scheduled time and execution time must be inside 11:00 to 02:59 UTC; delayed events outside the window are skipped. Requests bypass cache, never follow a redirect (Cloudflare accepts only `follow` and `manual`, so the Worker sends `manual` and a 3xx response fails the invocation), and time out after 90 seconds to allow the first invocation to wake a sleeping service. A non-success HTTP response or network error fails the invocation. This timeout supports waking the service; the acceptance probes below still require responses under two seconds.
-
-After review, the orchestrator loads `CLOUDFLARE_API_TOKEN` from the Keychain entry `orbit-cloudflare-api-token` without printing it, initializes the existing `infra/` backend, and uses the existing ignored `infra/local.tfvars`. The token needs account-level Workers Scripts Write permission. Review a plan restricted to these two resources, then apply with the same targets:
-
-```sh
-terraform -chdir=infra init
-terraform -chdir=infra plan -var-file=local.tfvars \
-  -target=cloudflare_workers_script.staging_pinger \
-  -target=cloudflare_workers_cron_trigger.staging_pinger
-terraform -chdir=infra apply -var-file=local.tfvars \
-  -target=cloudflare_workers_script.staging_pinger \
-  -target=cloudflare_workers_cron_trigger.staging_pinger
-```
-
-The reviewed plan must change only `cloudflare_workers_script.staging_pinger` and `cloudflare_workers_cron_trigger.staging_pinger`. Stop if it includes a web service, production API, or any other resource. Neither pinger resource references the managed Cloudflare zone or Render services, so targeting them does not pull those resources into the apply.
-
-In the Cloudflare dashboard, open **Workers & Pages > orbit-staging-pinger > Settings > Triggers > Cron Triggers** and confirm both expressions. Allow up to 15 minutes for [Cron Trigger propagation](https://developers.cloudflare.com/workers/configuration/cron-triggers/). Open **Observability** on that Worker to see [persisted invocation and custom logs](https://developers.cloudflare.com/workers/observability/logs/workers-logs/). Sampling is set to 100 percent. Search for `staging-health-ping` and inspect `scheduledAt`, `startedAt`, `outcome`, `status`, and `durationMs`. Outcomes are `healthy`, `failed`, or `skipped-outside-window`. Failures include an `error` string. Compare consecutive scheduled and actual start times to check the five-minute cadence. Export or copy the evidence before the account's log retention expires.
-
-Once scheduled invocations are visible, choose an hour entirely inside the window and record seven independent probes, ten minutes apart, spanning at least one hour. Append each probe to a file outside the repository using this command:
-
-```sh
-{
-  date -u '+timestamp=%Y-%m-%dT%H:%M:%SZ'
-  curl --silent --show-error --fail --max-time 2 --output /dev/null \
-    --write-out 'http_status=%{http_code} duration_seconds=%{time_total}\n' \
-    https://api-staging.useorbit.org/health
-  printf 'curl_exit=%s\n' "$?"
-} >> /tmp/orbit-staging-pinger-probes.log 2>&1
-```
-
-Record all seven timestamp, HTTP status, duration, and exit-code observations in the owning ticket or pull request. Every probe must have a success HTTP status, `curl_exit=0`, and `duration_seconds` strictly below 2. Also record the Worker's intervening invocations at five-minute intervals; the independent probes can themselves keep the service awake, so probe timings alone do not prove the Worker is running. If any probe fails or the Worker misses an invocation, investigate and restart the full observation hour. Run this observation again after any change to the Worker or its schedules.
-
-Provider arguments were confirmed using the installed `cloudflare/cloudflare` 5.26.0 schema. The versioned [Worker script schema](https://github.com/cloudflare/terraform-provider-cloudflare/blob/v5.26.0/docs/resources/workers_script.md) documents `content`, `main_module`, and `observability`; the [Cron Trigger schema](https://github.com/cloudflare/terraform-provider-cloudflare/blob/v5.26.0/docs/resources/workers_cron_trigger.md) requires `schedules`, despite its example using `body`. The controller's `scheduledTime` is milliseconds since the UTC epoch per the [scheduled handler contract](https://developers.cloudflare.com/workers/runtime-apis/handlers/scheduled/). Health response status and success use the [Response contract](https://developers.cloudflare.com/workers/runtime-apis/response/); cache, redirect, and abort options use the [Request contract](https://developers.cloudflare.com/workers/runtime-apis/request/).
+For a long batch that already exists, run `/app/efbundle` from the staging-verified image digest. Use operator compute with the production session credentials. Take a fresh completed export first. Run the bundle before the production release, and require exit code zero. Do not increase the poll time of the workflow to get around the startup limit.
 
 ## SSM parameters
 
-Create each entry as a SecureString in AWS Systems Manager Parameter Store in `us-east-2` before planning. Both production API connection strings always come from `render_postgres.production`. Its connection URL, database user, and password are converted to Npgsql's key and value connection string format. Staging uses its own Render database.
+Create each SecureString in SSM Parameter Store in `us-east-2` before the plan. The path is `/orbit/<environment>/api/<Key>` for the API and `/orbit/<environment>/web/SENTRY_DSN` for the web service. `<environment>` is `production` or `staging`. The production API connection strings come from `render_postgres.production`. Staging uses its own Render database.
 
-| Service | SecureString parameter |
+| Parameters | Where |
 | --- | --- |
-| Production API | `/orbit/production/api/AI__ApiKey` |
-| Production API | `/orbit/production/api/Encryption__Key` |
-| Production API | `/orbit/production/api/Firebase__CredentialsJson` |
-| Production API | `/orbit/production/api/GooglePlay__ServiceAccountJson` |
-| Production API | `/orbit/production/api/Google__ClientSecret` |
-| Production API | `/orbit/production/api/Jwt__SecretKey` |
-| Production API | `/orbit/production/api/Marketing__UnsubscribeSigningKey` |
-| Production API | `/orbit/production/api/PostHog__ApiKey` |
-| Production API | `/orbit/production/api/REVIEW_ACCOUNT_CODE` |
-| Production API | `/orbit/production/api/REVIEW_ACCOUNT_EMAIL` |
-| Production API | `/orbit/production/api/SMOKE_TEST_CODE` |
-| Production API | `/orbit/production/api/SMOKE_TEST_EMAIL` |
-| Production API | `/orbit/production/api/Sentry__Dsn` |
-| Production API | `/orbit/production/api/Stripe__SecretKey` |
-| Production API | `/orbit/production/api/Stripe__WebhookSecret` |
-| Production API | `/orbit/production/api/Vapid__PrivateKey` |
-| Production API | `/orbit/production/api/Waitlist__SigningKey` |
-| Production web | `/orbit/production/web/SENTRY_DSN` |
-| Staging API | `/orbit/staging/api/AI__ApiKey` |
-| Staging API | `/orbit/staging/api/Encryption__Key` |
-| Staging API | `/orbit/staging/api/Firebase__CredentialsJson` |
-| Staging API | `/orbit/staging/api/GooglePlay__ServiceAccountJson` |
-| Staging API | `/orbit/staging/api/Google__ClientSecret` |
-| Staging API | `/orbit/staging/api/Jwt__SecretKey` |
-| Staging API | `/orbit/staging/api/Marketing__UnsubscribeSigningKey` |
-| Staging API | `/orbit/staging/api/PostHog__ApiKey` |
-| Staging API | `/orbit/staging/api/SMOKE_TEST_CODE` |
-| Staging API | `/orbit/staging/api/SMOKE_TEST_EMAIL` |
-| Staging API | `/orbit/staging/api/Sentry__Dsn` |
-| Staging API | `/orbit/staging/api/Stripe__SecretKey` |
-| Staging API | `/orbit/staging/api/Stripe__WebhookSecret` |
-| Staging API | `/orbit/staging/api/TEST_ACCOUNTS` |
-| Staging API | `/orbit/staging/api/Vapid__PrivateKey` |
-| Staging API | `/orbit/staging/api/Waitlist__SigningKey` |
-| Staging web | `/orbit/staging/web/SENTRY_DSN` |
+| The keys in `api_secret_keys` of `infra/configuration.tf` | Both API environments |
+| `StagingEval__AccountIds` | Both API environments |
+| `AI__EvalApiKey` (optional) | Both API environments |
+| `REVIEW_ACCOUNT_CODE`, `REVIEW_ACCOUNT_EMAIL` | Production API only |
+| `TEST_ACCOUNTS` | Staging API only |
+| `Stripe__ProProductId` and the four `Stripe__*PriceId*` keys (String parameters) | Staging API only |
+| `SENTRY_DSN` | Each web service |
 
-The staging billing IDs below are String parameters. Terraform reads them into the staging API environment group. Keep their values in SSM rather than in Terraform files.
+Terraform generates `Auth__BffForwardingSecret`, `BotProtection__SecretKey`, `BotProtection__SmokeBypassSecret`, the SES credentials, and the S3 credentials. Do not create them by hand.
 
-| Service | String parameter |
-| --- | --- |
-| Staging API | `/orbit/staging/api/Stripe__ProProductId` |
-| Staging API | `/orbit/staging/api/Stripe__MonthlyPriceIdUsd` |
-| Staging API | `/orbit/staging/api/Stripe__YearlyPriceIdUsd` |
-| Staging API | `/orbit/staging/api/Stripe__MonthlyPriceIdBrl` |
-| Staging API | `/orbit/staging/api/Stripe__YearlyPriceIdBrl` |
-
-Every staging secret must be independently generated or issued for staging. `/orbit/staging/api/Stripe__SecretKey` and `/orbit/staging/api/Stripe__WebhookSecret` are SecureString parameters containing Stripe test-mode credentials. The staging webhook endpoint is `https://api-staging.useorbit.org/api/subscriptions/webhook`. It must deliver `checkout.session.completed`, `invoice.paid`, `invoice.payment_failed`, `customer.subscription.deleted`, and `customer.subscription.updated`. The test product and prices mirror the production monthly and yearly plans in USD and BRL. Use a Stripe test card to confirm checkout and the signed webhook grant Pro without a charge.
-
-Google Play uses the configured service account for both live and license-tester subscription purchases. Set up license testers on the internal and closed tracks, then verify a test purchase through `play/verify`. The staging Pub/Sub push subscription must use `https://api-staging.useorbit.org/api/subscriptions/play/rtdn` as both its endpoint and OIDC audience, with the configured `GooglePlay__RtdnServiceAccountEmail` as the token issuer. Confirm an RTDN push reaches staging and updates the linked purchase. The production API's non-secret values mirror the existing Render service; staging overrides its environment, CORS origin, return URLs, RTDN audience, and billing IDs.
-
-Terraform creates `/orbit/<environment>/api/Ses__AccessKeyId` and `/orbit/<environment>/api/Ses__SecretAccessKey` as SecureString parameters and places the matching values in each Render API environment group. `orbit-api-ses` can send with the production configuration sets; `orbit-api-ses-staging` can send with the staging sets. Both users can send from the shared SES identities `send.useorbit.org`, `updates.useorbit.org`, and `useorbit.org`. The production sets `orbit-transactional` and `orbit-marketing` publish to `orbit-ses-events`, which subscribes only to `https://api.useorbit.org/api/email/ses-events`. The staging sets `orbit-staging-transactional` and `orbit-staging-marketing` publish to `orbit-ses-events-staging`, which subscribes only to `https://api-staging.useorbit.org/api/email/ses-events`. Each API group receives its own `Ses__TransactionalConfigurationSet`, `Ses__MarketingConfigurationSet`, and `Ses__TopicArn`. Both groups also provide `Ses__Region`, `Ses__FromEmail`, `Ses__MarketingFromEmail`, and `Ses__SupportEmail`. SES is the only email transport. API startup requires nonempty `Ses__AccessKeyId`, `Ses__SecretAccessKey`, `Ses__Region`, `Ses__FromEmail`, `Ses__MarketingFromEmail`, `Ses__SupportEmail`, `Ses__TransactionalConfigurationSet`, `Ses__MarketingConfigurationSet`, and `Ses__TopicArn`. Confirm each SNS subscription through its own signed webhook.
-
-Retire the old email settings only after the SES-only build runs in both environments. A build from before this change falls back to the retired transport when `Email__Provider` is absent, and Render's **Save and deploy** redeploys the existing build with the changed variables. Release production through `release.yml` from `main`, and staging after the standing sync to `redesign/main`. Confirm health and SES `Send` and `Delivery` metrics for each environment's transactional configuration set. The production mailbox simulator can verify delivery without sending to a real recipient. Until both releases pass that check, change no email setting and deploy no build from before this change.
-
-After both releases pass, remove the obsolete provider variables from the ignored `infra/local.tfvars` and save a plan restricted to the two API groups:
-
-```sh
-terraform -chdir=infra plan -var-file=local.tfvars \
-  -target=render_env_group.production_api \
-  -target=render_env_group.staging_api \
-  -out=email-cleanup.tfplan
-```
-
-Review the saved plan before applying. Only `render_env_group.production_api` and `render_env_group.staging_api` may change, and their existing SES settings must be preserved. The retired vendor's SSM inputs are data sources, so removing those references does not delete the live parameters. In Render's service Environment screens, remove any retired email variables that override the linked groups; the running SES-only build ignores them. Then remove the retired API-key SecureStrings from AWS Systems Manager > Parameter Store, and apply legacy email DNS removals through a separately reviewed DNS plan; the group-targeted plan excludes DNS resources.
-
-Each SNS HTTPS subscription retains failed deliveries for up to 14 days in its own SQS dead-letter queue: `orbit-ses-events-dead-letter` for production and `orbit-ses-events-staging-dead-letter` for staging. A CloudWatch alarm on each queue enters ALARM when `ApproximateNumberOfMessagesVisible` reaches one and publishes to its matching operations topic, `orbit-ses-dead-letter-alerts` or `orbit-ses-dead-letter-alerts-staging`. Set `production_ses_dlq_alert_email` and `staging_ses_dlq_alert_email` in the ignored `infra/local.tfvars` before applying Terraform. Both default to an empty value, which creates the alarm and topic without an email recipient. Confirm each subscription through the email sent by SNS. In the AWS SNS console in `us-east-2`, check that neither operations topic has a subscription marked `PendingConfirmation`. To verify delivery, use the AWS SQS console to send a test message to each matching dead-letter queue, confirm its CloudWatch alarm enters ALARM and the matching recipient receives the alert, then delete the test message. Investigate any real alarm before retention expires. Once the webhook and database are healthy, recover messages in the matching environment:
-
-1. In the AWS SQS console in `us-east-2`, open the matching queue and use **Send and receive messages** to inspect one message. Identify the original SES event payload from the actual message body. Keep the message if its payload cannot be identified.
-2. In the AWS SNS console, open the matching topic (`orbit-ses-events` or `orbit-ses-events-staging`) and use **Publish message** with that original event payload. SNS signs a new webhook envelope for the same environment. Do not publish production events to staging or staging events to production.
-3. Confirm the webhook accepted the event and the affected marketing contact is suppressed for a permanent bounce or complaint. Delete the original SQS message only after that confirmation. If processing fails, leave it in the queue for another attempt.
-
-The SES DKIM CNAME records and the MAIL FROM MX and SPF records are managed directly in `ses.tf` using the SES identity outputs. Each identity uses Easy DKIM with 2048-bit keys and three unproxied CNAME records. The custom MAIL FROM domains are `bounce.send.useorbit.org`, `bounce.updates.useorbit.org`, and `bounce.useorbit.org`; only these bounce subdomains receive SES MX and SPF records. The root `useorbit.org` MX stays on Google Workspace, and `_dmarc.useorbit.org` retains its reject policy. The Cloudflare zone is created on the Free plan without a zone subscription resource because that resource requires billing scope unavailable to the DNS token.
-
-Both environments send transactional email with `Ses__FromEmail = "Orbit <contact@useorbit.org>"`, the Workspace user whose public profile photo is the Orbit icon. Staging inherits this value from `production_api_values`. Marketing retains `Ses__MarketingFromEmail = "Orbit <news@updates.useorbit.org>"` for its separate reputation, and `Ses__SupportEmail` remains `contact@useorbit.org`.
-
-To roll out the transactional sender to production:
-
-1. In the AWS SES console in `us-east-2`, confirm that `useorbit.org` has successful identity, DKIM, and custom MAIL FROM verification.
-2. Save a plan targeting only the production API environment group:
-
-   ```sh
-   terraform -chdir=infra plan -var-file=local.tfvars \
-     -target=render_env_group.production_api \
-     -out=production-sender.tfplan
-   ```
-
-3. Review the saved plan with `terraform -chdir=infra show production-sender.tfplan`. Only `render_env_group.production_api` may change, and its only setting change must be `Ses__FromEmail` to `Orbit <contact@useorbit.org>`. Preserve all other settings, including the marketing sender and support address. If the plan includes other changes, stop and resolve them before applying.
-4. Apply the reviewed plan with `terraform -chdir=infra apply production-sender.tfplan`.
-5. In Render, open the production API service `orbit-api` > **Environment**. Confirm it inherits `Ses__FromEmail = "Orbit <contact@useorbit.org>"` from the linked `orbit-production-api` environment group, with no service override, and confirm its deploy with the updated environment succeeds.
-6. Receive one real production transactional email in Gmail web. Confirm the From address is `Orbit <contact@useorbit.org>`, the Orbit icon appears in the sender header, and **Show original** reports passing, aligned SPF, DKIM, and DMARC: MAIL FROM `bounce.useorbit.org` and DKIM signing domain `useorbit.org`. The Workspace profile photo route needs this received-email check; configuration alone does not prove the avatar appears.
-
-Terraform creates `/orbit/production/api/BotProtection__SecretKey` and `/orbit/staging/api/BotProtection__SecretKey` as SecureString parameters from the managed Turnstile widget. Both API environment groups read the corresponding parameter and receive `BotProtection__SiteKey` from the widget's `sitekey`. The staging landing also receives the managed `PUBLIC_TURNSTILE_SITE_KEY`. Both production and staging enforce Turnstile with explicit `BotProtection__Enabled = "true"` settings. `BotProtection__AllowedHostnames__N` is derived from the managed widget domains: production accepts `app.useorbit.org`, `api.useorbit.org`, `useorbit.org` and `www.useorbit.org`; staging accepts `app-staging.useorbit.org`, `api-staging.useorbit.org` and `orbit-landing-staging.onrender.com`. Both API hosts are explicit widget domains so the exact intersection retains the API-hosted OAuth widgets. The same allowlist is used for public authentication, waitlist and onboarding checks. The public `turnstile_site_key` output is for the client builds.
-
-Terraform generates independent 64-character bypass secrets as SecureStrings at `/orbit/production/api/BotProtection__SmokeBypassSecret` and `/orbit/staging/api/BotProtection__SmokeBypassSecret`, and supplies each API group with its own `BotProtection__SmokeBypassSecret`. In `orbit-api` GitHub Settings > Environments > `staging` and `production` > Environment secrets, set `SMOKE_BOT_BYPASS` to the matching Parameter Store value. The release smoke sends it as `X-Orbit-Smoke-Bypass` on both sign-in requests. Bypass requires both a fixed-time match against the non-empty configured secret and an email matching the API's `SMOKE_TEST_EMAIL`; every other request still verifies Turnstile. Both environments enforce Turnstile, so release smoke requires the matching bypass secret. Provision `/orbit/staging/api/SMOKE_TEST_EMAIL` to match the staging GitHub smoke email as well as its `TEST_ACCOUNTS` entry.
-
-Enablement requires the `orbit-ui-mobile` GitHub Actions repository variable `EXPO_PUBLIC_TURNSTILE_SITE_KEY`, a shipped and verified Android Open build that submits tokens, and both environments' smoke bypass secrets. Verify web and landing submissions and the production `MinSupportedVersion` prerequisite described in the root README. Both environment flags are `true` in code. After staging release smoke and tokenless and real-client acceptance checks pass, review and apply the production enablement only to `render_env_group.production_api`. Release smoke passes through `X-Orbit-Smoke-Bypass` in both environments. Never run an untargeted production apply. The kill switch is setting that environment's `BotProtection__Enabled` to `false` in Terraform and applying only its API environment group (`render_env_group.production_api` or `render_env_group.staging_api`).
-
-## DNS cutover
-
-The Cloudflare zone uses full DNS setup on the Free plan. The existing records have automatic TTL. The existing records remain unproxied, including the production web CNAME. At cutover, use these values in `infra/local.tfvars`:
-
-```hcl
-dns_apex_target        = "orbit-landing-aaa7.onrender.com"
-dns_www_target         = "orbit-landing-aaa7.onrender.com"
-dns_app_target         = "orbit-web-3qmv.onrender.com"
-landing_custom_domains = ["useorbit.org"]
-web_custom_domains     = ["app.useorbit.org"]
-```
-
-Render adds `www.useorbit.org` as a redirect to `useorbit.org` when the apex is added as a landing custom domain. Cloudflare flattens the unproxied apex CNAME into A answers while leaving its MX and TXT records in place. `api` continues to point to its existing Render service. Staging CNAMEs take their hostnames from the staging Render resources.
-
-After apply, read the `cloudflare_name_servers` output. Run `bash infra/check-dns-cutover.sh <cloudflare-nameserver> [apex-target] [app-target] [www-target]` once for each nameserver. The optional targets default to the Render hostnames above; pass all three configured targets in that order if any differs. The script compares the apex's flattened A answers with the Render target's A answers, checks the `app` and `www` CNAMEs against their targets, and compares the remaining records with Spaceship while ignoring TTL and TXT chunk boundaries. For an initial nameserver cutover, switch the nameservers at Spaceship only when every run succeeds. Confirm that `dig NS useorbit.org +short` returns the Cloudflare nameservers and that Render's Custom Domains screen reports `useorbit.org` verified.
+Generate each staging secret for staging alone. The staging Stripe secrets hold test-mode credentials. The staging webhook endpoint is `https://api-staging.useorbit.org/api/subscriptions/webhook`. The staging Pub/Sub push subscription for Google Play uses `https://api-staging.useorbit.org/api/subscriptions/play/rtdn` as its endpoint and as its OIDC audience. Its token issuer is the configured `GooglePlay__RtdnServiceAccountEmail`.
 
 ## Plan and apply
 
-Set `RENDER_API_KEY` and `CLOUDFLARE_API_TOKEN` in the shell and provide AWS credentials through the default credential chain. Make a local `infra/local.tfvars` containing the published production and staging image digests and any approved domain settings and database network access settings. This file is ignored; `example.tfvars` shows the shape only. Copy the production Postgres IP allow list from the Render Postgres Networking screen into `production_postgres_ip_allow_list`. The production variable defaults to `[]`, which removes production external access when applied. The staging root uses `staging_postgres_ip_allow_list` only at creation and ignores later allow list changes; use the `operator-mac` command above for local staging access. Check both database resources in every plan before applying; neither database should be replaced, and an existing operator address must not be removed. The requested `database_name` and `database_user` values are creation inputs; Terraform ignores later changes to those fields because Render assigns the live database name with a suffix. Connection strings read the database name from the resource URL.
+Set `RENDER_API_KEY` and `CLOUDFLARE_API_TOKEN` in the shell, and provide the AWS credentials through the default chain. Make a local `infra/local.tfvars` with the image digests and the approved domain and database network settings. `example.tfvars` shows its shape. Copy the production Postgres IP allow list from the Render Networking screen into `production_postgres_ip_allow_list`. The default `[]` removes the external access of production.
 
-The `production_api_digest`, `production_web_digest`, `staging_web_digest` and `staging_api_digest` variables seed their respective images. Terraform ignores later digest changes on these image-backed services. Subsequent staging and production web deploys use the manual `release.yml` workflow in `orbit-ui-mobile` with its `environment` input.
+Check both database resources in each plan. Neither may be replaced, and no operator address may be removed. Terraform ignores later changes to `database_name` and `database_user`.
 
-With Render provider v1.9.1, a refreshed digest image path also populates a computed image tag. On any web service update, the provider sends an image reference built from the planned tag before considering the digest. Ignoring the entire image block retains that computed tag and does not make the update safe. Run `terraform -chdir=infra show -json local.tfplan | node infra/check-web-plan.mjs` on the saved plan before every local apply. The guard blocks an in-place update, replacement, or deletion of either web service and names the changed attributes. Initial creation remains allowed.
+The manual Release workflow of `orbit-ui-mobile` deploys the web images. Terraform ignores digest changes after the first apply.
 
-For a deliberate web service setting change, review the saved plan and its blocked attributes, then apply that specific plan as an explicit exception. Immediately redeploy the approved digest through `orbit-ui-mobile`'s manual `release.yml` workflow with the matching `environment` input and verify the live `imagePath` against that approved digest before proceeding with another apply. Keep the exception scoped to the intended service change.
+With Render provider v1.9.1, a refreshed digest image path also fills a computed image tag. On a web service update, the provider builds an image reference from the planned tag and ignores the digest. Run `terraform -chdir=infra show -json local.tfplan | node infra/check-web-plan.mjs` on the saved plan before each local apply. The guard blocks an update, a replacement, or a deletion of a web service, and it names the changed attributes. For a deliberate change, apply the reviewed plan as an exception. Then redeploy the approved digest through `orbit-ui-mobile` and verify the live `imagePath`.
 
-A web service replacement or deletion requires separate recovery review before apply. For a replacement, confirm the currently approved digest, set the matching Terraform digest variable, and plan service continuity, domains, and service ID changes with the owner. Apply only the reviewed saved plan, redeploy the approved digest through the release workflow, and verify the live `imagePath`. For a deletion, confirm the service is intentionally being retired and arrange its traffic cutover before applying the reviewed plan.
+After each apply, read the live `imagePath` of each web service with `GET https://api.render.com/v1/services/<service-id>`. It must equal `ghcr.io/thomasluizon/orbit-web@sha256:<approved digest>`. Do not use the Terraform digest variables as the expected value. If an image differs, stop the applies and redeploy the approved digest.
 
-After every apply, read each web service's live `imagePath` from Render using its service ID and compare it with the digest approved by its latest release workflow. The expected value is `ghcr.io/thomasluizon/orbit-web@sha256:<approved digest without the sha256: prefix>`. Do not use the Terraform digest variables as the expected value after creation. For each service, run:
-
-```sh
-curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
-  "https://api.render.com/v1/services/<service-id>" | jq -r '.imagePath'
-```
-
-If either image differs, stop further applies and redeploy the approved digest through the corresponding release workflow.
-
-Render provider v1.9.1 requests a deploy after every service update, environment variable changes included ([provider source, line 641](https://github.com/render-oss/terraform-provider-render/blob/v1.9.1/internal/provider/common/client.go#L641)). For a Git-backed service, that deploy builds the tracked branch head. Releases go through the release workflows, so set `RENDER_SKIP_DEPLOY_AFTER_SERVICE_UPDATE=true` for each targeted apply that updates a service ([provider source, line 249](https://github.com/render-oss/terraform-provider-render/blob/v1.9.1/internal/provider/provider.go#L249)). If a deploy starts, cancel it unless it is an intended release of the same commit. The landing staging service has auto-deploy disabled; its release workflow selects the tracked branch and Terraform ignores later branch changes. The staging API uses a workflow-selected image digest instead.
-
-Neither landing static site sets `NODE_VERSION`. Render reads a `NODE_VERSION` variable before the `.node-version` file, so without the variable both sites build with the Node.js version in the landing repository's `.node-version`, the same file that its CI reads.
-
-After apply, set the `RENDER_STAGING_SERVICE_ID` repository variable in the Orbit API GitHub repository to the staging API service ID. Set `RENDER_API_KEY` as the Orbit API GitHub `staging` environment secret and restrict that environment to deployment branch `main`. Set `RENDER_LANDING_STAGING_SERVICE_ID` in the Orbit landing repository to the `landing_staging_service_id` Terraform output. Confirm each variable in its repository Actions variables screen before running the corresponding `release.yml` from `main`.
-
-Run:
+Render provider v1.9.1 requests a deploy after each service update. Set `RENDER_SKIP_DEPLOY_AFTER_SERVICE_UPDATE=true` for each targeted apply that updates a service ([provider source](https://github.com/render-oss/terraform-provider-render/blob/v1.9.1/internal/provider/provider.go#L249)). Cancel a deploy that starts, unless it is an intended release of the same commit.
 
 ```sh
 terraform -chdir=infra init
@@ -704,254 +117,76 @@ terraform -chdir=infra show -json local.tfplan | node infra/check-web-plan.mjs
 terraform -chdir=infra apply local.tfplan
 ```
 
-The initial plan must keep `srv-d6tc2isr85hc739bf75g`, its URL, and `api.useorbit.org` in place. Terraform ignores the imported API's own environment variables (`lifecycle.ignore_changes`), so the first apply only creates `orbit-production-api` and links it; the service keeps its existing variables, which override the group's identical values. Check the imported service's plan before applying: it must show no change to the service.
-
-Remove the obsolete `api_database` assignment from ignored `infra/local.tfvars`. Both `ConnectionStrings__DefaultConnection` and `ConnectionStrings__SessionConnection` in `orbit-production-api` use the managed Render database. A production plan for the selector removal must show no resource changes, including no environment group, service, or database updates. Only after that proof, delete `/orbit/production/api/ConnectionStrings__DefaultConnection` and `/orbit/production/api/ConnectionStrings__SessionConnection` from AWS Systems Manager Parameter Store in `us-east-2` without reading their values. Confirm both parameter names are absent afterward.
-
-Staging reads Stripe test-mode product and price IDs from SSM and uses staging return URLs. Staging uploads use their own S3 bucket. The web image must exist at both selected digests before the first apply. Set production web and landing custom domains during cutover. DNS and certificate verification follow the domain changes.
-
 ## Production web routing
 
 Production web is the DNS-only CNAME `app.useorbit.org` to `orbit-web-3qmv.onrender.com`. The variables `dns_app_target` and `web_custom_domains` set it.
 
-Run `terraform -chdir=infra init -backend=false -input=false`, then
-`npm test --prefix infra` for the infrastructure tests. They use Node's built-in
-test runner and Terraform's mocked plan tests without cloud credentials or cloud calls.
-The credential plans exercise the actual API environment groups with evaluation parameters
-present and absent.
+Run `terraform -chdir=infra init -backend=false -input=false`, then `npm test --prefix infra` for the infrastructure tests. They use mocked plans and need no cloud credentials.
 
-## Exact chat read recovery
+## API release admission
 
-Chat read contracts and failure handling are documented in
-[the read-tool contract](../src/Orbit.Application/Chat/Tools/README.md#exact-read-metadata-and-recovery).
-Deploy the append-only API before the paired client advertises `periodTotal` or
-`periodComparison`. Dated `habitList` output additionally needs
-`supportsDatedHabitListCard: true`; `habitHistory` record lists need
-`supportsHabitHistoryCard: true`. Each advertisement promises compatible parsing,
-display and date-correct interactions; unadvertised subtypes fall back to queried
-text. Refresh rechecks the subtype and may return HTTP 403 after a local-date
-rollover for a client without dated support. The existing `AiPeriodBlocksDisabled` feature flag disables
-those producers; no fleet-floor change or new secret is required. Read tokens use
-the shared `Jwt:SecretKey`; rotating that key expires outstanding queries and
-requires repeating the original request.
-
-On HTTP 409 `READ_QUERY_STALE`, refresh the original query before asking for another
-page. On HTTP 503 `READ_QUERY_REFRESH_FAILED`, keep the prior answer and retry the
-same token. HTTP 410 requires repeating the original query. A permission denial
-requires restoring the original capability through its existing flow. Never replace
-a historical query with Today, and never generate a recap to recover a read.
-## Habit ranking activation
-
-Release the append-only API through the existing `release.yml` workflow before
-shipping the #1618 consumer. Verify the generated contract at the deployed producer
-commit and an authenticated `POST /api/chat/habit-ranking/query` followed by paging
-and refresh using its returned tokens. An empty ranking is a successful result.
-No database migration, backfill, new secret or version-floor change is required.
-The query signer uses the already configured `Jwt:SecretKey`.
-
-The client enables the block by sending `supportsParts: true` and including
-`habitRanking` in `partKinds`. Remove that kind advertisement to return readable
-text. Existing `astra_period_blocks_disabled` or `astra_parts_disabled` flags
-also disable structured ranking output. Revert the producer if counts are wrong.
-Monitor `habit_ranking_query` outcomes and `habit_ranking_block` build failures;
-HTTP 409 `HABIT_RANKING_STALE` means refresh the existing absolute query rather
-than resolve its relative period again. The exact payload and boundary policy
-are in [HabitRanking.md](../src/Orbit.Api/OpenApi/HabitRanking.md).
-
-### API release admission
-
-Release API requires completed successful `API Tests` (`test.yml`) and `Guards`
-(`guards.yml`) runs triggered by `push` or `workflow_dispatch` on `main`, each at
-exactly the selected SHA, and their successful check runs before an image build.
-Pull request runs and runs for another branch or SHA do not qualify.
-
-For a bot-merged commit without push CI, confirm `main` still points to the selected
-commit and dispatch both workflows:
+Release API needs completed successful runs of `API Tests` (`.github/workflows/test.yml`) and `Guards` (`.github/workflows/guards.yml`). Each run must come from a `push` or `workflow_dispatch` event on `main`, at exactly the selected SHA. A pull request run, a run for another branch, and a run for another SHA do not qualify. A commit that a bot merged can have no push CI. In that case, confirm that `main` still points to the commit and dispatch both workflows:
 
 ```sh
 gh workflow run test.yml --ref main --repo thomasluizon/orbit-api
 gh workflow run guards.yml --ref main --repo thomasluizon/orbit-api
 ```
 
-Wait for both runs to complete successfully and verify each run's `head_sha` equals
-the selected SHA, then rerun Release API. Dispatch uses the commit at `main` when
-the event is created; if `main` has advanced, those runs cannot qualify for the
-older selected SHA. Select the current `main` commit and obtain its CI evidence
-before releasing it. The workflows check out the dispatched commit without a
-`ref` override and isolate dispatch concurrency by run id.
+Wait until both runs succeed and their `head_sha` equals the selected SHA. Then run Release API again. If `main` moved on, select the new commit.
 
-Staging signs in
-with a dedicated smoke account, reads the habit count, creates a throwaway general
-task and deletes it. The workflow marks `api-staging-smoke` pending before building
-and records success only after health, image and authenticated smoke checks pass.
-Production requires the latest trusted smoke status and matching staging health.
-`force_unstaged` requires `override_reason`; the summary and production deployment
-payload retain that reason. It does not bypass CI or the export gate.
+The staging smoke signs in with a dedicated account, reads the habit count, creates a throwaway task, and deletes it. The workflow records the status `api-staging-smoke` only after the health, image, and smoke checks pass. `force_unstaged` needs `override_reason` and does not bypass CI or the export gate.
 
-#### Stripe webhook endpoint version
+Set the GitHub secrets `SMOKE_TEST_EMAIL`, `SMOKE_TEST_CODE`, and `SMOKE_BOT_BYPASS` in the environments `staging` and `production`. The staging account and its six-digit code also live in `/orbit/staging/api/TEST_ACCOUNTS`. After a staging reseed, provision the staging account again if it is absent.
 
-The webhook handler refuses each event whose API version is outside the major
-release of the pinned `Stripe.net` (`StripeConfiguration.ApiVersion`). Stripe sets
-the version of a webhook endpoint when you create the endpoint, so the endpoint
-does not follow a package update. `/health/stripe` lists the versions of the enabled
-endpoints for `/api/subscriptions/webhook` and the library version. Render does not
-probe this route.
+For a release with a migration, set the variable `RENDER_PRODUCTION_POSTGRES_ID` in the GitHub environment `production`. Admission compares the migrations of the latest successful trusted production deployment with the selected SHA. When a migration changed, it creates a fresh Render export and waits for a new export ID with a download URL. No database ID, an unavailable export, or no deployment baseline blocks the release.
 
-Release API reads `/health/stripe` three times:
+## Stripe webhook endpoint version
 
-1. Before the production deploy, it compares the library version that staging serves
-   at the selected SHA with the production endpoint versions. `force_unstaged` skips
-   this step. A production build without the route gives only a warning.
-2. After the production deploy, it checks production against its own endpoints.
-3. After the staging deploy, it checks staging against its own endpoints. The staging
-   deployment record, which production needs, waits for this check.
+The webhook handler refuses each event whose API version is outside the major release of the pinned `Stripe.net` (`StripeConfiguration.ApiVersion`). Stripe fixes the version of an endpoint when you create it, so the endpoint does not follow a package update. `/health/stripe` lists the versions of the enabled endpoints for `/api/subscriptions/webhook` and the library version.
 
-Before you release a `Stripe.net` update that changes the major release, change the
-endpoint version in each environment. Production uses Stripe live mode, the group
-`orbit-production-api` and the service `orbit-api`. Staging uses Stripe test mode,
-the group `orbit-staging-api` and the service `orbit-api-staging`. Do these steps in
-this order:
+Release API reads `/health/stripe` three times. Before the production deploy, it compares the library version of staging at the selected SHA with the production endpoint versions. `force_unstaged` skips this check. After each deploy, it checks the environment against its own endpoints. The staging deployment record waits for the staging check.
 
-1. In the Stripe Dashboard, in the mode of the environment, open **Developers >
-   Webhooks** and add an endpoint at the new version. Use the same URL and the
-   same five events. Keep the old endpoint enabled.
-2. Write the signing secret of the new endpoint to the SSM SecureString
-   `/orbit/<environment>/api/Stripe__WebhookSecret` in `us-east-2`.
-3. Save and review a plan targeted only to `render_env_group.production_api` or
-   `render_env_group.staging_api`. Its only change must be the masked
-   `Stripe__WebhookSecret`. Apply only that reviewed plan.
-4. In **Render > the service > Environment**, confirm that `Stripe__WebhookSecret`
-   comes from the linked group and that no service override exists.
-5. Run **GitHub > orbit-api > Actions > Release API** from `main` for the
-   environment. The API reads `Stripe__WebhookSecret` only when the process starts,
-   so the deploy of this run loads the new secret. Do this step directly after
-   step 3: until the new process runs, the signature check can refuse events.
-   Stripe retries a refused live event for up to three days.
-6. Confirm that the check after the deploy passes and that the next event of the
-   new endpoint gets a 2xx in **Developers > Webhooks**. Then disable the old
-   endpoint.
+Before you release a `Stripe.net` update that changes the major release, change the endpoint version in each environment. Production uses Stripe live mode and the service `orbit-api`. Staging uses Stripe test mode and the service `orbit-api-staging`. Do these steps in order:
 
-Configure GitHub Actions environment secrets `SMOKE_TEST_EMAIL`,
-`SMOKE_TEST_CODE` and `SMOKE_BOT_BYPASS` in both `staging` and `production`. On staging, provision that
-account and retain its email and six-digit code in the API's `TEST_ACCOUNTS` value
-in AWS Systems Manager Parameter Store at `/orbit/staging/api/TEST_ACCOUNTS`.
-Reseeding staging copies production, so provision the dedicated staging account
-again after a reseed if it is absent. On production, the corresponding API
-`SMOKE_TEST_EMAIL` and `SMOKE_TEST_CODE` values use the existing production smoke
-code path. Production smoke signs in and reads only; it never writes habits.
-Neither the scripts nor their diagnostics print credentials or login bodies.
+1. In the Stripe Dashboard, in the mode of the environment, open **Developers > Webhooks**. Add an endpoint at the new version with the same URL. It must deliver `checkout.session.completed`, `invoice.paid`, `invoice.payment_failed`, `customer.subscription.deleted`, and `customer.subscription.updated`. Keep the old endpoint enabled.
+2. Write the signing secret of the new endpoint to the SecureString `/orbit/<environment>/api/Stripe__WebhookSecret`.
+3. Apply a reviewed plan targeted only to `render_env_group.production_api` or `render_env_group.staging_api`. Its only change must be the masked `Stripe__WebhookSecret`. Confirm in Render that no service override exists.
+4. Run **Actions > Release API** from `main` for the environment, directly after step 3. The API reads the secret only at process start, so until then the signature check can refuse events.
+5. Confirm that the check after the deploy passes and that the next event of the new endpoint gets a 2xx in **Developers > Webhooks**. Then disable the old endpoint.
 
-### Store-review sign-in
+## Store-review sign-in
 
-Google Play and App Store review sign in to production with a dedicated account that has no mailbox and no personal data.
-Production reads its address from `/orbit/production/api/REVIEW_ACCOUNT_EMAIL` and its code from `/orbit/production/api/REVIEW_ACCOUNT_CODE`.
-Both are SecureString parameters, and only the production API group receives them. Staging review sign-in uses `TEST_ACCOUNTS`.
-When the address matches and the code is exactly six ASCII digits, send-code seeds that code and enqueues no email.
-For the same pair, SES skips every message to the address, so nothing bounces. A missing or malformed value seeds nothing and the address receives a normal emailed code.
-Generate the code once with `LC_ALL=C tr -dc '0-9' < /dev/urandom | head -c 6`, and give it only to the store consoles.
-After you change either parameter, apply a plan restricted to `-target=render_env_group.production_api`, then update the login details in Play Console and App Store Connect.
-The reviewer still passes Turnstile in the app, as every user does.
+Google Play and App Store review sign in to production with a dedicated account that has no mailbox and no personal data. Production reads its address from `/orbit/production/api/REVIEW_ACCOUNT_EMAIL` and its code from `/orbit/production/api/REVIEW_ACCOUNT_CODE`. Only the production API group receives them.
 
-For migration releases, set GitHub Actions environment `production` variable
-`RENDER_PRODUCTION_POSTGRES_ID` to the production database id from Render Dashboard.
-Admission diffs migrations from the latest successful trusted production deployment
-against the selected SHA. With any migration change it creates a fresh Render export
-and waits for a new export id with a download URL before triggering the deploy.
-The deployment payload and release summary record the export id. A missing database
-id, unavailable export or missing deployment baseline blocks the release. The
-operator does not supply an unverified restore-point id. Export creation and listing
-use the Render Postgres export endpoint documented in its public OpenAPI schema.
+When the address matches and the code is exactly six ASCII digits, send-code seeds that code and queues no email. For the same pair, SES skips each message to the address, so nothing bounces. A value that is absent or malformed seeds nothing, and the address receives a normal emailed code. The reviewer still passes Turnstile in the app.
 
-### Migration lock budget
+Generate the code once with `LC_ALL=C tr -dc '0-9' < /dev/urandom | head -c 6`. After you change a parameter, apply a plan targeted to `render_env_group.production_api`. Then update the login details in the store consoles.
 
-The migration lock gate inspects every compiled migration after the pinned applied
-baseline in `.github/migration-locks.json`. Existing-table indexes use concurrent
-creation with transaction suppression. Fluent index drops are rejected because the
-installed provider does not suppress their transaction; use raw `DROP INDEX
-CONCURRENTLY` with `suppressTransaction: true`. Backfills use bounded primary-key
-ranges, one SQL operation per batch with transaction suppression, so locks release
-between batches. Procedural and dynamic SQL need reviewed evidence.
+## Migration lock budget
 
-Add foreign keys and checks as `NOT VALID`, then validate in a separate
-transaction-suppressed operation. Suppress the add operation too, releasing its
-initial table lock before validation.
-Set a finite, nonzero `lock_timeout` of at most five seconds before altering an
-existing table. A required column needs a validated not-null check first. Type
-rewrites fail; prefer a length check added without validation. Per-migration
-exceptions name the rule, measured row count, expected lock milliseconds, review URL
-and reason in the same policy file. Raising the applied baseline is not an exception.
+The migration lock gate checks each compiled migration after the applied baseline in `.github/migration-locks.json`. These rules apply:
 
-### Production plan monitor
+- Create an index on a table that already exists concurrently, with transaction suppression.
+- Drop an index with a raw `DROP INDEX CONCURRENTLY` and `suppressTransaction: true`, never a fluent drop.
+- Run a backfill in bounded primary-key ranges, one suppressed SQL operation for each batch.
+- Add a foreign key or a check as `NOT VALID`. Validate it in a separate suppressed operation.
+- Set a `lock_timeout` of at most five seconds before you alter a table that already exists.
+- Add a validated not-null check before a required column.
+- Do not rewrite a type. Add a length check without validation instead.
+- Give procedural and dynamic SQL reviewed evidence.
 
-The production infrastructure plan workflow runs daily and on manual dispatch
-from main. Its `render-operations` environment assumes
-`orbit-production-plan`, refreshes only the guarded services and API env group with
-their dependency graph, and never applies. Terraform binary plans, refresh logs and
-input files stay in a private temporary directory that is deleted on exit. JSON is
-piped into the web and production checkers; neither plans nor state are published.
-Any guarded change or drift, a different sender, or a shutdown delay other than 300
-seconds fails the job. A legitimate configuration change needs a reviewed targeted
-apply before this monitor can become green again.
-The release workflows deploy image digests outside Terraform. Thus each release causes
-refresh drift on `runtime_source.image.digest` and `runtime_source.image.tag`.
-The production checker accepts an update drift on a guarded web service only when it
-changes nothing but those two attributes. Drift on any other attribute fails the job.
+An exception for one migration names the rule, the measured row count, the expected lock time in milliseconds, the review URL, and the reason. It lives in the same policy file. A higher applied baseline is not an exception.
 
-An operator must target `aws_iam_role.production_plan` and
-`aws_iam_role_policy.production_plan` in an apply before the workflow can assume the
-role. The state permission reads only `render/terraform.tfstate`. Provider reads are
-limited to the dependency graph's API SSM paths, upload buckets, IAM users, SES
-configuration sets, SNS topic and KMS key. The AWS provider first reads upload bucket
-tags with the S3 Control `s3:ListTagsForResource` call. The role does not grant it, so
-CloudTrail records an `AccessDenied` for each bucket. The provider then reads the tags
-with `s3:GetBucketTagging`, and the plan continues. Both environment API paths are needed
-because Terraform evaluates shared for-each maps. SSM `DescribeParameters` has no
-resource-level authorization; its metadata read is restricted to `us-east-2`.
-Decryption is restricted to SSM and those API parameter encryption contexts.
-`GetParametersByPath` authorizes the exact hierarchy roots configured by
-`onboarding_platform`; individual parameter reads retain their child-path scope.
+## Production plan monitor
 
-In GitHub Settings > Environments > `render-operations`, add secret
-`CLOUDFLARE_READ_ONLY_API_TOKEN` from Cloudflare My Profile > API Tokens with Account
-Turnstile Read for the managed account. Add secret `PRODUCTION_PLAN_TFVARS` as a JSON
-object containing the reviewed local Terraform input values, including the four
-image digest variables, the non-empty `production_postgres_ip_allow_list`,
-`web_custom_domains` and any other configured custom domains or alert recipients.
-Retain the environment's `RENDER_API_KEY`. A dispatch from main must pass with the
-read-only role and both checkers before considering the monitor operational. A pull
-request runs mock-provider Terraform tests and never receives these credentials.
-After provisioning these prerequisites and observing a successful dispatch, add
-the `push` trigger for `main` in a follow-up commit of this ticket and update its
-workflow regression test. Keep the scheduled and manual triggers.
+The production infrastructure plan workflow runs daily and on manual dispatch from `main`. Its environment `render-operations` assumes the role `orbit-production-plan`. It refreshes only the guarded services and the API environment group, with their dependency graph, and never applies. It publishes no plan and no state.
 
-Both production image services ignore service-level `env_vars` changes. Linking
-the managed groups preserves Render service overrides instead of replacing them
-with only the Terraform group marker.
+The job fails on a guarded change or drift, on a different sender, and on a shutdown delay other than 300 seconds. A configuration change needs a reviewed targeted apply first. Each release deploys a digest outside Terraform, so it causes refresh drift on `runtime_source.image.digest` and `runtime_source.image.tag`. The production checker accepts a web service drift only on those two attributes.
 
-### Landing content security policy
+Apply `aws_iam_role.production_plan` and `aws_iam_role_policy.production_plan` with targets before the workflow can assume the role. The role does not grant `s3:ListTagsForResource`, so CloudTrail records an expected `AccessDenied` for each bucket. The provider then uses `s3:GetBucketTagging`.
 
-Both static sites have an enforcing Terraform CSP header by default. The allowlist
-contains the same-origin assets, the environment API and Cloudflare Turnstile.
-`landing-csp.tf` hashes the emitted inline font styles and the exact existing style
-attributes, using `style-src-attr 'unsafe-hashes'` for only those attributes. It also
-lists the inline structured-data script hashes. Executable scripts in the reviewed
-landing source are bundled modules. `fixtures/landing-inline-blocks.json` records
-the source commit, public page URLs and exact bytes used to derive every hash.
-Recompute these SHA-256 sources whenever the landing's emitted inline bytes change;
-never add `unsafe-inline` to work around a mismatch.
+The environment `render-operations` needs the secrets `RENDER_API_KEY`, `CLOUDFLARE_READ_ONLY_API_TOKEN` (Account Turnstile Read), and `PRODUCTION_PLAN_TFVARS`. The last one is a JSON object with the reviewed Terraform inputs, with the four digest variables and the non-empty `production_postgres_ip_allow_list`. A pull request runs mock-provider Terraform tests and never receives these credentials.
 
-The operator first runs a targeted apply for `render_static_site.staging_landing`
-with `staging_landing_csp_report_only=true`. Read the report-only response header,
-then check the home page, waitlist section, confirmation page including
-`?status=invalid`, and 404 console. Complete Turnstile and a staging waitlist signup,
-accept and revoke consent, and check the PostHog relay and app links. With no CSP
-violations, target the same staging resource with the variable set to false and
-repeat the checks. Only then target `render_static_site.landing` in production.
-Verify the enforcing header with `curl -sI` on both sites and repeat the production
-home and waitlist console checks. Keep all five existing security headers.
+## Landing content security policy
 
-The worker does not open a browser or apply infrastructure. These rollout checks
-belong to the operator. For a staging rollback, target the staging resource with
-`staging_landing_csp_report_only=true`. For a production rollback, change only its
-header name to `Content-Security-Policy-Report-Only` and target the production static
-site. Landing source changes remain in the landing ticket.
+Both static sites send a Terraform CSP header that enforces the policy by default. The variable `staging_landing_csp_report_only` in `infra/landing-csp.tf` switches the staging site to the report-only header. `infra/landing-csp.tf` hashes the inline font styles, the exact style attributes, and the inline structured-data scripts. `infra/fixtures/landing-inline-blocks.json` holds the bytes that the hashes come from. Compute the hashes again when the inline bytes change. Never add `unsafe-inline`.
