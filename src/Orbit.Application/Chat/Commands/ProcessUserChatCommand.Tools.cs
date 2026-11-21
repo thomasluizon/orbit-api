@@ -197,6 +197,7 @@ public partial class ProcessUserChatCommandHandler
             RejectedCallCorrection rejected => await ExecuteCorrectionsAsync(orderedCalls, rejected, request, executionResults, cancellationToken),
             _ => await ExecuteToolCallsAsync(orderedCalls, request, executionResults, language, cancellationToken)
         };
+        NoteReferenceWrites(outcomesByCallId.Values);
         if (correction is null)
             ReplaceResentDeniedWrites(orderedCalls, outcomesByCallId, executionResults);
         await CompletePlanCallsAsync(outcomesByCallId, request, executionResults);
@@ -243,7 +244,7 @@ public partial class ProcessUserChatCommandHandler
         RefreshAskSchema(aiResponse.ConversationContext, request, context, executionResults);
         toolResults.AddRange(planResults);
         cancellationToken.ThrowIfCancellationRequested();
-        var continueResult = await ai.IntentService.ContinueWithToolResultsAsync(aiResponse.ConversationContext!, toolResults,
+        var continueResult = await Model.ContinueWithToolResultsAsync(aiResponse.ConversationContext!, toolResults,
             correction is null ? aiStreamSink : null, cancellationToken);
         if (continueResult.IsFailure)
         {
@@ -457,6 +458,9 @@ public partial class ProcessUserChatCommandHandler
         string? language,
         CancellationToken cancellationToken)
     {
+        var referenceFailures = orderedCalls.Select(call => (call.Id, Outcome: ReferenceFailureOutcome(call)))
+            .Where(pair => pair.Outcome is not null).ToDictionary(pair => pair.Id, pair => pair.Outcome!, StringComparer.Ordinal);
+        orderedCalls = orderedCalls.Where(call => !referenceFailures.ContainsKey(call.Id)).ToList();
         var readOnlyCalls = orderedCalls
             .Where(call => call.Name != "ask" && ai.ToolRegistry.GetTool(call.Name)?.IsReadOnly == true)
             .ToList();
@@ -480,7 +484,7 @@ public partial class ProcessUserChatCommandHandler
             .ToList();
         var readOnlyOutcomes = await Task.WhenAll(readOnlyTasks);
 
-        var outcomesByCallId = new Dictionary<string, ToolCallOutcome>(orderedCalls.Count, StringComparer.Ordinal);
+        var outcomesByCallId = new Dictionary<string, ToolCallOutcome>(referenceFailures, StringComparer.Ordinal);
         foreach (var call in excessReads)
             outcomesByCallId[call.Id] = new ToolCallOutcome(
                 new AiToolCallResult(call.Name, call.Id, false, null, null, "Read call limit reached; narrow the request or read the next page in another round."),

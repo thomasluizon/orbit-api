@@ -1,3 +1,4 @@
+using Orbit.Application.Chat.References;
 using System.Linq.Expressions;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
@@ -253,6 +254,8 @@ public partial class ProcessUserChatCommandHandlerTests
     private async Task AssertUnboundRecoveryRejectedAsync(IAiTool tool, string originalJson, string replacementJson)
     {
         SetupUserAndPayGate();
+        OwnRecords(_notificationRepo, notification => new ReferenceRecord(Guid.Parse(RecoveryNotificationId), notification.Title),
+            Notification.Create(UserId, "First", "Body"));
         var original = ParseArguments(originalJson);
         var replacement = ParseArguments(replacementJson);
         var schema = JsonSerializer.SerializeToElement(tool.GetParameterSchema());

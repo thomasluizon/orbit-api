@@ -15,6 +15,12 @@ public sealed class AiSettings
     public int MaxRetries { get; init; } = 2;
 
     /// <summary>
+    /// Model text of the chat names each record of a listed type by a short reference in place of its GUID. Off shows
+    /// full GUIDs; the chat boundary still resolves each reference and each full GUID that the model sends.
+    /// </summary>
+    public bool ShortReferences { get; init; } = true;
+
+    /// <summary>
     /// Bounds buffered calls independently of per-attempt timeouts and retry count.
     /// Allows a 90-second failed attempt, a 90-second successful retry and five seconds for
     /// retry wait and processing. Longer server-directed retry waits consume this same deadline.

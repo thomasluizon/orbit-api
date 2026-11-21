@@ -170,6 +170,7 @@ public partial class ProcessUserChatCommandHandlerTests
                 .PadRight(AppConstants.MaxHabitTitleLength, '\u6f22')
                 : $"Daily habit {index:D3} " + new string('x', 50), FrequencyUnit.Day, 1, Today)).Value).ToList();
         foreach (var habit in habits) habit.Log(Today, advanceDueDate: false).IsSuccess.Should().BeTrue();
+        SetupSelectionHabits([.. habits]);
         var tokens = new HabitRankingTokenService(Options.Create(new JwtSettings
         {
             SecretKey = "payload-budget-ranking-signing-secret",

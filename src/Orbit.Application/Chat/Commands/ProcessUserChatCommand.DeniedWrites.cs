@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Orbit.Application.Chat.References;
 using System.Text.Json.Nodes;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Habits.Services;
@@ -249,7 +250,7 @@ public partial class ProcessUserChatCommandHandler
     /// </summary>
     private static ToolCallOutcome DescribeUnownedTargets(AiToolCall call, ToolCallOutcome outcome, ToolExecutionAccumulator results)
     {
-        if (!IsOwnershipWriteDenial(outcome))
+        if (!IsOwnershipWriteDenial(outcome) || outcome.FailureKey == NormalizedToolCall.ErrorCode)
             return outcome;
         var owned = results.AllHabits.Select(habit => habit.Id).ToHashSet();
         var unknown = TargetsOf(call.Args).Where(target => !Guid.TryParse(target.Value, out var id) || target.Habit && !owned.Contains(id))

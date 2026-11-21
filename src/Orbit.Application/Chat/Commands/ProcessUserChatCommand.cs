@@ -4,6 +4,7 @@ using MediatR;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Chat.Models;
 using Orbit.Application.Chat.Grounding;
+using Orbit.Application.Chat.References;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Common;
 using Orbit.Application.Goals.Services;
@@ -163,7 +164,8 @@ public partial class ProcessUserChatCommandHandler(
     IAppConfigService appConfig,
     IContentModerationService moderation,
     IConversationTurnRecorder? conversationRecorder = null, ReadBlockFactory? readBlocks = null,
-    TimeProvider? timeProvider = null, IConversationOfferStore? offerStore = null) : IRequestHandler<ProcessUserChatCommand, Result<ChatResponse>>
+    TimeProvider? timeProvider = null, IConversationOfferStore? offerStore = null,
+    ChatReferenceDependencies? references = null) : IRequestHandler<ProcessUserChatCommand, Result<ChatResponse>>
 {
     private static class PartKinds
     {
@@ -188,6 +190,7 @@ public partial class ProcessUserChatCommandHandler(
         CancellationToken cancellationToken)
     {
         using var timer = ChatTurnTimer.Begin(timeProvider ?? TimeProvider.System);
+        using var referenceTurn = BeginReferenceTurn(request);
         using var reads = new ChatTurnReadScope(request.UserId,
             await data.UserRepository.GetByIdAsync(request.UserId, cancellationToken));
         ChatEvalTraceCollector? evalTrace = null;
@@ -500,6 +503,7 @@ public partial class ProcessUserChatCommandHandler(
 
         request = ApplyClientKillFlags(request, context.EnabledFeatureFlags);
         CaptureFollowUpSentEvent(request, context.User);
+        SeedReferences(context);
 
         var userLanguage = context.Language;
         GroundingTurn groundingTurn;

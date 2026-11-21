@@ -28,7 +28,7 @@ public partial class ProcessUserChatCommandHandler
             }
         };
         ct.ThrowIfCancellationRequested();
-        var replanned = await ai.IntentService.ContinueWithToolResultsAsync(response.ConversationContext!,
+        var replanned = await Model.ContinueWithToolResultsAsync(response.ConversationContext!,
             [recoveryResult], null, ct);
         ct.ThrowIfCancellationRequested();
         if (replanned.IsFailure || replanned.Value.IsTruncated

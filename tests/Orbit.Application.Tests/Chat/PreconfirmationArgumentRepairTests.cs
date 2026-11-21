@@ -146,10 +146,9 @@ public partial class ProcessUserChatCommandHandlerTests
         var result = await handler.Handle(new(UserId, "Prepare the requested preview.", ClientContext: OfferClient("en")), default);
 
         result.IsSuccess.Should().BeTrue(result.Error);
-        var rejection = outcomes.Should().ContainSingle().Which;
-        rejection.Should().NotBeOfType<RepairableArgumentResponse>();
-        rejection.Operation.Status.Should().Be(AgentOperationStatus.Denied);
-        rejection.Operation.PolicyReason.Should().Be(code);
+        outcomes.Should().BeEmpty("the chat boundary turns down an id of no record of the person before the argument check");
+        result.Value.PolicyDenials.Should().ContainSingle().Which.Reason
+            .Should().StartWith($"unknown_reference:{operation}:").And.NotBe(code);
         result.Value.PendingOperations.Should().BeNullOrEmpty();
     }
 
