@@ -18,9 +18,9 @@ file on its own head. Nothing here configures that review.
 - After tests pass, open or update the pull request and put the intended approach in
   its body: the change made, the files it landed in, and why that shape was chosen.
 - Analyzer gates (silent in local builds, CI-fatal): ORBIT0001 narration comments,
-  ORBIT0002 redundant rollbacks, ORBIT0003 controller authorization, ORBIT0004 raw
-  `DateTime.UtcNow` for user-facing dates (use `IUserDateService.GetUserTodayAsync`),
-  ORBIT0005 unconfigured DbSet. Grep for bare `//` comments before pushing.
+  ORBIT0003 controller authorization, ORBIT0004 raw
+  `DateTime.UtcNow` for user-facing dates (use `IUserDateService.GetUserTodayAsync`).
+  Grep for bare `//` comments before pushing.
 - The dash ban is CI-enforced (`tools/check-dashes.mjs`): never type an em dash
   anywhere, including commits and PR text.
 - New features need FluentValidation validators AND domain-entity guards; the backend
