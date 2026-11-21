@@ -49,7 +49,8 @@ public sealed class PreviewAllHabitSuggestionsCommandHandler(HabitSuggestionServ
                 var response = await executor.ExecuteAsync(new(request.UserId,
                     operationId, arguments,
                     AgentExecutionSurface.Chat, request.AuthMethod, request.GrantedScopes, request.IsReadOnlyCredential,
-                    IncludeChangePreview: true, PreviewOnly: true), ct);
+                    IncludeChangePreview: true, PreviewOnly: true,
+                    ClientContext: PreviewHabitSuggestionCommandHandler.ClientContext(request.Language)), ct);
                 if (response.PendingOperation is { } member) pending.Add(member);
                 if (response.Operation.Status != AgentOperationStatus.PendingConfirmation || response.PendingOperation is null)
                     return Result.Success(response);
@@ -59,7 +60,8 @@ public sealed class PreviewAllHabitSuggestionsCommandHandler(HabitSuggestionServ
                     return Result.Success(response);
                 }
             }
-            var combined = await changeSets.CombineAsync(request.UserId, pending, ct, requireAllMembers: true);
+            var combined = await changeSets.CombineAsync(request.UserId, pending, ct,
+                PreviewHabitSuggestionCommandHandler.ClientContext(request.Language), requireAllMembers: true);
             if (combined is null)
                 return Result.Failure<AgentExecuteOperationResponse>(HabitSuggestionService.Unavailable(request.Language), "HABIT_SUGGESTION_UNAVAILABLE");
             complete = true;

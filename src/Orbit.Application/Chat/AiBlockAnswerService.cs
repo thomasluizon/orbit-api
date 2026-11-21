@@ -303,7 +303,11 @@ public sealed class AiBlockAnswerService(
                 request.UserId, "bulk_" + definition.Action,
                 arguments, AgentExecutionSurface.Chat,
                 request.AuthMethod, request.GrantedScopes, request.IsReadOnlyCredential,
-                CorrelationId: request.CorrelationId, IncludeChangePreview: true, PreviewOnly: true), token);
+                CorrelationId: request.CorrelationId, IncludeChangePreview: true, PreviewOnly: true,
+                ClientContext: request.ClientContext)
+            {
+                PendingOperationConversation = request.PendingOperationConversation
+            }, token);
         observeTool?.Invoke(new ConversationToolCall("block-preview", "bulk_" + definition.Action,
             arguments.Clone(), preview.Operation.Status == AgentOperationStatus.Succeeded,
             preview.Operation.PolicyReason ?? (preview.Operation.Status == AgentOperationStatus.Succeeded
@@ -343,7 +347,7 @@ public sealed class AiBlockAnswerService(
             if (execution is null)
                 continue;
             var preview = previewer is null ? null : await previewer.PreviewSafelyAsync(
-                userId, execution.OperationId, execution.Arguments, logger ?? NullLogger.Instance, ct);
+                userId, execution.OperationId, execution.Arguments, logger ?? NullLogger.Instance, ct, request.ClientContext);
             if (preview is null && operation.PreviewFingerprint != execution.PreviewFingerprint)
                 throw new AnswerRejectedException(Failure(ErrorCodes.AiBlockAnswered));
             current.Add(preview is null ? operation : operation with

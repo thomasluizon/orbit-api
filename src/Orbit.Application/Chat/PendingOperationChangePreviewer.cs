@@ -59,7 +59,7 @@ public sealed partial class PendingOperationChangePreviewer(
         CancellationToken cancellationToken)
     {
         if (operationId == AccountChangeSet.OperationName)
-            return Result.Success(await AccountChangeSet.PreviewAsync(userId, arguments, this, cancellationToken, clientContext));
+            return Result.Success(await PreviewChangeSetAsync(userId, arguments, clientContext, cancellationToken));
         if (!arguments.TryGetProperty("revised_items", out _) && toolRegistry.GetTool(operationId) is { } tool)
             arguments = tool is BulkCreateHabitsTool bulk
                 ? bulk.PrepareArguments(arguments)
@@ -69,24 +69,17 @@ public sealed partial class PendingOperationChangePreviewer(
         if (RequiresEmojiInference(operationId, arguments))
             return await PreviewInferredEmojisAsync(userId, arguments, cancellationToken);
         if (operationId is "create_habit" or "create_sub_habit" or BulkCreateHabits)
-            return Result.Success(await LocalizePreviewAsync(await PreviewPlacementAsync(userId, operationId, arguments, cancellationToken, clientContext), userId, clientContext, cancellationToken));
-        return Result.Success(await LocalizePreviewAsync(await PreviewChangesAsync(userId, operationId, arguments, cancellationToken), userId, clientContext, cancellationToken));
+            return Result.Success(await PreviewPlacementAsync(userId, operationId, arguments, cancellationToken, clientContext));
+        return Result.Success(await PreviewChangesAsync(userId, operationId, arguments, cancellationToken));
     }
 
-    private async Task<PendingOperationChangePreview?> LocalizePreviewAsync(PendingOperationChangePreview? preview,
+    private async Task<PendingOperationChangePreview> LocalizeAsync(PendingOperationChangePreview preview,
         Guid userId, AgentClientContext? client, CancellationToken ct)
     {
-        if (preview is null)
-            return null;
-        var hasRepeat = preview.Changes.Any(c => c.Field == RepeatReminderToolArguments.Field)
-            || preview.Items?.Any(i => i.Fields.Any(f => f.Field == RepeatReminderToolArguments.Field)) == true;
-        var zone = hasRepeat ? await userDateService.GetUserTimeZoneAsync(userId, ct) : null;
-        return LocalizeActions(preview, client, zone ?? TimeZoneInfo.Utc);
-    }
-
-    private static PendingOperationChangePreview? LocalizeActions(PendingOperationChangePreview? preview, AgentClientContext? client, TimeZoneInfo zone)
-    {
-        if (preview is null) return null;
+        static bool IsRepeat(PendingOperationChange field) => field.Field == RepeatReminderToolArguments.Field
+            || field.Field.EndsWith("/" + RepeatReminderToolArguments.Field, StringComparison.Ordinal);
+        var hasRepeat = preview.Changes.Any(IsRepeat) || preview.Items?.Any(item => item.Fields.Any(IsRepeat)) == true;
+        var zone = (hasRepeat ? await userDateService.GetUserTimeZoneAsync(userId, ct) : null) ?? TimeZoneInfo.Utc;
         var skip = Orbit.Application.Common.LocaleHelper.IsPortuguese(client?.Locale) ? "Pular" : "Skip";
         PendingOperationChange Localize(PendingOperationChange field) => field.Field == RepeatReminderToolArguments.Field
             ? field with
@@ -94,6 +87,7 @@ public sealed partial class PendingOperationChangePreviewer(
                 OldValue = RepeatReminderPreview.Format(field.OldValue, client, zone),
                 NewValue = RepeatReminderPreview.Format(field.NewValue, client, zone)
             }
+            : IsRepeat(field) ? field with { NewValue = RepeatReminderPreview.Format(field.NewValue, client, zone) }
             : field is { Field: "action", NewValue: "skip" } ? field with { NewValue = skip } : field;
         return preview with
         {
@@ -713,7 +707,8 @@ public sealed partial class PendingOperationChangePreviewer(
             var entityEmoji = existing is not null ? existing.Emoji : AgentArgumentPreview.DraftEmoji(habit);
             fields = fields.Select(field => field with { EntityEmoji = entityEmoji }).ToList();
             items.Add(new PendingOperationItem(itemId, existing?.Id,
-                existing?.Title ?? name, fields, AgentOperationFingerprint.Compute(BulkCreateHabits + parentFingerprint, habit.GetRawText()),
+                existing?.Title ?? name, fields, AgentOperationFingerprint.Compute(BulkCreateHabits + parentFingerprint,
+                    ProactiveProposal.StripMetadata(habit).GetRawText()),
                 RemovesData: false, ValidationErrors: errors.Count > 0 ? errors : null,
                 FieldOptions: parentOptions is null && reuseOptions is null ? null
                     : new[] { parentOptions, reuseOptions }.OfType<PendingOperationFieldOptions>().ToArray(),
@@ -859,8 +854,7 @@ public sealed partial class PendingOperationChangePreviewer(
             return BulkNoChangesOutcome.Supports(operationId)
                 ? new PendingOperationChangePreview([], 0, [])
                 : null;
-        var fingerprint = AgentOperationFingerprint.Compute(operationId, JsonSerializer.Serialize(items));
-        return new PendingOperationChangePreview(changes, items.Count, items, fingerprint);
+        return new PendingOperationChangePreview(changes, items.Count, items, PreviewHashView.Compute(operationId, items));
     }
 
     private static string FingerprintHabit(Habit habit) => AgentOperationFingerprint.Compute(

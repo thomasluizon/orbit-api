@@ -1,0 +1,4982 @@
+{
+  "01-bulk-update/en": {
+    "changes": [
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000001",
+        "EntityName": "Water",
+        "Field": "title",
+        "OldValue": "Water",
+        "NewValue": "Agua",
+        "ValueType": "text",
+        "ProposedValue": "Agua",
+        "IsEditable": true
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000002",
+        "EntityName": "Water",
+        "Field": "title",
+        "OldValue": "Water",
+        "NewValue": "Agua",
+        "ValueType": "text",
+        "ProposedValue": "Agua",
+        "IsEditable": true
+      }
+    ],
+    "items": [
+      {
+        "ItemId": "00000000-0000-0000-0000-000000000001",
+        "EntityId": "00000000-0000-0000-0000-000000000001",
+        "EntityName": "Water",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000001",
+            "EntityName": "Water",
+            "Field": "title",
+            "OldValue": "Water",
+            "NewValue": "Agua",
+            "ValueType": "text",
+            "ProposedValue": "Agua",
+            "IsEditable": true
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": false
+      },
+      {
+        "ItemId": "00000000-0000-0000-0000-000000000002",
+        "EntityId": "00000000-0000-0000-0000-000000000002",
+        "EntityName": "Water",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000002",
+            "EntityName": "Water",
+            "Field": "title",
+            "OldValue": "Water",
+            "NewValue": "Agua",
+            "ValueType": "text",
+            "ProposedValue": "Agua",
+            "IsEditable": true
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": false
+      }
+    ]
+  },
+  "01-bulk-update/pt-BR": {
+    "changes": [
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000001",
+        "EntityName": "Water",
+        "Field": "title",
+        "OldValue": "Water",
+        "NewValue": "Agua",
+        "ValueType": "text",
+        "ProposedValue": "Agua",
+        "IsEditable": true
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000002",
+        "EntityName": "Water",
+        "Field": "title",
+        "OldValue": "Water",
+        "NewValue": "Agua",
+        "ValueType": "text",
+        "ProposedValue": "Agua",
+        "IsEditable": true
+      }
+    ],
+    "items": [
+      {
+        "ItemId": "00000000-0000-0000-0000-000000000001",
+        "EntityId": "00000000-0000-0000-0000-000000000001",
+        "EntityName": "Water",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000001",
+            "EntityName": "Water",
+            "Field": "title",
+            "OldValue": "Water",
+            "NewValue": "Agua",
+            "ValueType": "text",
+            "ProposedValue": "Agua",
+            "IsEditable": true
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": false
+      },
+      {
+        "ItemId": "00000000-0000-0000-0000-000000000002",
+        "EntityId": "00000000-0000-0000-0000-000000000002",
+        "EntityName": "Water",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000002",
+            "EntityName": "Water",
+            "Field": "title",
+            "OldValue": "Water",
+            "NewValue": "Agua",
+            "ValueType": "text",
+            "ProposedValue": "Agua",
+            "IsEditable": true
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": false
+      }
+    ]
+  },
+  "01-bulk-delete/en": {
+    "changes": [
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000001",
+        "EntityName": "Water",
+        "Field": "delete",
+        "OldValue": null,
+        "NewValue": null,
+        "ValueType": "action",
+        "ProposedValue": null,
+        "IsEditable": false
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000002",
+        "EntityName": "Water",
+        "Field": "delete",
+        "OldValue": null,
+        "NewValue": null,
+        "ValueType": "action",
+        "ProposedValue": null,
+        "IsEditable": false
+      }
+    ],
+    "items": [
+      {
+        "ItemId": "00000000-0000-0000-0000-000000000001",
+        "EntityId": "00000000-0000-0000-0000-000000000001",
+        "EntityName": "Water",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000001",
+            "EntityName": "Water",
+            "Field": "delete",
+            "OldValue": null,
+            "NewValue": null,
+            "ValueType": "action",
+            "ProposedValue": null,
+            "IsEditable": false
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": true
+      },
+      {
+        "ItemId": "00000000-0000-0000-0000-000000000002",
+        "EntityId": "00000000-0000-0000-0000-000000000002",
+        "EntityName": "Water",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000002",
+            "EntityName": "Water",
+            "Field": "delete",
+            "OldValue": null,
+            "NewValue": null,
+            "ValueType": "action",
+            "ProposedValue": null,
+            "IsEditable": false
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": true
+      }
+    ]
+  },
+  "01-bulk-delete/pt-BR": {
+    "changes": [
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000001",
+        "EntityName": "Water",
+        "Field": "delete",
+        "OldValue": null,
+        "NewValue": null,
+        "ValueType": "action",
+        "ProposedValue": null,
+        "IsEditable": false
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000002",
+        "EntityName": "Water",
+        "Field": "delete",
+        "OldValue": null,
+        "NewValue": null,
+        "ValueType": "action",
+        "ProposedValue": null,
+        "IsEditable": false
+      }
+    ],
+    "items": [
+      {
+        "ItemId": "00000000-0000-0000-0000-000000000001",
+        "EntityId": "00000000-0000-0000-0000-000000000001",
+        "EntityName": "Water",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000001",
+            "EntityName": "Water",
+            "Field": "delete",
+            "OldValue": null,
+            "NewValue": null,
+            "ValueType": "action",
+            "ProposedValue": null,
+            "IsEditable": false
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": true
+      },
+      {
+        "ItemId": "00000000-0000-0000-0000-000000000002",
+        "EntityId": "00000000-0000-0000-0000-000000000002",
+        "EntityName": "Water",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000002",
+            "EntityName": "Water",
+            "Field": "delete",
+            "OldValue": null,
+            "NewValue": null,
+            "ValueType": "action",
+            "ProposedValue": null,
+            "IsEditable": false
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": true
+      }
+    ]
+  },
+  "01-bulk-emoji/en": {
+    "changes": [
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000001",
+        "EntityName": "Water",
+        "Field": "emoji",
+        "OldValue": null,
+        "NewValue": "\uD83E\uDD64",
+        "ValueType": "emoji",
+        "ProposedValue": "\uD83E\uDD64",
+        "IsEditable": true
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000002",
+        "EntityName": "Water",
+        "Field": "emoji",
+        "OldValue": null,
+        "NewValue": "\uD83E\uDD64",
+        "ValueType": "emoji",
+        "ProposedValue": "\uD83E\uDD64",
+        "IsEditable": true
+      }
+    ],
+    "items": [
+      {
+        "ItemId": "00000000-0000-0000-0000-000000000001",
+        "EntityId": "00000000-0000-0000-0000-000000000001",
+        "EntityName": "Water",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000001",
+            "EntityName": "Water",
+            "Field": "emoji",
+            "OldValue": null,
+            "NewValue": "\uD83E\uDD64",
+            "ValueType": "emoji",
+            "ProposedValue": "\uD83E\uDD64",
+            "IsEditable": true
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": false
+      },
+      {
+        "ItemId": "00000000-0000-0000-0000-000000000002",
+        "EntityId": "00000000-0000-0000-0000-000000000002",
+        "EntityName": "Water",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000002",
+            "EntityName": "Water",
+            "Field": "emoji",
+            "OldValue": null,
+            "NewValue": "\uD83E\uDD64",
+            "ValueType": "emoji",
+            "ProposedValue": "\uD83E\uDD64",
+            "IsEditable": true
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": false
+      }
+    ]
+  },
+  "01-bulk-emoji/pt-BR": {
+    "changes": [
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000001",
+        "EntityName": "Water",
+        "Field": "emoji",
+        "OldValue": null,
+        "NewValue": "\uD83E\uDD64",
+        "ValueType": "emoji",
+        "ProposedValue": "\uD83E\uDD64",
+        "IsEditable": true
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000002",
+        "EntityName": "Water",
+        "Field": "emoji",
+        "OldValue": null,
+        "NewValue": "\uD83E\uDD64",
+        "ValueType": "emoji",
+        "ProposedValue": "\uD83E\uDD64",
+        "IsEditable": true
+      }
+    ],
+    "items": [
+      {
+        "ItemId": "00000000-0000-0000-0000-000000000001",
+        "EntityId": "00000000-0000-0000-0000-000000000001",
+        "EntityName": "Water",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000001",
+            "EntityName": "Water",
+            "Field": "emoji",
+            "OldValue": null,
+            "NewValue": "\uD83E\uDD64",
+            "ValueType": "emoji",
+            "ProposedValue": "\uD83E\uDD64",
+            "IsEditable": true
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": false
+      },
+      {
+        "ItemId": "00000000-0000-0000-0000-000000000002",
+        "EntityId": "00000000-0000-0000-0000-000000000002",
+        "EntityName": "Water",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000002",
+            "EntityName": "Water",
+            "Field": "emoji",
+            "OldValue": null,
+            "NewValue": "\uD83E\uDD64",
+            "ValueType": "emoji",
+            "ProposedValue": "\uD83E\uDD64",
+            "IsEditable": true
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": false
+      }
+    ]
+  },
+  "01-bulk-log/en": {
+    "changes": [
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000001",
+        "EntityName": "Water",
+        "Field": "date",
+        "OldValue": null,
+        "NewValue": "2026-10-19",
+        "ValueType": "date",
+        "ProposedValue": "2026-10-19",
+        "IsEditable": true
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000002",
+        "EntityName": "Water",
+        "Field": "date",
+        "OldValue": null,
+        "NewValue": "2026-10-19",
+        "ValueType": "date",
+        "ProposedValue": "2026-10-19",
+        "IsEditable": true
+      }
+    ],
+    "items": [
+      {
+        "ItemId": "00000000-0000-0000-0000-000000000001",
+        "EntityId": "00000000-0000-0000-0000-000000000001",
+        "EntityName": "Water",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000001",
+            "EntityName": "Water",
+            "Field": "date",
+            "OldValue": null,
+            "NewValue": "2026-10-19",
+            "ValueType": "date",
+            "ProposedValue": "2026-10-19",
+            "IsEditable": true
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": false
+      },
+      {
+        "ItemId": "00000000-0000-0000-0000-000000000002",
+        "EntityId": "00000000-0000-0000-0000-000000000002",
+        "EntityName": "Water",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000002",
+            "EntityName": "Water",
+            "Field": "date",
+            "OldValue": null,
+            "NewValue": "2026-10-19",
+            "ValueType": "date",
+            "ProposedValue": "2026-10-19",
+            "IsEditable": true
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": false
+      }
+    ]
+  },
+  "01-bulk-log/pt-BR": {
+    "changes": [
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000001",
+        "EntityName": "Water",
+        "Field": "date",
+        "OldValue": null,
+        "NewValue": "2026-10-19",
+        "ValueType": "date",
+        "ProposedValue": "2026-10-19",
+        "IsEditable": true
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000002",
+        "EntityName": "Water",
+        "Field": "date",
+        "OldValue": null,
+        "NewValue": "2026-10-19",
+        "ValueType": "date",
+        "ProposedValue": "2026-10-19",
+        "IsEditable": true
+      }
+    ],
+    "items": [
+      {
+        "ItemId": "00000000-0000-0000-0000-000000000001",
+        "EntityId": "00000000-0000-0000-0000-000000000001",
+        "EntityName": "Water",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000001",
+            "EntityName": "Water",
+            "Field": "date",
+            "OldValue": null,
+            "NewValue": "2026-10-19",
+            "ValueType": "date",
+            "ProposedValue": "2026-10-19",
+            "IsEditable": true
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": false
+      },
+      {
+        "ItemId": "00000000-0000-0000-0000-000000000002",
+        "EntityId": "00000000-0000-0000-0000-000000000002",
+        "EntityName": "Water",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000002",
+            "EntityName": "Water",
+            "Field": "date",
+            "OldValue": null,
+            "NewValue": "2026-10-19",
+            "ValueType": "date",
+            "ProposedValue": "2026-10-19",
+            "IsEditable": true
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": false
+      }
+    ]
+  },
+  "01-bulk-skip/en": {
+    "changes": [
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000001",
+        "EntityName": "Water",
+        "Field": "date",
+        "OldValue": null,
+        "NewValue": "2026-10-19",
+        "ValueType": "date",
+        "ProposedValue": "2026-10-19",
+        "IsEditable": true
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000001",
+        "EntityName": "Water",
+        "Field": "action",
+        "OldValue": null,
+        "NewValue": "Skip",
+        "ValueType": "action",
+        "ProposedValue": "skip",
+        "IsEditable": false
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000002",
+        "EntityName": "Water",
+        "Field": "date",
+        "OldValue": null,
+        "NewValue": "2026-10-19",
+        "ValueType": "date",
+        "ProposedValue": "2026-10-19",
+        "IsEditable": true
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000002",
+        "EntityName": "Water",
+        "Field": "action",
+        "OldValue": null,
+        "NewValue": "Skip",
+        "ValueType": "action",
+        "ProposedValue": "skip",
+        "IsEditable": false
+      }
+    ],
+    "items": [
+      {
+        "ItemId": "00000000-0000-0000-0000-000000000001",
+        "EntityId": "00000000-0000-0000-0000-000000000001",
+        "EntityName": "Water",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000001",
+            "EntityName": "Water",
+            "Field": "date",
+            "OldValue": null,
+            "NewValue": "2026-10-19",
+            "ValueType": "date",
+            "ProposedValue": "2026-10-19",
+            "IsEditable": true
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000001",
+            "EntityName": "Water",
+            "Field": "action",
+            "OldValue": null,
+            "NewValue": "Skip",
+            "ValueType": "action",
+            "ProposedValue": "skip",
+            "IsEditable": false
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": false
+      },
+      {
+        "ItemId": "00000000-0000-0000-0000-000000000002",
+        "EntityId": "00000000-0000-0000-0000-000000000002",
+        "EntityName": "Water",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000002",
+            "EntityName": "Water",
+            "Field": "date",
+            "OldValue": null,
+            "NewValue": "2026-10-19",
+            "ValueType": "date",
+            "ProposedValue": "2026-10-19",
+            "IsEditable": true
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000002",
+            "EntityName": "Water",
+            "Field": "action",
+            "OldValue": null,
+            "NewValue": "Skip",
+            "ValueType": "action",
+            "ProposedValue": "skip",
+            "IsEditable": false
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": false
+      }
+    ]
+  },
+  "01-bulk-skip/pt-BR": {
+    "changes": [
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000001",
+        "EntityName": "Water",
+        "Field": "date",
+        "OldValue": null,
+        "NewValue": "2026-10-19",
+        "ValueType": "date",
+        "ProposedValue": "2026-10-19",
+        "IsEditable": true
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000001",
+        "EntityName": "Water",
+        "Field": "action",
+        "OldValue": null,
+        "NewValue": "Pular",
+        "ValueType": "action",
+        "ProposedValue": "skip",
+        "IsEditable": false
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000002",
+        "EntityName": "Water",
+        "Field": "date",
+        "OldValue": null,
+        "NewValue": "2026-10-19",
+        "ValueType": "date",
+        "ProposedValue": "2026-10-19",
+        "IsEditable": true
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000002",
+        "EntityName": "Water",
+        "Field": "action",
+        "OldValue": null,
+        "NewValue": "Pular",
+        "ValueType": "action",
+        "ProposedValue": "skip",
+        "IsEditable": false
+      }
+    ],
+    "items": [
+      {
+        "ItemId": "00000000-0000-0000-0000-000000000001",
+        "EntityId": "00000000-0000-0000-0000-000000000001",
+        "EntityName": "Water",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000001",
+            "EntityName": "Water",
+            "Field": "date",
+            "OldValue": null,
+            "NewValue": "2026-10-19",
+            "ValueType": "date",
+            "ProposedValue": "2026-10-19",
+            "IsEditable": true
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000001",
+            "EntityName": "Water",
+            "Field": "action",
+            "OldValue": null,
+            "NewValue": "Pular",
+            "ValueType": "action",
+            "ProposedValue": "skip",
+            "IsEditable": false
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": false
+      },
+      {
+        "ItemId": "00000000-0000-0000-0000-000000000002",
+        "EntityId": "00000000-0000-0000-0000-000000000002",
+        "EntityName": "Water",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000002",
+            "EntityName": "Water",
+            "Field": "date",
+            "OldValue": null,
+            "NewValue": "2026-10-19",
+            "ValueType": "date",
+            "ProposedValue": "2026-10-19",
+            "IsEditable": true
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000002",
+            "EntityName": "Water",
+            "Field": "action",
+            "OldValue": null,
+            "NewValue": "Pular",
+            "ValueType": "action",
+            "ProposedValue": "skip",
+            "IsEditable": false
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": false
+      }
+    ]
+  },
+  "02-dated-skip/en": {
+    "changes": [
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000001",
+        "EntityName": "Water",
+        "Field": "date",
+        "OldValue": null,
+        "NewValue": "2026-10-19",
+        "ValueType": "date",
+        "ProposedValue": "2026-10-19",
+        "IsEditable": true
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000001",
+        "EntityName": "Water",
+        "Field": "action",
+        "OldValue": null,
+        "NewValue": "Skip",
+        "ValueType": "action",
+        "ProposedValue": "skip",
+        "IsEditable": false
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000002",
+        "EntityName": "Water",
+        "Field": "date",
+        "OldValue": null,
+        "NewValue": "2026-10-19",
+        "ValueType": "date",
+        "ProposedValue": "2026-10-19",
+        "IsEditable": true
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000002",
+        "EntityName": "Water",
+        "Field": "action",
+        "OldValue": null,
+        "NewValue": "Skip",
+        "ValueType": "action",
+        "ProposedValue": "skip",
+        "IsEditable": false
+      }
+    ],
+    "items": [
+      {
+        "ItemId": "00000000-0000-0000-0000-000000000001",
+        "EntityId": "00000000-0000-0000-0000-000000000001",
+        "EntityName": "Water",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000001",
+            "EntityName": "Water",
+            "Field": "date",
+            "OldValue": null,
+            "NewValue": "2026-10-19",
+            "ValueType": "date",
+            "ProposedValue": "2026-10-19",
+            "IsEditable": true
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000001",
+            "EntityName": "Water",
+            "Field": "action",
+            "OldValue": null,
+            "NewValue": "Skip",
+            "ValueType": "action",
+            "ProposedValue": "skip",
+            "IsEditable": false
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": false
+      },
+      {
+        "ItemId": "00000000-0000-0000-0000-000000000002",
+        "EntityId": "00000000-0000-0000-0000-000000000002",
+        "EntityName": "Water",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000002",
+            "EntityName": "Water",
+            "Field": "date",
+            "OldValue": null,
+            "NewValue": "2026-10-19",
+            "ValueType": "date",
+            "ProposedValue": "2026-10-19",
+            "IsEditable": true
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000002",
+            "EntityName": "Water",
+            "Field": "action",
+            "OldValue": null,
+            "NewValue": "Skip",
+            "ValueType": "action",
+            "ProposedValue": "skip",
+            "IsEditable": false
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": false
+      }
+    ]
+  },
+  "02-dated-skip/pt-BR": {
+    "changes": [
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000001",
+        "EntityName": "Water",
+        "Field": "date",
+        "OldValue": null,
+        "NewValue": "2026-10-19",
+        "ValueType": "date",
+        "ProposedValue": "2026-10-19",
+        "IsEditable": true
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000001",
+        "EntityName": "Water",
+        "Field": "action",
+        "OldValue": null,
+        "NewValue": "Pular",
+        "ValueType": "action",
+        "ProposedValue": "skip",
+        "IsEditable": false
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000002",
+        "EntityName": "Water",
+        "Field": "date",
+        "OldValue": null,
+        "NewValue": "2026-10-19",
+        "ValueType": "date",
+        "ProposedValue": "2026-10-19",
+        "IsEditable": true
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000002",
+        "EntityName": "Water",
+        "Field": "action",
+        "OldValue": null,
+        "NewValue": "Pular",
+        "ValueType": "action",
+        "ProposedValue": "skip",
+        "IsEditable": false
+      }
+    ],
+    "items": [
+      {
+        "ItemId": "00000000-0000-0000-0000-000000000001",
+        "EntityId": "00000000-0000-0000-0000-000000000001",
+        "EntityName": "Water",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000001",
+            "EntityName": "Water",
+            "Field": "date",
+            "OldValue": null,
+            "NewValue": "2026-10-19",
+            "ValueType": "date",
+            "ProposedValue": "2026-10-19",
+            "IsEditable": true
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000001",
+            "EntityName": "Water",
+            "Field": "action",
+            "OldValue": null,
+            "NewValue": "Pular",
+            "ValueType": "action",
+            "ProposedValue": "skip",
+            "IsEditable": false
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": false
+      },
+      {
+        "ItemId": "00000000-0000-0000-0000-000000000002",
+        "EntityId": "00000000-0000-0000-0000-000000000002",
+        "EntityName": "Water",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000002",
+            "EntityName": "Water",
+            "Field": "date",
+            "OldValue": null,
+            "NewValue": "2026-10-19",
+            "ValueType": "date",
+            "ProposedValue": "2026-10-19",
+            "IsEditable": true
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000002",
+            "EntityName": "Water",
+            "Field": "action",
+            "OldValue": null,
+            "NewValue": "Pular",
+            "ValueType": "action",
+            "ProposedValue": "skip",
+            "IsEditable": false
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": false
+      }
+    ]
+  },
+  "02-dated-log/en": {
+    "changes": [
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000001",
+        "EntityName": "Water",
+        "Field": "date",
+        "OldValue": null,
+        "NewValue": "2026-10-18",
+        "ValueType": "date",
+        "ProposedValue": "2026-10-18",
+        "IsEditable": true
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000002",
+        "EntityName": "Water",
+        "Field": "date",
+        "OldValue": null,
+        "NewValue": "2026-10-18",
+        "ValueType": "date",
+        "ProposedValue": "2026-10-18",
+        "IsEditable": true
+      }
+    ],
+    "items": [
+      {
+        "ItemId": "00000000-0000-0000-0000-000000000001",
+        "EntityId": "00000000-0000-0000-0000-000000000001",
+        "EntityName": "Water",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000001",
+            "EntityName": "Water",
+            "Field": "date",
+            "OldValue": null,
+            "NewValue": "2026-10-18",
+            "ValueType": "date",
+            "ProposedValue": "2026-10-18",
+            "IsEditable": true
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": false
+      },
+      {
+        "ItemId": "00000000-0000-0000-0000-000000000002",
+        "EntityId": "00000000-0000-0000-0000-000000000002",
+        "EntityName": "Water",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000002",
+            "EntityName": "Water",
+            "Field": "date",
+            "OldValue": null,
+            "NewValue": "2026-10-18",
+            "ValueType": "date",
+            "ProposedValue": "2026-10-18",
+            "IsEditable": true
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": false
+      }
+    ]
+  },
+  "02-dated-log/pt-BR": {
+    "changes": [
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000001",
+        "EntityName": "Water",
+        "Field": "date",
+        "OldValue": null,
+        "NewValue": "2026-10-18",
+        "ValueType": "date",
+        "ProposedValue": "2026-10-18",
+        "IsEditable": true
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000002",
+        "EntityName": "Water",
+        "Field": "date",
+        "OldValue": null,
+        "NewValue": "2026-10-18",
+        "ValueType": "date",
+        "ProposedValue": "2026-10-18",
+        "IsEditable": true
+      }
+    ],
+    "items": [
+      {
+        "ItemId": "00000000-0000-0000-0000-000000000001",
+        "EntityId": "00000000-0000-0000-0000-000000000001",
+        "EntityName": "Water",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000001",
+            "EntityName": "Water",
+            "Field": "date",
+            "OldValue": null,
+            "NewValue": "2026-10-18",
+            "ValueType": "date",
+            "ProposedValue": "2026-10-18",
+            "IsEditable": true
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": false
+      },
+      {
+        "ItemId": "00000000-0000-0000-0000-000000000002",
+        "EntityId": "00000000-0000-0000-0000-000000000002",
+        "EntityName": "Water",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000002",
+            "EntityName": "Water",
+            "Field": "date",
+            "OldValue": null,
+            "NewValue": "2026-10-18",
+            "ValueType": "date",
+            "ProposedValue": "2026-10-18",
+            "IsEditable": true
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": false
+      }
+    ]
+  },
+  "03-single-skip/en": {
+    "changes": [
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000008",
+        "EntityName": "Read",
+        "Field": "date",
+        "OldValue": null,
+        "NewValue": "2026-10-19",
+        "ValueType": "date",
+        "ProposedValue": "2026-10-19",
+        "IsEditable": true,
+        "EntityEmoji": "\uD83D\uDCD6"
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000008",
+        "EntityName": "Read",
+        "Field": "habit_id",
+        "OldValue": null,
+        "NewValue": "00000000-0000-0000-0000-000000000008",
+        "ValueType": "text",
+        "ProposedValue": "00000000-0000-0000-0000-000000000008",
+        "IsEditable": false,
+        "EntityEmoji": "\uD83D\uDCD6"
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000008",
+        "EntityName": "Read",
+        "Field": "action",
+        "OldValue": null,
+        "NewValue": "Skip",
+        "ValueType": "action",
+        "ProposedValue": "skip",
+        "IsEditable": false,
+        "EntityEmoji": "\uD83D\uDCD6"
+      }
+    ],
+    "items": [
+      {
+        "ItemId": "00000000-0000-0000-0000-000000000008",
+        "EntityId": "00000000-0000-0000-0000-000000000008",
+        "EntityName": "Read",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000008",
+            "EntityName": "Read",
+            "Field": "date",
+            "OldValue": null,
+            "NewValue": "2026-10-19",
+            "ValueType": "date",
+            "ProposedValue": "2026-10-19",
+            "IsEditable": true,
+            "EntityEmoji": "\uD83D\uDCD6"
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000008",
+            "EntityName": "Read",
+            "Field": "habit_id",
+            "OldValue": null,
+            "NewValue": "00000000-0000-0000-0000-000000000008",
+            "ValueType": "text",
+            "ProposedValue": "00000000-0000-0000-0000-000000000008",
+            "IsEditable": false,
+            "EntityEmoji": "\uD83D\uDCD6"
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000008",
+            "EntityName": "Read",
+            "Field": "action",
+            "OldValue": null,
+            "NewValue": "Skip",
+            "ValueType": "action",
+            "ProposedValue": "skip",
+            "IsEditable": false,
+            "EntityEmoji": "\uD83D\uDCD6"
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": false,
+        "EntityEmoji": "\uD83D\uDCD6"
+      }
+    ]
+  },
+  "03-single-skip/pt-BR": {
+    "changes": [
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000008",
+        "EntityName": "Read",
+        "Field": "date",
+        "OldValue": null,
+        "NewValue": "2026-10-19",
+        "ValueType": "date",
+        "ProposedValue": "2026-10-19",
+        "IsEditable": true,
+        "EntityEmoji": "\uD83D\uDCD6"
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000008",
+        "EntityName": "Read",
+        "Field": "habit_id",
+        "OldValue": null,
+        "NewValue": "00000000-0000-0000-0000-000000000008",
+        "ValueType": "text",
+        "ProposedValue": "00000000-0000-0000-0000-000000000008",
+        "IsEditable": false,
+        "EntityEmoji": "\uD83D\uDCD6"
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000008",
+        "EntityName": "Read",
+        "Field": "action",
+        "OldValue": null,
+        "NewValue": "Pular",
+        "ValueType": "action",
+        "ProposedValue": "skip",
+        "IsEditable": false,
+        "EntityEmoji": "\uD83D\uDCD6"
+      }
+    ],
+    "items": [
+      {
+        "ItemId": "00000000-0000-0000-0000-000000000008",
+        "EntityId": "00000000-0000-0000-0000-000000000008",
+        "EntityName": "Read",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000008",
+            "EntityName": "Read",
+            "Field": "date",
+            "OldValue": null,
+            "NewValue": "2026-10-19",
+            "ValueType": "date",
+            "ProposedValue": "2026-10-19",
+            "IsEditable": true,
+            "EntityEmoji": "\uD83D\uDCD6"
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000008",
+            "EntityName": "Read",
+            "Field": "habit_id",
+            "OldValue": null,
+            "NewValue": "00000000-0000-0000-0000-000000000008",
+            "ValueType": "text",
+            "ProposedValue": "00000000-0000-0000-0000-000000000008",
+            "IsEditable": false,
+            "EntityEmoji": "\uD83D\uDCD6"
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000008",
+            "EntityName": "Read",
+            "Field": "action",
+            "OldValue": null,
+            "NewValue": "Pular",
+            "ValueType": "action",
+            "ProposedValue": "skip",
+            "IsEditable": false,
+            "EntityEmoji": "\uD83D\uDCD6"
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": false,
+        "EntityEmoji": "\uD83D\uDCD6"
+      }
+    ]
+  },
+  "03-single-update-reminder/en": {
+    "changes": [
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000009",
+        "EntityName": "Stretch",
+        "Field": "habit_id",
+        "OldValue": null,
+        "NewValue": "00000000-0000-0000-0000-000000000009",
+        "ValueType": "text",
+        "ProposedValue": "00000000-0000-0000-0000-000000000009",
+        "IsEditable": false
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000009",
+        "EntityName": "Stretch",
+        "Field": "repeat_reminder",
+        "OldValue": "Every 8 hours; starting 10/19/2026 08:00",
+        "NewValue": "Every 30 minutes",
+        "ValueType": "text",
+        "ProposedValue": {
+          "interval_minutes": 30
+        },
+        "IsEditable": true
+      }
+    ],
+    "items": [
+      {
+        "ItemId": "00000000-0000-0000-0000-000000000009",
+        "EntityId": "00000000-0000-0000-0000-000000000009",
+        "EntityName": "Stretch",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000009",
+            "EntityName": "Stretch",
+            "Field": "habit_id",
+            "OldValue": null,
+            "NewValue": "00000000-0000-0000-0000-000000000009",
+            "ValueType": "text",
+            "ProposedValue": "00000000-0000-0000-0000-000000000009",
+            "IsEditable": false
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000009",
+            "EntityName": "Stretch",
+            "Field": "repeat_reminder",
+            "OldValue": "Every 8 hours; starting 10/19/2026 08:00",
+            "NewValue": "Every 30 minutes",
+            "ValueType": "text",
+            "ProposedValue": {
+              "interval_minutes": 30
+            },
+            "IsEditable": true
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": false
+      }
+    ]
+  },
+  "03-single-update-reminder/pt-BR": {
+    "changes": [
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000009",
+        "EntityName": "Stretch",
+        "Field": "habit_id",
+        "OldValue": null,
+        "NewValue": "00000000-0000-0000-0000-000000000009",
+        "ValueType": "text",
+        "ProposedValue": "00000000-0000-0000-0000-000000000009",
+        "IsEditable": false
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000009",
+        "EntityName": "Stretch",
+        "Field": "repeat_reminder",
+        "OldValue": "A cada 8 horas; a partir de 19/10/2026 08:00",
+        "NewValue": "A cada 30 minutos",
+        "ValueType": "text",
+        "ProposedValue": {
+          "interval_minutes": 30
+        },
+        "IsEditable": true
+      }
+    ],
+    "items": [
+      {
+        "ItemId": "00000000-0000-0000-0000-000000000009",
+        "EntityId": "00000000-0000-0000-0000-000000000009",
+        "EntityName": "Stretch",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000009",
+            "EntityName": "Stretch",
+            "Field": "habit_id",
+            "OldValue": null,
+            "NewValue": "00000000-0000-0000-0000-000000000009",
+            "ValueType": "text",
+            "ProposedValue": "00000000-0000-0000-0000-000000000009",
+            "IsEditable": false
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000009",
+            "EntityName": "Stretch",
+            "Field": "repeat_reminder",
+            "OldValue": "A cada 8 horas; a partir de 19/10/2026 08:00",
+            "NewValue": "A cada 30 minutos",
+            "ValueType": "text",
+            "ProposedValue": {
+              "interval_minutes": 30
+            },
+            "IsEditable": true
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": false
+      }
+    ]
+  },
+  "04-assign-tags/en": {
+    "changes": [
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000001",
+        "EntityName": "Water",
+        "Field": "habit_id",
+        "OldValue": null,
+        "NewValue": "00000000-0000-0000-0000-000000000001",
+        "ValueType": "text",
+        "ProposedValue": "00000000-0000-0000-0000-000000000001",
+        "IsEditable": false
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000001",
+        "EntityName": "Water",
+        "Field": "tag_names",
+        "OldValue": null,
+        "NewValue": "[\"Health\"]",
+        "ValueType": "text",
+        "ProposedValue": [
+          "Health"
+        ],
+        "IsEditable": false
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000008",
+        "EntityName": "Read",
+        "Field": "habit_id",
+        "OldValue": null,
+        "NewValue": "00000000-0000-0000-0000-000000000008",
+        "ValueType": "text",
+        "ProposedValue": "00000000-0000-0000-0000-000000000008",
+        "IsEditable": false,
+        "EntityEmoji": "\uD83D\uDCD6"
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000008",
+        "EntityName": "Read",
+        "Field": "tag_names",
+        "OldValue": null,
+        "NewValue": "[\"Health\"]",
+        "ValueType": "text",
+        "ProposedValue": [
+          "Health"
+        ],
+        "IsEditable": false,
+        "EntityEmoji": "\uD83D\uDCD6"
+      }
+    ],
+    "items": [
+      {
+        "ItemId": "00000000-0000-0000-0000-000000000001",
+        "EntityId": "00000000-0000-0000-0000-000000000001",
+        "EntityName": "Water",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000001",
+            "EntityName": "Water",
+            "Field": "habit_id",
+            "OldValue": null,
+            "NewValue": "00000000-0000-0000-0000-000000000001",
+            "ValueType": "text",
+            "ProposedValue": "00000000-0000-0000-0000-000000000001",
+            "IsEditable": false
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000001",
+            "EntityName": "Water",
+            "Field": "tag_names",
+            "OldValue": null,
+            "NewValue": "[\"Health\"]",
+            "ValueType": "text",
+            "ProposedValue": [
+              "Health"
+            ],
+            "IsEditable": false
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": null
+      },
+      {
+        "ItemId": "00000000-0000-0000-0000-000000000008",
+        "EntityId": "00000000-0000-0000-0000-000000000008",
+        "EntityName": "Read",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000008",
+            "EntityName": "Read",
+            "Field": "habit_id",
+            "OldValue": null,
+            "NewValue": "00000000-0000-0000-0000-000000000008",
+            "ValueType": "text",
+            "ProposedValue": "00000000-0000-0000-0000-000000000008",
+            "IsEditable": false,
+            "EntityEmoji": "\uD83D\uDCD6"
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000008",
+            "EntityName": "Read",
+            "Field": "tag_names",
+            "OldValue": null,
+            "NewValue": "[\"Health\"]",
+            "ValueType": "text",
+            "ProposedValue": [
+              "Health"
+            ],
+            "IsEditable": false,
+            "EntityEmoji": "\uD83D\uDCD6"
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": null,
+        "EntityEmoji": "\uD83D\uDCD6"
+      }
+    ]
+  },
+  "04-assign-tags/pt-BR": {
+    "changes": [
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000001",
+        "EntityName": "Water",
+        "Field": "habit_id",
+        "OldValue": null,
+        "NewValue": "00000000-0000-0000-0000-000000000001",
+        "ValueType": "text",
+        "ProposedValue": "00000000-0000-0000-0000-000000000001",
+        "IsEditable": false
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000001",
+        "EntityName": "Water",
+        "Field": "tag_names",
+        "OldValue": null,
+        "NewValue": "[\"Health\"]",
+        "ValueType": "text",
+        "ProposedValue": [
+          "Health"
+        ],
+        "IsEditable": false
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000008",
+        "EntityName": "Read",
+        "Field": "habit_id",
+        "OldValue": null,
+        "NewValue": "00000000-0000-0000-0000-000000000008",
+        "ValueType": "text",
+        "ProposedValue": "00000000-0000-0000-0000-000000000008",
+        "IsEditable": false,
+        "EntityEmoji": "\uD83D\uDCD6"
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000008",
+        "EntityName": "Read",
+        "Field": "tag_names",
+        "OldValue": null,
+        "NewValue": "[\"Health\"]",
+        "ValueType": "text",
+        "ProposedValue": [
+          "Health"
+        ],
+        "IsEditable": false,
+        "EntityEmoji": "\uD83D\uDCD6"
+      }
+    ],
+    "items": [
+      {
+        "ItemId": "00000000-0000-0000-0000-000000000001",
+        "EntityId": "00000000-0000-0000-0000-000000000001",
+        "EntityName": "Water",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000001",
+            "EntityName": "Water",
+            "Field": "habit_id",
+            "OldValue": null,
+            "NewValue": "00000000-0000-0000-0000-000000000001",
+            "ValueType": "text",
+            "ProposedValue": "00000000-0000-0000-0000-000000000001",
+            "IsEditable": false
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000001",
+            "EntityName": "Water",
+            "Field": "tag_names",
+            "OldValue": null,
+            "NewValue": "[\"Health\"]",
+            "ValueType": "text",
+            "ProposedValue": [
+              "Health"
+            ],
+            "IsEditable": false
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": null
+      },
+      {
+        "ItemId": "00000000-0000-0000-0000-000000000008",
+        "EntityId": "00000000-0000-0000-0000-000000000008",
+        "EntityName": "Read",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000008",
+            "EntityName": "Read",
+            "Field": "habit_id",
+            "OldValue": null,
+            "NewValue": "00000000-0000-0000-0000-000000000008",
+            "ValueType": "text",
+            "ProposedValue": "00000000-0000-0000-0000-000000000008",
+            "IsEditable": false,
+            "EntityEmoji": "\uD83D\uDCD6"
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000008",
+            "EntityName": "Read",
+            "Field": "tag_names",
+            "OldValue": null,
+            "NewValue": "[\"Health\"]",
+            "ValueType": "text",
+            "ProposedValue": [
+              "Health"
+            ],
+            "IsEditable": false,
+            "EntityEmoji": "\uD83D\uDCD6"
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": null,
+        "EntityEmoji": "\uD83D\uDCD6"
+      }
+    ]
+  },
+  "05-checklist-append/en": {
+    "changes": [
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000010",
+        "EntityName": "Morning routine",
+        "Field": "checklist_items",
+        "OldValue": "Coffee",
+        "NewValue": "[{\"is_checked\":false,\"text\":\"Coffee\"},{\"is_checked\":false,\"text\":\"Stretch\"}]",
+        "ValueType": "text",
+        "ProposedValue": [
+          {
+            "text": "Coffee",
+            "is_checked": false
+          },
+          {
+            "text": "Stretch",
+            "is_checked": false
+          }
+        ],
+        "IsEditable": false
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000010",
+        "EntityName": "Morning routine",
+        "Field": "habit_id",
+        "OldValue": null,
+        "NewValue": "00000000-0000-0000-0000-000000000010",
+        "ValueType": "text",
+        "ProposedValue": "00000000-0000-0000-0000-000000000010",
+        "IsEditable": false
+      }
+    ],
+    "items": [
+      {
+        "ItemId": "00000000-0000-0000-0000-000000000010",
+        "EntityId": "00000000-0000-0000-0000-000000000010",
+        "EntityName": "Morning routine",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000010",
+            "EntityName": "Morning routine",
+            "Field": "checklist_items",
+            "OldValue": "Coffee",
+            "NewValue": "[{\"is_checked\":false,\"text\":\"Coffee\"},{\"is_checked\":false,\"text\":\"Stretch\"}]",
+            "ValueType": "text",
+            "ProposedValue": [
+              {
+                "text": "Coffee",
+                "is_checked": false
+              },
+              {
+                "text": "Stretch",
+                "is_checked": false
+              }
+            ],
+            "IsEditable": false
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000010",
+            "EntityName": "Morning routine",
+            "Field": "habit_id",
+            "OldValue": null,
+            "NewValue": "00000000-0000-0000-0000-000000000010",
+            "ValueType": "text",
+            "ProposedValue": "00000000-0000-0000-0000-000000000010",
+            "IsEditable": false
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": null
+      }
+    ]
+  },
+  "05-checklist-append/pt-BR": {
+    "changes": [
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000010",
+        "EntityName": "Morning routine",
+        "Field": "checklist_items",
+        "OldValue": "Coffee",
+        "NewValue": "[{\"is_checked\":false,\"text\":\"Coffee\"},{\"is_checked\":false,\"text\":\"Stretch\"}]",
+        "ValueType": "text",
+        "ProposedValue": [
+          {
+            "text": "Coffee",
+            "is_checked": false
+          },
+          {
+            "text": "Stretch",
+            "is_checked": false
+          }
+        ],
+        "IsEditable": false
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000010",
+        "EntityName": "Morning routine",
+        "Field": "habit_id",
+        "OldValue": null,
+        "NewValue": "00000000-0000-0000-0000-000000000010",
+        "ValueType": "text",
+        "ProposedValue": "00000000-0000-0000-0000-000000000010",
+        "IsEditable": false
+      }
+    ],
+    "items": [
+      {
+        "ItemId": "00000000-0000-0000-0000-000000000010",
+        "EntityId": "00000000-0000-0000-0000-000000000010",
+        "EntityName": "Morning routine",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000010",
+            "EntityName": "Morning routine",
+            "Field": "checklist_items",
+            "OldValue": "Coffee",
+            "NewValue": "[{\"is_checked\":false,\"text\":\"Coffee\"},{\"is_checked\":false,\"text\":\"Stretch\"}]",
+            "ValueType": "text",
+            "ProposedValue": [
+              {
+                "text": "Coffee",
+                "is_checked": false
+              },
+              {
+                "text": "Stretch",
+                "is_checked": false
+              }
+            ],
+            "IsEditable": false
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000010",
+            "EntityName": "Morning routine",
+            "Field": "habit_id",
+            "OldValue": null,
+            "NewValue": "00000000-0000-0000-0000-000000000010",
+            "ValueType": "text",
+            "ProposedValue": "00000000-0000-0000-0000-000000000010",
+            "IsEditable": false
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": null
+      }
+    ]
+  },
+  "06-single-delete/en": {
+    "changes": [],
+    "items": [
+      {
+        "ItemId": "00000000-0000-0000-0000-000000000008",
+        "EntityId": "00000000-0000-0000-0000-000000000008",
+        "EntityName": "Read",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000008",
+            "EntityName": "Read",
+            "Field": "delete",
+            "OldValue": null,
+            "NewValue": null,
+            "ValueType": "action",
+            "ProposedValue": null,
+            "IsEditable": false,
+            "EntityEmoji": "\uD83D\uDCD6"
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": true,
+        "EntityEmoji": "\uD83D\uDCD6"
+      }
+    ]
+  },
+  "06-single-delete/pt-BR": {
+    "changes": [],
+    "items": [
+      {
+        "ItemId": "00000000-0000-0000-0000-000000000008",
+        "EntityId": "00000000-0000-0000-0000-000000000008",
+        "EntityName": "Read",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000008",
+            "EntityName": "Read",
+            "Field": "delete",
+            "OldValue": null,
+            "NewValue": null,
+            "ValueType": "action",
+            "ProposedValue": null,
+            "IsEditable": false,
+            "EntityEmoji": "\uD83D\uDCD6"
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": true,
+        "EntityEmoji": "\uD83D\uDCD6"
+      }
+    ]
+  },
+  "07-create-reminder/en": {
+    "changes": [
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000000",
+        "EntityName": "Drink",
+        "Field": "title",
+        "OldValue": null,
+        "NewValue": "Drink",
+        "ValueType": "text",
+        "ProposedValue": "Drink",
+        "IsEditable": true
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000000",
+        "EntityName": "Drink",
+        "Field": "frequency_quantity",
+        "OldValue": null,
+        "NewValue": "1",
+        "ValueType": "number",
+        "ProposedValue": 1,
+        "IsEditable": true
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000000",
+        "EntityName": "Drink",
+        "Field": "frequency_unit",
+        "OldValue": null,
+        "NewValue": "Day",
+        "ValueType": "text",
+        "ProposedValue": "Day",
+        "IsEditable": true
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000000",
+        "EntityName": "Drink",
+        "Field": "repeat_reminder",
+        "OldValue": null,
+        "NewValue": "Every 3 hours",
+        "ValueType": "text",
+        "ProposedValue": {
+          "interval_minutes": 180
+        },
+        "IsEditable": true
+      }
+    ],
+    "items": [
+      {
+        "ItemId": "0",
+        "EntityId": null,
+        "EntityName": "Drink",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000000",
+            "EntityName": "Drink",
+            "Field": "title",
+            "OldValue": null,
+            "NewValue": "Drink",
+            "ValueType": "text",
+            "ProposedValue": "Drink",
+            "IsEditable": true
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000000",
+            "EntityName": "Drink",
+            "Field": "frequency_quantity",
+            "OldValue": null,
+            "NewValue": "1",
+            "ValueType": "number",
+            "ProposedValue": 1,
+            "IsEditable": true
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000000",
+            "EntityName": "Drink",
+            "Field": "frequency_unit",
+            "OldValue": null,
+            "NewValue": "Day",
+            "ValueType": "text",
+            "ProposedValue": "Day",
+            "IsEditable": true
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000000",
+            "EntityName": "Drink",
+            "Field": "repeat_reminder",
+            "OldValue": null,
+            "NewValue": "Every 3 hours",
+            "ValueType": "text",
+            "ProposedValue": {
+              "interval_minutes": 180
+            },
+            "IsEditable": true
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": false
+      }
+    ]
+  },
+  "07-create-reminder/pt-BR": {
+    "changes": [
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000000",
+        "EntityName": "Drink",
+        "Field": "title",
+        "OldValue": null,
+        "NewValue": "Drink",
+        "ValueType": "text",
+        "ProposedValue": "Drink",
+        "IsEditable": true
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000000",
+        "EntityName": "Drink",
+        "Field": "frequency_quantity",
+        "OldValue": null,
+        "NewValue": "1",
+        "ValueType": "number",
+        "ProposedValue": 1,
+        "IsEditable": true
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000000",
+        "EntityName": "Drink",
+        "Field": "frequency_unit",
+        "OldValue": null,
+        "NewValue": "Day",
+        "ValueType": "text",
+        "ProposedValue": "Day",
+        "IsEditable": true
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000000",
+        "EntityName": "Drink",
+        "Field": "repeat_reminder",
+        "OldValue": null,
+        "NewValue": "A cada 3 horas",
+        "ValueType": "text",
+        "ProposedValue": {
+          "interval_minutes": 180
+        },
+        "IsEditable": true
+      }
+    ],
+    "items": [
+      {
+        "ItemId": "0",
+        "EntityId": null,
+        "EntityName": "Drink",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000000",
+            "EntityName": "Drink",
+            "Field": "title",
+            "OldValue": null,
+            "NewValue": "Drink",
+            "ValueType": "text",
+            "ProposedValue": "Drink",
+            "IsEditable": true
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000000",
+            "EntityName": "Drink",
+            "Field": "frequency_quantity",
+            "OldValue": null,
+            "NewValue": "1",
+            "ValueType": "number",
+            "ProposedValue": 1,
+            "IsEditable": true
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000000",
+            "EntityName": "Drink",
+            "Field": "frequency_unit",
+            "OldValue": null,
+            "NewValue": "Day",
+            "ValueType": "text",
+            "ProposedValue": "Day",
+            "IsEditable": true
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000000",
+            "EntityName": "Drink",
+            "Field": "repeat_reminder",
+            "OldValue": null,
+            "NewValue": "A cada 3 horas",
+            "ValueType": "text",
+            "ProposedValue": {
+              "interval_minutes": 180
+            },
+            "IsEditable": true
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": false
+      }
+    ]
+  },
+  "07-create-placement/en": {
+    "changes": [
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000000",
+        "EntityName": "Stretch",
+        "Field": "title",
+        "OldValue": null,
+        "NewValue": "Stretch",
+        "ValueType": "text",
+        "ProposedValue": "Stretch",
+        "IsEditable": true
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000000",
+        "EntityName": "Stretch",
+        "Field": "frequency_unit",
+        "OldValue": null,
+        "NewValue": "Day",
+        "ValueType": "text",
+        "ProposedValue": "Day",
+        "IsEditable": true
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000000",
+        "EntityName": "Stretch",
+        "Field": "parent_habit_id",
+        "OldValue": null,
+        "NewValue": "Morning routine",
+        "ValueType": "text",
+        "ProposedValue": "00000000-0000-0000-0000-000000000010",
+        "IsEditable": true
+      }
+    ],
+    "items": [
+      {
+        "ItemId": "0",
+        "EntityId": null,
+        "EntityName": "Stretch",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000000",
+            "EntityName": "Stretch",
+            "Field": "title",
+            "OldValue": null,
+            "NewValue": "Stretch",
+            "ValueType": "text",
+            "ProposedValue": "Stretch",
+            "IsEditable": true
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000000",
+            "EntityName": "Stretch",
+            "Field": "frequency_unit",
+            "OldValue": null,
+            "NewValue": "Day",
+            "ValueType": "text",
+            "ProposedValue": "Day",
+            "IsEditable": true
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000000",
+            "EntityName": "Stretch",
+            "Field": "parent_habit_id",
+            "OldValue": null,
+            "NewValue": "Morning routine",
+            "ValueType": "text",
+            "ProposedValue": "00000000-0000-0000-0000-000000000010",
+            "IsEditable": true
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": null,
+        "Placement": {
+          "Selected": "checklist_item",
+          "Recommended": "checklist_item",
+          "ReasonKey": "chat.placement.destinationChecklist",
+          "Reason": {
+            "en": "You already keep a checklist item here.",
+            "pt-BR": "Você já tem um item no checklist aqui."
+          },
+          "Alternatives": [
+            "sub_habit",
+            "new_parent"
+          ],
+          "DestinationId": "00000000-0000-0000-0000-000000000010",
+          "DestinationName": "Morning routine"
+        }
+      }
+    ]
+  },
+  "07-create-placement/pt-BR": {
+    "changes": [
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000000",
+        "EntityName": "Stretch",
+        "Field": "title",
+        "OldValue": null,
+        "NewValue": "Stretch",
+        "ValueType": "text",
+        "ProposedValue": "Stretch",
+        "IsEditable": true
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000000",
+        "EntityName": "Stretch",
+        "Field": "frequency_unit",
+        "OldValue": null,
+        "NewValue": "Day",
+        "ValueType": "text",
+        "ProposedValue": "Day",
+        "IsEditable": true
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000000",
+        "EntityName": "Stretch",
+        "Field": "parent_habit_id",
+        "OldValue": null,
+        "NewValue": "Morning routine",
+        "ValueType": "text",
+        "ProposedValue": "00000000-0000-0000-0000-000000000010",
+        "IsEditable": true
+      }
+    ],
+    "items": [
+      {
+        "ItemId": "0",
+        "EntityId": null,
+        "EntityName": "Stretch",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000000",
+            "EntityName": "Stretch",
+            "Field": "title",
+            "OldValue": null,
+            "NewValue": "Stretch",
+            "ValueType": "text",
+            "ProposedValue": "Stretch",
+            "IsEditable": true
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000000",
+            "EntityName": "Stretch",
+            "Field": "frequency_unit",
+            "OldValue": null,
+            "NewValue": "Day",
+            "ValueType": "text",
+            "ProposedValue": "Day",
+            "IsEditable": true
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000000",
+            "EntityName": "Stretch",
+            "Field": "parent_habit_id",
+            "OldValue": null,
+            "NewValue": "Morning routine",
+            "ValueType": "text",
+            "ProposedValue": "00000000-0000-0000-0000-000000000010",
+            "IsEditable": true
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": null,
+        "Placement": {
+          "Selected": "checklist_item",
+          "Recommended": "checklist_item",
+          "ReasonKey": "chat.placement.destinationChecklist",
+          "Reason": {
+            "en": "You already keep a checklist item here.",
+            "pt-BR": "Você já tem um item no checklist aqui."
+          },
+          "Alternatives": [
+            "sub_habit",
+            "new_parent"
+          ],
+          "DestinationId": "00000000-0000-0000-0000-000000000010",
+          "DestinationName": "Morning routine"
+        }
+      }
+    ]
+  },
+  "08-emoji-inference/en": {
+    "changes": [
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000001",
+        "EntityName": "Water",
+        "Field": "emoji",
+        "OldValue": null,
+        "NewValue": "\uD83D\uDCA7",
+        "ValueType": "emoji",
+        "ProposedValue": "\uD83D\uDCA7",
+        "IsEditable": true
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000002",
+        "EntityName": "Water",
+        "Field": "emoji",
+        "OldValue": null,
+        "NewValue": "\uD83D\uDCA7",
+        "ValueType": "emoji",
+        "ProposedValue": "\uD83D\uDCA7",
+        "IsEditable": true
+      }
+    ],
+    "items": [
+      {
+        "ItemId": "00000000-0000-0000-0000-000000000001",
+        "EntityId": "00000000-0000-0000-0000-000000000001",
+        "EntityName": "Water",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000001",
+            "EntityName": "Water",
+            "Field": "emoji",
+            "OldValue": null,
+            "NewValue": "\uD83D\uDCA7",
+            "ValueType": "emoji",
+            "ProposedValue": "\uD83D\uDCA7",
+            "IsEditable": true
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": false
+      },
+      {
+        "ItemId": "00000000-0000-0000-0000-000000000002",
+        "EntityId": "00000000-0000-0000-0000-000000000002",
+        "EntityName": "Water",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000002",
+            "EntityName": "Water",
+            "Field": "emoji",
+            "OldValue": null,
+            "NewValue": "\uD83D\uDCA7",
+            "ValueType": "emoji",
+            "ProposedValue": "\uD83D\uDCA7",
+            "IsEditable": true
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": false
+      }
+    ]
+  },
+  "08-emoji-inference/pt-BR": {
+    "changes": [
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000001",
+        "EntityName": "Water",
+        "Field": "emoji",
+        "OldValue": null,
+        "NewValue": "\uD83D\uDCA7",
+        "ValueType": "emoji",
+        "ProposedValue": "\uD83D\uDCA7",
+        "IsEditable": true
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000002",
+        "EntityName": "Water",
+        "Field": "emoji",
+        "OldValue": null,
+        "NewValue": "\uD83D\uDCA7",
+        "ValueType": "emoji",
+        "ProposedValue": "\uD83D\uDCA7",
+        "IsEditable": true
+      }
+    ],
+    "items": [
+      {
+        "ItemId": "00000000-0000-0000-0000-000000000001",
+        "EntityId": "00000000-0000-0000-0000-000000000001",
+        "EntityName": "Water",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000001",
+            "EntityName": "Water",
+            "Field": "emoji",
+            "OldValue": null,
+            "NewValue": "\uD83D\uDCA7",
+            "ValueType": "emoji",
+            "ProposedValue": "\uD83D\uDCA7",
+            "IsEditable": true
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": false
+      },
+      {
+        "ItemId": "00000000-0000-0000-0000-000000000002",
+        "EntityId": "00000000-0000-0000-0000-000000000002",
+        "EntityName": "Water",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000002",
+            "EntityName": "Water",
+            "Field": "emoji",
+            "OldValue": null,
+            "NewValue": "\uD83D\uDCA7",
+            "ValueType": "emoji",
+            "ProposedValue": "\uD83D\uDCA7",
+            "IsEditable": true
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": false
+      }
+    ]
+  },
+  "09-destructive-goal/en": {
+    "changes": [
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000020",
+        "EntityName": "Read 12 books",
+        "Field": "delete",
+        "OldValue": null,
+        "NewValue": null,
+        "ValueType": "action",
+        "ProposedValue": null,
+        "IsEditable": false
+      }
+    ],
+    "items": [
+      {
+        "ItemId": "00000000-0000-0000-0000-000000000020",
+        "EntityId": "00000000-0000-0000-0000-000000000020",
+        "EntityName": "Read 12 books",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000020",
+            "EntityName": "Read 12 books",
+            "Field": "delete",
+            "OldValue": null,
+            "NewValue": null,
+            "ValueType": "action",
+            "ProposedValue": null,
+            "IsEditable": false
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": true
+      }
+    ]
+  },
+  "09-destructive-goal/pt-BR": {
+    "changes": [
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000020",
+        "EntityName": "Read 12 books",
+        "Field": "delete",
+        "OldValue": null,
+        "NewValue": null,
+        "ValueType": "action",
+        "ProposedValue": null,
+        "IsEditable": false
+      }
+    ],
+    "items": [
+      {
+        "ItemId": "00000000-0000-0000-0000-000000000020",
+        "EntityId": "00000000-0000-0000-0000-000000000020",
+        "EntityName": "Read 12 books",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000020",
+            "EntityName": "Read 12 books",
+            "Field": "delete",
+            "OldValue": null,
+            "NewValue": null,
+            "ValueType": "action",
+            "ProposedValue": null,
+            "IsEditable": false
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": true
+      }
+    ]
+  },
+  "09-destructive-tag/en": {
+    "changes": [
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000030",
+        "EntityName": "Health",
+        "Field": "delete",
+        "OldValue": null,
+        "NewValue": null,
+        "ValueType": "action",
+        "ProposedValue": null,
+        "IsEditable": false
+      }
+    ],
+    "items": [
+      {
+        "ItemId": "00000000-0000-0000-0000-000000000030",
+        "EntityId": "00000000-0000-0000-0000-000000000030",
+        "EntityName": "Health",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000030",
+            "EntityName": "Health",
+            "Field": "delete",
+            "OldValue": null,
+            "NewValue": null,
+            "ValueType": "action",
+            "ProposedValue": null,
+            "IsEditable": false
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": true
+      }
+    ]
+  },
+  "09-destructive-tag/pt-BR": {
+    "changes": [
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000030",
+        "EntityName": "Health",
+        "Field": "delete",
+        "OldValue": null,
+        "NewValue": null,
+        "ValueType": "action",
+        "ProposedValue": null,
+        "IsEditable": false
+      }
+    ],
+    "items": [
+      {
+        "ItemId": "00000000-0000-0000-0000-000000000030",
+        "EntityId": "00000000-0000-0000-0000-000000000030",
+        "EntityName": "Health",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000030",
+            "EntityName": "Health",
+            "Field": "delete",
+            "OldValue": null,
+            "NewValue": null,
+            "ValueType": "action",
+            "ProposedValue": null,
+            "IsEditable": false
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": true
+      }
+    ]
+  },
+  "10-dependency-names/en": {
+    "changes": [
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000000",
+        "EntityName": "Read more",
+        "Field": "title",
+        "OldValue": null,
+        "NewValue": "Read more",
+        "ValueType": "text",
+        "ProposedValue": "Read more",
+        "IsEditable": true
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000000",
+        "EntityName": "Read more",
+        "Field": "habit_ids",
+        "OldValue": null,
+        "NewValue": "Read",
+        "ValueType": "text",
+        "ProposedValue": [
+          "00000000-0000-0000-0000-000000000008"
+        ],
+        "IsEditable": false
+      }
+    ],
+    "items": [
+      {
+        "ItemId": "0",
+        "EntityId": null,
+        "EntityName": "Read more",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000000",
+            "EntityName": "Read more",
+            "Field": "title",
+            "OldValue": null,
+            "NewValue": "Read more",
+            "ValueType": "text",
+            "ProposedValue": "Read more",
+            "IsEditable": true
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000000",
+            "EntityName": "Read more",
+            "Field": "habit_ids",
+            "OldValue": null,
+            "NewValue": "Read",
+            "ValueType": "text",
+            "ProposedValue": [
+              "00000000-0000-0000-0000-000000000008"
+            ],
+            "IsEditable": false
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": null
+      }
+    ]
+  },
+  "10-dependency-names/pt-BR": {
+    "changes": [
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000000",
+        "EntityName": "Read more",
+        "Field": "title",
+        "OldValue": null,
+        "NewValue": "Read more",
+        "ValueType": "text",
+        "ProposedValue": "Read more",
+        "IsEditable": true
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000000",
+        "EntityName": "Read more",
+        "Field": "habit_ids",
+        "OldValue": null,
+        "NewValue": "Read",
+        "ValueType": "text",
+        "ProposedValue": [
+          "00000000-0000-0000-0000-000000000008"
+        ],
+        "IsEditable": false
+      }
+    ],
+    "items": [
+      {
+        "ItemId": "0",
+        "EntityId": null,
+        "EntityName": "Read more",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000000",
+            "EntityName": "Read more",
+            "Field": "title",
+            "OldValue": null,
+            "NewValue": "Read more",
+            "ValueType": "text",
+            "ProposedValue": "Read more",
+            "IsEditable": true
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000000",
+            "EntityName": "Read more",
+            "Field": "habit_ids",
+            "OldValue": null,
+            "NewValue": "Read",
+            "ValueType": "text",
+            "ProposedValue": [
+              "00000000-0000-0000-0000-000000000008"
+            ],
+            "IsEditable": false
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": null
+      }
+    ]
+  },
+  "11-date-field/en": {
+    "changes": [
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000000",
+        "EntityName": "Submit form",
+        "Field": "title",
+        "OldValue": null,
+        "NewValue": "Submit form",
+        "ValueType": "text",
+        "ProposedValue": "Submit form",
+        "IsEditable": true
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000000",
+        "EntityName": "Submit form",
+        "Field": "due_date",
+        "OldValue": null,
+        "NewValue": "2026-10-21",
+        "ValueType": "date",
+        "ProposedValue": "2026-10-21",
+        "IsEditable": true,
+        "Provenance": "requested"
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000000",
+        "EntityName": "Submit form",
+        "Field": "due_time",
+        "OldValue": null,
+        "NewValue": "14:00",
+        "ValueType": "time",
+        "ProposedValue": "14:00",
+        "IsEditable": true,
+        "Provenance": "requested"
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000000",
+        "EntityName": "Submit form",
+        "Field": "frequency_unit",
+        "OldValue": null,
+        "NewValue": "OneTime",
+        "ValueType": "text",
+        "ProposedValue": "OneTime",
+        "IsEditable": true
+      }
+    ],
+    "items": [
+      {
+        "ItemId": "0",
+        "EntityId": null,
+        "EntityName": "Submit form",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000000",
+            "EntityName": "Submit form",
+            "Field": "title",
+            "OldValue": null,
+            "NewValue": "Submit form",
+            "ValueType": "text",
+            "ProposedValue": "Submit form",
+            "IsEditable": true
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000000",
+            "EntityName": "Submit form",
+            "Field": "due_date",
+            "OldValue": null,
+            "NewValue": "2026-10-21",
+            "ValueType": "date",
+            "ProposedValue": "2026-10-21",
+            "IsEditable": true,
+            "Provenance": "requested"
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000000",
+            "EntityName": "Submit form",
+            "Field": "due_time",
+            "OldValue": null,
+            "NewValue": "14:00",
+            "ValueType": "time",
+            "ProposedValue": "14:00",
+            "IsEditable": true,
+            "Provenance": "requested"
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000000",
+            "EntityName": "Submit form",
+            "Field": "frequency_unit",
+            "OldValue": null,
+            "NewValue": "OneTime",
+            "ValueType": "text",
+            "ProposedValue": "OneTime",
+            "IsEditable": true
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": false
+      }
+    ]
+  },
+  "11-date-field/pt-BR": {
+    "changes": [
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000000",
+        "EntityName": "Submit form",
+        "Field": "title",
+        "OldValue": null,
+        "NewValue": "Submit form",
+        "ValueType": "text",
+        "ProposedValue": "Submit form",
+        "IsEditable": true
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000000",
+        "EntityName": "Submit form",
+        "Field": "due_date",
+        "OldValue": null,
+        "NewValue": "2026-10-21",
+        "ValueType": "date",
+        "ProposedValue": "2026-10-21",
+        "IsEditable": true,
+        "Provenance": "requested"
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000000",
+        "EntityName": "Submit form",
+        "Field": "due_time",
+        "OldValue": null,
+        "NewValue": "14:00",
+        "ValueType": "time",
+        "ProposedValue": "14:00",
+        "IsEditable": true,
+        "Provenance": "requested"
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000000",
+        "EntityName": "Submit form",
+        "Field": "frequency_unit",
+        "OldValue": null,
+        "NewValue": "OneTime",
+        "ValueType": "text",
+        "ProposedValue": "OneTime",
+        "IsEditable": true
+      }
+    ],
+    "items": [
+      {
+        "ItemId": "0",
+        "EntityId": null,
+        "EntityName": "Submit form",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000000",
+            "EntityName": "Submit form",
+            "Field": "title",
+            "OldValue": null,
+            "NewValue": "Submit form",
+            "ValueType": "text",
+            "ProposedValue": "Submit form",
+            "IsEditable": true
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000000",
+            "EntityName": "Submit form",
+            "Field": "due_date",
+            "OldValue": null,
+            "NewValue": "2026-10-21",
+            "ValueType": "date",
+            "ProposedValue": "2026-10-21",
+            "IsEditable": true,
+            "Provenance": "requested"
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000000",
+            "EntityName": "Submit form",
+            "Field": "due_time",
+            "OldValue": null,
+            "NewValue": "14:00",
+            "ValueType": "time",
+            "ProposedValue": "14:00",
+            "IsEditable": true,
+            "Provenance": "requested"
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000000",
+            "EntityName": "Submit form",
+            "Field": "frequency_unit",
+            "OldValue": null,
+            "NewValue": "OneTime",
+            "ValueType": "text",
+            "ProposedValue": "OneTime",
+            "IsEditable": true
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": false
+      }
+    ]
+  },
+  "12-offer-repeat/en": {
+    "changes": [
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000000",
+        "EntityName": "Water",
+        "Field": "title",
+        "OldValue": null,
+        "NewValue": "Water",
+        "ValueType": "text",
+        "ProposedValue": "Water",
+        "IsEditable": true,
+        "EntityEmoji": "\uD83D\uDCA7",
+        "Provenance": "requested"
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000000",
+        "EntityName": "Water",
+        "Field": "emoji",
+        "OldValue": null,
+        "NewValue": "\uD83D\uDCA7",
+        "ValueType": "emoji",
+        "ProposedValue": "\uD83D\uDCA7",
+        "IsEditable": true,
+        "EntityEmoji": "\uD83D\uDCA7",
+        "Provenance": "suggested",
+        "Removal": {
+          "OfferKey": "preview::0E9EF606276FCD5C51404EF3:emoji",
+          "Field": "emoji",
+          "Fields": [
+            "emoji"
+          ]
+        }
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000000",
+        "EntityName": "Water",
+        "Field": "is_general",
+        "OldValue": null,
+        "NewValue": "True",
+        "ValueType": "boolean",
+        "ProposedValue": true,
+        "IsEditable": true,
+        "EntityEmoji": "\uD83D\uDCA7",
+        "Provenance": "requested"
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000000",
+        "EntityName": "Water",
+        "Field": "reminder_enabled",
+        "OldValue": null,
+        "NewValue": "True",
+        "ValueType": "boolean",
+        "ProposedValue": true,
+        "IsEditable": true,
+        "EntityEmoji": "\uD83D\uDCA7",
+        "Provenance": "suggested",
+        "Removal": {
+          "OfferKey": "preview::0E9EF606276FCD5C51404EF3:reminder_enabled",
+          "Field": "reminder_enabled",
+          "Fields": [
+            "reminder_enabled",
+            "repeat_reminder"
+          ]
+        }
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000000",
+        "EntityName": "Water",
+        "Field": "repeat_reminder",
+        "OldValue": null,
+        "NewValue": "Every 2 hours; active 08:00 to 20:00",
+        "ValueType": "text",
+        "ProposedValue": {
+          "interval_minutes": 120,
+          "active_start": "08:00",
+          "active_end": "20:00"
+        },
+        "IsEditable": true,
+        "EntityEmoji": "\uD83D\uDCA7",
+        "Provenance": "suggested",
+        "Removal": {
+          "OfferKey": "preview::0E9EF606276FCD5C51404EF3:repeat_reminder",
+          "Field": "repeat_reminder",
+          "Fields": [
+            "reminder_enabled",
+            "repeat_reminder"
+          ]
+        }
+      }
+    ],
+    "items": [
+      {
+        "ItemId": "0",
+        "EntityId": null,
+        "EntityName": "Water",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000000",
+            "EntityName": "Water",
+            "Field": "title",
+            "OldValue": null,
+            "NewValue": "Water",
+            "ValueType": "text",
+            "ProposedValue": "Water",
+            "IsEditable": true,
+            "EntityEmoji": "\uD83D\uDCA7",
+            "Provenance": "requested"
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000000",
+            "EntityName": "Water",
+            "Field": "emoji",
+            "OldValue": null,
+            "NewValue": "\uD83D\uDCA7",
+            "ValueType": "emoji",
+            "ProposedValue": "\uD83D\uDCA7",
+            "IsEditable": true,
+            "EntityEmoji": "\uD83D\uDCA7",
+            "Provenance": "suggested",
+            "Removal": {
+              "OfferKey": "preview::0E9EF606276FCD5C51404EF3:emoji",
+              "Field": "emoji",
+              "Fields": [
+                "emoji"
+              ]
+            }
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000000",
+            "EntityName": "Water",
+            "Field": "is_general",
+            "OldValue": null,
+            "NewValue": "True",
+            "ValueType": "boolean",
+            "ProposedValue": true,
+            "IsEditable": true,
+            "EntityEmoji": "\uD83D\uDCA7",
+            "Provenance": "requested"
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000000",
+            "EntityName": "Water",
+            "Field": "reminder_enabled",
+            "OldValue": null,
+            "NewValue": "True",
+            "ValueType": "boolean",
+            "ProposedValue": true,
+            "IsEditable": true,
+            "EntityEmoji": "\uD83D\uDCA7",
+            "Provenance": "suggested",
+            "Removal": {
+              "OfferKey": "preview::0E9EF606276FCD5C51404EF3:reminder_enabled",
+              "Field": "reminder_enabled",
+              "Fields": [
+                "reminder_enabled",
+                "repeat_reminder"
+              ]
+            }
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000000",
+            "EntityName": "Water",
+            "Field": "repeat_reminder",
+            "OldValue": null,
+            "NewValue": "Every 2 hours; active 08:00 to 20:00",
+            "ValueType": "text",
+            "ProposedValue": {
+              "interval_minutes": 120,
+              "active_start": "08:00",
+              "active_end": "20:00"
+            },
+            "IsEditable": true,
+            "EntityEmoji": "\uD83D\uDCA7",
+            "Provenance": "suggested",
+            "Removal": {
+              "OfferKey": "preview::0E9EF606276FCD5C51404EF3:repeat_reminder",
+              "Field": "repeat_reminder",
+              "Fields": [
+                "reminder_enabled",
+                "repeat_reminder"
+              ]
+            }
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": false,
+        "EntityEmoji": "\uD83D\uDCA7"
+      }
+    ]
+  },
+  "12-offer-repeat/pt-BR": {
+    "changes": [
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000000",
+        "EntityName": "Water",
+        "Field": "title",
+        "OldValue": null,
+        "NewValue": "Water",
+        "ValueType": "text",
+        "ProposedValue": "Water",
+        "IsEditable": true,
+        "EntityEmoji": "\uD83D\uDCA7",
+        "Provenance": "requested"
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000000",
+        "EntityName": "Water",
+        "Field": "emoji",
+        "OldValue": null,
+        "NewValue": "\uD83D\uDCA7",
+        "ValueType": "emoji",
+        "ProposedValue": "\uD83D\uDCA7",
+        "IsEditable": true,
+        "EntityEmoji": "\uD83D\uDCA7",
+        "Provenance": "suggested",
+        "Removal": {
+          "OfferKey": "preview::0E9EF606276FCD5C51404EF3:emoji",
+          "Field": "emoji",
+          "Fields": [
+            "emoji"
+          ]
+        }
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000000",
+        "EntityName": "Water",
+        "Field": "is_general",
+        "OldValue": null,
+        "NewValue": "True",
+        "ValueType": "boolean",
+        "ProposedValue": true,
+        "IsEditable": true,
+        "EntityEmoji": "\uD83D\uDCA7",
+        "Provenance": "requested"
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000000",
+        "EntityName": "Water",
+        "Field": "reminder_enabled",
+        "OldValue": null,
+        "NewValue": "True",
+        "ValueType": "boolean",
+        "ProposedValue": true,
+        "IsEditable": true,
+        "EntityEmoji": "\uD83D\uDCA7",
+        "Provenance": "suggested",
+        "Removal": {
+          "OfferKey": "preview::0E9EF606276FCD5C51404EF3:reminder_enabled",
+          "Field": "reminder_enabled",
+          "Fields": [
+            "reminder_enabled",
+            "repeat_reminder"
+          ]
+        }
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000000",
+        "EntityName": "Water",
+        "Field": "repeat_reminder",
+        "OldValue": null,
+        "NewValue": "A cada 2 horas; das 08:00 às 20:00",
+        "ValueType": "text",
+        "ProposedValue": {
+          "interval_minutes": 120,
+          "active_start": "08:00",
+          "active_end": "20:00"
+        },
+        "IsEditable": true,
+        "EntityEmoji": "\uD83D\uDCA7",
+        "Provenance": "suggested",
+        "Removal": {
+          "OfferKey": "preview::0E9EF606276FCD5C51404EF3:repeat_reminder",
+          "Field": "repeat_reminder",
+          "Fields": [
+            "reminder_enabled",
+            "repeat_reminder"
+          ]
+        }
+      }
+    ],
+    "items": [
+      {
+        "ItemId": "0",
+        "EntityId": null,
+        "EntityName": "Water",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000000",
+            "EntityName": "Water",
+            "Field": "title",
+            "OldValue": null,
+            "NewValue": "Water",
+            "ValueType": "text",
+            "ProposedValue": "Water",
+            "IsEditable": true,
+            "EntityEmoji": "\uD83D\uDCA7",
+            "Provenance": "requested"
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000000",
+            "EntityName": "Water",
+            "Field": "emoji",
+            "OldValue": null,
+            "NewValue": "\uD83D\uDCA7",
+            "ValueType": "emoji",
+            "ProposedValue": "\uD83D\uDCA7",
+            "IsEditable": true,
+            "EntityEmoji": "\uD83D\uDCA7",
+            "Provenance": "suggested",
+            "Removal": {
+              "OfferKey": "preview::0E9EF606276FCD5C51404EF3:emoji",
+              "Field": "emoji",
+              "Fields": [
+                "emoji"
+              ]
+            }
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000000",
+            "EntityName": "Water",
+            "Field": "is_general",
+            "OldValue": null,
+            "NewValue": "True",
+            "ValueType": "boolean",
+            "ProposedValue": true,
+            "IsEditable": true,
+            "EntityEmoji": "\uD83D\uDCA7",
+            "Provenance": "requested"
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000000",
+            "EntityName": "Water",
+            "Field": "reminder_enabled",
+            "OldValue": null,
+            "NewValue": "True",
+            "ValueType": "boolean",
+            "ProposedValue": true,
+            "IsEditable": true,
+            "EntityEmoji": "\uD83D\uDCA7",
+            "Provenance": "suggested",
+            "Removal": {
+              "OfferKey": "preview::0E9EF606276FCD5C51404EF3:reminder_enabled",
+              "Field": "reminder_enabled",
+              "Fields": [
+                "reminder_enabled",
+                "repeat_reminder"
+              ]
+            }
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000000",
+            "EntityName": "Water",
+            "Field": "repeat_reminder",
+            "OldValue": null,
+            "NewValue": "A cada 2 horas; das 08:00 às 20:00",
+            "ValueType": "text",
+            "ProposedValue": {
+              "interval_minutes": 120,
+              "active_start": "08:00",
+              "active_end": "20:00"
+            },
+            "IsEditable": true,
+            "EntityEmoji": "\uD83D\uDCA7",
+            "Provenance": "suggested",
+            "Removal": {
+              "OfferKey": "preview::0E9EF606276FCD5C51404EF3:repeat_reminder",
+              "Field": "repeat_reminder",
+              "Fields": [
+                "reminder_enabled",
+                "repeat_reminder"
+              ]
+            }
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": false,
+        "EntityEmoji": "\uD83D\uDCA7"
+      }
+    ]
+  },
+  "12-offer-nested-repeat/en": {
+    "changes": [],
+    "items": [
+      {
+        "ItemId": "0",
+        "EntityId": null,
+        "EntityName": "Daily routine",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000000",
+            "EntityName": "Daily routine",
+            "Field": "title",
+            "OldValue": null,
+            "NewValue": "Daily routine",
+            "ValueType": "text",
+            "ProposedValue": "Daily routine",
+            "IsEditable": true,
+            "Provenance": "requested"
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000000",
+            "EntityName": "Daily routine",
+            "Field": "frequency_quantity",
+            "OldValue": null,
+            "NewValue": "1",
+            "ValueType": "number",
+            "ProposedValue": 1,
+            "IsEditable": true,
+            "Provenance": "requested"
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000000",
+            "EntityName": "Daily routine",
+            "Field": "frequency_unit",
+            "OldValue": null,
+            "NewValue": "Day",
+            "ValueType": "text",
+            "ProposedValue": "Day",
+            "IsEditable": true,
+            "Provenance": "requested"
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000000",
+            "EntityName": "Daily routine",
+            "Field": "sub_habits",
+            "OldValue": null,
+            "NewValue": "[{\"emoji\":\"\\uD83C\\uDF31\",\"reminder_enabled\":true,\"repeat_reminder\":{\"interval_minutes\":120},\"title\":\"Stretch\"},{\"due_time\":\"20:00\",\"title\":\"Read\"}]",
+            "ValueType": "text",
+            "ProposedValue": [
+              {
+                "title": "Stretch",
+                "repeat_reminder": {
+                  "interval_minutes": 120
+                },
+                "reminder_enabled": true,
+                "emoji": "\uD83C\uDF31"
+              },
+              {
+                "title": "Read",
+                "due_time": "20:00"
+              }
+            ],
+            "IsEditable": true,
+            "Provenance": "requested"
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000000",
+            "EntityName": "Daily routine",
+            "Field": "parent_habit_id",
+            "OldValue": null,
+            "NewValue": "No parent",
+            "ValueType": "text",
+            "ProposedValue": null,
+            "IsEditable": true,
+            "Provenance": "stored"
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000000",
+            "EntityName": "Stretch",
+            "Field": "sub_habits/0/repeat_reminder",
+            "OldValue": null,
+            "NewValue": "Every 2 hours",
+            "ValueType": "text",
+            "ProposedValue": {
+              "interval_minutes": 120
+            },
+            "IsEditable": true,
+            "EntityEmoji": "\uD83C\uDF31",
+            "Provenance": "suggested",
+            "Removal": {
+              "OfferKey": "preview::1E79D1BF2413E5E6FA82A3EA:sub_habits/0/repeat_reminder",
+              "Field": "sub_habits/0/repeat_reminder",
+              "Fields": [
+                "sub_habits/0/reminder_enabled",
+                "sub_habits/0/repeat_reminder"
+              ]
+            }
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000000",
+            "EntityName": "Stretch",
+            "Field": "sub_habits/0/reminder_enabled",
+            "OldValue": null,
+            "NewValue": "True",
+            "ValueType": "boolean",
+            "ProposedValue": true,
+            "IsEditable": true,
+            "EntityEmoji": "\uD83C\uDF31",
+            "Provenance": "suggested",
+            "Removal": {
+              "OfferKey": "preview::1E79D1BF2413E5E6FA82A3EA:sub_habits/0/reminder_enabled",
+              "Field": "sub_habits/0/reminder_enabled",
+              "Fields": [
+                "sub_habits/0/reminder_enabled",
+                "sub_habits/0/repeat_reminder"
+              ]
+            }
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000000",
+            "EntityName": "Stretch",
+            "Field": "sub_habits/0/emoji",
+            "OldValue": null,
+            "NewValue": "\uD83C\uDF31",
+            "ValueType": "emoji",
+            "ProposedValue": "\uD83C\uDF31",
+            "IsEditable": true,
+            "EntityEmoji": "\uD83C\uDF31",
+            "Provenance": "suggested",
+            "Removal": {
+              "OfferKey": "preview::1E79D1BF2413E5E6FA82A3EA:sub_habits/0/emoji",
+              "Field": "sub_habits/0/emoji",
+              "Fields": [
+                "sub_habits/0/emoji"
+              ]
+            }
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": false,
+        "HabitType": "Habit"
+      }
+    ]
+  },
+  "12-offer-nested-repeat/pt-BR": {
+    "changes": [],
+    "items": [
+      {
+        "ItemId": "0",
+        "EntityId": null,
+        "EntityName": "Daily routine",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000000",
+            "EntityName": "Daily routine",
+            "Field": "title",
+            "OldValue": null,
+            "NewValue": "Daily routine",
+            "ValueType": "text",
+            "ProposedValue": "Daily routine",
+            "IsEditable": true,
+            "Provenance": "requested"
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000000",
+            "EntityName": "Daily routine",
+            "Field": "frequency_quantity",
+            "OldValue": null,
+            "NewValue": "1",
+            "ValueType": "number",
+            "ProposedValue": 1,
+            "IsEditable": true,
+            "Provenance": "requested"
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000000",
+            "EntityName": "Daily routine",
+            "Field": "frequency_unit",
+            "OldValue": null,
+            "NewValue": "Day",
+            "ValueType": "text",
+            "ProposedValue": "Day",
+            "IsEditable": true,
+            "Provenance": "requested"
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000000",
+            "EntityName": "Daily routine",
+            "Field": "sub_habits",
+            "OldValue": null,
+            "NewValue": "[{\"emoji\":\"\\uD83C\\uDF31\",\"reminder_enabled\":true,\"repeat_reminder\":{\"interval_minutes\":120},\"title\":\"Stretch\"},{\"due_time\":\"20:00\",\"title\":\"Read\"}]",
+            "ValueType": "text",
+            "ProposedValue": [
+              {
+                "title": "Stretch",
+                "repeat_reminder": {
+                  "interval_minutes": 120
+                },
+                "reminder_enabled": true,
+                "emoji": "\uD83C\uDF31"
+              },
+              {
+                "title": "Read",
+                "due_time": "20:00"
+              }
+            ],
+            "IsEditable": true,
+            "Provenance": "requested"
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000000",
+            "EntityName": "Daily routine",
+            "Field": "parent_habit_id",
+            "OldValue": null,
+            "NewValue": "No parent",
+            "ValueType": "text",
+            "ProposedValue": null,
+            "IsEditable": true,
+            "Provenance": "stored"
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000000",
+            "EntityName": "Stretch",
+            "Field": "sub_habits/0/repeat_reminder",
+            "OldValue": null,
+            "NewValue": "A cada 2 horas",
+            "ValueType": "text",
+            "ProposedValue": {
+              "interval_minutes": 120
+            },
+            "IsEditable": true,
+            "EntityEmoji": "\uD83C\uDF31",
+            "Provenance": "suggested",
+            "Removal": {
+              "OfferKey": "preview::1E79D1BF2413E5E6FA82A3EA:sub_habits/0/repeat_reminder",
+              "Field": "sub_habits/0/repeat_reminder",
+              "Fields": [
+                "sub_habits/0/reminder_enabled",
+                "sub_habits/0/repeat_reminder"
+              ]
+            }
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000000",
+            "EntityName": "Stretch",
+            "Field": "sub_habits/0/reminder_enabled",
+            "OldValue": null,
+            "NewValue": "True",
+            "ValueType": "boolean",
+            "ProposedValue": true,
+            "IsEditable": true,
+            "EntityEmoji": "\uD83C\uDF31",
+            "Provenance": "suggested",
+            "Removal": {
+              "OfferKey": "preview::1E79D1BF2413E5E6FA82A3EA:sub_habits/0/reminder_enabled",
+              "Field": "sub_habits/0/reminder_enabled",
+              "Fields": [
+                "sub_habits/0/reminder_enabled",
+                "sub_habits/0/repeat_reminder"
+              ]
+            }
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000000",
+            "EntityName": "Stretch",
+            "Field": "sub_habits/0/emoji",
+            "OldValue": null,
+            "NewValue": "\uD83C\uDF31",
+            "ValueType": "emoji",
+            "ProposedValue": "\uD83C\uDF31",
+            "IsEditable": true,
+            "EntityEmoji": "\uD83C\uDF31",
+            "Provenance": "suggested",
+            "Removal": {
+              "OfferKey": "preview::1E79D1BF2413E5E6FA82A3EA:sub_habits/0/emoji",
+              "Field": "sub_habits/0/emoji",
+              "Fields": [
+                "sub_habits/0/emoji"
+              ]
+            }
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": false,
+        "HabitType": "Habit"
+      }
+    ]
+  },
+  "13-change-set/en": {
+    "changes": [
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000001",
+        "EntityName": "Water",
+        "Field": "delete",
+        "OldValue": null,
+        "NewValue": null,
+        "ValueType": "action",
+        "ProposedValue": null,
+        "IsEditable": false
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000002",
+        "EntityName": "Water",
+        "Field": "delete",
+        "OldValue": null,
+        "NewValue": null,
+        "ValueType": "action",
+        "ProposedValue": null,
+        "IsEditable": false
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000003",
+        "EntityName": "Water",
+        "Field": "title",
+        "OldValue": "Water",
+        "NewValue": "Agua",
+        "ValueType": "text",
+        "ProposedValue": "Agua",
+        "IsEditable": true
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000004",
+        "EntityName": "Water",
+        "Field": "title",
+        "OldValue": "Water",
+        "NewValue": "Agua",
+        "ValueType": "text",
+        "ProposedValue": "Agua",
+        "IsEditable": true
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000005",
+        "EntityName": "Water",
+        "Field": "title",
+        "OldValue": "Water",
+        "NewValue": "Agua",
+        "ValueType": "text",
+        "ProposedValue": "Agua",
+        "IsEditable": true
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000006",
+        "EntityName": "Water",
+        "Field": "title",
+        "OldValue": "Water",
+        "NewValue": "Agua",
+        "ValueType": "text",
+        "ProposedValue": "Agua",
+        "IsEditable": true
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000007",
+        "EntityName": "Water",
+        "Field": "date",
+        "OldValue": null,
+        "NewValue": "2026-10-19",
+        "ValueType": "date",
+        "ProposedValue": "2026-10-19",
+        "IsEditable": true
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000007",
+        "EntityName": "Water",
+        "Field": "habit_id",
+        "OldValue": null,
+        "NewValue": "00000000-0000-0000-0000-000000000007",
+        "ValueType": "text",
+        "ProposedValue": "00000000-0000-0000-0000-000000000007",
+        "IsEditable": false
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000007",
+        "EntityName": "Water",
+        "Field": "action",
+        "OldValue": null,
+        "NewValue": "Skip",
+        "ValueType": "action",
+        "ProposedValue": "skip",
+        "IsEditable": false
+      }
+    ],
+    "items": [
+      {
+        "ItemId": "0/00000000-0000-0000-0000-000000000001",
+        "EntityId": "00000000-0000-0000-0000-000000000001",
+        "EntityName": "Water",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000001",
+            "EntityName": "Water",
+            "Field": "delete",
+            "OldValue": null,
+            "NewValue": null,
+            "ValueType": "action",
+            "ProposedValue": null,
+            "IsEditable": false
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": true
+      },
+      {
+        "ItemId": "0/00000000-0000-0000-0000-000000000002",
+        "EntityId": "00000000-0000-0000-0000-000000000002",
+        "EntityName": "Water",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000002",
+            "EntityName": "Water",
+            "Field": "delete",
+            "OldValue": null,
+            "NewValue": null,
+            "ValueType": "action",
+            "ProposedValue": null,
+            "IsEditable": false
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": true
+      },
+      {
+        "ItemId": "1/00000000-0000-0000-0000-000000000003",
+        "EntityId": "00000000-0000-0000-0000-000000000003",
+        "EntityName": "Water",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000003",
+            "EntityName": "Water",
+            "Field": "title",
+            "OldValue": "Water",
+            "NewValue": "Agua",
+            "ValueType": "text",
+            "ProposedValue": "Agua",
+            "IsEditable": true
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": false
+      },
+      {
+        "ItemId": "1/00000000-0000-0000-0000-000000000004",
+        "EntityId": "00000000-0000-0000-0000-000000000004",
+        "EntityName": "Water",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000004",
+            "EntityName": "Water",
+            "Field": "title",
+            "OldValue": "Water",
+            "NewValue": "Agua",
+            "ValueType": "text",
+            "ProposedValue": "Agua",
+            "IsEditable": true
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": false
+      },
+      {
+        "ItemId": "1/00000000-0000-0000-0000-000000000005",
+        "EntityId": "00000000-0000-0000-0000-000000000005",
+        "EntityName": "Water",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000005",
+            "EntityName": "Water",
+            "Field": "title",
+            "OldValue": "Water",
+            "NewValue": "Agua",
+            "ValueType": "text",
+            "ProposedValue": "Agua",
+            "IsEditable": true
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": false
+      },
+      {
+        "ItemId": "1/00000000-0000-0000-0000-000000000006",
+        "EntityId": "00000000-0000-0000-0000-000000000006",
+        "EntityName": "Water",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000006",
+            "EntityName": "Water",
+            "Field": "title",
+            "OldValue": "Water",
+            "NewValue": "Agua",
+            "ValueType": "text",
+            "ProposedValue": "Agua",
+            "IsEditable": true
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": false
+      },
+      {
+        "ItemId": "2/00000000-0000-0000-0000-000000000007",
+        "EntityId": "00000000-0000-0000-0000-000000000007",
+        "EntityName": "Water",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000007",
+            "EntityName": "Water",
+            "Field": "date",
+            "OldValue": null,
+            "NewValue": "2026-10-19",
+            "ValueType": "date",
+            "ProposedValue": "2026-10-19",
+            "IsEditable": true
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000007",
+            "EntityName": "Water",
+            "Field": "habit_id",
+            "OldValue": null,
+            "NewValue": "00000000-0000-0000-0000-000000000007",
+            "ValueType": "text",
+            "ProposedValue": "00000000-0000-0000-0000-000000000007",
+            "IsEditable": false
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000007",
+            "EntityName": "Water",
+            "Field": "action",
+            "OldValue": null,
+            "NewValue": "Skip",
+            "ValueType": "action",
+            "ProposedValue": "skip",
+            "IsEditable": false
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": false
+      }
+    ]
+  },
+  "13-change-set/pt-BR": {
+    "changes": [
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000001",
+        "EntityName": "Water",
+        "Field": "delete",
+        "OldValue": null,
+        "NewValue": null,
+        "ValueType": "action",
+        "ProposedValue": null,
+        "IsEditable": false
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000002",
+        "EntityName": "Water",
+        "Field": "delete",
+        "OldValue": null,
+        "NewValue": null,
+        "ValueType": "action",
+        "ProposedValue": null,
+        "IsEditable": false
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000003",
+        "EntityName": "Water",
+        "Field": "title",
+        "OldValue": "Water",
+        "NewValue": "Agua",
+        "ValueType": "text",
+        "ProposedValue": "Agua",
+        "IsEditable": true
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000004",
+        "EntityName": "Water",
+        "Field": "title",
+        "OldValue": "Water",
+        "NewValue": "Agua",
+        "ValueType": "text",
+        "ProposedValue": "Agua",
+        "IsEditable": true
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000005",
+        "EntityName": "Water",
+        "Field": "title",
+        "OldValue": "Water",
+        "NewValue": "Agua",
+        "ValueType": "text",
+        "ProposedValue": "Agua",
+        "IsEditable": true
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000006",
+        "EntityName": "Water",
+        "Field": "title",
+        "OldValue": "Water",
+        "NewValue": "Agua",
+        "ValueType": "text",
+        "ProposedValue": "Agua",
+        "IsEditable": true
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000007",
+        "EntityName": "Water",
+        "Field": "date",
+        "OldValue": null,
+        "NewValue": "2026-10-19",
+        "ValueType": "date",
+        "ProposedValue": "2026-10-19",
+        "IsEditable": true
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000007",
+        "EntityName": "Water",
+        "Field": "habit_id",
+        "OldValue": null,
+        "NewValue": "00000000-0000-0000-0000-000000000007",
+        "ValueType": "text",
+        "ProposedValue": "00000000-0000-0000-0000-000000000007",
+        "IsEditable": false
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000007",
+        "EntityName": "Water",
+        "Field": "action",
+        "OldValue": null,
+        "NewValue": "Pular",
+        "ValueType": "action",
+        "ProposedValue": "skip",
+        "IsEditable": false
+      }
+    ],
+    "items": [
+      {
+        "ItemId": "0/00000000-0000-0000-0000-000000000001",
+        "EntityId": "00000000-0000-0000-0000-000000000001",
+        "EntityName": "Water",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000001",
+            "EntityName": "Water",
+            "Field": "delete",
+            "OldValue": null,
+            "NewValue": null,
+            "ValueType": "action",
+            "ProposedValue": null,
+            "IsEditable": false
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": true
+      },
+      {
+        "ItemId": "0/00000000-0000-0000-0000-000000000002",
+        "EntityId": "00000000-0000-0000-0000-000000000002",
+        "EntityName": "Water",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000002",
+            "EntityName": "Water",
+            "Field": "delete",
+            "OldValue": null,
+            "NewValue": null,
+            "ValueType": "action",
+            "ProposedValue": null,
+            "IsEditable": false
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": true
+      },
+      {
+        "ItemId": "1/00000000-0000-0000-0000-000000000003",
+        "EntityId": "00000000-0000-0000-0000-000000000003",
+        "EntityName": "Water",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000003",
+            "EntityName": "Water",
+            "Field": "title",
+            "OldValue": "Water",
+            "NewValue": "Agua",
+            "ValueType": "text",
+            "ProposedValue": "Agua",
+            "IsEditable": true
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": false
+      },
+      {
+        "ItemId": "1/00000000-0000-0000-0000-000000000004",
+        "EntityId": "00000000-0000-0000-0000-000000000004",
+        "EntityName": "Water",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000004",
+            "EntityName": "Water",
+            "Field": "title",
+            "OldValue": "Water",
+            "NewValue": "Agua",
+            "ValueType": "text",
+            "ProposedValue": "Agua",
+            "IsEditable": true
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": false
+      },
+      {
+        "ItemId": "1/00000000-0000-0000-0000-000000000005",
+        "EntityId": "00000000-0000-0000-0000-000000000005",
+        "EntityName": "Water",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000005",
+            "EntityName": "Water",
+            "Field": "title",
+            "OldValue": "Water",
+            "NewValue": "Agua",
+            "ValueType": "text",
+            "ProposedValue": "Agua",
+            "IsEditable": true
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": false
+      },
+      {
+        "ItemId": "1/00000000-0000-0000-0000-000000000006",
+        "EntityId": "00000000-0000-0000-0000-000000000006",
+        "EntityName": "Water",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000006",
+            "EntityName": "Water",
+            "Field": "title",
+            "OldValue": "Water",
+            "NewValue": "Agua",
+            "ValueType": "text",
+            "ProposedValue": "Agua",
+            "IsEditable": true
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": false
+      },
+      {
+        "ItemId": "2/00000000-0000-0000-0000-000000000007",
+        "EntityId": "00000000-0000-0000-0000-000000000007",
+        "EntityName": "Water",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000007",
+            "EntityName": "Water",
+            "Field": "date",
+            "OldValue": null,
+            "NewValue": "2026-10-19",
+            "ValueType": "date",
+            "ProposedValue": "2026-10-19",
+            "IsEditable": true
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000007",
+            "EntityName": "Water",
+            "Field": "habit_id",
+            "OldValue": null,
+            "NewValue": "00000000-0000-0000-0000-000000000007",
+            "ValueType": "text",
+            "ProposedValue": "00000000-0000-0000-0000-000000000007",
+            "IsEditable": false
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000007",
+            "EntityName": "Water",
+            "Field": "action",
+            "OldValue": null,
+            "NewValue": "Pular",
+            "ValueType": "action",
+            "ProposedValue": "skip",
+            "IsEditable": false
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": false
+      }
+    ]
+  },
+  "14-set-members/en": {
+    "changes": [
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000008",
+        "EntityName": "Read",
+        "Field": "title",
+        "OldValue": "Read",
+        "NewValue": "Read more",
+        "ValueType": "text",
+        "ProposedValue": "Read more",
+        "IsEditable": true,
+        "EntityEmoji": "\uD83D\uDCD6"
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000008",
+        "EntityName": "Read",
+        "Field": "habit_id",
+        "OldValue": null,
+        "NewValue": "00000000-0000-0000-0000-000000000008",
+        "ValueType": "text",
+        "ProposedValue": "00000000-0000-0000-0000-000000000008",
+        "IsEditable": false,
+        "EntityEmoji": "\uD83D\uDCD6"
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000009",
+        "EntityName": "Stretch",
+        "Field": "habit_id",
+        "OldValue": null,
+        "NewValue": "00000000-0000-0000-0000-000000000009",
+        "ValueType": "text",
+        "ProposedValue": "00000000-0000-0000-0000-000000000009",
+        "IsEditable": false
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000009",
+        "EntityName": "Stretch",
+        "Field": "repeat_reminder",
+        "OldValue": "Every 8 hours; starting 10/19/2026 08:00",
+        "NewValue": "Every 30 minutes",
+        "ValueType": "text",
+        "ProposedValue": {
+          "interval_minutes": 30
+        },
+        "IsEditable": true
+      }
+    ],
+    "items": [
+      {
+        "ItemId": "0/00000000-0000-0000-0000-000000000008",
+        "EntityId": "00000000-0000-0000-0000-000000000008",
+        "EntityName": "Read",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000008",
+            "EntityName": "Read",
+            "Field": "title",
+            "OldValue": "Read",
+            "NewValue": "Read more",
+            "ValueType": "text",
+            "ProposedValue": "Read more",
+            "IsEditable": true,
+            "EntityEmoji": "\uD83D\uDCD6"
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000008",
+            "EntityName": "Read",
+            "Field": "habit_id",
+            "OldValue": null,
+            "NewValue": "00000000-0000-0000-0000-000000000008",
+            "ValueType": "text",
+            "ProposedValue": "00000000-0000-0000-0000-000000000008",
+            "IsEditable": false,
+            "EntityEmoji": "\uD83D\uDCD6"
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": false,
+        "EntityEmoji": "\uD83D\uDCD6"
+      },
+      {
+        "ItemId": "1/00000000-0000-0000-0000-000000000009",
+        "EntityId": "00000000-0000-0000-0000-000000000009",
+        "EntityName": "Stretch",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000009",
+            "EntityName": "Stretch",
+            "Field": "habit_id",
+            "OldValue": null,
+            "NewValue": "00000000-0000-0000-0000-000000000009",
+            "ValueType": "text",
+            "ProposedValue": "00000000-0000-0000-0000-000000000009",
+            "IsEditable": false
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000009",
+            "EntityName": "Stretch",
+            "Field": "repeat_reminder",
+            "OldValue": "Every 8 hours; starting 10/19/2026 08:00",
+            "NewValue": "Every 30 minutes",
+            "ValueType": "text",
+            "ProposedValue": {
+              "interval_minutes": 30
+            },
+            "IsEditable": true
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": false
+      }
+    ]
+  },
+  "14-set-members/pt-BR": {
+    "changes": [
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000008",
+        "EntityName": "Read",
+        "Field": "title",
+        "OldValue": "Read",
+        "NewValue": "Read more",
+        "ValueType": "text",
+        "ProposedValue": "Read more",
+        "IsEditable": true,
+        "EntityEmoji": "\uD83D\uDCD6"
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000008",
+        "EntityName": "Read",
+        "Field": "habit_id",
+        "OldValue": null,
+        "NewValue": "00000000-0000-0000-0000-000000000008",
+        "ValueType": "text",
+        "ProposedValue": "00000000-0000-0000-0000-000000000008",
+        "IsEditable": false,
+        "EntityEmoji": "\uD83D\uDCD6"
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000009",
+        "EntityName": "Stretch",
+        "Field": "habit_id",
+        "OldValue": null,
+        "NewValue": "00000000-0000-0000-0000-000000000009",
+        "ValueType": "text",
+        "ProposedValue": "00000000-0000-0000-0000-000000000009",
+        "IsEditable": false
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000009",
+        "EntityName": "Stretch",
+        "Field": "repeat_reminder",
+        "OldValue": "A cada 8 horas; a partir de 19/10/2026 08:00",
+        "NewValue": "A cada 30 minutos",
+        "ValueType": "text",
+        "ProposedValue": {
+          "interval_minutes": 30
+        },
+        "IsEditable": true
+      }
+    ],
+    "items": [
+      {
+        "ItemId": "0/00000000-0000-0000-0000-000000000008",
+        "EntityId": "00000000-0000-0000-0000-000000000008",
+        "EntityName": "Read",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000008",
+            "EntityName": "Read",
+            "Field": "title",
+            "OldValue": "Read",
+            "NewValue": "Read more",
+            "ValueType": "text",
+            "ProposedValue": "Read more",
+            "IsEditable": true,
+            "EntityEmoji": "\uD83D\uDCD6"
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000008",
+            "EntityName": "Read",
+            "Field": "habit_id",
+            "OldValue": null,
+            "NewValue": "00000000-0000-0000-0000-000000000008",
+            "ValueType": "text",
+            "ProposedValue": "00000000-0000-0000-0000-000000000008",
+            "IsEditable": false,
+            "EntityEmoji": "\uD83D\uDCD6"
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": false,
+        "EntityEmoji": "\uD83D\uDCD6"
+      },
+      {
+        "ItemId": "1/00000000-0000-0000-0000-000000000009",
+        "EntityId": "00000000-0000-0000-0000-000000000009",
+        "EntityName": "Stretch",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000009",
+            "EntityName": "Stretch",
+            "Field": "habit_id",
+            "OldValue": null,
+            "NewValue": "00000000-0000-0000-0000-000000000009",
+            "ValueType": "text",
+            "ProposedValue": "00000000-0000-0000-0000-000000000009",
+            "IsEditable": false
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000009",
+            "EntityName": "Stretch",
+            "Field": "repeat_reminder",
+            "OldValue": "A cada 8 horas; a partir de 19/10/2026 08:00",
+            "NewValue": "A cada 30 minutos",
+            "ValueType": "text",
+            "ProposedValue": {
+              "interval_minutes": 30
+            },
+            "IsEditable": true
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": false
+      }
+    ]
+  },
+  "14-set-offer-member/en": {
+    "changes": [
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000008",
+        "EntityName": "Read",
+        "Field": "title",
+        "OldValue": "Read",
+        "NewValue": "Read more",
+        "ValueType": "text",
+        "ProposedValue": "Read more",
+        "IsEditable": true,
+        "EntityEmoji": "\uD83D\uDCD6",
+        "Provenance": "requested"
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000008",
+        "EntityName": "Read",
+        "Field": "habit_id",
+        "OldValue": null,
+        "NewValue": "00000000-0000-0000-0000-000000000008",
+        "ValueType": "text",
+        "ProposedValue": "00000000-0000-0000-0000-000000000008",
+        "IsEditable": false,
+        "EntityEmoji": "\uD83D\uDCD6",
+        "Provenance": "requested"
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000000",
+        "EntityName": "Daily routine",
+        "Field": "title",
+        "OldValue": null,
+        "NewValue": "Daily routine",
+        "ValueType": "text",
+        "ProposedValue": "Daily routine",
+        "IsEditable": true,
+        "Provenance": "requested"
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000000",
+        "EntityName": "Daily routine",
+        "Field": "frequency_quantity",
+        "OldValue": null,
+        "NewValue": "1",
+        "ValueType": "number",
+        "ProposedValue": 1,
+        "IsEditable": true,
+        "Provenance": "requested"
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000000",
+        "EntityName": "Daily routine",
+        "Field": "frequency_unit",
+        "OldValue": null,
+        "NewValue": "Day",
+        "ValueType": "text",
+        "ProposedValue": "Day",
+        "IsEditable": true,
+        "Provenance": "requested"
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000000",
+        "EntityName": "Daily routine",
+        "Field": "sub_habits",
+        "OldValue": null,
+        "NewValue": "[{\"emoji\":\"\\uD83C\\uDF31\",\"reminder_enabled\":true,\"repeat_reminder\":{\"interval_minutes\":120},\"title\":\"Stretch\"}]",
+        "ValueType": "text",
+        "ProposedValue": [
+          {
+            "title": "Stretch",
+            "repeat_reminder": {
+              "interval_minutes": 120
+            },
+            "reminder_enabled": true,
+            "emoji": "\uD83C\uDF31"
+          }
+        ],
+        "IsEditable": true,
+        "Provenance": "requested"
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000000",
+        "EntityName": "Daily routine",
+        "Field": "parent_habit_id",
+        "OldValue": null,
+        "NewValue": "No parent",
+        "ValueType": "text",
+        "ProposedValue": null,
+        "IsEditable": true,
+        "Provenance": "stored"
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000000",
+        "EntityName": "Stretch",
+        "Field": "sub_habits/0/repeat_reminder",
+        "OldValue": null,
+        "NewValue": "Every 2 hours",
+        "ValueType": "text",
+        "ProposedValue": {
+          "interval_minutes": 120
+        },
+        "IsEditable": true,
+        "EntityEmoji": "\uD83C\uDF31",
+        "Provenance": "suggested",
+        "Removal": {
+          "OfferKey": "preview::1E79D1BF2413E5E6FA82A3EA:sub_habits/0/repeat_reminder",
+          "Field": "sub_habits/0/repeat_reminder",
+          "Fields": [
+            "sub_habits/0/reminder_enabled",
+            "sub_habits/0/repeat_reminder"
+          ]
+        }
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000000",
+        "EntityName": "Stretch",
+        "Field": "sub_habits/0/reminder_enabled",
+        "OldValue": null,
+        "NewValue": "True",
+        "ValueType": "boolean",
+        "ProposedValue": true,
+        "IsEditable": true,
+        "EntityEmoji": "\uD83C\uDF31",
+        "Provenance": "suggested",
+        "Removal": {
+          "OfferKey": "preview::1E79D1BF2413E5E6FA82A3EA:sub_habits/0/reminder_enabled",
+          "Field": "sub_habits/0/reminder_enabled",
+          "Fields": [
+            "sub_habits/0/reminder_enabled",
+            "sub_habits/0/repeat_reminder"
+          ]
+        }
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000000",
+        "EntityName": "Stretch",
+        "Field": "sub_habits/0/emoji",
+        "OldValue": null,
+        "NewValue": "\uD83C\uDF31",
+        "ValueType": "emoji",
+        "ProposedValue": "\uD83C\uDF31",
+        "IsEditable": true,
+        "EntityEmoji": "\uD83C\uDF31",
+        "Provenance": "suggested",
+        "Removal": {
+          "OfferKey": "preview::1E79D1BF2413E5E6FA82A3EA:sub_habits/0/emoji",
+          "Field": "sub_habits/0/emoji",
+          "Fields": [
+            "sub_habits/0/emoji"
+          ]
+        }
+      }
+    ],
+    "items": [
+      {
+        "ItemId": "0/00000000-0000-0000-0000-000000000008",
+        "EntityId": "00000000-0000-0000-0000-000000000008",
+        "EntityName": "Read",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000008",
+            "EntityName": "Read",
+            "Field": "title",
+            "OldValue": "Read",
+            "NewValue": "Read more",
+            "ValueType": "text",
+            "ProposedValue": "Read more",
+            "IsEditable": true,
+            "EntityEmoji": "\uD83D\uDCD6",
+            "Provenance": "requested"
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000008",
+            "EntityName": "Read",
+            "Field": "habit_id",
+            "OldValue": null,
+            "NewValue": "00000000-0000-0000-0000-000000000008",
+            "ValueType": "text",
+            "ProposedValue": "00000000-0000-0000-0000-000000000008",
+            "IsEditable": false,
+            "EntityEmoji": "\uD83D\uDCD6",
+            "Provenance": "requested"
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": false,
+        "EntityEmoji": "\uD83D\uDCD6"
+      },
+      {
+        "ItemId": "1/0",
+        "EntityId": null,
+        "EntityName": "Daily routine",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000000",
+            "EntityName": "Daily routine",
+            "Field": "title",
+            "OldValue": null,
+            "NewValue": "Daily routine",
+            "ValueType": "text",
+            "ProposedValue": "Daily routine",
+            "IsEditable": true,
+            "Provenance": "requested"
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000000",
+            "EntityName": "Daily routine",
+            "Field": "frequency_quantity",
+            "OldValue": null,
+            "NewValue": "1",
+            "ValueType": "number",
+            "ProposedValue": 1,
+            "IsEditable": true,
+            "Provenance": "requested"
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000000",
+            "EntityName": "Daily routine",
+            "Field": "frequency_unit",
+            "OldValue": null,
+            "NewValue": "Day",
+            "ValueType": "text",
+            "ProposedValue": "Day",
+            "IsEditable": true,
+            "Provenance": "requested"
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000000",
+            "EntityName": "Daily routine",
+            "Field": "sub_habits",
+            "OldValue": null,
+            "NewValue": "[{\"emoji\":\"\\uD83C\\uDF31\",\"reminder_enabled\":true,\"repeat_reminder\":{\"interval_minutes\":120},\"title\":\"Stretch\"}]",
+            "ValueType": "text",
+            "ProposedValue": [
+              {
+                "title": "Stretch",
+                "repeat_reminder": {
+                  "interval_minutes": 120
+                },
+                "reminder_enabled": true,
+                "emoji": "\uD83C\uDF31"
+              }
+            ],
+            "IsEditable": true,
+            "Provenance": "requested"
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000000",
+            "EntityName": "Daily routine",
+            "Field": "parent_habit_id",
+            "OldValue": null,
+            "NewValue": "No parent",
+            "ValueType": "text",
+            "ProposedValue": null,
+            "IsEditable": true,
+            "Provenance": "stored"
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000000",
+            "EntityName": "Stretch",
+            "Field": "sub_habits/0/repeat_reminder",
+            "OldValue": null,
+            "NewValue": "Every 2 hours",
+            "ValueType": "text",
+            "ProposedValue": {
+              "interval_minutes": 120
+            },
+            "IsEditable": true,
+            "EntityEmoji": "\uD83C\uDF31",
+            "Provenance": "suggested",
+            "Removal": {
+              "OfferKey": "preview::1E79D1BF2413E5E6FA82A3EA:sub_habits/0/repeat_reminder",
+              "Field": "sub_habits/0/repeat_reminder",
+              "Fields": [
+                "sub_habits/0/reminder_enabled",
+                "sub_habits/0/repeat_reminder"
+              ]
+            }
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000000",
+            "EntityName": "Stretch",
+            "Field": "sub_habits/0/reminder_enabled",
+            "OldValue": null,
+            "NewValue": "True",
+            "ValueType": "boolean",
+            "ProposedValue": true,
+            "IsEditable": true,
+            "EntityEmoji": "\uD83C\uDF31",
+            "Provenance": "suggested",
+            "Removal": {
+              "OfferKey": "preview::1E79D1BF2413E5E6FA82A3EA:sub_habits/0/reminder_enabled",
+              "Field": "sub_habits/0/reminder_enabled",
+              "Fields": [
+                "sub_habits/0/reminder_enabled",
+                "sub_habits/0/repeat_reminder"
+              ]
+            }
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000000",
+            "EntityName": "Stretch",
+            "Field": "sub_habits/0/emoji",
+            "OldValue": null,
+            "NewValue": "\uD83C\uDF31",
+            "ValueType": "emoji",
+            "ProposedValue": "\uD83C\uDF31",
+            "IsEditable": true,
+            "EntityEmoji": "\uD83C\uDF31",
+            "Provenance": "suggested",
+            "Removal": {
+              "OfferKey": "preview::1E79D1BF2413E5E6FA82A3EA:sub_habits/0/emoji",
+              "Field": "sub_habits/0/emoji",
+              "Fields": [
+                "sub_habits/0/emoji"
+              ]
+            }
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": false,
+        "HabitType": "Habit"
+      }
+    ]
+  },
+  "14-set-offer-member/pt-BR": {
+    "changes": [
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000008",
+        "EntityName": "Read",
+        "Field": "title",
+        "OldValue": "Read",
+        "NewValue": "Read more",
+        "ValueType": "text",
+        "ProposedValue": "Read more",
+        "IsEditable": true,
+        "EntityEmoji": "\uD83D\uDCD6",
+        "Provenance": "requested"
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000008",
+        "EntityName": "Read",
+        "Field": "habit_id",
+        "OldValue": null,
+        "NewValue": "00000000-0000-0000-0000-000000000008",
+        "ValueType": "text",
+        "ProposedValue": "00000000-0000-0000-0000-000000000008",
+        "IsEditable": false,
+        "EntityEmoji": "\uD83D\uDCD6",
+        "Provenance": "requested"
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000000",
+        "EntityName": "Daily routine",
+        "Field": "title",
+        "OldValue": null,
+        "NewValue": "Daily routine",
+        "ValueType": "text",
+        "ProposedValue": "Daily routine",
+        "IsEditable": true,
+        "Provenance": "requested"
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000000",
+        "EntityName": "Daily routine",
+        "Field": "frequency_quantity",
+        "OldValue": null,
+        "NewValue": "1",
+        "ValueType": "number",
+        "ProposedValue": 1,
+        "IsEditable": true,
+        "Provenance": "requested"
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000000",
+        "EntityName": "Daily routine",
+        "Field": "frequency_unit",
+        "OldValue": null,
+        "NewValue": "Day",
+        "ValueType": "text",
+        "ProposedValue": "Day",
+        "IsEditable": true,
+        "Provenance": "requested"
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000000",
+        "EntityName": "Daily routine",
+        "Field": "sub_habits",
+        "OldValue": null,
+        "NewValue": "[{\"emoji\":\"\\uD83C\\uDF31\",\"reminder_enabled\":true,\"repeat_reminder\":{\"interval_minutes\":120},\"title\":\"Stretch\"}]",
+        "ValueType": "text",
+        "ProposedValue": [
+          {
+            "title": "Stretch",
+            "repeat_reminder": {
+              "interval_minutes": 120
+            },
+            "reminder_enabled": true,
+            "emoji": "\uD83C\uDF31"
+          }
+        ],
+        "IsEditable": true,
+        "Provenance": "requested"
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000000",
+        "EntityName": "Daily routine",
+        "Field": "parent_habit_id",
+        "OldValue": null,
+        "NewValue": "No parent",
+        "ValueType": "text",
+        "ProposedValue": null,
+        "IsEditable": true,
+        "Provenance": "stored"
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000000",
+        "EntityName": "Stretch",
+        "Field": "sub_habits/0/repeat_reminder",
+        "OldValue": null,
+        "NewValue": "A cada 2 horas",
+        "ValueType": "text",
+        "ProposedValue": {
+          "interval_minutes": 120
+        },
+        "IsEditable": true,
+        "EntityEmoji": "\uD83C\uDF31",
+        "Provenance": "suggested",
+        "Removal": {
+          "OfferKey": "preview::1E79D1BF2413E5E6FA82A3EA:sub_habits/0/repeat_reminder",
+          "Field": "sub_habits/0/repeat_reminder",
+          "Fields": [
+            "sub_habits/0/reminder_enabled",
+            "sub_habits/0/repeat_reminder"
+          ]
+        }
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000000",
+        "EntityName": "Stretch",
+        "Field": "sub_habits/0/reminder_enabled",
+        "OldValue": null,
+        "NewValue": "True",
+        "ValueType": "boolean",
+        "ProposedValue": true,
+        "IsEditable": true,
+        "EntityEmoji": "\uD83C\uDF31",
+        "Provenance": "suggested",
+        "Removal": {
+          "OfferKey": "preview::1E79D1BF2413E5E6FA82A3EA:sub_habits/0/reminder_enabled",
+          "Field": "sub_habits/0/reminder_enabled",
+          "Fields": [
+            "sub_habits/0/reminder_enabled",
+            "sub_habits/0/repeat_reminder"
+          ]
+        }
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000000",
+        "EntityName": "Stretch",
+        "Field": "sub_habits/0/emoji",
+        "OldValue": null,
+        "NewValue": "\uD83C\uDF31",
+        "ValueType": "emoji",
+        "ProposedValue": "\uD83C\uDF31",
+        "IsEditable": true,
+        "EntityEmoji": "\uD83C\uDF31",
+        "Provenance": "suggested",
+        "Removal": {
+          "OfferKey": "preview::1E79D1BF2413E5E6FA82A3EA:sub_habits/0/emoji",
+          "Field": "sub_habits/0/emoji",
+          "Fields": [
+            "sub_habits/0/emoji"
+          ]
+        }
+      }
+    ],
+    "items": [
+      {
+        "ItemId": "0/00000000-0000-0000-0000-000000000008",
+        "EntityId": "00000000-0000-0000-0000-000000000008",
+        "EntityName": "Read",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000008",
+            "EntityName": "Read",
+            "Field": "title",
+            "OldValue": "Read",
+            "NewValue": "Read more",
+            "ValueType": "text",
+            "ProposedValue": "Read more",
+            "IsEditable": true,
+            "EntityEmoji": "\uD83D\uDCD6",
+            "Provenance": "requested"
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000008",
+            "EntityName": "Read",
+            "Field": "habit_id",
+            "OldValue": null,
+            "NewValue": "00000000-0000-0000-0000-000000000008",
+            "ValueType": "text",
+            "ProposedValue": "00000000-0000-0000-0000-000000000008",
+            "IsEditable": false,
+            "EntityEmoji": "\uD83D\uDCD6",
+            "Provenance": "requested"
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": false,
+        "EntityEmoji": "\uD83D\uDCD6"
+      },
+      {
+        "ItemId": "1/0",
+        "EntityId": null,
+        "EntityName": "Daily routine",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000000",
+            "EntityName": "Daily routine",
+            "Field": "title",
+            "OldValue": null,
+            "NewValue": "Daily routine",
+            "ValueType": "text",
+            "ProposedValue": "Daily routine",
+            "IsEditable": true,
+            "Provenance": "requested"
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000000",
+            "EntityName": "Daily routine",
+            "Field": "frequency_quantity",
+            "OldValue": null,
+            "NewValue": "1",
+            "ValueType": "number",
+            "ProposedValue": 1,
+            "IsEditable": true,
+            "Provenance": "requested"
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000000",
+            "EntityName": "Daily routine",
+            "Field": "frequency_unit",
+            "OldValue": null,
+            "NewValue": "Day",
+            "ValueType": "text",
+            "ProposedValue": "Day",
+            "IsEditable": true,
+            "Provenance": "requested"
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000000",
+            "EntityName": "Daily routine",
+            "Field": "sub_habits",
+            "OldValue": null,
+            "NewValue": "[{\"emoji\":\"\\uD83C\\uDF31\",\"reminder_enabled\":true,\"repeat_reminder\":{\"interval_minutes\":120},\"title\":\"Stretch\"}]",
+            "ValueType": "text",
+            "ProposedValue": [
+              {
+                "title": "Stretch",
+                "repeat_reminder": {
+                  "interval_minutes": 120
+                },
+                "reminder_enabled": true,
+                "emoji": "\uD83C\uDF31"
+              }
+            ],
+            "IsEditable": true,
+            "Provenance": "requested"
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000000",
+            "EntityName": "Daily routine",
+            "Field": "parent_habit_id",
+            "OldValue": null,
+            "NewValue": "No parent",
+            "ValueType": "text",
+            "ProposedValue": null,
+            "IsEditable": true,
+            "Provenance": "stored"
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000000",
+            "EntityName": "Stretch",
+            "Field": "sub_habits/0/repeat_reminder",
+            "OldValue": null,
+            "NewValue": "A cada 2 horas",
+            "ValueType": "text",
+            "ProposedValue": {
+              "interval_minutes": 120
+            },
+            "IsEditable": true,
+            "EntityEmoji": "\uD83C\uDF31",
+            "Provenance": "suggested",
+            "Removal": {
+              "OfferKey": "preview::1E79D1BF2413E5E6FA82A3EA:sub_habits/0/repeat_reminder",
+              "Field": "sub_habits/0/repeat_reminder",
+              "Fields": [
+                "sub_habits/0/reminder_enabled",
+                "sub_habits/0/repeat_reminder"
+              ]
+            }
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000000",
+            "EntityName": "Stretch",
+            "Field": "sub_habits/0/reminder_enabled",
+            "OldValue": null,
+            "NewValue": "True",
+            "ValueType": "boolean",
+            "ProposedValue": true,
+            "IsEditable": true,
+            "EntityEmoji": "\uD83C\uDF31",
+            "Provenance": "suggested",
+            "Removal": {
+              "OfferKey": "preview::1E79D1BF2413E5E6FA82A3EA:sub_habits/0/reminder_enabled",
+              "Field": "sub_habits/0/reminder_enabled",
+              "Fields": [
+                "sub_habits/0/reminder_enabled",
+                "sub_habits/0/repeat_reminder"
+              ]
+            }
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000000",
+            "EntityName": "Stretch",
+            "Field": "sub_habits/0/emoji",
+            "OldValue": null,
+            "NewValue": "\uD83C\uDF31",
+            "ValueType": "emoji",
+            "ProposedValue": "\uD83C\uDF31",
+            "IsEditable": true,
+            "EntityEmoji": "\uD83C\uDF31",
+            "Provenance": "suggested",
+            "Removal": {
+              "OfferKey": "preview::1E79D1BF2413E5E6FA82A3EA:sub_habits/0/emoji",
+              "Field": "sub_habits/0/emoji",
+              "Fields": [
+                "sub_habits/0/emoji"
+              ]
+            }
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": false,
+        "HabitType": "Habit"
+      }
+    ]
+  },
+  "15-picklist-skip/en": {
+    "changes": [
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000001",
+        "EntityName": "Water",
+        "Field": "date",
+        "OldValue": null,
+        "NewValue": "2026-10-19",
+        "ValueType": "date",
+        "ProposedValue": "2026-10-19",
+        "IsEditable": true
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000001",
+        "EntityName": "Water",
+        "Field": "action",
+        "OldValue": null,
+        "NewValue": "Skip",
+        "ValueType": "action",
+        "ProposedValue": "skip",
+        "IsEditable": false
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000002",
+        "EntityName": "Water",
+        "Field": "date",
+        "OldValue": null,
+        "NewValue": "2026-10-19",
+        "ValueType": "date",
+        "ProposedValue": "2026-10-19",
+        "IsEditable": true
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000002",
+        "EntityName": "Water",
+        "Field": "action",
+        "OldValue": null,
+        "NewValue": "Skip",
+        "ValueType": "action",
+        "ProposedValue": "skip",
+        "IsEditable": false
+      }
+    ],
+    "items": [
+      {
+        "ItemId": "00000000-0000-0000-0000-000000000001",
+        "EntityId": "00000000-0000-0000-0000-000000000001",
+        "EntityName": "Water",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000001",
+            "EntityName": "Water",
+            "Field": "date",
+            "OldValue": null,
+            "NewValue": "2026-10-19",
+            "ValueType": "date",
+            "ProposedValue": "2026-10-19",
+            "IsEditable": true
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000001",
+            "EntityName": "Water",
+            "Field": "action",
+            "OldValue": null,
+            "NewValue": "Skip",
+            "ValueType": "action",
+            "ProposedValue": "skip",
+            "IsEditable": false
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": false
+      },
+      {
+        "ItemId": "00000000-0000-0000-0000-000000000002",
+        "EntityId": "00000000-0000-0000-0000-000000000002",
+        "EntityName": "Water",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000002",
+            "EntityName": "Water",
+            "Field": "date",
+            "OldValue": null,
+            "NewValue": "2026-10-19",
+            "ValueType": "date",
+            "ProposedValue": "2026-10-19",
+            "IsEditable": true
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000002",
+            "EntityName": "Water",
+            "Field": "action",
+            "OldValue": null,
+            "NewValue": "Skip",
+            "ValueType": "action",
+            "ProposedValue": "skip",
+            "IsEditable": false
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": false
+      }
+    ]
+  },
+  "15-picklist-skip/pt-BR": {
+    "changes": [
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000001",
+        "EntityName": "Water",
+        "Field": "date",
+        "OldValue": null,
+        "NewValue": "2026-10-19",
+        "ValueType": "date",
+        "ProposedValue": "2026-10-19",
+        "IsEditable": true
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000001",
+        "EntityName": "Water",
+        "Field": "action",
+        "OldValue": null,
+        "NewValue": "Pular",
+        "ValueType": "action",
+        "ProposedValue": "skip",
+        "IsEditable": false
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000002",
+        "EntityName": "Water",
+        "Field": "date",
+        "OldValue": null,
+        "NewValue": "2026-10-19",
+        "ValueType": "date",
+        "ProposedValue": "2026-10-19",
+        "IsEditable": true
+      },
+      {
+        "EntityId": "00000000-0000-0000-0000-000000000002",
+        "EntityName": "Water",
+        "Field": "action",
+        "OldValue": null,
+        "NewValue": "Pular",
+        "ValueType": "action",
+        "ProposedValue": "skip",
+        "IsEditable": false
+      }
+    ],
+    "items": [
+      {
+        "ItemId": "00000000-0000-0000-0000-000000000001",
+        "EntityId": "00000000-0000-0000-0000-000000000001",
+        "EntityName": "Water",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000001",
+            "EntityName": "Water",
+            "Field": "date",
+            "OldValue": null,
+            "NewValue": "2026-10-19",
+            "ValueType": "date",
+            "ProposedValue": "2026-10-19",
+            "IsEditable": true
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000001",
+            "EntityName": "Water",
+            "Field": "action",
+            "OldValue": null,
+            "NewValue": "Pular",
+            "ValueType": "action",
+            "ProposedValue": "skip",
+            "IsEditable": false
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": false
+      },
+      {
+        "ItemId": "00000000-0000-0000-0000-000000000002",
+        "EntityId": "00000000-0000-0000-0000-000000000002",
+        "EntityName": "Water",
+        "Fields": [
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000002",
+            "EntityName": "Water",
+            "Field": "date",
+            "OldValue": null,
+            "NewValue": "2026-10-19",
+            "ValueType": "date",
+            "ProposedValue": "2026-10-19",
+            "IsEditable": true
+          },
+          {
+            "EntityId": "00000000-0000-0000-0000-000000000002",
+            "EntityName": "Water",
+            "Field": "action",
+            "OldValue": null,
+            "NewValue": "Pular",
+            "ValueType": "action",
+            "ProposedValue": "skip",
+            "IsEditable": false
+          }
+        ],
+        "StateFingerprint": "<fingerprint>",
+        "RemovesData": false
+      }
+    ]
+  }
+}

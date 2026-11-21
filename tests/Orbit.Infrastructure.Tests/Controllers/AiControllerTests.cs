@@ -357,6 +357,9 @@ public class AiControllerTests
         var (controller, id) = await SetupBulkCreateAsync(
             """{"habits":[{"title":"Valid","frequency_unit":"Day","frequency_quantity":1}]}""",
             hasFingerprint);
+        _operationExecutor.ExecuteAsync(Arg.Any<AgentExecuteOperationRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new AgentExecuteOperationResponse(new AgentOperationResult("bulk_create_habits", "bulk_create_habits",
+                AgentRiskClass.Low, AgentConfirmationRequirement.FreshConfirmation, AgentOperationStatus.Succeeded)));
 
         var confirmation = await controller.ConfirmPendingOperation(id, CancellationToken.None);
         var execution = await controller.ExecutePendingOperation(id,
@@ -372,7 +375,8 @@ public class AiControllerTests
         execution.Should().BeOfType<OkObjectResult>();
         _pendingOperationStore.Received(1).Confirm(UserId, id);
         await _operationExecutor.Received(1).ExecuteAsync(
-            Arg.Is<AgentExecuteOperationRequest>(request => request.OperationId == "bulk_create_habits"),
+            Arg.Is<AgentExecuteOperationRequest>(request => request.OperationId == "bulk_create_habits"
+                && request.RequiresConfirmedOperation),
             Arg.Any<CancellationToken>());
     }
 

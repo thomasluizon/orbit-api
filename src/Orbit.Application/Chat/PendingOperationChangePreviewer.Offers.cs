@@ -15,8 +15,21 @@ namespace Orbit.Application.Chat;
 
 public sealed partial class PendingOperationChangePreviewer
 {
+    /// <summary>
+    /// Builds the preview of <paramref name="arguments"/>. The fingerprint reads the plain items, so one change has one
+    /// fingerprint for each client context; the action and reminder values of the client locale replace the plain values
+    /// only after that hash.
+    /// </summary>
     public async Task<Result<PendingOperationChangePreview?>> PreviewAsync(Guid userId, string operationId,
         JsonElement arguments, CancellationToken cancellationToken = default, AgentClientContext? clientContext = null)
+    {
+        var result = await PreviewPlainAsync(userId, operationId, arguments, cancellationToken, clientContext);
+        return result.IsFailure || result.Value is not { } preview ? result
+            : Result.Success<PendingOperationChangePreview?>(await LocalizeAsync(preview, userId, clientContext, cancellationToken));
+    }
+
+    private async Task<Result<PendingOperationChangePreview?>> PreviewPlainAsync(Guid userId, string operationId,
+        JsonElement arguments, CancellationToken cancellationToken, AgentClientContext? clientContext)
     {
         if (operationId is "create_habit" or "bulk_create_habits")
         {
@@ -49,8 +62,7 @@ public sealed partial class PendingOperationChangePreviewer
         {
             Items = updated,
             Changes = preview.Changes.Select(field => DateField(field, root)).ToArray(),
-            PreviewFingerprint = updated is null ? preview.PreviewFingerprint
-                : AgentOperationFingerprint.Compute(operationId, JsonSerializer.Serialize(updated))
+            PreviewFingerprint = updated is null ? preview.PreviewFingerprint : PreviewHashView.Compute(operationId, updated)
         });
     }
 
@@ -79,16 +91,6 @@ public sealed partial class PendingOperationChangePreviewer
         var effective = preview.ExecutionArguments ?? bound;
         root = JsonNode.Parse(effective.GetRawText())!.AsObject();
         var updated = items.Select(item => Annotate(item, ProactiveProposal.Source(root, operationId, item.ItemId))).ToArray();
-        if (updated.Any(item => item.Fields.Any(field => field.Field.EndsWith("/repeat_reminder", StringComparison.Ordinal))))
-        {
-            var zone = await userDateService.GetUserTimeZoneAsync(userId, cancellationToken);
-            updated = updated.Select(item => item with
-            {
-                Fields = item.Fields.Select(field =>
-                field.Field.EndsWith("/repeat_reminder", StringComparison.Ordinal)
-                    ? field with { NewValue = RepeatReminderPreview.Format(field.NewValue, clientContext, zone) } : field).ToArray()
-            }).ToArray();
-        }
         var changes = preview.Changes.Select(field => updated.SelectMany(item => item.Fields)
             .FirstOrDefault(candidate => candidate.EntityId == field.EntityId && candidate.Field == field.Field
                 && candidate.EntityName == field.EntityName) ?? field).ToArray();
@@ -97,7 +99,7 @@ public sealed partial class PendingOperationChangePreviewer
             Items = updated,
             Changes = changes,
             ExecutionArguments = effective,
-            PreviewFingerprint = AgentOperationFingerprint.Compute(operationId, JsonSerializer.Serialize(updated))
+            PreviewFingerprint = PreviewHashView.Compute(operationId, updated)
         });
     }
 
