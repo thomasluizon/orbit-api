@@ -32,7 +32,7 @@ public sealed partial class FirstTryPreviewTests
         var rows = PendingRows();
         Succeeded(await ApproveAsync(preview.Id, OfferClient()));
         PendingRows().Should().Be(rows);
-        var saved = await _factory.Context.Habits.AsNoTracking().SingleAsync(habit => habit.Title == "Stretch habit");
+        var saved = await _factory.Context.Habits.AsNoTracking().SingleAsync(habit => habit.ParentHabitId == parent.Id);
         saved.ParentHabitId.Should().Be(parent.Id);
         saved.Emoji.Should().Be("🧘");
     }

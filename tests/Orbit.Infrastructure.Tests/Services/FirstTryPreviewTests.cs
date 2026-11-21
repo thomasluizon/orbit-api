@@ -41,7 +41,9 @@ namespace Orbit.Infrastructure.Tests.Services;
 public sealed partial class FirstTryPreviewTests : IDisposable
 {
     private static readonly DateOnly Today = new(2026, 3, 20);
-    private readonly SqliteOrbitDbContextFactory _factory = new();
+    private readonly IEncryptionService _encryption = new EncryptionService(
+        Options.Create(new EncryptionSettings { Key = Convert.ToBase64String(new byte[32]) }), NullLogger<EncryptionService>.Instance);
+    private readonly SqliteOrbitDbContextFactory _factory;
     private readonly ServiceProvider _provider;
     private readonly PendingAgentOperationStore _store;
     private readonly PendingClarificationStore _clarifications;
@@ -59,6 +61,7 @@ public sealed partial class FirstTryPreviewTests : IDisposable
 
     public FirstTryPreviewTests()
     {
+        _factory = new SqliteOrbitDbContextFactory(_encryption);
         var context = _factory.Context;
         var user = User.Create("Alex", "alex@example.com").Value;
         user.GrantLifetimePro();
