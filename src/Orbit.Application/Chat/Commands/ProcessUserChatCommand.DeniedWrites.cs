@@ -181,7 +181,7 @@ public partial class ProcessUserChatCommandHandler
         var resentValues = resentTargets.Select(target => target.Value).ToHashSet(StringComparer.Ordinal);
         var deniedTargets = TargetsOf(denied.Args);
         return resentValues.Count >= deniedTargets.Select(target => target.Value).Distinct(StringComparer.Ordinal).Count()
-            && deniedTargets.All(target => !target.Habit ? resentValues.Contains(target.Value)
+            && deniedTargets.All(target => !target.Habit ? resentValues.Any(resent => IsSameRecord(target.Value, resent))
                 : Guid.TryParse(target.Value, out var id) && owned.Contains(id) ? resentIds.Contains(id)
                 : CopiedFrom(target.Value, owned) is { } copied && resentIds.Contains(copied));
     }
@@ -198,13 +198,37 @@ public partial class ProcessUserChatCommandHandler
 
     /// <summary>
     /// The one owned habit that a denied id was copied from: the id cut short at the end of its groups, with the first
-    /// group whole, or one character off. Null when no habit or more than one habit fits.
+    /// group whole, one character off, or a reference to it (<see cref="IsReferenceCopy"/>). Null when no habit or more
+    /// than one habit fits.
     /// </summary>
     private static Guid? CopiedFrom(string value, IReadOnlyCollection<Guid> owned)
     {
         var copy = value.Trim().ToLowerInvariant();
-        var sources = owned.Where(id => IsCutShort(copy, id.ToString()) || FuzzyMatcher.LevenshteinDistance(copy, id.ToString()) == 1).Take(2).ToArray();
+        var sources = owned.Where(id => IsCutShort(copy, id.ToString()) || FuzzyMatcher.LevenshteinDistance(copy, id.ToString()) == 1
+            || IsReferenceCopy(copy, id)).Take(2).ToArray();
         return sources.Length == 1 ? sources[0] : null;
+    }
+
+    /// <summary>
+    /// The copy is the reference of the habit, or the reference with one character changed. With references on, the model
+    /// reads and copies the 8 digits of a habit (12 when two habits share them), so a denied write keeps that text.
+    /// </summary>
+    private static bool IsReferenceCopy(string copy, Guid id)
+    {
+        var digits = copy.Replace("-", string.Empty, StringComparison.Ordinal);
+        return digits.Length is ReferenceCodes.ShortLength or ReferenceCodes.CollisionLength
+            && FuzzyMatcher.LevenshteinDistance(digits, ReferenceCodes.Hex(id)[..digits.Length]) <= 1;
+    }
+
+    /// <summary>
+    /// The denied value is the resent value, or the reference of the record that a resent GUID names. A call that the
+    /// boundary turned down keeps the references that the model sent, and a resend holds full GUIDs.
+    /// </summary>
+    private static bool IsSameRecord(string denied, string resent)
+    {
+        var digits = denied.Trim().ToLowerInvariant().Replace("-", string.Empty, StringComparison.Ordinal);
+        return denied == resent || digits.Length is ReferenceCodes.ShortLength or ReferenceCodes.CollisionLength
+            && Guid.TryParse(resent, out var id) && ReferenceCodes.Hex(id).StartsWith(digits, StringComparison.Ordinal);
     }
 
     private static bool IsCutShort(string copy, string id)
