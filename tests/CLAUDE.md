@@ -1,59 +1,25 @@
 # Tests
 
-Three unit test projects (no integration suite — it was removed as outdated; don't add one back):
+## Rules
 
-```
-Orbit.Application.Tests/    - command/query handlers, validators
-Orbit.Domain.Tests/         - entities, value objects, factory methods
-Orbit.Infrastructure.Tests/ - services, prompt sections, controllers, MCP tools
-```
+- A handler test uses the real Application and Domain code. It mocks only the Infrastructure ports with NSubstitute.
+- A relational query-shape test builds its context with `SqliteOrbitDbContextFactory`.
+- A test that needs Postgres behavior uses `Orbit.Infrastructure.Tests/Persistence/PostgresTestDatabase.cs`.
+- `Orbit.Infrastructure.Tests/Persistence/QueryRoundTripCountTests.cs` guards against N+1 queries. It builds the context with `SqliteOrbitDbContextFactory` and a `CountingDbCommandInterceptor`. It seeds a small and a large row set. It asserts that the command count does not change with the row count. Copy this pattern for a new query-shape test.
 
-## Conventions
+## Test accounts
 
-- **xUnit + FluentAssertions** everywhere. `result.IsSuccess.Should().BeTrue()`, `value.Should().Be(...)`.
-- **Unit tests mock at the ports.** Handlers use the real Application + Domain, mocking only Infrastructure interfaces (NSubstitute). Never spin up a real database.
-- **Every new feature needs:**
-  - Unit tests for commands, queries, validators (in `Orbit.Application.Tests`)
-  - Unit tests for domain entity factory + mutator methods (in `Orbit.Domain.Tests`)
-  - Unit tests for new services or prompt sections (in `Orbit.Infrastructure.Tests`)
+These accounts skip the email code of Amazon SES.
 
-## Test accounts (bypass email verification)
+- `TEST_ACCOUNTS` holds comma-separated `email:code` pairs for staging and local runs. It does nothing in production. Production startup fails when it is set.
+- `REVIEW_ACCOUNT_EMAIL` and `REVIEW_ACCOUNT_CODE` name the one store-review account of production. Production seeds its six-digit code and sends no email. Other environments ignore the pair.
 
-The auth flow normally requires a code emailed via Amazon SES. Env-controlled test accounts bypass this:
+When `SendCodeCommand` matches one of these emails, it uses the static code of the pair.
 
-- `TEST_ACCOUNTS` — comma-separated `email:code` pairs (staging reviewer flows and local runs).
-- `REVIEW_ACCOUNT_EMAIL` + `REVIEW_ACCOUNT_CODE`: the single production store-review account. Production seeds its six-digit code and sends it no email; other environments ignore the pair.
-
-When `SendCodeCommand` matches one of these emails, the verification code is NOT randomized; it's the static code from the pair. `TEST_ACCOUNTS` is inert in production, and production startup fails when it is set.
-
-## Running
+## Run
 
 ```bash
-# all tests
 dotnet test
-
-# one project
 dotnet test tests/Orbit.Application.Tests
-
-# one test
 dotnet test --filter "FullyQualifiedName~CreateHabit_Should_Succeed"
 ```
-
-## Patterns to mirror
-
-| Want to add… | Look at… |
-|---|---|
-| Handler unit test | `Orbit.Application.Tests/Commands/Habits/CreateHabitCommandHandlerTests.cs` |
-| Domain entity test | `Orbit.Domain.Tests/Entities/HabitTests.cs` |
-| Service test | `Orbit.Infrastructure.Tests/Services/UserDateServiceTests.cs` |
-| Validator test | `Orbit.Application.Tests/Validators/*Tests.cs` |
-| Query-builder shape test | `Orbit.Infrastructure.Tests/Persistence/HabitLogReaderTests.cs` (EF InMemory / `.AsQueryable()`) |
-| N+1 / SQL round-trip-count test | `Orbit.Infrastructure.Tests/Persistence/QueryRoundTripCountTests.cs` |
-
-## Query-shape / round-trip-count pattern
-
-`QueryRoundTripCountTests` catches N+1 regressions without a real Postgres: build the context via the shared `SqliteOrbitDbContextFactory` (SQLite in-memory, which emits real SQL, with the `::`-cast/filtered-index compatibility shim), pass a `CountingDbCommandInterceptor`, seed a small and a large row set, run the query, and assert the command count is invariant to volume. Use `SqliteOrbitDbContextFactory` for new relational query-shape tests.
-
-## Benchmarks (not part of `dotnet test`)
-
-`bench/Orbit.Benchmarks` (BenchmarkDotNet, `net10.0`) measures the pure hot paths when you run it locally; no CI job runs it. It is intentionally excluded from the test and coverage surface — never add it to a `dotnet test` step. Enumerate with `dotnet run -c Release --project bench/Orbit.Benchmarks -- --list flat`.
