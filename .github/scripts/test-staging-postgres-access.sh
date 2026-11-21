@@ -190,7 +190,7 @@ assert_staging_queue "$repo_root/.github/workflows/staging-reseed.yml" 'api-rele
 assert_staging_queue "$repo_root/.github/workflows/staging-postgres-access-reconcile.yml" 'api-release-staging'
 assert_staging_queue "$repo_root/.github/workflows/release.yml" 'api-release-${{ inputs.environment }}'
 
-staging_release="$(sed -n '/^  staging:/,$p' "$repo_root/.github/workflows/release.yml")"
+staging_release="$(sed -n '/^  staging:/,$p' "$repo_root/.github/workflows/release.yml"; cat "$repo_root/.github/scripts/render-release.sh")"
 if ! grep -Fq 'environment: staging' <<< "$staging_release" ||
   ! grep -Fq 'RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}' <<< "$staging_release" ||
   ! grep -Fq '/deploys/$deploy_id' <<< "$staging_release" ||

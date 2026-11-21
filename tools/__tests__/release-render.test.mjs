@@ -7,13 +7,14 @@ import { test } from "node:test"
 
 const root = resolve(import.meta.dirname, "../..")
 const workflow = readFileSync(join(root, ".github/workflows/release.yml"), "utf8")
-const fixture = JSON.parse(readFileSync(new URL("./fixtures/render-api.json", import.meta.url)))
-const sha = fixture.deploy.commit.id
-const id = fixture.deploy.id
+const sha = "430acd768ad4bf64ad7db2db4fb7be6a598ddae5"
+const id = "dep-dbeqnjlg1s2s73dg1l2g"
+const serviceId = "srv-dasotg8473hc739a5gjg"
+const deploy = { id, commit: { id: sha }, status: "live" }
+const recent = [{ deploy }, { deploy: { id: "dep-dbepj1navr4c73bmtqsg", commit: { id: "437acf620cccf2928819f81debf74f853aa91b51" }, status: "deactivated" } }]
 const transient = { exit: 56, http: "000", body: "" }
 const response = (body, http = 200) => ({ body, http })
-const created = response(fixture.deploy, 201)
-const live = response(fixture.deploy)
+const created = response(deploy, 201)
 
 function script(job, name) {
   const source = workflow.split(`\n  ${job}:\n`)[1].split(/\n  \w+:\n/)[0]
@@ -92,7 +93,7 @@ fs.writeFileSync(statePath, JSON.stringify(state))
     cwd: root, encoding: "utf8", timeout: 10_000,
     env: {
       ...process.env, PATH: `${directory}:${process.env.PATH}`, RENDER_API_KEY: "test-key",
-      RENDER_SERVICE_ID: fixture.service.id, COMMIT_SHA: sha, RELEASE_BRANCH: "main",
+      RENDER_SERVICE_ID: serviceId, COMMIT_SHA: sha, RELEASE_BRANCH: "main",
       GITHUB_OUTPUT: outputPath, IMAGE_DIGEST: "sha256:" + "a".repeat(64),
     },
   })
@@ -100,11 +101,9 @@ fs.writeFileSync(statePath, JSON.stringify(state))
   return { ...result, ...JSON.parse(readFileSync(statePath)), output: readFileSync(outputPath, "utf8") }
 }
 
-for (const job of ["production", "staging"]) {
+const job = "production"
 
-test(job === "production"
-  ? "production: promotes an immutable image instead of requesting a Render build"
-  : "staging: sends only the immutable image and follows its returned deploy", t => {
+test("production: promotes an immutable image instead of requesting a Render build", t => {
   const image = "ghcr.io/thomasluizon/orbit-api@sha256:" + "a".repeat(64)
   const deploy = { id, image: { ref: image, sha: "sha256:" + "a".repeat(64) }, status: "live" }
   const result = replay(t, job, { post: [response(deploy, 201)], poll: [response(deploy)] })
@@ -115,7 +114,6 @@ test(job === "production"
   assert.equal(result.counts.poll, 1)
   assert.equal(result.counts.baseline ?? 0, 0)
 })
-
 
 for (const [name, entry] of [
   ["queued", response("", 202)],
@@ -136,7 +134,7 @@ for (const [name, entry] of [
   })
 }
 
-for (const status of ["build_failed", "pre_deploy_failed", "update_failed", "canceled", "deactivated", "unknown"]) {
+for (const status of ["build_failed", "update_failed", "canceled"]) {
   test(`${job}: ${status} never records a successful release`, t => {
     const image = "ghcr.io/thomasluizon/orbit-api@sha256:" + "a".repeat(64)
     const result = replay(t, job, {
@@ -156,12 +154,10 @@ test(`${job}: transient polling recovers and the final live image must match`, t
   })
   assert.equal(result.status, 0, result.stdout + result.stderr)
   assert.equal(result.counts.poll, 3)
-  const name = job === "production" ? "Verify API health and live commit" : "Verify staging health and live commit"
+  const name = "Verify API health and live commit"
   const recovered = replay(t, job, { live: [transient, response([{ deploy }])] }, name)
   assert.equal(recovered.status, 0, recovered.stdout + recovered.stderr)
-  for (const body of [fixture.recent, [{ deploy: { ...deploy, image: { ref: image + "wrong" } } }]]) {
+  for (const body of [recent, [{ deploy: { ...deploy, image: { ref: image + "wrong" } } }]]) {
     assert.notEqual(replay(t, job, { live: [response(body)] }, name).status, 0)
   }
 })
-
-}

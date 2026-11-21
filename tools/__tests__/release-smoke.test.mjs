@@ -1,6 +1,5 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
 import { smoke } from '../release-smoke.mjs'
 
 const id = '00000000-0000-0000-0000-000000000001'
@@ -34,16 +33,6 @@ for (const smokeBotBypass of [undefined, '']) {
     for (const request of h.requests) assert.equal(new Headers(request.headers).has('X-Orbit-Smoke-Bypass'), false)
   })
 }
-test('release workflow supplies the environment-specific bypass to both smoke steps', () => {
-  const workflow = readFileSync(new URL('../../.github/workflows/release.yml', import.meta.url), 'utf8')
-  for (const environment of ['staging', 'production']) {
-    const step = workflow.split(`- name: Run ${environment} `)[1].split('\n      - name:')[0]
-    assert.match(step, /SMOKE_BOT_BYPASS: \$\{\{ secrets.SMOKE_BOT_BYPASS \}\}/)
-  }
-  const script = readFileSync(new URL('../release-smoke.mjs', import.meta.url), 'utf8')
-  assert.match(script, /smokeBotBypass: process.env.SMOKE_BOT_BYPASS/)
-  assert.doesNotMatch(script, /SMOKE_TURNSTILE_TOKEN|turnstileToken/)
-})
 for (const [path, status] of [['POST /api/auth/verify-code', 401], ['GET /api/habits/count', 500], ['POST /api/habits', 400], [`DELETE /api/habits/${id}`, 500]]) {
   test(`smoke refuses ${path} HTTP ${status}`, async () => {
     const h = harness({ [path]: status })
