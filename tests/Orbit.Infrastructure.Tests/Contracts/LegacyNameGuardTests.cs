@@ -123,7 +123,6 @@ public class LegacyNameGuardTests
             .Where(path => LegacyName.IsMatch(path))
             .Where(path => !path.Contains("/Migrations/", StringComparison.Ordinal)
                 && !path.StartsWith("evals/astra/", StringComparison.Ordinal)
-                && !path.StartsWith(".claude/skills/astra-eval/", StringComparison.Ordinal)
                 && !path.Contains("/Fixtures/", StringComparison.Ordinal))
             .ToList();
 

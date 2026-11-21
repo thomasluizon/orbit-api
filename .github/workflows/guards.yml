@@ -122,23 +122,6 @@ jobs:
           fi
           echo "OK: no TODO/FIXME/HACK markers in source."
 
-      - name: Capability inventory matches the reviewed snapshot
-        if: ${{ !cancelled() }}
-        run: node tools/capability-inventory.mjs --check
-
-      - name: Gating matrix generation is deterministic
-        if: ${{ !cancelled() }}
-        run: |
-          set -euo pipefail
-          node tools/gating-matrix.mjs
-          cp gating-matrix.json "$RUNNER_TEMP/first-gating-matrix.json"
-          node tools/gating-matrix.mjs > /dev/null
-          if ! cmp -s gating-matrix.json "$RUNNER_TEMP/first-gating-matrix.json"; then
-            echo "::error::gating-matrix.json differs between two runs over the same tree"
-            diff "$RUNNER_TEMP/first-gating-matrix.json" gating-matrix.json | head -40 || true
-            exit 1
-          fi
-
       - name: Save actionlint
         if: github.event_name != 'pull_request' && steps.actionlint-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0

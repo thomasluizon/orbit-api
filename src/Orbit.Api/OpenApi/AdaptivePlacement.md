@@ -73,5 +73,3 @@ The reason keys are `chat.placement.destinationChecklist`,
 `chat.placement.accountSubHabits`, `chat.placement.accountFlat`, and
 `chat.placement.newRoutine`. Copy lives in `HabitPlacementRecommendation` in both
 locales. New checklist validation copy lives in `ErrorCopy` in both locales.
-The coordinator owns `/second-opinion` copy approval and the owner's staging turn
-for "add X to my morning routine" after deploying this head to staging.

@@ -113,14 +113,3 @@ Calendário on the same account, and current-message language on a pt-BR profile
 receiving an English request. The paired UI ticket renders `habitMonth` as that
 grid, removes the vague actions sentence, and suppresses account emails in any
 consumer fallback. No browser or server is started by this worker.
-
-## Copy for review
-
-The coordinator's `/second-opinion` approval covers these new user-facing strings:
-
-| Use | en | pt-BR |
-| --- | --- | --- |
-| Introduction | Here is your habit calendar. | Aqui está seu calendário de hábitos. |
-| Legacy heading | Habit calendar | Calendário de hábitos |
-| Legacy log legend | Logs: positive = completion, zero = skipped; for bad habits, positive = slip. | Registros: positivo = conclusão, zero = pulado; em hábitos ruins, positivo = deslize. |
-| Invalid period (`HABIT_CALENDAR_RANGE_INVALID`) | Choose a valid habit calendar period of up to 62 days. | Escolha um período válido de até 62 dias para o calendário de hábitos. |

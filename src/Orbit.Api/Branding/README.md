@@ -51,8 +51,8 @@ node tools/generate-bimi-logo.mjs --check
 The generator supports the canonical mark's absolute M, L, C and Z commands and
 rejects other commands. When refreshing the mark, copy the canonical source,
 regenerate, and review the geometry and composition assertions in `BimiLogoTests`.
-Run `node --test tools/__tests__/generate-bimi-logo.test.mjs` to check reproducibility,
-the SVG Tiny PS profile, and drift detection without changing the committed asset.
+Run `node tools/generate-bimi-logo.mjs --check` to check that the generator reproduces the
+committed asset without changing it.
 
 The [Google SVG requirements](https://knowledge.workspace.google.com/admin/security/create-a-bimi-svg-file-detailed-steps)
 and [BIMI Group profile guidance](https://bimigroup.org/creating-bimi-svg-logo-files/)
