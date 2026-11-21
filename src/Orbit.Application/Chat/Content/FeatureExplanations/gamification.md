@@ -3,7 +3,7 @@ key: gamification
 display_name: XP, Levels, and Achievements
 related_capabilities: [gamification.read]
 related_surfaces: [gamification]
-version: 1
+version: 2
 derived_from:
   - src/Orbit.Application/Gamification/Services/GamificationService.cs ProcessHabitLogged
   - src/Orbit.Application/Gamification/Services/GamificationService.cs ProcessGoalCompleted
@@ -23,7 +23,7 @@ Gamification rewards consistency with experience points (XP), levels, and achiev
 
 ## Levels
 
-Your total XP places you on a level from 1 to 10. The thresholds are:
+Your total XP places you on a level. Levels have no cap. The thresholds for levels 1 to 10 are:
 
 | Level | Title | XP required |
 |---|---|---|
@@ -38,7 +38,7 @@ Your total XP places you on a level from 1 to 10. The thresholds are:
 | 9 | Elite | 6000 |
 | 10 | Legend | 10000 |
 
-Level 10 (Legend) is the top. There is no XP-to-next once you reach it.
+Levels past 10 continue with the title Legend. Level L needs 100 × L² total XP, so level 11 needs 12,100 XP. Each level always has a next level, so XP-to-next never ends.
 
 ## Achievements
 
