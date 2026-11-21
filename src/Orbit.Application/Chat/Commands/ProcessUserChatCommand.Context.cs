@@ -225,7 +225,7 @@ public partial class ProcessUserChatCommandHandler
         int OriginalEntryCount,
         IReadOnlySet<Guid> DoneTodayHabitIds);
 
-    private sealed record ChatContext(
+    internal sealed record ChatContext(
         IReadOnlyList<Habit> UserHabits,
         List<Habit> ActiveHabits,
         List<Habit> PromptHabits,
@@ -239,5 +239,9 @@ public partial class ProcessUserChatCommandHandler
         IReadOnlyList<string> EnabledFeatureFlags,
         DateOnly UserToday,
         HabitTodaySnapshot TodayFacts,
-        long ContextLoadMilliseconds);
+        long ContextLoadMilliseconds)
+    {
+        /// <summary>The path of the turn, resolved once from the enabled flags.</summary>
+        public TurnPolicy Policy { get; } = TurnPolicy.For(EnabledFeatureFlags);
+    }
 }

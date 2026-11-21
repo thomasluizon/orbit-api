@@ -59,7 +59,7 @@ public partial class ProcessUserChatCommandHandler
 
     private static bool CanRecoverFreshCreate(ProcessUserChatCommand request, ChatContext context,
         ToolExecutionAccumulator results, int iteration, long tokens) =>
-        IsExplicitHabitCreate(request.Message)
+        results.Policy.IsExplicitCreate(request.Message)
         && request.BlockAnswer is null && request.ConfirmationToken is null
         && results.PendingOperations.Count == 0 && results.ActionResults.Count == 0
         && results.OperationResults.Count == 1 && iteration < ChatTurnLimits.MaxToolIterations

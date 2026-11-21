@@ -4,6 +4,10 @@ using Orbit.Domain.ValueObjects;
 
 namespace Orbit.Domain.Interfaces;
 
+/// <param name="ChangePlan">
+/// True on the <c>ai_change_plan</c> path: <see cref="ISystemPromptBuilder.BuildStatic"/> returns the one short prompt
+/// (identity, act-or-ask rule, proposal, language, grounding, safety and habit model) in place of the rule sections.
+/// </param>
 public record PromptBuildRequest(
     IReadOnlyList<Habit> ActiveHabits,
     bool HasImage = false,
@@ -16,7 +20,8 @@ public record PromptBuildRequest(
     IReadOnlySet<Guid>? TodayHabitIds = null,
     IReadOnlySet<Guid>? OverdueHabitIds = null,
     IReadOnlySet<Guid>? DoneTodayHabitIds = null,
-    bool BlockFirstComposition = false);
+    bool BlockFirstComposition = false,
+    bool ChangePlan = false);
 
 public interface ISystemPromptBuilder
 {

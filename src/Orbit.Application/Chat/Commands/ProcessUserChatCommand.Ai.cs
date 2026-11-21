@@ -32,7 +32,8 @@ public partial class ProcessUserChatCommandHandler
             TodayHabitIds: context.TodayFacts.TodayIds,
             OverdueHabitIds: context.TodayFacts.OverdueIds,
             DoneTodayHabitIds: context.TodayFacts.DoneTodayIds,
-            BlockFirstComposition: UsesComposition(request, context));
+            BlockFirstComposition: UsesComposition(request, context),
+            ChangePlan: context.Policy.ChangePlan);
         var agentSnapshot = BuildAgentContextSnapshot(
             context.User,
             request.ClientContext,
@@ -48,7 +49,6 @@ public partial class ProcessUserChatCommandHandler
             Environment.NewLine,
             ai.PromptBuilder.BuildStatic(promptRequest),
             ai.CatalogService.BuildStaticSupplement(), PlanToolDeclaration.Instruction);
-        var habitTargets = HabitTargetContext.Build(context.PromptHabits, context.UserHabits);
         var accountContext = string.Join(
             Environment.NewLine,
             ai.PromptBuilder.BuildAccountContext(promptRequest),
@@ -63,8 +63,7 @@ public partial class ProcessUserChatCommandHandler
                 ? HabitPlacementContext.Build(context.UserHabits, request.Message)
                 : "The client cannot display placement choices. Keep the requested parent and independently tracked sub-habits. Do not recommend checklist placement or a separate parent for additions to an existing routine.");
 
-        if (habitTargets.HasSharedTargets)
-            accountContext = string.Join(Environment.NewLine, accountContext, HabitTargetContext.Instruction, habitTargets.Context);
+        accountContext = context.Policy.HabitTargetContext(accountContext, context);
 
         var availableTools = ai.ToolRegistry.GetAll().Where(tool => tool.Name != "ask" || AskEnabled(request, context)).ToArray();
         var toolNames = availableTools.Select(tool => tool.Name).ToArray();
@@ -118,8 +117,8 @@ public partial class ProcessUserChatCommandHandler
             .Select(tool => (object)new
             {
                 name = tool.Name,
-                description = ChatToolDescription(tool),
-                parameters = ChatToolSchema(tool, request.ClientContext, UsesComposition(request, context))
+                description = context.Policy.ToolDescription(tool),
+                parameters = context.Policy.ToolSchema(tool, request.ClientContext, UsesComposition(request, context))
             })
             .ToList();
         if (toolDeclarations.Count > 0)
@@ -156,7 +155,8 @@ public partial class ProcessUserChatCommandHandler
             {
                 Telemetry = telemetry,
                 AccountContext = accountContext,
-                DynamicContext = dynamicContext
+                DynamicContext = dynamicContext,
+                ChangePlan = context.Policy.ChangePlan
             },
             aiStreamSink,
             cancellationToken);
@@ -184,11 +184,11 @@ public partial class ProcessUserChatCommandHandler
             : tool.Description;
 
     private static object ChatToolSchema(Orbit.Application.Chat.Tools.IAiTool tool, AgentClientContext? client, bool composition,
-        bool hasAccountRead = false, IReadOnlyList<HabitSetupDraft>? drafts = null)
+        bool hasAccountRead = false, IReadOnlyList<HabitSetupDraft>? drafts = null, object? changePlanAsk = null)
     {
-        var schema = tool is AskTool ask
+        var schema = changePlanAsk ?? (tool is AskTool ask
             ? hasAccountRead || drafts is { Count: > 0 } ? ask.GetParameterSchema(hasAccountRead, drafts) : ask.GetCacheableParameterSchema()
-            : tool.GetParameterSchema();
+            : tool.GetParameterSchema());
         if (ProactiveProposal.Enabled(client) && ProactiveProposal.Supports(tool.Name))
             schema = ProactiveProposal.Schema(schema);
         if (tool.Name == "revise_pending_changes")

@@ -165,7 +165,7 @@ public partial class ProcessUserChatCommandHandler
     /// the whole set or members by order, or when the turn's writes make different changes that split the group
     /// between them without a gap or an overlap.
     /// </summary>
-    private sealed record SelectionScope(string Message, IReadOnlyList<AiToolCall> TurnWrites);
+    internal sealed record SelectionScope(string Message, IReadOnlyList<AiToolCall> TurnWrites);
 
     private sealed record SelectionVerdict(HabitSelectionCandidates? Unanswered, IReadOnlyList<SettledSelection> Settled);
 
