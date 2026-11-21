@@ -3,7 +3,7 @@ using System.Globalization;
 namespace Orbit.Api.Mcp.Tools;
 
 /// <summary>
-/// Safe parsers for MCP tool inputs. AI-supplied strings cannot crash the request — they must
+/// Safe parsers for MCP tool inputs. AI-supplied strings cannot crash the request; they must
 /// surface as friendly tool errors so the model can self-correct.
 /// </summary>
 internal static class McpInputParser

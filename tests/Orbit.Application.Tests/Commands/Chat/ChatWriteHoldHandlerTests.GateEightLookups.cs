@@ -26,7 +26,7 @@ public sealed partial class ChatWriteHoldHandlerTests
                 var ct = call.Arg<CancellationToken>();
                 return await _executor.ExecuteAsync(request with
                 {
-                    Arguments = await readBlocks.ResolveAsync(request.OperationId, request.Arguments, request.UserId, ct)
+                    Arguments = (await readBlocks.ResolveAsync(request.OperationId, request.Arguments, request.UserId, ct)).Value
                 }, ct);
             });
         var services = Substitute.For<IServiceProvider>();

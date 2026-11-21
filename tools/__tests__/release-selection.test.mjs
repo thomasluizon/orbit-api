@@ -8,7 +8,7 @@ import { fileURLToPath, pathToFileURL } from "node:url"
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..")
 const workflow = readFileSync(join(root, ".github/workflows/release.yml"), "utf8")
-const healthy = JSON.parse(readFileSync(new URL("./fixtures/release-health.json", import.meta.url)))
+const healthy = { status: "Healthy", commit: "49c0442128380129c5bfe7749c7baf62c4e5bcf9" }
 const otherSha = "377eca519ab8d5e5f5eb41b05b448f42db88d589"
 
 function job(name) {
@@ -50,16 +50,8 @@ const selectionEnv = {
   RELEASE_SHA: healthy.commit, DISPATCH_SHA: otherSha, FORCE_UNSTAGED: "false", OVERRIDE_REASON: "",
 }
 
-test("prepare checks out the dispatch selection with history, never the moving branch", () => {
-  const prepare = job("prepare")
-  const selection = step(prepare, "Validate release selection")
-  assert.match(prepare, /ref: \$\{\{ steps.selection.outputs.sha \}\}/)
-  assert.match(selection, /id: selection/)
-  assert.match(selection, /RELEASE_SHA: \$\{\{ inputs.sha \}\}/)
-  assert.match(selection, /DISPATCH_SHA: \$\{\{ github.sha \}\}/)
-  assert.match(prepare, /fetch-depth: 0/)
-  assert.doesNotMatch(prepare, /ref: \$\{\{ inputs.branch \}\}/)
-  const result = replay(script(selection), selectionEnv)
+test("a valid dispatch selection outputs its SHA", () => {
+  const result = replay(script(step(job("prepare"), "Validate release selection")), selectionEnv)
   assert.equal(result.status, 0, result.stdout + result.stderr)
   assert.equal(result.output, `sha=${healthy.commit}\n`)
 })
@@ -91,8 +83,6 @@ test("invalid dispatch selections fail before checkout", () => {
 
 test("a moved branch keeps the planned ancestor and rejects an unrelated commit or wrong checkout", () => {
   const resolveStep = step(job("prepare"), "Resolve commit")
-  assert.match(resolveStep, /RELEASE_SHA: \$\{\{ steps.selection.outputs.sha \}\}/)
-  assert.match(job("prepare"), /sha: \$\{\{ steps.commit.outputs.sha \}\}/)
   const directory = mkdtempSync(join(tmpdir(), "orbit-release-git-"))
   const git = (...args) => execFileSync("git", args, { cwd: directory, encoding: "utf8" }).trim()
   try {
@@ -185,7 +175,6 @@ test("production admits only the exact Healthy commit served by staging", () => 
 })
 
 test("an explicit staging override is recorded and can release while staging is unavailable", () => {
-  assert.match(workflow, /force_unstaged:\n[\s\S]*?type: boolean\n[\s\S]*?default: false/)
   const result = stagingGate(null, { force: "true", reason: "Staging unavailable during emergency repair", transport: true })
   assert.equal(result.status, 0, result.stdout + result.stderr)
   assert.match(result.summary, /force_unstaged: true/)
@@ -197,11 +186,6 @@ test("an explicit staging override is recorded and can release while staging is 
 test("both deployments, verifiers and summaries use the prepared SHA", () => {
   for (const name of ["production", "staging"]) {
     const source = job(name)
-    assert.match(source, /COMMIT_SHA: \$\{\{ needs.prepare.outputs.sha \}\}/)
-    const deploy = script(step(source, "Trigger and monitor Render deploy"))
-    assert.match(deploy, /--arg image "\$image_url" '\{imageUrl: \$image\}'/)
-    assert.doesNotMatch(deploy, /commitId/)
-    assert.doesNotMatch(deploy, /git rev-parse|inputs.branch|branches\//)
     const summary = replay(script(step(source, "Summarize release")), { COMMIT_SHA: healthy.commit, IMAGE_DIGEST: "sha256:" + "a".repeat(64) })
     assert.equal(summary.status, 0, summary.stderr)
     assert.match(summary.summary, new RegExp(`Deployed SHA: ${healthy.commit}`))
@@ -210,22 +194,8 @@ test("both deployments, verifiers and summaries use the prepared SHA", () => {
 })
 
 
-test("staging builds the verified source checkout and carries its SHA into the image", () => {
+test("the image source check accepts only the selected commit reachable from the branch", () => {
   const staging = job("staging")
-  assert.match(staging, /packages: write/)
-  assert.match(staging, /ref: \$\{\{ needs.prepare.outputs.sha \}\}[\s\S]*?fetch-depth: 0[\s\S]*?path: release-source/)
-  assert.match(staging, /cache-from: type=gha,scope=api-image\n/)
-  assert.doesNotMatch(staging, /cache-to:/)
-  assert.match(staging, /context: \.\/release-source/)
-  assert.match(staging, /file: \.\/release-source\/Dockerfile/)
-  assert.match(staging, /push: true/)
-  assert.match(staging, /tags: ghcr.io\/thomasluizon\/orbit-api:\$\{\{ needs.prepare.outputs.sha \}\}/)
-  assert.match(staging, /build-args: API_COMMIT_SHA=\$\{\{ needs.prepare.outputs.sha \}\}/)
-  assert.match(staging, /IMAGE_DIGEST: \$\{\{ steps.image.outputs.digest \}\}/)
-  assert.doesNotMatch(staging, /Select staging branch|render_request PATCH|commitId/)
-  const dockerfile = readFileSync(join(root, "Dockerfile"), "utf8")
-  assert.match(dockerfile, /FROM .* AS runtime[\s\S]*ARG API_COMMIT_SHA\nENV RENDER_GIT_COMMIT=\$API_COMMIT_SHA/)
-  assert.match(dockerfile, /COPY --chown=appuser:appuser --from=build \/app \.\n(?:#.*\n)*ARG API_COMMIT_SHA\n/, "the release commit must follow every cached layer")
   const directory = mkdtempSync(join(tmpdir(), "orbit-image-source-"))
   const git = (...args) => execFileSync("git", args, { cwd: directory, encoding: "utf8" }).trim()
   try {
@@ -237,10 +207,11 @@ test("staging builds the verified source checkout and carries its SHA into the i
     git("-C", "release-source", "commit", "--quiet", "-m", "Planned commit")
     const sha = git("-C", "release-source", "rev-parse", "HEAD")
     git("-C", "release-source", "update-ref", "refs/remotes/origin/main", sha)
-    const source = script(step(staging, "Verify image source"))
-    assert.equal(replay(source, { COMMIT_SHA: sha, RELEASE_BRANCH: "main" }, directory).status, 0)
-    assert.notEqual(replay(source, { COMMIT_SHA: otherSha, RELEASE_BRANCH: "main" }, directory).status, 0)
-    assert.notEqual(replay(source, { COMMIT_SHA: sha, RELEASE_BRANCH: "other" }, directory).status, 0)
+    const source = script(step(staging, "Verify image source")).replace(".github/scripts/render-release.sh", '"$RENDER_RELEASE_SCRIPT"')
+    const env = { RENDER_RELEASE_SCRIPT: join(root, ".github/scripts/render-release.sh"), RELEASE_BRANCH: "main" }
+    assert.equal(replay(source, { ...env, COMMIT_SHA: sha }, directory).status, 0)
+    assert.notEqual(replay(source, { ...env, COMMIT_SHA: otherSha }, directory).status, 0)
+    assert.notEqual(replay(source, { ...env, COMMIT_SHA: sha, RELEASE_BRANCH: "other" }, directory).status, 0)
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }

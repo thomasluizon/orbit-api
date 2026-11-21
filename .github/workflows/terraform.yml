@@ -9,6 +9,7 @@ on:
       - .github/workflows/staging-reseed.yml
       - .github/workflows/staging-postgres-access-reconcile.yml
       - .github/workflows/release.yml
+      - .github/scripts/render-release.sh
       - .github/scripts/staging-reseed*
       - .github/scripts/*staging-postgres-access*
 

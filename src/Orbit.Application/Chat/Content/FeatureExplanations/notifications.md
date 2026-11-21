@@ -22,8 +22,8 @@ If a habit has a specific due **time**, you can set "X minutes before" reminders
 
 If a habit has no due time, it uses **scheduled** reminders that fire at a time you pick, either:
 
-- **same-day** — on the day the habit is due, or
-- **day-before** — the day before it's due.
+- **same-day**: on the day the habit is due, or
+- **day-before**: the day before it's due.
 
 ## When reminders fire
 
@@ -34,4 +34,4 @@ A reminder is only sent for a habit that is:
 - is actually **due** that day, and
 - has **not yet been logged** that day.
 
-Each distinct reminder is sent **once** — once a given reminder has fired for a habit on a given day, it won't fire again, so you won't be nudged twice for the same thing.
+Each distinct reminder is sent **once**: when a given reminder has fired for a habit on a given day, it won't fire again, so you won't be nudged twice for the same thing.

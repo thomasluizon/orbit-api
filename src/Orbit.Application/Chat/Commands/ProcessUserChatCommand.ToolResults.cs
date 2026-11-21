@@ -92,7 +92,7 @@ public partial class ProcessUserChatCommandHandler
             AgentOperationStatus.Denied => $"Policy denied: {operationResult.PolicyReason}",
             AgentOperationStatus.UnsupportedByPolicy => "Operation is unsupported by policy.",
             AgentOperationStatus.PendingConfirmation => "Confirmation required before this action can run.",
-            AgentOperationStatus.Failed => string.Equals(operationResult.PolicyReason, "unexpected_error", StringComparison.Ordinal)
+            AgentOperationStatus.Failed => string.Equals(operationResult.PolicyReason, ToolFailureCodes.UnexpectedError, StringComparison.Ordinal)
                 ? "An unexpected error occurred."
                 : operationResult.PolicyReason,
             _ => null

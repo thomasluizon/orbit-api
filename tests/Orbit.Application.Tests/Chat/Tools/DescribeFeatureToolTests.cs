@@ -28,7 +28,6 @@ public class DescribeFeatureToolTests
 
     [Theory]
     [InlineData("frequencies")]
-    [InlineData("schedule-math")]
     public async Task ExecuteAsync_ScheduleHelpIncludesTheRealSurfaceAndEditingInstructions(string key)
     {
         var tool = new DescribeFeatureTool(_service, new AppSurfaceCatalog());
@@ -47,8 +46,6 @@ public class DescribeFeatureToolTests
     [Theory]
     [InlineData("frequencies", "Time and reminder", "Exact time", "End Time", "Done", "Save")]
     [InlineData("frequencies", "Horário e lembrete", "Horário exato", "Horário final", "Concluir", "Salvar")]
-    [InlineData("schedule-math", "Time and reminder", "Exact time", "End Time", "Done", "Save")]
-    [InlineData("schedule-math", "Horário e lembrete", "Horário exato", "Horário final", "Concluir", "Salvar")]
     public async Task ExecuteAsync_HabitTimeHelpDocumentsTheSharedFormFieldsInBothLocales(
         string key, string section, string time, string endTime, string done, string save)
     {

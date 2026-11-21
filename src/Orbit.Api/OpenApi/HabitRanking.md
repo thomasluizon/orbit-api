@@ -1,10 +1,6 @@
 # Habit ranking consumer contract
 
-Tracks thomasluizon/orbit-tickets#1615. The consumer is owned by
-thomasluizon/orbit-tickets#1618; composition is owned by
-thomasluizon/orbit-tickets#1617. Deploy this API before enabling the consumer.
-Select a full producer commit and a supported identity from
-[artifacts.json](artifacts.json), following [README.md](README.md).
+Select an identity from [artifacts.json](artifacts.json), following [README.md](README.md).
 
 ## Query and window
 
@@ -23,14 +19,11 @@ Dates use the authenticated user's timezone and a start-inclusive, end-exclusive
 interval `[dateFrom, dateToExclusive)`. An explicitly inclusive end advances by
 one local calendar day. The range must contain 1 through 3660 days.
 
-For “últimos 6 meses” or “last six months”, resolve `rolling_months`, `months: 6`
-using `[userToday.AddMonths(-6), userToday.AddDays(1))`. Calendar subtraction
-clamps the day to the destination month's last day. For example, August 31 maps
-to February 29 in a leap year and February 28 otherwise. This includes today.
-An explicitly requested six complete calendar months uses the first of the
-current local month as the exclusive end and subtracts six months from that
-first day. Never replace either operation with 180 days or reinterpret the
-legacy retrospective `semester` period.
+A request for the last six months resolves `rolling_months` with `months: 6`, over
+`[userToday.AddMonths(-6), userToday.AddDays(1))`, which includes today. Calendar
+subtraction clamps the day to the last day of the destination month. Six complete
+calendar months use the first day of the current local month as the exclusive end.
+Never replace either with 180 days or the legacy retrospective `semester` period.
 
 The sole supported metric is `completion_log_records`: count distinct positive
 completion log records by log ID, excluding undone, soft-deleted and slip logs.
@@ -41,7 +34,7 @@ reinterpreted. Current goal targets and schedules do not change this count.
 
 The fixed scope is positive recurring habits, including independently logged
 children. Parent rows count only their own records. Tasks, bad habits, slips,
-soft-deleted habits and their logs are excluded. Orbit has no archive state.
+soft-deleted habits and their logs are excluded.
 Ended and completed recurring habits retain their eligible records and remain
 ranked. Rows with zero eligible completions are omitted, so no completions yields
 an ordinary successful empty ranking.
@@ -157,29 +150,6 @@ For a client advertising `supportsParts: true` and including the exact
 The model directive is `[[orbit:ranking]]`. The server builds its payload from
 the successful query result. If either capability is missing, it supplies readable
 text containing the resolved window, record-count definition, rows and page
-position. It never relies on an older Android client skipping an unknown kind.
+position.
 A query-only ranking turn can return the same block or text if the model's
 follow-up narrative call fails. A failed block build returns readable retry text.
-An initial model outage cannot resolve a natural-language request; the HTTP reads
-remain deterministic and available independently.
-
-## Activation, rollback and verification
-
-Ship the API and its generated contracts first, then let #1618 advertise both
-capabilities. Removing `habitRanking` from `partKinds` disables the structured
-path. Existing `astra_period_blocks_disabled` and `astra_parts_disabled` switches
-also retain the readable fallback. Revert the producer if count correctness fails.
-There is no minimum-version raise, schema migration, new secret or backfill.
-Existing retrospective fields, tools, enums and period blocks retain their behavior.
-
-Events `habit_ranking_query` and `habit_ranking_block` use existing telemetry:
-fixed kind and metric IDs, result count, completeness, query/page/refresh outcome
-and build failure. They contain no titles, prompts, filters or cursor values.
-No per-call cost instrumentation is added.
-
-The repository contract-aligner instructions were reviewed for endpoint and
-nullable-field parity. Consumer edits and consumer contract tests belong to
-#1618; this API work does not change a second repository or reuse historical
-branch instructions. Unit tests cover query, domain guards, token verification,
-repository translation/decryption, chat capabilities, narrative outage and
-controller payloads. #26 owns real-pipeline bilingual and composition acceptance.

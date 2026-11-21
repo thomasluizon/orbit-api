@@ -1,72 +1,22 @@
-# Orbit.Infrastructure — persistence + external services
+# Orbit.Infrastructure
 
-EF Core + PostgreSQL + service integrations (OpenAI, Firebase, Stripe, Amazon SES, VAPID).
-
-## Layout
-
-```
-Persistence/
-  OrbitDbContext.cs       - DbContext root (entity config via Fluent API in OnModelCreating)
-  GenericRepository.cs    - generic repo (per-aggregate repos alongside, e.g. AccountResetRepository.cs)
-  UnitOfWork.cs
-Migrations/               - EF migrations (alphabetical timestamped)
-Services/                 - implementations of Orbit.Domain.Interfaces.* (AI, push, email, JWT, ...)
-  Prompts/                - composable prompt sections (HabitCountSection, RoutinePatternsSection, ...)
-Configuration/            - strongly-typed options bound from appsettings (SesSettings, VapidSettings, ...)
-AI/                       - top-level AI service entry points
-```
+EF Core, PostgreSQL and the external services: OpenAI, Firebase, Stripe, Amazon SES and VAPID.
 
 ## EF Core
 
-- **Configuration via Fluent API**, never data annotations on entities. Every entity is configured in `OrbitDbContext.OnModelCreating`.
-- **Infrastructure owns the EF plumbing** — the DbContext, migrations, fluent entity configuration, and provider wiring live here. Application composes EF queries (LINQ + `Microsoft.EntityFrameworkCore` operators) against repository `IQueryable`s; Domain entities stay EF-free.
-- **No `[Required]` / `[StringLength]` / `[Key]` attributes on domain entities** — domain stays EF-free.
-- **Migrations** are alphabetical-by-timestamp. Add via `dotnet ef migrations add <Name> --project src/Orbit.Infrastructure --startup-project src/Orbit.Api`. NEVER edit a migration that has been applied to any environment.
-- **Adding a `DbSet<>` requires a FluentConfig.** If you forget the config, EF infers — which is wrong, and the next migration will be ugly. Roslyn `ORBIT0005` fails CI on a `DbSet<T>` with no matching `modelBuilder.Entity<T>(...)` call.
-
-## AI services (OpenAI)
-
-- `OpenAI .NET SDK 2.14.0` via the Responses API, with `gpt-6-luna` for chat and sub-tasks at low reasoning. Model selection is configurable.
-- Prompts composed from `Services/Prompts/Sections/*` — dynamic sections (HabitCountSection, TodayDateSection, RoutinePatternsSection) compose at runtime based on user state.
-- Structured output via JSON schema — define the response type, the SDK enforces shape.
-- Cache results in `IMemoryCache` keyed by user + date + version. Invalidate via `CacheInvalidationHelper` in Application (never directly here).
-
-## JWT
-
-- `ITokenService` issues + verifies. Uses HS256 with a configured secret from `appsettings`/env.
-- Refresh tokens stored in DB; access tokens stateless.
-- Token lifetime: short access (15min-ish), long refresh (configured).
+- Configure each entity with the Fluent API in `OrbitDbContext.OnModelCreating`. Never use a data annotation on an entity.
+- Add a Fluent configuration for each new `DbSet<>`. EF infers a wrong shape without it.
+- Create a migration with `dotnet ef migrations add <Name> --project src/Orbit.Infrastructure --startup-project src/Orbit.Api`.
+- Never edit a migration that any environment applied.
+- Infrastructure owns the DbContext, the migrations and the provider setup. Application builds its queries on the repository `IQueryable`.
 
 ## Stripe
 
-- **API key set ONCE** at startup in `Orbit.Api/Extensions/ServiceCollectionExtensions.cs`: `StripeConfiguration.ApiKey = ...`. NEVER set it per-request in a controller.
-- **Webhook signature verification** in `SubscriptionController.HandleWebhook`. Reject if `WebhookSecret` is not configured.
-- Validate checkout intervals against a whitelist of allowed values.
-- **Webhook endpoint version:** each Stripe webhook endpoint keeps the API version of its creation. `StripeWebhookVersionHealthCheck` serves `/health/stripe`, and Release API refuses a deploy when no enabled endpoint matches `Stripe.net`. See [Stripe webhook endpoint version](../../infra/README.md#stripe-webhook-endpoint-version).
+- Set `StripeConfiguration.ApiKey` once at startup, in `Orbit.Api/Extensions/ServiceCollectionExtensions.Infrastructure.cs`. Never set it in a controller.
+- Verify the signature in `HandleWebhookCommandHandler` (`Orbit.Application/Subscriptions/Commands/HandleWebhookCommand.cs`). Reject the event when `WebhookSecret` is not set.
+- Check a checkout interval against a list of allowed values.
+- Each Stripe webhook endpoint keeps the API version of its creation. `StripeWebhookVersionHealthCheck` serves `/health/stripe`. Release API refuses a deploy when no enabled endpoint matches `Stripe.net`. See [Stripe webhook endpoint version](../../infra/README.md#stripe-webhook-endpoint-version).
 
-## Push notifications
+## Secrets
 
-- `PushNotificationService` routes by subscription type: `p256dh == "fcm"` → Firebase Admin SDK (native); otherwise → VAPID Web Push (browser).
-- `ReminderSchedulerService` (BackgroundService) runs every 1 minute, finds habits with `ReminderEnabled && DueTime != null`, sends push + creates in-app notification. `SentReminder` table prevents duplicates.
-
-## Email (Amazon SES)
-
-- `SesEmailService` sends transactional emails (login codes, reset, support).
-- Per-delivery success uses debug logs; send failures are observable in Render logs.
-
-## Configuration
-
-- Strongly-typed options pattern. `SesSettings`, `VapidSettings`, `JwtSettings`, etc.
-- Bound from `appsettings.json` + env vars in `Orbit.Api/Extensions/ServiceCollectionExtensions.cs` via `services.Configure<X>(...)`.
-- Secrets MUST come from env vars in production. Never commit `appsettings.Development.json`.
-
-## Patterns to mirror
-
-| Want to add… | Look at… |
-|---|---|
-| New entity persistence | `Persistence/OrbitDbContext.cs` (`OnModelCreating`) |
-| New repository | `Persistence/GenericRepository.cs` + `Persistence/AccountResetRepository.cs` |
-| New migration | run the dotnet ef CLI; example in EF Core section above |
-| New AI prompt | `Services/Prompts/Sections/*` |
-| New external service | `Services/` + interface in `Orbit.Domain/Interfaces/` |
-| New config block | `Configuration/SesSettings.cs` + binding in `Orbit.Api/Extensions/ServiceCollectionExtensions.cs` |
+Production secrets come from environment variables. Never commit `appsettings.Development.json`.

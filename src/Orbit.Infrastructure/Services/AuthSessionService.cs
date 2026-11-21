@@ -38,9 +38,7 @@ public class AuthSessionService(
         if (owner.IsDeactivated)
             return Result.Failure<SessionTokens>(ErrorMessages.InvalidSession);
         var refreshToken = GenerateRefreshToken();
-#pragma warning disable ORBIT0004 // CreateSessionAsync computes the refresh-token ExpiresAtUtc instant through GetRefreshExpiry; no calendar date is derived. https://github.com/thomasluizon/orbit-tickets/issues/230
         var nowUtc = DateTime.UtcNow;
-#pragma warning restore ORBIT0004
         var sessionResult = UserSession.Create(
             userId,
             HashToken(refreshToken),
@@ -59,9 +57,7 @@ public class AuthSessionService(
 
     public async Task<Result<SessionTokens>> RefreshSessionAsync(string refreshToken, CancellationToken cancellationToken = default)
     {
-#pragma warning disable ORBIT0004 // RefreshSessionAsync uses nowUtc for CanUse validity, refresh expiry and Rotate audit stamps, all session instants. https://github.com/thomasluizon/orbit-tickets/issues/230
         var nowUtc = DateTime.UtcNow;
-#pragma warning restore ORBIT0004
         var tokenHash = HashToken(refreshToken);
 
         var session = await userSessionRepository.FindOneTrackedAsync(
@@ -210,9 +206,7 @@ public class AuthSessionService(
 
     public async Task<bool> HasSessionForTokenAsync(string refreshToken, CancellationToken cancellationToken = default)
     {
-#pragma warning disable ORBIT0004 // HasSessionForTokenAsync compares ExpiresAtUtc with nowUtc to reject expired refresh tokens. https://github.com/thomasluizon/orbit-tickets/issues/230
         var nowUtc = DateTime.UtcNow;
-#pragma warning restore ORBIT0004
         var tokenHash = HashToken(refreshToken);
         return await userSessionRepository.AnyAsync(
             session => session.TokenHash == tokenHash

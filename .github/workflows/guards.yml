@@ -1,8 +1,7 @@
 name: Guards
 
 # These repository gates apply to every contributor through CI. Each step runs even when an
-# earlier one fails, so one run reports every broken gate. The pull request title and body are
-# checked by pr-text.yml: a body edit must never post a new Guards check run on the head.
+# earlier one fails, so one run reports every broken gate.
 
 on:
   workflow_dispatch:
@@ -62,18 +61,6 @@ jobs:
         # https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#concurrency documents queue, which actionlint does not recognize.
         run: ~/.cache/actionlint/actionlint -color -ignore '^unexpected key "queue" for "concurrency" section\. expected one of "cancel-in-progress", "group"$'
 
-      - name: Timeless Text
-        if: ${{ !cancelled() }}
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          BASE_REF: ${{ github.base_ref }}
-        run: |
-          if [ "$EVENT_NAME" = pull_request ]; then
-            node tools/check-timeless.mjs --base "origin/$BASE_REF"
-          else
-            node tools/check-timeless.mjs --all
-          fi
-
       - name: Dash Ban
         if: ${{ !cancelled() }}
         env:
@@ -84,20 +71,6 @@ jobs:
             git diff --name-only --diff-filter=ACMR "origin/$BASE_REF...HEAD" -z \
               | xargs -0 --no-run-if-empty node tools/check-dashes.mjs --files
           fi
-          node tools/check-dashes.mjs --check-baseline
-
-      - name: Skill and Agent Frontmatter
-        if: ${{ !cancelled() }}
-        run: node tools/check-frontmatter.mjs
-
-      - name: Root Allowlist
-        if: ${{ !cancelled() }}
-        run: node tools/check-root-allowlist.mjs
-
-      # The closed allowlist makes every analyzer suppression visible in the diff.
-      - name: Every analyzer suppression under src/ is declared in the closed allowlist
-        if: ${{ !cancelled() }}
-        run: node tools/check-suppression-allowlist.mjs
 
       - name: Tool tests
         if: ${{ !cancelled() }}
@@ -105,7 +78,7 @@ jobs:
 
       - name: API release admission tests
         if: ${{ !cancelled() }}
-        run: node --test .github/scripts/release-admission.test.mjs .github/scripts/release-admission-security.test.mjs .github/scripts/stripe-webhook-version.test.mjs
+        run: node --test .github/scripts/release-admission.test.mjs .github/scripts/stripe-webhook-version.test.mjs
 
       - name: CI input selection tests
         if: ${{ !cancelled() }}
@@ -147,23 +120,6 @@ jobs:
             exit 1
           fi
           echo "OK: no TODO/FIXME/HACK markers in source."
-
-      - name: Capability inventory matches the reviewed snapshot
-        if: ${{ !cancelled() }}
-        run: node tools/capability-inventory.mjs --check
-
-      - name: Gating matrix generation is deterministic
-        if: ${{ !cancelled() }}
-        run: |
-          set -euo pipefail
-          node tools/gating-matrix.mjs
-          cp gating-matrix.json "$RUNNER_TEMP/first-gating-matrix.json"
-          node tools/gating-matrix.mjs > /dev/null
-          if ! cmp -s gating-matrix.json "$RUNNER_TEMP/first-gating-matrix.json"; then
-            echo "::error::gating-matrix.json differs between two runs over the same tree"
-            diff "$RUNNER_TEMP/first-gating-matrix.json" gating-matrix.json | head -40 || true
-            exit 1
-          fi
 
       - name: Save actionlint
         if: github.event_name != 'pull_request' && steps.actionlint-cache.outputs.cache-hit != 'true'

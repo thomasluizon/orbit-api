@@ -123,7 +123,7 @@ public interface IPendingClarificationStore
 
     /// <summary>
     /// Atomically claims the clarification as resolved. Returns true iff this caller
-    /// is the one that flipped <c>ResolvedAtUtc</c> from null to a value — closes the
+    /// is the one that flipped <c>ResolvedAtUtc</c> from null to a value, and closes the
     /// TOCTOU window between get-and-resolve. Concurrent callers see false and must
     /// short-circuit (e.g., 409 Conflict) without re-invoking the tool.
     /// </summary>

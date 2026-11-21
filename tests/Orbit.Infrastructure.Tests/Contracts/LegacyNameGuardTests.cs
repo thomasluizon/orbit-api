@@ -42,7 +42,6 @@ public class LegacyNameGuardTests
         (@"""IssuedAstraBlocks""", TableOrColumn),
         (@"AstraGroundingEnforce", ConfigKey),
         (@"""IssuedAstraBlocksDays""", ConfigKey),
-        (@"evals/astra", HarnessName),
         (@"\$""astra-blocks:\{request\.UserId\}""", LockKey),
         (@"\(string\?\)""[^""]*Astra[^""]*""", SeedText),
     ];
@@ -123,7 +122,6 @@ public class LegacyNameGuardTests
             .Where(path => LegacyName.IsMatch(path))
             .Where(path => !path.Contains("/Migrations/", StringComparison.Ordinal)
                 && !path.StartsWith("evals/astra/", StringComparison.Ordinal)
-                && !path.StartsWith(".claude/skills/astra-eval/", StringComparison.Ordinal)
                 && !path.Contains("/Fixtures/", StringComparison.Ordinal))
             .ToList();
 

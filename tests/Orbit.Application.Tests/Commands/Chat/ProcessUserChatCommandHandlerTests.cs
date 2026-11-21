@@ -3282,7 +3282,7 @@ public partial class ProcessUserChatCommandHandlerTests
         await handler.Handle(
             new ProcessUserChatCommand(
                 UserId, "yes",
-                History: [new ChatHistoryMessage("ai", "I can log your 5 km run — should I?")]),
+                History: [new ChatHistoryMessage("ai", "I can log your 5 km run. Should I?")]),
             CancellationToken.None);
 
         await _aiIntentService.Received(1).SendWithToolsAsync(

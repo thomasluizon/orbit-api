@@ -1,275 +1,112 @@
 # Chat AI Tools
 
-This directory holds the chat agent's tool layer. Each tool is a small adapter that
-exposes one capability to the AI through a JSON-schema'd contract and delegates to the
-existing application logic (usually a MediatR command/query).
+Each chat tool is a small adapter. It exposes one capability to the AI through a JSON schema and calls the application logic, usually a MediatR command or query.
 
-## Brain dump composition
+## Contents
 
-`bulk_create_habits` accepts the full set of tasks, new habits and reused activities
-from an unstructured message in its existing `habits` array. A reused activity carries
-`habit_id` and only requested changes. If additional habit ideas are requested,
-`suggest_habits` provides editable drafts; map `existingHabitId` to `habit_id` when
-preparing the combined preview and retain explicit tasks. For additional ideas,
-supply `excluded_activities` with every already planned title. A supplied list,
-including `[]`, excludes those activities and existing account habits. Omission or
-null preserves ordinary adjustment suggestions. The generator receives the list;
-server validation rejects title matches and existing-habit targets and retries once. Every write uses the
-existing command, validation, domain guards and pending approval gateway.
-Use `query_habits` for reuse and `suggest_habits` for requested ideas; organizing
-the message does not need calendar, habit-month, profile or analytics reads.
-Bulk argument preparation normalizes zero-second suggestion times to `HH:mm`
-and includes a recurring item's supplied start date as `due_date` when omitted.
-With an anchor, edit `start_date`; `due_date` is display-only in the preview.
-The existing ID determines the stored title carried by the reuse preview.
-
-Preview items append optional nullable string `habitType` (`Task`, `Habit`, `General`).
-It is derived from structured schedule fields, retaining a reused item's stored cadence
-when omitted. The paired UI groups items inside one preview without creating heading
-records. Unknown or absent values retain ordinary item rendering. Approval, edit,
-reject, refresh and stored replay keep their existing operation contracts. Nothing
-is saved before approval. Replies have at most one short sentence without figures,
-then the combined preview. No message keywords select tools or rewrite model output.
-The producer and paired web/Android handoff are documented in
-[AnswerComposition.md](../../../Orbit.Api/OpenApi/AnswerComposition.md#brain-dump-approval).
+- [IAiTool contract](#the-iaitool-contract)
+- [Ordering](#tool-ordering-order)
+- [Catalog mapping](#catalog-mapping-is-mandatory)
+- [MCP bridge](#mcp-routes-through-the-same-tools)
+- [Habit query results](#typed-habit-query-results)
+- [Period metrics](#period-metric-definitions)
+- [Total and comparison](#total-and-comparison-blocks)
+- [Read metadata](#exact-read-metadata-and-recovery)
 
 ## The `IAiTool` contract
 
 A tool implements `IAiTool` (`IAiTool.cs`):
 
-- `string Name` — the stable tool name the model calls. It is also the agent
-  operation id, so it must be unique across all tools.
-- `string Description` — what the tool does and when to use it.
-- `bool IsReadOnly` (default `false`) — read-only tools never mutate state; this drives
-  the `IsAgentExecutable`/audit semantics in the catalog.
-- `int Order` (default `int.MaxValue`) — execution priority within a single tool-calling
-  iteration (see below).
-- `object GetParameterSchema()` — the JSON schema for the tool's arguments. Build it from
-  the `JsonSchemaTypes` constants to avoid duplicated string literals.
-- `Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)` —
-  validate arguments at the boundary, run the work, and return a `ToolResult`
-  (`Success`, `EntityId`, `EntityName`, `Error`, `Payload`).
+- `string Name`: the stable tool name that the model calls. It is also the agent operation id, so it must be unique across all tools.
+- `string Description`: what the tool does and when to use it.
+- `bool IsReadOnly` (default `false`): a read-only tool never changes state. The catalog uses it for `IsAgentExecutable` and audit.
+- `int Order` (default `int.MaxValue`): the execution priority in one tool-call iteration.
+- `object GetParameterSchema()`: the JSON schema of the arguments. Build it from the `JsonSchemaTypes` constants.
+- `Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)`: validate the arguments at the boundary, do the work and return a `ToolResult` (`Success`, `EntityId`, `EntityName`, `Error`, `Payload`).
 
-Argument parsing helpers live in `JsonArgumentParser` (same assembly, internal).
 
 ## Tool ordering (`Order`)
 
-When the model requests several tool calls in one iteration, they are executed in
-ascending `Order` (`ProcessUserChatCommand.ProcessToolCallsAsync`). The order is data on
-the tool, not a hardcoded switch:
+When the model requests several tool calls in one iteration, `ProcessUserChatCommand.ProcessToolCallsAsync` runs them in ascending `Order`.
 
-```
-calls.OrderBy(c => registry.GetTool(c.Name)?.Order ?? int.MaxValue)
-```
+| Order | Tool               | Why                                              |
+| ----- | ------------------ | ------------------------------------------------ |
+| 0     | `create_habit`     | Parent habits must exist before sub-habits and tags. |
+| 1     | `create_sub_habit` | A sub-habit depends on its parent.               |
+| 2     | `assign_tags`      | Tags attach to a habit that must already exist.  |
 
-Reserved values:
-
-| Order | Tool             | Why                                                   |
-| ----- | ---------------- | ----------------------------------------------------- |
-| 0     | `create_habit`   | Parent habits must exist before sub-habits/tags.      |
-| 1     | `create_sub_habit` | Sub-habits depend on their parent.                  |
-| 2     | `assign_tags`    | Tags attach to a habit that must already exist.       |
-
-Every other tool keeps the default `int.MaxValue` and runs last. `OrderBy` is stable, so
-tools that share an `Order` keep their original call order.
+Every other tool keeps `int.MaxValue` and runs last. `OrderBy` is stable, so tools with the same `Order` keep their call order.
 
 ## Catalog mapping is mandatory
 
-Every registered `IAiTool` MUST have a matching `chatTools` entry on an agent capability
-in `AgentCatalogService`. At startup `BuildOperations` enumerates all registered tools and
-throws `InvalidOperationException` if any tool name is not mapped to a capability. So a new
-tool is always added together with its catalog `chatTools` entry and its DI registration in
-`ServiceCollectionExtensions`.
+Each registered `IAiTool` must have a matching `chatTools` entry on an agent capability in `AgentCatalogService`. At startup, `BuildOperations` throws `InvalidOperationException` for a tool name that no capability maps. Add a new tool together with its catalog `chatTools` entry and its DI registration in `ServiceCollectionExtensions`.
 
 ## MCP routes through the same tools
 
-The MCP server's mutating tools (`Orbit.Api/Mcp/Tools/*`) do not call MediatR directly.
-They forward to `McpExecutorBridge` → `IAgentOperationExecutor`, which resolves the backing
-`IAiTool` by name and the matching catalog operation, runs the same policy evaluation
-(read-only-credential denial, ownership pre-check, confirmation gating) and writes an
-`AgentAuditLogs` row. Chat and MCP therefore share one implementation and one policy surface
-per capability; read-only MCP tools stay on MediatR.
-
-
-## Restart plans
-
-`bulk_reschedule_habits` accepts either the existing `filter` plus shared
-`due_date`, or optional `revised_items: [{ habit_id, updates: { due_date } }]`.
-Individual dates reuse the existing revision adapter and `BulkUpdateHabitsCommand`;
-they do not introduce a repository write path. Every item is checked by the
-existing command validator and domain guards before the preview is held.
-Approval consumption and all individual date changes share the executor's
-transaction. A failed, cancelled or partial item rolls back the complete plan
-and leaves its approval reusable for retry.
-The complete plan includes habits kept today as well as deferred habits, even
-when a proposed date equals its stored value. Model instructions read the dated
-remaining schedule with overdue entries before planning, preserve unrelated fields
-and past records, and finish with one approval preview. No message routing is added.
-
-The wire contract, rendering requirements and coordinator-owned bilingual live
-eval handoff are in `src/Orbit.Api/OpenApi/AnswerComposition.md`, under Restart
-plans. The English instructions in `RestartPlanInstructions.cs` appear once in
-the tool description and apply to every message language. Schema descriptions
-are English model metadata.
-The feature adds no fixed user-facing copy. Existing localized preview labels and
-controls are reused. Tracks thomasluizon/orbit-tickets#1855.
+The mutating MCP tools (`Orbit.Api/Mcp/Tools/*`) do not call MediatR. They call `McpExecutorBridge`, then `IAgentOperationExecutor`. The executor finds the `IAiTool` by name and the matching catalog operation. It applies the same policy: read-only credential denial, ownership pre-check and confirmation gating. It writes an `AgentAuditLogs` row. Chat and MCP share one implementation and one policy for each capability. The read-only MCP tools stay on MediatR.
 
 ## Typed habit query results
 
-`query_habits` retains its formatted `EntityName` and also returns a `HabitListCard`
-payload from the same filtered schedule result. Rows preserve order, hierarchy and
-queried completion status. The optional `date` is the resolved user-local query day.
-The scope is `date` for a historical or future schedule, `today` for the resolved
-current day, and `all` for an undated query. An undated query retains its filters;
-`all` does not mean the payload contains every habit.
+`query_habits` keeps its formatted `EntityName`. It also returns a `HabitListCard` payload from the same filtered schedule result. Rows keep the order, the hierarchy and the completion status of the query. The optional `date` is the resolved user-local day.
 
-Habit rows append optional nullable boolean `isSkippedOnDate`. Dated queries emit
-true for a skipped occurrence and false otherwise; undated queries omit it. The
-enclosing `date` remains authoritative after refresh and replay. The existing `status`
-enum is unchanged: skipped rows keep `none`. A day's completion or skip question uses
-`query_habits` with `date` and null `is_completed`, rather than inferring skip state
-from completion logs. A habit list containing a skipped row additionally requires
-`clientContext.supportsSkippedHabitRows: true`. Clients declare it only when they
-render `isSkippedOnDate` against the enclosing date. Omission, null or false keeps
-the localized typed skip text, including on stored replay. Dated query rows keep
-emitting `isSkippedOnDate` regardless of the requesting client's capabilities.
+The scope is `date` for a past or future schedule, `today` for the current day and `all` for an undated query. An undated query keeps its filters. `all` does not mean that the payload holds every habit.
 
-The normal page size is 50, including an all-habits request; the model supplies another
-size only when requested. A 51-row result with limit 50 is partial and has a signed
-next cursor; limit 100 returns complete data. Consumer preview truncation cannot
-change source completeness. A complete, empty filtered read retains its `search`
-in exact query metadata and adds one short localized scope explanation after its
-empty block. It names the typed search term without deriving anything from the message.
+Habit rows append the optional nullable boolean `isSkippedOnDate`:
 
-The chat builder carries the successful typed result into its block. Each read tool
-call gets its own query identity. A continuation result's `readDirective`, for example
-`[[orbit:read:call_1]]`, refers only to that call. An unqualified legacy directive
-cannot choose between differently scoped results. Existing formatted strings and
-legacy card properties remain supported. Ambiguity suppresses only that binding;
-independent successful reads retain their cards, and the dated facts remain readable.
+- A dated query sets it to true for a skipped occurrence and to false for the others. An undated query omits it.
+- The enclosing `date` stays authoritative after refresh and replay. A skipped row keeps the `status` `none`.
+- A question about the completion or skip state of a day uses `query_habits` with `date` and a null `is_completed`.
+- A habit list with a skipped row also requires `clientContext.supportsSkippedHabitRows: true`. Without it, the response keeps the localized typed skip text, also on stored replay.
 
-A `habitList` with `scope: "date"` additionally requires
-`supportsDatedHabitListCard: true`. This promises parsing, display and actions that
-use the returned absolute `date`. The original `supportsHabitListCard` flag and
-`partKinds: ["habitList"]` alone do not establish that support. Without the new flag,
-legacy and parts responses contain dated text from the actual rows, without live
-habit controls. Existing `today` and `all` cards retain their original negotiation.
-Tracks thomasluizon/orbit-tickets#1616.
+The normal page size is 50, also for an all-habits request. A result of 51 rows with limit 50 is partial and has a signed next cursor. A complete empty read keeps its `search` in the query metadata and adds one short localized scope sentence after the empty block.
+
+Each read tool call gets its own query identity. The `readDirective` of a continuation result, for example `[[orbit:read:call_1]]`, refers only to that call. An unqualified legacy directive cannot choose between results with different scopes. An ambiguous directive suppresses only its own binding.
+
+A `habitList` with `scope: "date"` also requires `supportsDatedHabitListCard: true`. Without it, the response holds dated text from the real rows and no live habit controls.
 
 ## Period metric definitions
 
-`get_period_analytics` requires `metric` and either `relative_period` or explicit
-`date_from` and `date_to`. Dates are
-inclusive user-local days, resolved before the query is issued. `habit_id`, `search`,
-`tag` and `is_bad_habit` optionally constrain the source. Existing record, date and
-schedule aggregates include root habits; an explicitly selected child is measured
-independently. `completedHabits` includes independent children using only their own
-logs, never inheriting completion from a parent or child. A calendar-month
-request uses `this_month` or `last_month`, or explicit dates for a named month. The existing retrospective enums
-keep their rolling definitions; `month` still means the last 30 days.
+`get_period_analytics` requires `metric`. It also requires `relative_period` or both `date_from` and `date_to`. The dates are inclusive user-local days that the server resolves before the query. The arguments `habit_id`, `search`, `tag` and `is_bad_habit` limit the source.
 
-Relative period selectors include `today`, `yesterday`, `this_week`, `last_week`,
-`this_month`, `last_month` and `last_7_days`. Counted rolling windows use
-`last_n_days` or `last_n_weeks` with `period_count`. Current weeks and months run
-from the account's calendar boundary through its local today. Previous weeks and
-months are complete. Week boundaries honor the account's week-start preference.
-Comparisons use `baseline_relative_period` and optional `baseline_period_count`.
-Relative selectors override model-supplied absolute dates and are removed before
-issuing the query, so read metadata, paging and refresh retain the exact absolute scope.
+- Record, date and schedule aggregates include root habits. A child that the user selects is measured alone.
+- `completedHabits` counts an independent child from its own logs only.
+- The retrospective enums keep their rolling definition. `month` means the last 30 days.
 
-The shared read resolver also applies these selectors to `get_retrospective`,
-`get_daily_summary`, `get_habit_metrics`, `get_habit_history`, `get_habit_month`,
-`get_calendar_overview` and `get_habit_ranking`. Calendar event instants are derived
-from the resolved local days in the account's timezone. Ranking converts its end
-to the existing exclusive-end contract and retains its server-resolved month windows.
-`query_goals`, `review_goals` and `get_gamification_overview` expose current goal
-and lifetime account-streak snapshots rather than selectable period totals. Their
-server-captured `as_of` anchor already uses the account's local today. Period habit
-streak questions use `get_period_analytics` or `get_habit_metrics`.
-`query_habits` accepts the single-day selectors `today` and `yesterday`; a dated
-habit list represents one day rather than a multi-day period.
+`RelativeReadPeriod` lists the relative selectors. A counted rolling window uses `last_n_days` or `last_n_weeks` with `period_count`. A current week or month ends at the local today of the account. A previous week or month is complete. Week boundaries follow the week-start preference. A comparison uses `baseline_relative_period` and the optional `baseline_period_count`. A relative selector overrides the absolute dates of the model. The server removes it before the query, so read metadata, paging and refresh keep the exact absolute scope.
+
+`query_goals`, `review_goals` and `get_gamification_overview` return current snapshots, not period totals. Their `as_of` anchor uses the local today of the account. A question about a period habit streak uses `get_period_analytics` or `get_habit_metrics`. `query_habits` accepts only the single-day selectors `today` and `yesterday`.
 
 | Metric | Unit | Definition |
 | --- | --- | --- |
-| `completedHabits` | `habits` | Distinct nondeleted positive recurring or flexible habits with at least one positive, nondeleted, nonslip log in the window. Includes ended and completed habits; excludes tasks, General items and bad habits. |
+| `completedHabits` | `habits` | Distinct nondeleted positive recurring or flexible habits with at least one positive, nondeleted, nonslip log in the window. Includes ended and completed habits. Excludes tasks, General items and bad habits. |
 | `positiveLogRecords` | `records` | Number of nondeleted positive log records in the window, including unscheduled records. |
 | `distinctLoggedDates` | `days` | Number of distinct local dates with positive records across the selected habits. |
-| `metScheduledDates` | `days` | Number of scheduled habit/date pairs with a positive record on that date. |
-| `scheduledDates` | `days` | Scheduled habit/date pairs, bounded by account-local creation, recurrence and end dates. General and bad habits have no positive-adherence denominator. |
+| `metScheduledDates` | `days` | Number of scheduled habit and date pairs with a positive record on that date. |
+| `scheduledDates` | `days` | Scheduled habit and date pairs, limited by the creation, recurrence and end dates in the account timezone. General and bad habits have no positive-adherence denominator. |
 
-`PeriodHabitMetrics` contains `window: { from, to }`, the four existing counts,
-optional nullable `completedHabits`,
-`completionRate` (0 through 100, null without scheduled dates), `currentStreak`,
-`bestStreak` and `streakScope: "period"`. These streaks count consecutive dates
-with positive activity inside the requested window. Current streak ends at the
-window's last date. They are distinct from lifetime habit and account streaks.
-The series uses daily buckets through 31 days, then weeks aligned to the account's
-week-start preference, with clipped first and last buckets. Summed series counts
-match the scheduled and met counts.
+`PeriodHabitMetrics` holds `window: { from, to }`, the four counts, the optional nullable `completedHabits`, `completionRate` (0 to 100, null without scheduled dates), `currentStreak`, `bestStreak` and `streakScope: "period"`. These streaks count consecutive dates with positive activity inside the window. The current streak ends at the last date of the window. They are not the lifetime habit streak or the account streak. The series uses daily buckets up to 31 days, then weekly buckets that follow the week-start preference. The first and last buckets are clipped. The summed series counts equal the scheduled and met counts.
 
-Habit logs contain completion or skip markers, with no measurement quantity or
-unit. Minutes, pages, litres and similar requests use the closest supported named
-count metric. Neither marker values nor their sums establish measured quantities.
+`get_habit_metrics` keeps every lifetime field and appends `period`, `periodSeries` and `sourceRevision`. The optional `date_from` and `date_to` select the period. When both are absent, the period is the 30 local days that end today. The query captures `as_of` once for the rolling weekly and monthly rates and the current streak, and refresh keeps it. The revision includes the timezone and the week-start setting of the account.
 
-`get_habit_metrics` retains every lifetime field and appends `period`,
-`periodSeries` and `sourceRevision`. Its optional `date_from` and `date_to` select
-the period; omission resolves to the 30 local days ending today. The query also captures
-`as_of` once for the existing rolling weekly/monthly rates and current streak;
-refresh retains that anchor. Its revision includes account timezone and week-start
-settings as well as habit and log sources. The metrics block
-retains its lifetime `totalCompletions`, `currentStreak` and `bestStreak`, while
-`periodMetrics` and its series carry the explicitly scoped facts.
-
-For "how many habits did I complete" and "quantos hábitos concluí", select
-`completedHabits` with unit `habits`. For "how many times" and "quantas vezes",
-select `positiveLogRecords` with unit `records`. Supported period answers contain
-at most one short sentence without figures, then the block; figures belong only
-in the block. MCP exposes the same `get_period_analytics` query through a typed
-`query` object with camelCase fields and the same inclusive dates and metric names.
+A period answer holds at most one short sentence without figures, then the block. Figures belong only in the block. MCP exposes the same query through a typed `query` object with camelCase fields and the same dates and metric names.
 
 ## Total and comparison blocks
 
-Both new kinds require `supportsParts: true` and their exact kind in `partKinds`.
-When `metric` is `completedHabits` and `unit` is `habits`, both kinds additionally
-require optional `clientContext.supportsCompletedHabitsMetric: true`. Omission,
-null or false preserves a readable server-generated text answer instead of an
-unsupported block, including replayed answers. Other period metrics retain their
-existing negotiation. Deploy the API before the paired consumer in
-thomasluizon/orbit-tickets#1763 accepts these metric and unit values and advertises
-the capability.
-`AiPeriodBlocksDisabled` suppresses them. They have no legacy directive or fleet
-floor requirement. Without advertisement, tools can still ground ordinary text.
-Successful focused analytics survive an unavailable AI continuation: advertised
-blocks or deterministic text retain each query's exact windows, named counts and
-units. A failed source query remains a failure.
+Both kinds require `supportsParts: true` and their exact kind in `partKinds`. For `metric` `completedHabits` with `unit` `habits`, both kinds also require `clientContext.supportsCompletedHabitsMetric: true`. When it is absent, null or false, the response holds a readable server text answer instead of the block, also on replay. The other period metrics keep their negotiation.
 
-`periodTotal` contains `metric`, `unit`, `value`, `metrics`, `series`, nullable
-`habitId` and `read`. `metrics.window` names the exact resolved dates and the metrics
-include both the met numerator and scheduled denominator.
+`AiPeriodBlocksDisabled` suppresses both kinds. They need no legacy directive. When the AI continuation is unavailable, a successful focused analytics query still returns its blocks or deterministic text with the exact windows, counts and units. A failed source query stays a failure.
 
-Supplying both `baseline_from` and `baseline_to` produces `periodComparison`:
-`metric`, `unit`, `current`, `baseline`, `currentValue`, `baselineValue`,
-`absoluteDelta`, nullable `relativeDelta`, nullable `habitId` and `read`.
-`current` and `baseline` are complete `PeriodHabitMetrics` values with their own
-windows and denominators. The optional `completedHabits` count is available on
-`periodTotal.metrics`, `periodComparison.current` and `periodComparison.baseline`.
-A missing or null count from an older producer means unknown, not zero.
-Absolute delta is current minus baseline. Relative delta
-is that delta divided by baseline, expressed as a ratio rather than a percentage.
-A zero baseline yields null. A decrease yields a negative delta. These calculations
-have no dependency on optional AI narrative generation.
+`periodTotal` holds `metric`, `unit`, `value`, `metrics`, `series`, the nullable `habitId` and `read`. `metrics.window` names the resolved dates. The metrics include the met numerator and the scheduled denominator.
+
+`periodComparison` needs both `baseline_from` and `baseline_to`. It holds `metric`, `unit`, `current`, `baseline`, `currentValue`, `baselineValue`, `absoluteDelta`, the nullable `relativeDelta`, the nullable `habitId` and `read`. `current` and `baseline` are complete `PeriodHabitMetrics` values with their own windows and denominators. The optional `completedHabits` count is on `periodTotal.metrics`, `periodComparison.current` and `periodComparison.baseline`. A missing or null count from an older producer means unknown, not zero.
+
+The absolute delta is current minus baseline. The relative delta is the absolute delta divided by the baseline, as a ratio and not as a percentage. A zero baseline gives a null relative delta.
 
 ## Exact read metadata and recovery
 
-`AgentOperationResult` appends optional `access` with `"read"` or `"write"` for
-every known tool or capability, including failed and policy-denied operations.
-Chat responses and final stream responses use the same field. Missing metadata
-omits the field and means unknown. Clients can distinguish read failures from
-write failures without maintaining a tool-name list. Deploy the API before the
-consumer in thomasluizon/orbit-tickets#1808 uses this field.
+`AgentOperationResult` appends the optional `access` field with `"read"` or `"write"` for each known tool or capability, also for a failed or policy-denied operation. Chat responses and final stream responses use the same field. A missing field means unknown. A client uses it to tell a read failure from a write failure.
 
-All affected card types append optional `read` metadata. `AgentOperationResult`
-optionally carries `readBlock: { kind, block, read }`. The metadata is:
+Each affected card type appends the optional `read` metadata. `AgentOperationResult` optionally holds `readBlock: { kind, block, read }`. The metadata is:
 
 ```json
 {
@@ -285,21 +122,9 @@ optionally carries `readBlock: { kind, block, read }`. The metadata is:
 }
 ```
 
-Scope contains resolved absolute dates and the original target and filters. Calendar
-scope includes the original UTC window and calendar selection. Its date inputs
-resolve midnight in the account's timezone; omitted dates capture the existing
-forward feed window once. State reads such as account settings continue querying
-the same state fields. Lifetime fields remain lifetime reads alongside a fixed
-period, rather than becoming historical snapshots of account settings.
+The scope holds the resolved absolute dates, the original target and the filters. The calendar scope also holds the original UTC window and the calendar selection. The server captures an omitted calendar date once from the forward feed window. A lifetime field stays a lifetime read next to a fixed period.
 
-Revisions hash source membership and facts, including counts and identifiers where
-the source exposes them. Deleting a source can change the revision even if the
-remaining maximum update timestamp is unchanged. Answer time is never a source
-revision. Reference-list chat reads bypass reference caches. Cached retrospective
-narratives are marked `stale`; exact refresh calculates facts without generating
-another narrative. Calendar disconnection is `partial` with `recovery: "reconnect"`.
-A paged result is `partial` with an authenticated `nextCursor`. Partial refers to
-the original query's result, rather than an invented full-data claim.
+A revision hashes the membership and the facts of the source. The deletion of a source can change the revision. The answer time is never a revision. A cached retrospective narrative is `stale`, and an exact refresh calculates the facts without a new narrative. A disconnected calendar is `partial` with `recovery: "reconnect"`. A paged result is `partial` with an authenticated `nextCursor`. `partial` describes the original query result only.
 
 `POST /api/chat/reads/refresh` accepts:
 
@@ -311,72 +136,27 @@ the original query's result, rather than an invented full-data claim.
 }
 ```
 
-Success returns `{ kind, block, read }`. For existing kinds, send their existing
-card capability boolean as well. Habit lists containing skipped rows also require
-`supportsSkippedHabitRows: true`. Dated habit lists additionally require
-`supportsDatedHabitListCard: true`; habit history also requires
-`supportsHabitHistoryCard: true`. Every refresh rechecks these capabilities, including
-when a formerly current-day query becomes historical after local midnight. Set `page: true` only with `nextCursor`. Refresh
-starts the original query at its first page. Paging preserves the query identity
-and rejects a changed source revision with HTTP 409 (`READ_QUERY_STALE`); refresh
-the original token before paging again. Refresh retains the query identity and can
-return a changed revision. It cannot change the metric, windows, filters or target.
-Each request authenticates the caller and repeats the original operation policy,
-ownership, plan, scope and feature checks. A token grants no extra authority.
+A success returns `{ kind, block, read }`. For an existing kind, send its card capability boolean. A habit list with skipped rows also needs `supportsSkippedHabitRows: true`. A dated habit list also needs `supportsDatedHabitListCard: true`. Habit history also needs `supportsHabitHistoryCard: true`. Each refresh checks these capabilities again, also when a current-day query becomes historical after local midnight.
 
-Tokens are bound to the user, authenticated with a domain-separated key derived
-from `Jwt:SecretKey`, and expire after 30 days. All API instances use the existing
-shared JWT configuration. Key rotation invalidates outstanding read tokens.
-Invalid, expired or cross-user tokens return HTTP 410 (`READ_QUERY_EXPIRED`);
-repeat the original request. Permission changes return HTTP 403. A removed target returns HTTP 404, and key
-reads preserve their HTTP 428 step-up requirement. A source or refresh
-failure returns HTTP 503 (`READ_QUERY_REFRESH_FAILED`); retain the visible prior
-answer and retry the same token. Never substitute today's query after a failure.
+- Set `page: true` only with `nextCursor`.
+- A refresh restarts the original query at its first page.
+- Paging keeps the query identity. It rejects a changed source revision with HTTP 409 (`READ_QUERY_STALE`). Refresh the original token before the next page.
+- A refresh keeps the query identity and can return a changed revision. It cannot change the metric, the windows, the filters or the target.
+- Each request authenticates the caller and repeats the policy, ownership, plan, scope and feature checks of the original operation. A token grants no extra authority.
 
-`get_habit_history` uses the existing `recordList` kind with `kind: "habitHistory"`.
-It additionally requires `supportsHabitHistoryCard: true`; the existing
-`supportsRecordListCard` and `partKinds: ["recordList"]` alone are insufficient.
-Without subtype support, both legacy and parts replies retain readable log dates
-and record markers in text.
-Each row has the log id, `logDate` and its actual `value`; these are record markers,
-not measured amounts. Results sort by date descending, then id, and use the exact
-refresh route for paging. Goal rows preserve their requested status/search filters.
-Calendar blocks preserve connection/sync state and append the actual `calendars`
-and `suggestions` arrays. Suggestion cutoffs and calendar selection remain bound
-to the original query. Profile rows include the queried preference values, and
-plan allowance rows use the subscription result. Key rows retain safe prefixes
-and state only, with the existing step-up checks. Chat reads do not provision
-referral codes, reconcile achievements, persist calendar connection state, create
-recaps or shares, or write habit logs. Missing referral codes and links stay empty.
+A token is bound to the user. A domain-separated key from `Jwt:SecretKey` authenticates it, and it expires after 30 days. All API instances use the same JWT configuration. A key rotation invalidates the outstanding tokens. The error codes are:
 
-The paired renderer work belongs to thomasluizon/orbit-tickets#1619. Deploy these
-append-only producer contracts before that consumer advertises the new kinds.
-#1617 owns composition policy and #26 owns bilingual pipeline composition checks.
+- HTTP 410 (`READ_QUERY_EXPIRED`): the token is invalid, expired or from another user. Repeat the original request.
+- HTTP 403: a permission changed.
+- HTTP 404: the target was removed.
+- HTTP 428: a key read keeps its step-up requirement.
+- HTTP 503 (`READ_QUERY_REFRESH_FAILED`): the source or the refresh failed. Keep the visible prior answer and retry the same token. Never substitute the query of today.
 
-## One small starting step
+`get_habit_history` uses the `recordList` kind with `kind: "habitHistory"`. It also requires `supportsHabitHistoryCard: true`. Without it, legacy and parts replies keep the log dates and record markers as text. Each row holds the log id, `logDate` and its `value`, a record marker and not a measured amount. Results sort by date descending, then by id.
 
-`suggest_breakdown` supports optional `one_small_step: true` and `language: en|pt-BR`.
-It validates exactly one `suggested_sub_habits` entry and returns a guarded
-`StartingStep` payload. The model schema requires at least one suggestion and a
-nonempty action title. Omitted or false mode preserves ordinary breakdown execution.
-An isolated failed starting-step call returns its error for one model correction
-inside the same turn. Only one call in the same mode can correct it; a write or
-additional tool cannot run through that correction. Successful correction removes
-the failed outcome before the server composes the block.
-Prompt and tool descriptions route starting help and smaller refinements through
-this tool in both languages, independently of message patterns.
-The server composes the negotiated `oneSmallStep` block without a continuation.
-For clients advertising `supportsStartingStepContext: true`, its smaller action
-carries typed `previousStep`; clients forward it as
-`clientContext.previousStartingStep` with the ordinary chat request. The model
-receives that JSON baseline and must return a proper part or first physical action
-requiring strictly less time and effort. Save requests reuse
-`create_habit` or `update_checklist`, with the existing approval preview and owned
-checklist target resolution. Checklist saves send only `item_to_add`; the server
-previews the full stored list plus the unchecked step, then appends on approval.
-Full-list additions through `checklist_items` must retain the stored prefix without
-changing text, order or checked state. Suggestions write nothing.
+Other read blocks:
 
-The exact wire contract, capability negotiation, bilingual copy inventory and
-paired-consumer eval requirements are in
-[AnswerComposition.md](../../../Orbit.Api/OpenApi/AnswerComposition.md#one-small-starting-step).
+- Goal rows keep their status and search filters.
+- Calendar blocks keep the connection and sync state and append the `calendars` and `suggestions` arrays, bound to the original query.
+- Key rows hold only safe prefixes and the state, with the step-up checks.
+- A chat read does not create referral codes, reconcile achievements, save the calendar connection state, create recaps or shares, or write habit logs. A missing referral code or link stays empty.

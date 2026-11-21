@@ -167,7 +167,7 @@ public partial class AgentOperationExecutor(
         if (toolRegistry.GetTool(operation.Id) is IArgumentCheckTool check)
         {
             var validation = await check.CheckArgumentsAsync(effective, request.UserId, ct);
-            if (validation.IsFailure) return Result.Failure<JsonElement>(validation.ErrorCode is { } code ? $"{code}: {validation.Error}" : validation.Error, validation.ErrorCode ?? "invalid_arguments");
+            if (validation.IsFailure) return Result.Failure<JsonElement>(validation.ErrorCode is { } code ? $"{code}: {validation.Error}" : validation.Error, validation.ErrorCode ?? ToolFailureCodes.InvalidArguments);
         }
         return Result.Success(effective);
     }
@@ -520,11 +520,14 @@ public partial class AgentOperationExecutor(
         }
 
         if (readBlocks is not null && tool.IsReadOnly && ResolvesReadArguments(tool.Name))
-            execution = execution with
-            {
-                Arguments = await readBlocks.ResolveAsync(tool.Name,
-                execution.Arguments, execution.Request.UserId, executionCancellationToken)
-            };
+        {
+            var resolved = await readBlocks.ResolveAsync(tool.Name,
+                execution.Arguments, execution.Request.UserId, executionCancellationToken);
+            if (resolved.IsFailure)
+                return await BuildToolOutcomeResponseAsync(execution, policyDecision,
+                    ToolResult.FromFailure(resolved), executionCancellationToken);
+            execution = execution with { Arguments = resolved.Value };
+        }
         var result = await ExecuteToolWithConcurrencyRetryAsync(tool, execution, executionCancellationToken);
         if (tool is ITransactionalAiTool && !result.Success)
             throw new ToolOutcomeRollbackException(policyDecision, result);

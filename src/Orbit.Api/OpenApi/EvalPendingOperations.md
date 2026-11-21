@@ -1,9 +1,6 @@
 # Eval account pending-operation cleanup
 
-Tracks thomasluizon/orbit-tickets#1845. The paired harness work belongs to
-thomasluizon/orbit-tickets#1822; this producer change does not update that repository.
-
-The coordinator opts disposable accounts into this fixture by setting SSM parameter
+An owner opts disposable accounts into this fixture by setting SSM parameter
 `/orbit/staging/api/StagingEval__AccountIds` or
 `/orbit/production/api/StagingEval__AccountIds` to comma-separated account UUIDs,
 applied as `StagingEval__AccountIds` through the matching API environment group.
@@ -52,12 +49,7 @@ Concurrent revisions or consumption can cause HTTP 409 after the bounded
 concurrency retry. Failed requests do not establish isolation. Cleanup also does
 not undo writes already executed before it started.
 
-## Harness handoff
-
-Deploy the producer and have the coordinator set the exact disposable account's
-allowlist entry through the matching SSM parameter. Verify access using that account's session
-against `https://api-staging.useorbit.org` or `https://api.useorbit.org`. Confirm an unlisted account and an
-API key cannot use either route. No database migration is required.
+## Attempt protocol
 
 Give each running eval exclusive use of its account. Stop concurrent chats and
 pending-operation execution before cleanup; a new proposal after readback can
@@ -69,12 +61,3 @@ invalidate isolation. Before every attempt, including retries and process restar
    infer isolation from a missing field, an empty export or a cancellation count.
 4. Create proposals during the attempt, then repeat both calls before the next
    attempt. Check that earlier previews and confirmation tokens cannot be used.
-
-The published OpenAPI artifacts contain the response schemas.
-`EvalAccountPendingOperationsTests` serializes the actual controller responses with
-MVC JSON options and repeats this sequence across fresh database scopes using the
-real handlers and repository. It covers all catalog operation names, old and expired
-previews, confirmation-token invalidation, no conversation history and account
-isolation. These are producer unit observations, not a live staging response capture.
-The UI worker must pin the deployed producer contract and capture real responses
-before adding its harness fixtures. API deployment precedes that consumer change.

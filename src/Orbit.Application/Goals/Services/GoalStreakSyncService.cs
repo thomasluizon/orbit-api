@@ -81,7 +81,7 @@ public static class GoalStreakSyncService
     /// <summary>
     /// Applies the freshly computed read value to a non-persisted active streak goal so its DTO and
     /// metrics reflect the live streak, without ever flipping Status. No-ops when the goal is not an
-    /// active streak goal. The caller must pass an instance that will not be saved — completion and
+    /// active streak goal. The caller must pass an instance that will not be saved: completion and
     /// gamification stay solely on the write paths and the hosted sweep.
     /// </summary>
     public static void ApplyReadValue(Goal goal, DateOnly userToday, int weekStartDay)

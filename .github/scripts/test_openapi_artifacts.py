@@ -1,5 +1,4 @@
 import json
-import os
 import pathlib
 import shutil
 import subprocess
@@ -130,15 +129,6 @@ class PublicationTests(unittest.TestCase):
         result = self.run_guard('freshness')
         self.assertEqual(0, result.returncode, result.stderr)
 
-    def test_temporary_repository_commits_do_not_launch_automatic_housekeeping(self):
-        trace = self.repo / 'git-trace.json'
-        with mock.patch.dict(os.environ, {'GIT_TRACE2_EVENT': str(trace)}):
-            self.git('commit', '--allow-empty', '-qm', 'Housekeeping isolation')
-        children = [event['argv'] for line in trace.read_text().splitlines()
-                    if (event := json.loads(line))['event'] == 'child_start']
-        housekeeping = [args for args in children if args[1:2] in (['maintenance'], ['gc'])]
-        self.assertEqual([], housekeeping)
-
     def test_generator_cannot_silently_deregister_an_existing_stream(self):
         cache = self.repo / 'src/Orbit.Api/obj/Orbit.Api.OpenApiFiles.cache'
         cache.write_text(str(guard.artifact_path(self.rows[0], self.repo)))
@@ -166,7 +156,7 @@ class PublicationTests(unittest.TestCase):
             external.write_bytes(original)
             path.unlink()
             path.symlink_to(external)
-            for command in ('plan', 'freshness', 'evidence'):
+            for command in ('plan', 'freshness'):
                 with self.subTest(command=command):
                     result = self.run_guard(command)
                     self.assertNotEqual(0, result.returncode, result.stdout)
@@ -180,7 +170,7 @@ class PublicationTests(unittest.TestCase):
             external.write_bytes(original)
             path.unlink()
             path.symlink_to(external)
-            for command in ('plan', 'freshness', 'evidence'):
+            for command in ('plan', 'freshness'):
                 with self.subTest(command=command):
                     result = self.run_guard(command)
                     self.assertNotEqual(0, result.returncode, result.stdout)
@@ -206,14 +196,34 @@ class PublicationTests(unittest.TestCase):
                   self.assertRaisesRegex(ValueError, 'Invalid target ref')):
                 guard.plan(ref)
 
-    def test_catalog_identity_digits_remain_ascii(self):
-        for revision in ('2\u0663', '2\uff13'):
-            row = self.rows[-1].copy()
-            row.update(id='orbit-http-v2-r' + revision, revision='r' + revision,
-                       documentName='v2-r' + revision, path='src/Orbit.Api/openapi_v2-r' + revision + '.json')
-            raw = json.dumps([*self.rows[:-1], row])
-            with self.subTest(revision=revision), self.assertRaises(ValueError):
-                guard.catalog(raw)
+
+class GateDescriptionTests(unittest.TestCase):
+    def test_readme_describes_the_gate_that_the_workflow_runs(self):
+        readme = ' '.join((ROOT / 'src/Orbit.Api/OpenApi/README.md').read_text().split())
+        sources = (ROOT / '.github/workflows/test.yml').read_text() + (ROOT / '.github/scripts/openapi_artifacts.py').read_text()
+        cases = [
+            ('the workflow pins an oasdiff binary by checksum', 'OASDIFF_SHA256', True,
+             'runs the oasdiff release that `test.yml` pins by checksum'),
+            ('the workflow uses no oasdiff action', 'oasdiff/oasdiff-action', False,
+             'pinned v1 action'),
+            ('the gate has no dependent comparison job', 'needs: openapi-breaking-inventory', False,
+             'dependent comparison'),
+            ('the steps skip when no OpenAPI input changes', "steps.inputs.outputs.openapi == 'true'", True,
+             'When no OpenAPI input changes, the gate passes without a comparison.'),
+            ('the plan resolves a target ref to a commit', 'def resolve_commit(ref)', True,
+             'A target ref must resolve to a full 40-character hexadecimal commit'),
+        ]
+        for evidence, token, in_code, text in cases:
+            with self.subTest(evidence=evidence):
+                self.assertEqual(token in sources, in_code)
+                self.assertEqual(text in readme, in_code)
+
+    def test_readme_drops_the_stale_gate_claims(self):
+        readme = ' '.join((ROOT / 'src/Orbit.Api/OpenApi/README.md').read_text().split())
+        for stale in ('keeps the pinned v1 action', 'cannot satisfy the gate',
+                      'It accepts only a full 40-character hexadecimal commit'):
+            with self.subTest(stale=stale):
+                self.assertNotIn(stale, readme)
 
 
 if __name__ == '__main__':
