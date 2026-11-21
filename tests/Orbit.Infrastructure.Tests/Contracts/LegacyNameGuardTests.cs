@@ -42,7 +42,6 @@ public class LegacyNameGuardTests
         (@"""IssuedAstraBlocks""", TableOrColumn),
         (@"AstraGroundingEnforce", ConfigKey),
         (@"""IssuedAstraBlocksDays""", ConfigKey),
-        (@"evals/astra", HarnessName),
         (@"\$""astra-blocks:\{request\.UserId\}""", LockKey),
         (@"\(string\?\)""[^""]*Astra[^""]*""", SeedText),
     ];

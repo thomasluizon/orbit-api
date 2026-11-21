@@ -78,3 +78,39 @@ for (const { test: testFile, fixture } of replayReaders) {
     assert.match(readme, /No test reads `large-account\.json`\./)
   })
 }
+
+const habitMonthDoc = read('src/Orbit.Api/OpenApi/HabitMonth.md').replace(/\s+/g, ' ')
+const calendarWindow = read('src/Orbit.Domain/Models/HabitCalendarWindow.cs')
+const periodRange = read('src/Orbit.Application/Habits/Queries/RetrospectivePeriodRange.cs')
+
+const habitMonthWindowClaims = [
+  {
+    name: 'relative_period this_month ends today',
+    forbidden: /complete local month, including future days/,
+    required: /`this_month` ends today; `last_month` is the previous month/,
+    source: periodRange,
+    proof: /"this_month" => new DateOnly\(today\.Year, today\.Month, 1\),[\s\S]*return \(dateFrom, today\);/,
+  },
+  {
+    name: 'a single date runs to the end or from the start of its month',
+    forbidden: /one date alone selects the month that holds it/,
+    required: /A start date alone runs to the last day of its month; an end date alone starts on the first day\./,
+    source: calendarWindow,
+    proof: /var anchor = from \?\? to \?\? today;[\s\S]*var start = from \?\? new DateOnly\(anchor\.Year, anchor\.Month, 1\);[\s\S]*var end = to \?\? new DateOnly\(start\.Year, start\.Month, DateTime\.DaysInMonth\(start\.Year, start\.Month\)\)/,
+  },
+  {
+    name: 'a month window with no date is the current month, future days included',
+    forbidden: /A `month` window is the complete local month/,
+    required: /A `month` window with no date is the current month, future days included\./,
+    source: calendarWindow,
+    proof: /from \?\? to \?\? today/,
+  },
+]
+
+for (const { name, forbidden, required, source, proof } of habitMonthWindowClaims) {
+  test(`HabitMonth.md states that ${name}`, () => {
+    assert.doesNotMatch(habitMonthDoc, forbidden)
+    assert.match(habitMonthDoc, required)
+    assert.match(source, proof)
+  })
+}

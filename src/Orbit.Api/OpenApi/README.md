@@ -1,76 +1,10 @@
 # Selecting an OpenAPI artifact
 
-The additive AI turn plan, progress events and approval outcomes for
-thomasluizon/orbit-tickets#1976 are documented in [AiPlans.md](AiPlans.md).
-Deploy this API before the paired shared schemas and plan renderer.
-
-`POST /api/habits/read-phrase` reads a free-form habit phrase and costs the person no
-AI message. The body holds `phrase` and `language`. The response holds every field of the
-`suggest-setup` response plus the boolean `read`. When `read` is false, every value is null
-or empty, and the client asks the remaining questions itself. A reached daily cap, the
-`phrase_reader_ai_disabled` kill switch, a provider failure and a refused spend backstop
-all return HTTP 200 with `read: false`. The endpoint never returns the cap and never
-answers a cap with HTTP 429. `POST /api/habits/suggest-setup` is unchanged and still spends
-one message. `PUT /api/profile/mascot-motion` takes `{ "enabled": true }`. `GET /api/profile`
-appends the optional `mascotMotionEnabled`, true by default, and `GET /api/config` serves the
-flag `orbit_guided_flows` in `features`. Deploy this API and its migration before any client
-that reads the new field or calls the new endpoints. Tracks thomasluizon/orbit-tickets#2118.
-
-AI provider credit exhaustion returns HTTP 424 with the existing error body shape:
-`{"error":"...","errorCode":"AI_PROVIDER_QUOTA_EXHAUSTED"}`. This additive code
-means automatic retries must stop for the request. It is separate from the person's
-Orbit message allowance. Summary, chat, retrospective, goal review, habit setup,
-suggestions and refinement, date interpretation, rescheduling, tags and transcription
-share this code. Chat SSE uses the existing `error` event with `status: 424` and
-`code: "AI_PROVIDER_QUOTA_EXHAUSTED"` after the stream starts.
-
-Provider HTTP 429 bodies with `error.code` (or `error.type` when the code is absent or null) equal to
-`insufficient_quota` or `credit_balance_exhausted` stop after one attempt, even when the
-response also carries a `Retry-After` header, because the body code states the failure is
-permanent. Other or unrecognized 429 bodies retain the existing rate-limit retries. Error messages reuse the
-existing localized `AI_UNAVAILABLE` copy. Deploy this producer before the paired web
-and Android consumer disables automatic query and chat retries for this code.
-The existing shared query retry helper retries generic failures, including HTTP 424,
-until that consumer change lands. Tracks thomasluizon/orbit-tickets#1915.
-
-Habit search (`GET /api/habits` with `search`) appends nullable optional
-`completedOn` and `isSkippedOnDate` to schedule rows and children.
-`completedOn` is the latest nondeleted positive log's account calendar `Date`
-for a completed OneTime task, including logs outside the schedule read window.
-Other items and completed tasks without a surviving completion log return null.
-`isSkippedOnDate` reports an unresolved skip on `dateFrom`, or the account's
-today when no range is supplied. A positive log on that day resolves the skip.
-Skip receipts without a log are included by the existing schedule read model.
-Search pages put other results before completed OneTime tasks, then order those
-tasks by descending completion date, with missing dates last. Position, creation instant and habit ID
-break ties. The shared query orders in SQL before paging; MCP and the AI chat reuse it.
-Deploy this API to production before the search sections and completion labels
-in thomasluizon/orbit-tickets#1924 (orbit-ui-mobile#2271). Tracks
-thomasluizon/orbit-tickets#1933.
-
-The FCM data message and shared Android category for repeat reminder actions
-are documented in [RepeatReminderPush.md](RepeatReminderPush.md).
-
-The append-only authoritative `nextReminderAtUtc` field for habit schedule and
-detail reads is documented in [NextRepeatReminder.md](NextRepeatReminder.md).
-Deploy this producer to staging before the paired consumer updates its pin.
-
-The restricted eval account pending-operation fixture and independent readback for
-thomasluizon/orbit-tickets#1845 are documented in
-[EvalPendingOperations.md](EvalPendingOperations.md). Deploy the API and have the
-coordinator set its account allowlist through SSM parameter
-`/orbit/staging/api/StagingEval__AccountIds` or
-`/orbit/production/api/StagingEval__AccountIds` before the paired eval harness uses it.
-
-The negotiated AI `question` block and structured next-turn answers are
-documented in [QuestionBlocks.md](QuestionBlocks.md). Publish the API contract
-before the renderer in thomasluizon/orbit-tickets#1828 advertises support.
-
-[artifacts.json](artifacts.json) is the checked publication catalog. Generation,
-freshness and compatibility use the same declarations. Each entry contains exactly
-`id`, `httpVersion`, `revision`, `documentName`, `path`, `deprecated` and `replacement`.
-The first five are strings and form the stable identity. `deprecated` is a boolean;
-`replacement` is another identity or null. Paths are repository-relative files.
+[artifacts.json](artifacts.json) is the checked publication catalog. Generation, freshness
+and compatibility use the same declarations. Each entry contains exactly `id`,
+`httpVersion`, `revision`, `documentName`, `path`, `deprecated` and `replacement`. The first
+five are strings and form the stable identity. `deprecated` is a boolean. `replacement` is
+another identity or null. Each path is a repository-relative file.
 
 | Identity | HTTP header selection | Revision | Repository path |
 | --- | --- | --- | --- |
@@ -79,97 +13,25 @@ The first five are strings and form the stable identity. `deprecated` is a boole
 | `orbit-http-v1-r2` | omitted or `api-version: 1.0` | corrected enums | `src/Orbit.Api/openapi_v1-r2.json` |
 | `orbit-http-v2-r2` | `api-version: 2.0` | corrected enums | `src/Orbit.Api/openapi_v2-r2.json` |
 
-The legacy files retain known inaccuracies: FrequencyUnit, DayOfWeek and
-InstanceStatus promise integer-only output; ScheduledReminderWhen advertises
-snake_case names instead of MVC's canonical response names. Their replacements
-are the corresponding r2 entries. Deprecation is catalog metadata so existing
-artifact bytes retain their exact meaning. Legacy retirement needs separate
-consumer adoption work. Future compatible endpoint additions can still update
-all supported streams through ordinary generation and comparison.
+The legacy files keep known inaccuracies. FrequencyUnit, DayOfWeek and InstanceStatus
+promise integer-only output. ScheduledReminderWhen advertises snake_case names instead of
+the canonical response names of MVC. The r2 entries replace them. Deprecation is catalog
+metadata, so the bytes of an existing artifact keep their meaning.
 
-The additive anonymous onboarding enrollment, attestation, credential rotation and
-schedule fallback contract for thomasluizon/orbit-tickets#1782 is documented in
-[Onboarding.md](Onboarding.md). Deploy the producer before updating the paired
-consumer's shared contract snapshot.
+An immutable consumer selection is a full 40-character producer commit plus an exact
+catalog identity. Read the catalog at that commit and verify the identity, the HTTP version
+and the path. Then read the artifact at the same commit. Reject an unknown identity, a
+mismatched version, a missing file and a malformed commit. There is no arbitrary URL
+selector and no fallback to another artifact. A pin with only a SHA selects `openapi.json`.
 
-`POST /api/chat/habit-suggestions/preview-all` accepts `drafts` (one to five
-`HabitSuggestionDraft` values) and optional `language` (default `en`). It returns
-the existing `AgentExecuteOperationResponse` with one pending preview containing
-every create and adjustment in request order. A single draft follows the single
-preview path. Every draft is checked before staging; a failed schedule or target
-check returns HTTP 400 with its original `errorCode` and zero-based `draftIndex`.
-Malformed drafts use the validation response with indexed `Drafts` field paths.
-The existing confirmation and execution endpoints approve the combined change
-set once. Deploy this producer before the suggestion-card consumer in
-thomasluizon/orbit-tickets#1751 uses the route. Tracks thomasluizon/orbit-tickets#1788.
+A revision changes the documentation only. It does not change a request header, a route, a
+default or a runtime DTO. The r2 schemas publish the canonical output names plus an
+undefined Int32 numeric fallback. Separate request components accept case-insensitive
+names, comma-separated names and bounded numeric strings. Only the reminder inputs also
+accept the aliases `same_day` and `day_before`. JSON Schema integer cannot distinguish the
+tokens `1`, `1.0` and `1e0`. The MVC enum converter rejects the last two.
 
-Chat clients may send optional `clientContext.supportsMessageAllowance: true` to
-receive optional `messageAllowanceConsumed` on each successful chat response,
-including the SSE final response. True means the request consumed one message;
-false means it consumed none. The value follows the allowance reservation, so
-cached replies, block replays, pick-list previews, moderated declines and crisis
-replies report false. A fresh choice answer or model turn reports true when its
-reservation succeeds. Omission or false for the capability omits the response
-field and preserves the typed HTTP 400 moderation refusal (SSE error status 400
-on streams). Self-harm flags and phrase-guard crises keep returning support as
-successful turns for every client. Deploy the API before the paired consumer in
-thomasluizon/orbit-tickets#1708 advertises this capability.
-
-Pending operation `items`, their `fields`, and `changes` append optional nullable
-`entityEmoji`. Habit targets use the stored habit emoji at preview time, including
-when the proposal changes that emoji. New habits use their draft emoji. Habits
-without an emoji and non-habit targets omit the field. Single writes, bulk writes,
-account change sets, suggestion previews and pending revisions share this contract.
-Deploy the API before the consumer in thomasluizon/orbit-tickets#1823 renders it.
-Tracks thomasluizon/orbit-tickets#1832.
-
-`PUT /api/habits/{id}` accepts optional nullable `tagIds` in both HTTP versions.
-Omission or null preserves tags, an empty array clears them, and a supplied array
-replaces the assignment together with core fields, checklist and requested goals.
-The submitted count includes duplicates for the existing tag limits; resolved
-assignments form a set. Every requested tag and goal must resolve for the owner.
-Success remains HTTP 204 with no body. Independent tag and template management
-keeps its own commit boundary. A transport timeout requires readback or supported
-replay to reconcile the outcome. Deploy this producer before the paired consumer
-sends the field. Tracks thomasluizon/orbit-tickets#1605.
-
-`PUT /api/habits/{id}` also accepts optional nullable `parentId` (UUID) and
-`clearParent` (boolean). Omitted or null `parentId` preserves the existing parent
-unless `clearParent` is true. A non-null `parentId` sets the owned target; false
-or null `clearParent` does not suppress that set. True `clearParent` with a null
-or omitted `parentId` makes the habit top level. Supplying both true `clearParent`
-and a non-null `parentId` is rejected. Ownership, cycles, subtree depth, final
-General compatibility and live-root capacity are validated under the same user
-lock and transaction as the complete edit. The standalone parent endpoint retains
-its null-means-root contract and operation schemas.
-
-Ordinary habit detail and full detail append nullable UUID `parentId`. Both reads
-emit explicit null for an actual root and the authoritative parent UUID for a
-child. Absence from an older producer means unknown. Success for the combined
-update remains HTTP 204 with no body. Deploy this producer before publishing the
-paired parent-selector consumer. Tracks thomasluizon/orbit-tickets#1608.
-
-An immutable consumer selection is a full 40-character producer commit plus an
-exact catalog identity. Read the catalog at that commit, verify the identity,
-HTTP version and path, then read the artifact at the same commit. Reject unknown
-identities, mismatched versions, missing files and malformed commits. There is no
-arbitrary URL selector or fallback to another artifact. Existing SHA-only pins
-continue selecting `openapi.json`.
-
-These are documentation revisions for the unchanged HTTP APIs. Revision selection
-does not change request headers, routes, defaults or runtime DTOs. The new schemas
-publish canonical output names plus undefined Int32 numeric fallback, and separate
-request components for case-insensitive names, Unicode surrounding whitespace,
-comma-separated names and bounded signed/zero-padded numeric strings. Only reminder
-inputs additionally accept the exact `same_day` and `day_before` aliases. Binding
-success still does not imply validator or domain acceptance.
-
-JSON Schema integer describes a numeric value. It cannot distinguish JSON tokens
-`1`, `1.0` and `1e0`; MVC's enum converter rejects the latter two spellings. Tests
-record this lexical limitation separately. Numeric branches explicitly bound values
-to Int32; numeric-string patterns also reject overflow. Runtime acceptance is unchanged.
-
-Run from the repository root:
+Run these commands from the repository root:
 
 ```sh
 dotnet build Orbit.slnx
@@ -180,69 +42,34 @@ dotnet test tests/Orbit.Infrastructure.Tests --filter 'FullyQualifiedName~HabitE
 python3 -m unittest discover -s .github/scripts -p 'test_openapi_artifacts.py'
 ```
 
-Freshness requires every catalog artifact to be committed, present and identical to
-normal generation, including the generator's complete file list. Run generation
-again and require no artifact diff. The compatibility planner reads the actual target
-commit and its catalog, with the two historical legacy paths declared explicitly
-when that catalog predates publication. Published identities and paths cannot be
-removed, renamed or substituted. Only an artifact genuinely absent from that target
-is a first publication with no prior same-stream comparison.
+Freshness requires each catalog artifact to be committed, present and identical to the
+normal generation, including the complete file list of the generator. The compatibility
+planner reads the target commit and its catalog. A published identity or path cannot be
+removed, renamed or substituted. An artifact that is absent from the target is a first
+publication with no prior comparison.
 
-The required `OpenAPI Breaking-Change Gate` retains the pinned v1 action and ERR
-failure threshold. It also requires the inventory and every additional stream's
-ordinary comparison to succeed. Every later r2 change compares against its own
-target-branch file. The existing severity configuration is unchanged. Failure,
-cancellation or skipping of a dependent comparison cannot satisfy the required gate.
+When an OpenAPI input changes, the required `OpenAPI Breaking-Change Gate` runs the oasdiff
+release that `test.yml` pins by checksum, with the ERR failure threshold. It validates the
+inventory, then compares the v1 document and each additional stream. One failed comparison
+fails the gate. When no OpenAPI input changes, the gate passes without a comparison.
 
-Publication tooling reconstructs canonical paths from validated ASCII catalog
-identities and rejects files whose symlinks escape the repository. Generator-cache
-entries must equal the complete canonical absolute output paths; tooling never
-resolves paths supplied by cache contents. Target refs use ASCII letters, digits,
-slashes, dots, underscores and hyphens, starting with a letter or digit. Git calls
-use fixed subcommands and an end-of-options boundary. Resolved commits must be full
-40-character hexadecimal values before any target inventory or artifact is read.
+The tooling rebuilds each canonical path from a validated ASCII catalog identity. It rejects
+a file whose symlink leaves the repository. It never resolves a path that the generator cache
+supplies. A target ref must resolve to a full 40-character hexadecimal commit before the
+tooling reads a file at that commit.
 
-Tracks thomasluizon/orbit-tickets#1591. The blocked UI adoption ticket
-thomasluizon/orbit-tickets#1601 owns selector, pin, snapshot, Orval, Contract Drift,
-rebaseline workflows and consumer instruction changes after API acceptance and
-deployment. The producer commit and this catalog/evidence are its handoff inputs.
-UI PR #1913 retains its routine generated-pair scope. The model work in #227 is
-separate; #1558 remains closed and #1513's completed consumers remain intact.
+## Contract documents
 
-The append-only habit ranking query, paging, refresh and `habitRanking` block
-contract for thomasluizon/orbit-tickets#1618 is documented in
-[HabitRanking.md](HabitRanking.md). It preserves retrospective semantics and
-requires API deployment before client capability advertisement.
-
-The append-only negotiated `gamification` read block for profile-only,
-achievement-only and other partial gamification selections is documented in
-[GamificationReadBlocks.md](GamificationReadBlocks.md). Combined reads preserve
-the existing `streak` contract. Deploy this producer before the carrying consumer
-advertises the new kind. Tracks thomasluizon/orbit-tickets#1631.
-
-The append-only proactive `parts` field and capability negotiation for
-thomasluizon/orbit-tickets#1662 are documented in
-[ProactiveAnswerParts.md](ProactiveAnswerParts.md). The existing chat read blocks
-cover every proactive trigger. Publish the producer before updating the paired
-consumer's shared snapshot and enabling proactive block rendering.
-
-`POST /api/notifications/subscribe` accepts optional nullable `apnsTopic` and
-`deviceId` (UUID). Existing iOS requests omit `apnsTopic` and keep using `Apns:Topic`.
-macOS requests use `p256dh: "apns"`, the device token as `endpoint`, and
-`apnsTopic: "org.useorbit.desktop"` in production or
-`"org.useorbit.desktop.staging"` in staging. Explicit topics must match the
-server's configured `Apns:DesktopTopic` to receive delivery.
-
-Windows requests use `p256dh: "wns"`, `auth: "wns"`, a WNS channel URI as
-`endpoint`, and a persistent nonempty `deviceId` generated by the shell. A new
-channel for the same account, device ID and transport replaces the previous
-channel in place. Other devices keep their subscriptions. Channel possession is
-the native credential, as with APNs. Sign-out posts the current channel or device
-token to the existing unsubscribe endpoint under the signed-in account before
-clearing the session. Delayed sign-out cannot remove another account's claim.
-
-WNS receives the same JSON envelope as Web Push (`title`, `body`, optional `url`)
-inside a raw notification. The shell renders that envelope and routes its click.
-All notification producers use the common push service, so locale, content
-sanitization and destinations remain shared. Deploy this API and its generated
-migration before the desktop consumer in thomasluizon/orbit-tickets#1560.
+- [AdaptivePlacement.md](AdaptivePlacement.md)
+- [AiDateContext.md](AiDateContext.md)
+- [AiPlans.md](AiPlans.md)
+- [AnswerComposition.md](AnswerComposition.md)
+- [AppleIntegrations.md](AppleIntegrations.md)
+- [EvalPendingOperations.md](EvalPendingOperations.md)
+- [ExistingParentPreviews.md](ExistingParentPreviews.md)
+- [GamificationReadBlocks.md](GamificationReadBlocks.md)
+- [HabitMonth.md](HabitMonth.md)
+- [HabitRanking.md](HabitRanking.md)
+- [Onboarding.md](Onboarding.md)
+- [QuestionBlocks.md](QuestionBlocks.md)
+- [ServerConversations.md](ServerConversations.md)

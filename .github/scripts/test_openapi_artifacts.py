@@ -216,5 +216,34 @@ class PublicationTests(unittest.TestCase):
                 guard.catalog(raw)
 
 
+class GateDescriptionTests(unittest.TestCase):
+    def test_readme_describes_the_gate_that_the_workflow_runs(self):
+        readme = ' '.join((ROOT / 'src/Orbit.Api/OpenApi/README.md').read_text().split())
+        sources = (ROOT / '.github/workflows/test.yml').read_text() + (ROOT / '.github/scripts/openapi_artifacts.py').read_text()
+        cases = [
+            ('the workflow pins an oasdiff binary by checksum', 'OASDIFF_SHA256', True,
+             'runs the oasdiff release that `test.yml` pins by checksum'),
+            ('the workflow uses no oasdiff action', 'oasdiff/oasdiff-action', False,
+             'pinned v1 action'),
+            ('the gate has no dependent comparison job', 'needs: openapi-breaking-inventory', False,
+             'dependent comparison'),
+            ('the steps skip when no OpenAPI input changes', "steps.inputs.outputs.openapi == 'true'", True,
+             'When no OpenAPI input changes, the gate passes without a comparison.'),
+            ('the plan resolves a target ref to a commit', 'def resolve_commit(ref)', True,
+             'A target ref must resolve to a full 40-character hexadecimal commit'),
+        ]
+        for evidence, token, in_code, text in cases:
+            with self.subTest(evidence=evidence):
+                self.assertEqual(token in sources, in_code)
+                self.assertEqual(text in readme, in_code)
+
+    def test_readme_drops_the_stale_gate_claims(self):
+        readme = ' '.join((ROOT / 'src/Orbit.Api/OpenApi/README.md').read_text().split())
+        for stale in ('keeps the pinned v1 action', 'cannot satisfy the gate',
+                      'It accepts only a full 40-character hexadecimal commit'):
+            with self.subTest(stale=stale):
+                self.assertNotIn(stale, readme)
+
+
 if __name__ == '__main__':
     unittest.main()
