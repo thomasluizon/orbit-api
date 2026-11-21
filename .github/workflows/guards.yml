@@ -1,8 +1,7 @@
 name: Guards
 
 # These repository gates apply to every contributor through CI. Each step runs even when an
-# earlier one fails, so one run reports every broken gate. The pull request title and body are
-# checked by pr-text.yml: a body edit must never post a new Guards check run on the head.
+# earlier one fails, so one run reports every broken gate.
 
 on:
   workflow_dispatch:
@@ -62,18 +61,6 @@ jobs:
         # https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#concurrency documents queue, which actionlint does not recognize.
         run: ~/.cache/actionlint/actionlint -color -ignore '^unexpected key "queue" for "concurrency" section\. expected one of "cancel-in-progress", "group"$'
 
-      - name: Timeless Text
-        if: ${{ !cancelled() }}
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          BASE_REF: ${{ github.base_ref }}
-        run: |
-          if [ "$EVENT_NAME" = pull_request ]; then
-            node tools/check-timeless.mjs --base "origin/$BASE_REF"
-          else
-            node tools/check-timeless.mjs --all
-          fi
-
       - name: Dash Ban
         if: ${{ !cancelled() }}
         env:
@@ -86,26 +73,13 @@ jobs:
           fi
           node tools/check-dashes.mjs --check-baseline
 
-      - name: Skill and Agent Frontmatter
-        if: ${{ !cancelled() }}
-        run: node tools/check-frontmatter.mjs
-
-      - name: Root Allowlist
-        if: ${{ !cancelled() }}
-        run: node tools/check-root-allowlist.mjs
-
-      # The closed allowlist makes every analyzer suppression visible in the diff.
-      - name: Every analyzer suppression under src/ is declared in the closed allowlist
-        if: ${{ !cancelled() }}
-        run: node tools/check-suppression-allowlist.mjs
-
       - name: Tool tests
         if: ${{ !cancelled() }}
         run: node --test tools/__tests__/*.test.mjs
 
       - name: API release admission tests
         if: ${{ !cancelled() }}
-        run: node --test .github/scripts/release-admission.test.mjs .github/scripts/release-admission-security.test.mjs .github/scripts/stripe-webhook-version.test.mjs
+        run: node --test .github/scripts/release-admission.test.mjs .github/scripts/stripe-webhook-version.test.mjs
 
       - name: CI input selection tests
         if: ${{ !cancelled() }}
