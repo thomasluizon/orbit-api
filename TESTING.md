@@ -146,5 +146,3 @@ or a full day entirely on the released version when attributing cost to a change
 The coordinator records the gate's actual total cost and failures on the ticket. Starting
 or restarting a production process for a cost snapshot requires coordination with any
 active gate or other release work.
-
-The repository's [astra-eval skill](.claude/skills/astra-eval/SKILL.md) uses this procedure.

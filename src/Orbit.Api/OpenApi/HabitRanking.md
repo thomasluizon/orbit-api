@@ -162,24 +162,3 @@ A query-only ranking turn can return the same block or text if the model's
 follow-up narrative call fails. A failed block build returns readable retry text.
 An initial model outage cannot resolve a natural-language request; the HTTP reads
 remain deterministic and available independently.
-
-## Activation, rollback and verification
-
-Ship the API and its generated contracts first, then let #1618 advertise both
-capabilities. Removing `habitRanking` from `partKinds` disables the structured
-path. Existing `astra_period_blocks_disabled` and `astra_parts_disabled` switches
-also retain the readable fallback. Revert the producer if count correctness fails.
-There is no minimum-version raise, schema migration, new secret or backfill.
-Existing retrospective fields, tools, enums and period blocks retain their behavior.
-
-Events `habit_ranking_query` and `habit_ranking_block` use existing telemetry:
-fixed kind and metric IDs, result count, completeness, query/page/refresh outcome
-and build failure. They contain no titles, prompts, filters or cursor values.
-No per-call cost instrumentation is added.
-
-The repository contract-aligner instructions were reviewed for endpoint and
-nullable-field parity. Consumer edits and consumer contract tests belong to
-#1618; this API work does not change a second repository or reuse historical
-branch instructions. Unit tests cover query, domain guards, token verification,
-repository translation/decryption, chat capabilities, narrative outage and
-controller payloads. #26 owns real-pipeline bilingual and composition acceptance.

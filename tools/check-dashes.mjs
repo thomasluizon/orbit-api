@@ -11,8 +11,6 @@ const BASELINE_PATH = join(REPO_ROOT, "tools", "dash-baseline.json")
 const SKIP = [
   /(^|\/)node_modules\//,
   /(^|\/)\.git\//,
-  /(^|\/)\.claude\//,
-  /(^|\/)\.opencode\//,
   /(^|\/)dist\//,
   /(^|\/)coverage\//,
   /(^|\/)\.next\//,

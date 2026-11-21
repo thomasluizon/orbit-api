@@ -10,8 +10,6 @@
 
 Clean architecture, four projects: `Orbit.Api` → `Orbit.Application` → `Orbit.Domain` ← `Orbit.Infrastructure`. CQRS via MediatR. Commands and queries live per-feature folder in `Orbit.Application`. Domain entities use factory methods (`Habit.Create()`, `User.Create()`). Generic repository + Unit of Work in Infrastructure. Each project has a scoped `CLAUDE.md` — read those when editing inside that project.
 
-Run `node tools/arch-map.mjs` before reading `architecture.json` or `architecture.html`. Both maps are generated locally and are not committed.
-
 ## Cross-cutting hard rules
 
 These apply everywhere — they override project-local conventions if they conflict.
@@ -41,19 +39,11 @@ The TypeScript consumer is `thomasluizon/orbit-ui-mobile` (Turborepo: Next.js we
 | New DTO field | `packages/shared/src/types/*.ts` Zod schema |
 | Renamed/removed field | Both Zod schema AND every callsite in both apps |
 
-If you're launched from `orbit-ui-mobile`, do the consumer edits in the same session. This repository carries a `contract-aligner` subagent (`.claude/agents/contract-aligner.md`). Invoke it by name when both repos have staged changes.
+If you're launched from `orbit-ui-mobile`, do the consumer edits in the same session.
 
 ## LSP
 
 C# LSP (Roslyn, via the CWM.RoslynNavigator MCP server — install once with `dotnet tool install -g CWM.RoslynNavigator`) is wired into Claude Code through the **mobile repo's** `.mcp.json` (sessions are almost always launched from there), pointed at this repo's `Orbit.slnx`. It exposes symbol-level tools (`find_symbol`, `find_references`, `find_implementations`, `get_type_hierarchy`, `get_diagnostics`, ...) instead of reading whole files. When launched directly from orbit-api, no LSP — fall back to grep/glob/read.
-
-## opencode compatibility
-
-The workflow is tool-agnostic between Claude Code and opencode; `.claude/` stays the single source of truth.
-
-- `AGENTS.md` (repo root) is Codex's entry doc and defers to this file for conventions. Keep shared behavior here. opencode reads `opencode.json` and `.opencode/agents/*.md`.
-- `opencode.json` (committed) loads the scoped `tests/CLAUDE.md`.
-- `.opencode/agents/*.md` are thin pointers to the matching `.claude/agents/*.md` bodies. Edit behavior in `.claude/agents/` only; when adding a new agent, create both the body and its pointer.
 
 ## Git workflow
 
@@ -81,31 +71,3 @@ commit, run `gh workflow run test.yml --ref main --repo thomasluizon/orbit-api` 
 runs succeed with that `head_sha`, then rerun Release API. Runs for another SHA or
 branch, including pull request runs, do not qualify. See
 [API release admission](infra/README.md#api-release-admission) for recovery details.
-
-## Generated gating matrix
-
-Run `node tools/gating-matrix.mjs` to write `gating-matrix.json` at the repository root. The file is not committed.
-Gate rows distinguish a hard `planRequirement` from a plan-scoped quota in `quotaLiftedByPlan`.
-Feature flag rows always set `quotaLiftedByPlan` to `null` because their `planRequirement` comes from the database column.
-The `Guards` job generates it twice and verifies deterministic output.
-Its provenance hash covers every C# input read. Live `AppConfigs` rows can override the compiled defaults it reports.
-
-## Generated capability inventory
-
-Run `node tools/capability-inventory.mjs` to write the ignored root artifact `capability-inventory.json`.
-It extends the existing agent capability catalog with registered chat/MCP tools, entity and nested value-object fields,
-EF mapping evidence, parameter names, output projections, and separate direct MCP and operation-gateway routes.
-Schema extraction retains nullable types, enums, item contracts and helper/composed schemas. Partial domain declarations
-and checked formatter chains retain the persisted fields and actual rendered readback when producers are split across files.
-Counts come from registration code; MCP-only tools are excluded from the exposed chat count.
-Full field readback is distinct from a count or summary. Creation without update and writes without full readback are gaps.
-Domain edit contracts also reveal writable fields with no tool parameter. Deliberate omissions carry their reason.
-
-The `Guards` job runs the source-mutation tests in `tools/__tests__/capability-inventory.test.mjs` and `node tools/capability-inventory.mjs --check`, which compares the reviewed semantic snapshot.
-The readable baseline records registrations, parameter contracts, per-field operation verdicts, routes and tracked gaps.
-Source hashes and line numbers are excluded. Evidence in the artifact and gap report identifies a path and type/member,
-so whitespace, line shifts and unrelated implementation edits do not require accepting a new capability baseline.
-After changing a registry, model, mapping, schema or projection, review the generated cells and the semantic bindings in
-`tools/capability-inventory.bindings.mjs`, then run `node tools/capability-inventory.mjs --accept`.
-Commit `tools/capability-inventory.baseline.json` and the refreshed `tools/capability-inventory.gaps.md` together.
-Run `node tools/capability-inventory.mjs --check` to verify the result. Generation never accesses user rows or encrypted values.

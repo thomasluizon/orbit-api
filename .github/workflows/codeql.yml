@@ -12,8 +12,8 @@ name: CodeQL
 #
 # The language set matches what default setup covered: csharp,
 # javascript-typescript and actions. The javascript-typescript leg analyzes
-# the Node tools, scripts, hooks and tests in tools/, infra/ (with its
-# workers), .github/scripts/, .claude/ and load-tests/, and the three OAuth
+# the Node tools, scripts and tests in tools/, infra/ (with its
+# workers), .github/scripts/ and load-tests/, and the three OAuth
 # page script tests in tests/Orbit.Infrastructure.Tests/. No JavaScript file
 # is under src/. The leg runs on main and on the weekly schedule and not on
 # pull requests. C# is analyzed with a real build
