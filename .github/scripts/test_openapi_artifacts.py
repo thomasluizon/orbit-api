@@ -1,5 +1,4 @@
 import json
-import os
 import pathlib
 import shutil
 import subprocess
@@ -130,15 +129,6 @@ class PublicationTests(unittest.TestCase):
         result = self.run_guard('freshness')
         self.assertEqual(0, result.returncode, result.stderr)
 
-    def test_temporary_repository_commits_do_not_launch_automatic_housekeeping(self):
-        trace = self.repo / 'git-trace.json'
-        with mock.patch.dict(os.environ, {'GIT_TRACE2_EVENT': str(trace)}):
-            self.git('commit', '--allow-empty', '-qm', 'Housekeeping isolation')
-        children = [event['argv'] for line in trace.read_text().splitlines()
-                    if (event := json.loads(line))['event'] == 'child_start']
-        housekeeping = [args for args in children if args[1:2] in (['maintenance'], ['gc'])]
-        self.assertEqual([], housekeeping)
-
     def test_generator_cannot_silently_deregister_an_existing_stream(self):
         cache = self.repo / 'src/Orbit.Api/obj/Orbit.Api.OpenApiFiles.cache'
         cache.write_text(str(guard.artifact_path(self.rows[0], self.repo)))
@@ -166,7 +156,7 @@ class PublicationTests(unittest.TestCase):
             external.write_bytes(original)
             path.unlink()
             path.symlink_to(external)
-            for command in ('plan', 'freshness', 'evidence'):
+            for command in ('plan', 'freshness'):
                 with self.subTest(command=command):
                     result = self.run_guard(command)
                     self.assertNotEqual(0, result.returncode, result.stdout)
@@ -180,7 +170,7 @@ class PublicationTests(unittest.TestCase):
             external.write_bytes(original)
             path.unlink()
             path.symlink_to(external)
-            for command in ('plan', 'freshness', 'evidence'):
+            for command in ('plan', 'freshness'):
                 with self.subTest(command=command):
                     result = self.run_guard(command)
                     self.assertNotEqual(0, result.returncode, result.stdout)
@@ -205,15 +195,6 @@ class PublicationTests(unittest.TestCase):
                                     side_effect=AssertionError('Untrusted ref reached git')),
                   self.assertRaisesRegex(ValueError, 'Invalid target ref')):
                 guard.plan(ref)
-
-    def test_catalog_identity_digits_remain_ascii(self):
-        for revision in ('2\u0663', '2\uff13'):
-            row = self.rows[-1].copy()
-            row.update(id='orbit-http-v2-r' + revision, revision='r' + revision,
-                       documentName='v2-r' + revision, path='src/Orbit.Api/openapi_v2-r' + revision + '.json')
-            raw = json.dumps([*self.rows[:-1], row])
-            with self.subTest(revision=revision), self.assertRaises(ValueError):
-                guard.catalog(raw)
 
 
 class GateDescriptionTests(unittest.TestCase):

@@ -1,5 +1,4 @@
 import argparse
-import hashlib
 import json
 import pathlib
 import re
@@ -16,7 +15,6 @@ LEGACY = [
      'deprecated': False, 'replacement': None}
     for v in (1, 2)
 ]
-ENUMS = ('FrequencyUnit', 'DayOfWeek', 'InstanceStatus', 'ScheduledReminderWhen')
 
 
 def resolve_commit(ref):
@@ -169,47 +167,14 @@ def plan(base):
     return {'include': matrix}
 
 
-def enum_references(value, location=''):
-    owners = {}
-    if isinstance(value, dict):
-        for key, item in value.items():
-            if key == '$ref' and any(item.endswith('/' + e) or item.endswith('/' + e + 'Input') for e in ENUMS):
-                owners[location] = item
-            else:
-                owners.update(enum_references(item, location + '/' + key))
-    elif isinstance(value, list):
-        for index, item in enumerate(value):
-            owners.update(enum_references(item, location + '/' + str(index)))
-    return owners
-
-
-def document_evidence(row):
-    raw = artifact_path(row).read_bytes()
-    doc = json.loads(raw)
-    selected = {k: v for k, v in doc['components']['schemas'].items()
-                if k.removesuffix('Input') in (*ENUMS, 'ScheduledReminderTime', 'RelativeReminderTime')}
-    types = {str: 'string', dict: 'object', list: 'array', int: 'integer', bool: 'boolean', type(None): 'null'}
-    return {'sha256': hashlib.sha256(raw).hexdigest(),
-            'rootKeys': {k: types[type(v)] for k, v in doc.items()}, 'info': doc['info'],
-            'pathCount': len(doc['paths']), 'operationCount': sum(len(path) for path in doc['paths'].values()),
-            'components': selected, 'enumReferences': enum_references(doc)}
-
-
-def evidence():
-    rows = catalog(repository_path(CATALOG).read_bytes())
-    return {'catalog': rows, 'documents': {row['id']: document_evidence(row) for row in rows}}
-
-
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('command', choices=['freshness', 'plan', 'evidence'])
+    parser.add_argument('command', choices=['freshness', 'plan'])
     parser.add_argument('--base')
     args = parser.parse_args()
     try:
         if args.command == 'freshness':
             freshness()
-        elif args.command == 'evidence':
-            print(json.dumps(evidence(), indent=2))
         else:
             if not args.base:
                 parser.error('plan requires --base for the actual target ref')
