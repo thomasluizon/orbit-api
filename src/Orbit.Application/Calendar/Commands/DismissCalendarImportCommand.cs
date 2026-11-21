@@ -12,7 +12,7 @@ public record DismissCalendarImportCommand(Guid UserId) : IRequest<Result>, ICon
 /// <summary>
 /// Suppresses the calendar-import prompt for the user. Intentionally NOT pay-gated:
 /// the prompt is shown to every onboarded user, so every user must be able to
-/// dismiss it permanently — gating this behind Pro made the modal resurrect on
+/// dismiss it permanently; gating this behind Pro made the modal resurrect on
 /// every app restart for free accounts.
 /// </summary>
 public class DismissCalendarImportCommandHandler(

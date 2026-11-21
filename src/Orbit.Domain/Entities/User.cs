@@ -661,7 +661,7 @@ public partial class User : Entity
     public void SetReferralCode(string code) => ReferralCode = code;
 
     /// <summary>
-    /// Grants this user the single administrative role — the only code path that sets IsAdmin, which
+    /// Grants this user the single administrative role: the only code path that sets IsAdmin, which
     /// mints the JWT admin claim the "Admin" policy gates admin-only endpoints on. Idempotent. The
     /// first admin is bootstrapped by a direct DB update; this mutator is the seam a future in-app
     /// admin dashboard uses to grant admin.

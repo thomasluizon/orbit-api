@@ -6,8 +6,8 @@ using Orbit.Domain.Entities;
 namespace Orbit.Benchmarks;
 
 /// <summary>
-/// <see cref="RetrospectiveMetricsCalculator.Compute"/> — the deterministic weekly/monthly retrospective
-/// rollup (completion rates, weekday consistency, top and needs-attention lists) — over a twenty-habit
+/// <see cref="RetrospectiveMetricsCalculator.Compute"/> (the deterministic weekly/monthly retrospective
+/// rollup (completion rates, weekday consistency, top and needs-attention lists) over a twenty-habit
 /// portfolio across a ninety-day window.
 /// </summary>
 [MemoryDiagnoser]

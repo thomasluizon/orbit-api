@@ -827,8 +827,8 @@ public partial class ProcessUserChatCommandHandler(
 
     /// <summary>
     /// A FAQ answer is safe to cache and share across users only when the turn raised no pending
-    /// confirmation and every tool it ran (if any) was a successful describe_feature — a static,
-    /// user-data-free lookup. Any write or user-specific read makes the answer unshareable.
+    /// confirmation and every tool it ran (if any) was a successful describe_feature (a static,
+    /// user-data-free lookup). Any write or user-specific read makes the answer unshareable.
     /// </summary>
     internal static bool IsShareableFaqTurn(
         ToolExecutionAccumulator results,
@@ -890,7 +890,7 @@ public partial class ProcessUserChatCommandHandler(
     [LoggerMessage(EventId = 25, Level = LogLevel.Warning, Message = "Tool {Name} emitted a clarification payload on a Failed/Denied result and it was dropped: {Reason}")]
     private static partial void LogClarificationDroppedOnFailedTool(ILogger logger, string name, string? reason);
 
-    [LoggerMessage(EventId = 26, Level = LogLevel.Warning, Message = "Tool {Name} requested clarification with oversized partial args ({Length} chars) — dropped without stashing")]
+    [LoggerMessage(EventId = 26, Level = LogLevel.Warning, Message = "Tool {Name} requested clarification with oversized partial args ({Length} chars): dropped without stashing")]
     private static partial void LogClarificationArgsTooLarge(ILogger logger, string name, int length);
 
     [LoggerMessage(EventId = 27, Level = LogLevel.Warning, Message = "Prompt habit index truncated. OriginalEntryCount={OriginalEntryCount} RetainedEntryCount={RetainedEntryCount} MaxEntries={MaxEntries}")]

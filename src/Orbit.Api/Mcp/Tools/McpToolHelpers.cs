@@ -9,7 +9,7 @@ namespace Orbit.Api.Mcp.Tools;
 
 /// <summary>
 /// Pure formatting, parsing, and snake_case argument-mapping helpers shared by the MCP habit and
-/// goal toolsets. No injected or instance state — every member is deterministic over its inputs and
+/// goal toolsets. No injected or instance state: every member is deterministic over its inputs and
 /// returns the exact shapes the backing <c>IAiTool</c> schemas and the legacy MCP string contract
 /// expect.
 /// </summary>

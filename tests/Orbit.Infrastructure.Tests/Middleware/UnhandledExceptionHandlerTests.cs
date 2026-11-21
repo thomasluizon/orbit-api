@@ -8,7 +8,7 @@ namespace Orbit.Infrastructure.Tests.Middleware;
 /// <summary>
 /// The catch-all 500 handler, with a short-circuit that treats a client-aborted request
 /// (OperationCanceledException while RequestAborted is signalled) as a 499 no-op rather than a
-/// reportable server error — https://thomasluizon.sentry.io/issues/ORBIT-API-8
+/// reportable server error: https://thomasluizon.sentry.io/issues/ORBIT-API-8
 /// </summary>
 public class UnhandledExceptionHandlerTests
 {

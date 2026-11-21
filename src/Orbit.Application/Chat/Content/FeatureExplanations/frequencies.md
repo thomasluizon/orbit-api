@@ -18,7 +18,7 @@ derived_from:
 
 Open Today, open the habit's details and choose Edit habit. In Frequency, choose the repeat interval or flexible target, then set the number and unit. Adjust the habit's date, weekdays or end date in the same form, then save.
 
-A habit's frequency decides which days it is due. Every recurring habit has a unit (Day, Week, Month, or Year), an interval quantity (how many of those units between occurrences), and an anchor date — the habit's due date — that the schedule aligns to.
+A habit's frequency decides which days it is due. Every recurring habit has a unit (Day, Week, Month, or Year), an interval quantity (how many of those units between occurrences), and an anchor date, the habit's due date, that the schedule aligns to.
 
 ## Where to set the time
 
@@ -28,10 +28,10 @@ Os formulários de criação e edição na web e no aplicativo usam os mesmos ca
 
 ## The frequency units
 
-- **Daily** — due every day, or every N days when the interval is greater than 1 (for example, every 2 days). The interval is counted from the anchor date.
-- **Weekly** — due on the same weekday as the anchor, every N weeks (for example, every 2 weeks on Monday).
-- **Monthly** — due on the same day-of-month as the anchor, every N months.
-- **Yearly** — due on the same month and day as the anchor, every N years.
+- **Daily**: due every day, or every N days when the interval is greater than 1 (for example, every 2 days). The interval is counted from the anchor date.
+- **Weekly**: due on the same weekday as the anchor, every N weeks (for example, every 2 weeks on Monday).
+- **Monthly**: due on the same day-of-month as the anchor, every N months.
+- **Yearly**: due on the same month and day as the anchor, every N years.
 
 The interval quantity is the "every N" part. With a quantity of 1 the habit is due every period; with a quantity of 2 it is due every other period, and so on. A habit is never due before its anchor date, and never after its end date if one is set.
 
@@ -41,7 +41,7 @@ A habit can also restrict itself to specific weekdays. When weekdays are chosen,
 
 ## One-time tasks
 
-A one-time task has no recurring unit. It is due on exactly one date — its due date — and nowhere else. Once completed, it stops appearing.
+A one-time task has no recurring unit. It is due on exactly one date, its due date, and nowhere else. Once completed, it stops appearing.
 
 ## Flexible habits
 
