@@ -3,11 +3,12 @@
 A client receives the part only when `clientContext.supportsParts` is true and
 `partKinds` includes `habitMonth`. Other clients receive a readable localized schedule.
 
-The tool requires `window`: `month` or `date_range`. A `month` window is the complete
-local month, including future days, and `relative_period` (`this_month` or
-`last_month`) selects it; `date_from` and `date_to` are optional inclusive local ISO
-dates, and one date alone selects the month that holds it. A `date_range` window requires
-both dates, with `date_to` after `date_from`. A window covers at most 62 days.
+The tool requires `window`: `month` or `date_range`, with local inclusive dates. A
+`month` window with no date is the current month, future days included. A start date
+alone runs to the last day of its month; an end date alone starts on the first day.
+`relative_period` sets both dates: `this_month` ends today; `last_month` is the
+previous month. A `date_range` window needs both dates, `date_to` after `date_from`. A
+window covers at most 62 days.
 `language` is `en`, `pt` or `pt-BR`, taken from the person's current message.
 The account date and week start come from `IUserDateService`.
 
