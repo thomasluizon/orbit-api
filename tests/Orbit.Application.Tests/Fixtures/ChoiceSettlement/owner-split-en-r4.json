@@ -1,0 +1,37 @@
+{
+  "caseId": "owner-split-en",
+  "repeat": 4,
+  "role": "answer turn, round 2: the opposite question that the defect asked",
+  "source": "Authored from the owner's screenshot of 12 November 2026 (ticket 2127) and the staging selection cards of thomasluizon/orbit-tickets#2129. Not a provider capture. The test rebinds habit-1 to habit-6 to the six Water - 710ml habits.",
+  "toolCalls": [
+    {
+      "name": "ask",
+      "arguments": {
+        "input": {
+          "form": "choice",
+          "missing_input": "record_selection",
+          "question": "Which 2 of the 6 habits do you want to delete?",
+          "multiSelect": false,
+          "allowFreeText": true,
+          "options": [
+            {
+              "id": "first2",
+              "label": "First 2",
+              "description": "In list order"
+            },
+            {
+              "id": "last2",
+              "label": "Last 2",
+              "description": "In list order"
+            },
+            {
+              "id": "other2",
+              "label": "Other 2",
+              "description": "Name them in text"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

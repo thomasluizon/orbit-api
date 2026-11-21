@@ -1,0 +1,16 @@
+{
+  "caseId": "owner-split-pt-BR",
+  "repeat": 1,
+  "role": "first turn, round 1: read the habits",
+  "source": "Authored from the owner's screenshot of 12 November 2026 (ticket 2127) and the staging selection cards of thomasluizon/orbit-tickets#2129. Not a provider capture. The test rebinds habit-1 to habit-6 to the six Water - 710ml habits.",
+  "toolCalls": [
+    {
+      "name": "query_habits",
+      "arguments": {
+        "search": "Water 710ml",
+        "for_selection": true,
+        "orbit_read_complete": false
+      }
+    }
+  ]
+}
