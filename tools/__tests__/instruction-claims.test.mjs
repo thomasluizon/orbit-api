@@ -114,3 +114,34 @@ for (const { name, forbidden, required, source, proof } of habitMonthWindowClaim
     assert.match(source, proof)
   })
 }
+
+const fixturesReadme = read('tests/Orbit.Application.Tests/Fixtures/README.md').replace(/\s+/g, ' ')
+
+const fixtureReplayClaims = [
+  {
+    name: 'Gamification/achievements.en.json is a copy of the consumer text, not model output',
+    required: /`Gamification\/achievements\.en\.json` is a copy of the achievement text in the consumer `en\.json`\. It is not model output\./,
+    source: 'tests/Orbit.Application.Tests/Gamification/AchievementDefinitionsTests.cs',
+    proof: /achievements\.en\.json/,
+  },
+  {
+    name: 'PendingRevisions bodies replay at the HTTP transport',
+    required: /`PendingRevisions\/` and `TerminalReads\/` hold Responses API bodies\. The tests replay them at the HTTP transport, through the real SDK and `AiIntentService`\./,
+    source: 'tests/Orbit.Application.Tests/Commands/Chat/ChatWriteHoldHandlerTests.RevisionOpinion.cs',
+    proof: /HttpMessageHandler/,
+  },
+  {
+    name: 'TerminalReads bodies replay at the HTTP transport',
+    required: /`PendingRevisions\/` and `TerminalReads\/` hold Responses API bodies\. The tests replay them at the HTTP transport, through the real SDK and `AiIntentService`\./,
+    source: 'tests/Orbit.Application.Tests/Chat/TerminalReadProviderTests.cs',
+    proof: /HttpMessageHandler/,
+  },
+]
+
+for (const { name, required, source, proof } of fixtureReplayClaims) {
+  test(`Fixtures/README.md states that ${name}`, () => {
+    assert.match(fixturesReadme, required)
+    assert.doesNotMatch(fixturesReadme, /Each fixture file holds the output of the AI model for one test case\. The tests replay the file at `IAiIntentService`/)
+    assert.match(read(source), proof)
+  })
+}

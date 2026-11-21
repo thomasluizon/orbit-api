@@ -1,6 +1,8 @@
 # Application test fixtures
 
-Each fixture file holds the output of the AI model for one test case. The tests replay the file at `IAiIntentService`, so each run is deterministic and makes no network call.
+Most fixture files hold the output of the AI model for one test case. The tests replay these files at `IAiIntentService` or at another application port, so each run is deterministic and makes no network call.
+
+`PendingRevisions/` and `TerminalReads/` hold Responses API bodies. The tests replay them at the HTTP transport, through the real SDK and `AiIntentService`. `Gamification/achievements.en.json` is a copy of the achievement text in the consumer `en.json`. It is not model output.
 
 ## What a replay proves
 
