@@ -21,8 +21,32 @@ public partial class ProcessUserChatCommandHandler
         if (keys.Count == 0) return;
         var conversation = request.ClientContext!.ConversationId!.Value;
         var issued = await offerStore.IssuedAsync(request.UserId, conversation, ct);
-        var owned = keys.Where(key => issued.Any(offer => offer.Action.OfferKey == key)).ToArray();
+        var owned = await IssuedOfferKeysAsync(issued, keys, ct);
         if (owned.Length > 0) await offerStore.DismissAsync(request.UserId, conversation, owned, ct);
+    }
+
+    /// <summary>
+    /// The issued keys that the model named. The model read each key with the reference of its record, so a key matches an
+    /// issued key as it is or as the reference book of the turn writes it.
+    /// </summary>
+    private async Task<string[]> IssuedOfferKeysAsync(IReadOnlyList<AiOfferFact> issued, IReadOnlyList<string> keys, CancellationToken ct)
+    {
+        var fullKeys = issued.Select(offer => offer.Action.OfferKey).Distinct(StringComparer.Ordinal).ToArray();
+        var named = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var key in keys)
+        {
+            if (fullKeys.Contains(key, StringComparer.Ordinal))
+            {
+                named.Add(key);
+                continue;
+            }
+            if (_referenceTurn is not { } turn)
+                continue;
+            foreach (var fullKey in fullKeys)
+                if (await turn.ModelTextAsync(fullKey, ct) == key)
+                    named.Add(fullKey);
+        }
+        return named.ToArray();
     }
 
     private async Task<ProcessUserChatCommand> LoadOfferDismissalsAsync(ProcessUserChatCommand request, CancellationToken ct)

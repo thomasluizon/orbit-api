@@ -25,10 +25,12 @@ public sealed record ChatReferenceDependencies(
 public sealed class ShortReferenceTurn : IDisposable
 {
     private readonly ConcurrentDictionary<string, NormalizedToolCall> _failures = new(StringComparer.Ordinal);
+    private readonly bool _writeReferences;
 
     public ShortReferenceTurn(ReferenceBook book, ToolCallReferenceNormalizer normalizer, bool writeReferences, IAiIntentService inner)
     {
         Book = book;
+        _writeReferences = writeReferences;
         Model = new ReferencedAiIntentService(inner, book, normalizer, writeReferences, _failures);
     }
 
@@ -38,6 +40,9 @@ public sealed class ShortReferenceTurn : IDisposable
 
     /// <summary>The normalized call whose arguments name a record that the person does not have, or null.</summary>
     public NormalizedToolCall? FailureOf(string callId) => _failures.GetValueOrDefault(callId);
+
+    /// <summary>The text as the model reads it: with references when the setting is on, and as it is when the setting is off.</summary>
+    public Task<string> ModelTextAsync(string text, CancellationToken ct) => _writeReferences ? Book.WriteAsync(text, ct) : Task.FromResult(text);
 
     public void Dispose() => Book.Dispose();
 
