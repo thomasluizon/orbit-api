@@ -42,7 +42,7 @@ test('api_secret_keys covers every required API secret', () => {
   for (const key of ['BotProtection__SecretKey', 'BotProtection__SmokeBypassSecret', 'Auth__BffForwardingSecret', 'Storage__S3__AccessKeyId', 'Storage__S3__SecretAccessKey', 'OnboardingSecurity__SigningSecret', 'Ses__AccessKeyId', 'Ses__SecretAccessKey'])
     assert.ok(configuration.includes(key), `Terraform-managed secret ${key} must reach the API group`)
 })
-test('both API groups receive the managed widget site key and independent SSM smoke bypass secrets', () => {
+test('both API groups receive the widget site key and independent SSM smoke bypass secrets', () => {
   const password = configuration.split('resource "random_password" "smoke_bypass_secret" {')[1]?.split('\n}')[0]
   assert.ok(password)
   assert.match(password, /for_each = toset\(\["production", "staging"\]\)/)
@@ -59,7 +59,11 @@ test('both API groups receive the managed widget site key and independent SSM sm
     assert.ok(group.includes(`BotProtection__SmokeBypassSecret = { value = aws_ssm_parameter.smoke_bypass_secret["${environment}"].value }`))
   }
 })
-test('staging landing uses the managed widget and its host is admitted only by staging', () => {
+test('the Turnstile widget runs in invisible mode, as the live widget does', () => {
+  const widget = text('cloudflare.tf').split('resource "cloudflare_turnstile_widget" "orbit" {')[1].split('\n}')[0]
+  value(widget, 'mode', 'invisible')
+})
+test('staging landing uses the widget and its host is admitted only by staging', () => {
   const host = 'orbit-landing-staging.onrender.com'
   const landing = text('staging.tf').split('resource "render_static_site" "staging_landing" {')[1].split('\nresource ')[0]
   assert.match(landing, /PUBLIC_TURNSTILE_SITE_KEY\s*=\s*\{ value = cloudflare_turnstile_widget.orbit.sitekey \}/)
