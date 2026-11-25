@@ -32,7 +32,7 @@ jobs:
       # It pins a release commit, because a moving tag is an unpinned dependency.
       - name: Run agent
         id: claude
-        uses: pullfrog/pullfrog@44b58efe7fe431053c58aafa05e51e190f969685 # v0, release 0.1.130
+        uses: pullfrog/pullfrog@ef3a939a663d6eb5701ecbcbb824621076cf10e5 # v0, release 0.1.140
         with:
           prompt: ${{ inputs.prompt }}
           model: anthropic/claude-opus-5-5
