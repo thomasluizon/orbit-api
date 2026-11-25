@@ -57,6 +57,7 @@ public sealed class RedesignMigrationCompatibilityTests
     {
         using var context = CreateContext();
         var script = context.GetService<IMigrator>().GenerateScript(
+            toMigration: LastCheckedMigration,
             options: MigrationsSqlGenerationOptions.Idempotent);
 
         string[] missingMigrations =
@@ -65,12 +66,38 @@ public sealed class RedesignMigrationCompatibilityTests
             "20260929070016_LinkGamificationNotificationsToProgress",
             "20260929070408_AddClockFormatPreference",
             "20261001074038_AddHabitSkipUndo",
-            "20261017011939_AddFeatureFlagAccounts"
+            LastCheckedMigration
         ];
         foreach (var migration in missingMigrations)
             script.Should().Contain(
                 $"IF NOT EXISTS(SELECT 1 FROM \"__EFMigrationsHistory\" WHERE \"MigrationId\" = '{migration}')");
     }
+
+    [Fact]
+    public void IdempotentScript_CannotIncludeAMigrationThatCreatesAnIndexConcurrently()
+    {
+        using var context = CreateContext();
+        var migrator = context.GetService<IMigrator>();
+        var concurrentMigrations = context.GetService<IMigrationsAssembly>().Migrations
+            .Where(entry => context.GetService<IMigrationsAssembly>()
+                .CreateMigration(entry.Value, "Npgsql.EntityFrameworkCore.PostgreSQL").UpOperations
+                .OfType<CreateIndexOperation>()
+                .Any(index => index["Npgsql:CreatedConcurrently"] as bool? == true))
+            .Select(entry => entry.Key)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
+        concurrentMigrations.Should().NotBeEmpty();
+        concurrentMigrations.Should().OnlyContain(id => string.CompareOrdinal(id, LastCheckedMigration) > 0,
+            "the idempotent script ends before the first concurrent index migration");
+
+        var generate = () => migrator.GenerateScript(
+            toMigration: concurrentMigrations[0],
+            options: MigrationsSqlGenerationOptions.Idempotent);
+        generate.Should().Throw<NotSupportedException>().WithMessage("*CREATE INDEX CONCURRENTLY*");
+    }
+
+    private const string LastCheckedMigration = "20261017011939_AddFeatureFlagAccounts";
 
     private static OrbitDbContext CreateContext() => new(
         new DbContextOptionsBuilder<OrbitDbContext>()
