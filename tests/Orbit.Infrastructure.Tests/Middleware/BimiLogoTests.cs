@@ -29,7 +29,7 @@ public class BimiLogoTests
         root.Attribute("height")!.Value.Should().Be("1024");
         root.Attribute("viewBox")!.Value.Should().Be("0 0 1024 1024");
         root.Elements().Select(element => element.Name)
-            .Should().Equal(Svg + "title", Svg + "desc", Svg + "rect", Svg + "path", Svg + "path");
+            .Should().Equal(new[] { Svg + "title", Svg + "desc", Svg + "rect" }.Concat(Enumerable.Repeat(Svg + "path", 7)));
         root.Element(Svg + "title")!.Value.Should().Be("Orbit");
         root.Element(Svg + "desc")!.Value.Should().NotBeNullOrWhiteSpace();
         foreach (var text in root.Elements().Take(2))
@@ -60,27 +60,43 @@ public class BimiLogoTests
     }
 
     [Fact]
-    public void Logo_PreservesCanonicalGeometryAndCentersThePlatformIconComposition()
+    public void Logo_PreservesTheMascotGeometryAndCentersItsInk()
     {
         var source = XDocument.Load(Path.Combine(BrandingDirectory(), "Sources", "orbit-mark.svg"));
         var logo = XDocument.Load(Path.Combine(BrandingDirectory(), "Assets", "orbit-bimi.svg"));
         var paths = logo.Root!.Elements(Svg + "path").ToArray();
-        paths.Select(path => path.Attribute("d")!.Value)
-            .Should().Equal(source.Root!.Elements(Svg + "path").Select(path => path.Attribute("d")!.Value));
-        paths.Select(path => path.Attribute("fill-rule")?.Value)
-            .Should().Equal(source.Root!.Elements(Svg + "path").Select(path => path.Attribute("fill-rule")?.Value));
-        paths.Select(path => path.Attribute("fill")!.Value).Should().Equal("#F4F4F6", "#C4530F");
+        paths.Should().HaveCount(7);
+        var mascotPaths = source.Descendants(Svg + "path").ToArray();
+        mascotPaths.Should().HaveCount(5);
+        new[] { 0, 2, 3, 4, 5 }.Select(index => paths[index].Attribute("d")!.Value)
+            .Should().Equal(mascotPaths.Select(path => path.Attribute("d")!.Value));
+        paths.Select(path => path.Attribute("fill-rule")?.Value).Should().OnlyContain(rule => rule == null);
+        var circles = source.Root!.Elements(Svg + "circle").ToArray();
+        circles.Should().HaveCount(2);
+        foreach (var (circle, index) in circles.Zip(new[] { 1, 6 }))
+        {
+            var radius = double.Parse(circle.Attribute("r")!.Value, CultureInfo.InvariantCulture);
+            var centreX = double.Parse(circle.Attribute("cx")!.Value, CultureInfo.InvariantCulture);
+            var centreY = double.Parse(circle.Attribute("cy")!.Value, CultureInfo.InvariantCulture);
+            var data = paths[index].Attribute("d")!.Value;
+            data.Count(character => character == 'C').Should().Be(4);
+            data.Should().StartWith($"M{(centreX + radius).ToString("0.######", CultureInfo.InvariantCulture)} {centreY.ToString("0.######", CultureInfo.InvariantCulture)}C");
+        }
+
+        paths.Select(path => path.Attribute("fill")!.Value)
+            .Should().Equal("#F4F4F6", "#F4F4F6", "#09090B", "#09090B", "#09090B", "#F4F4F6", "#C4530F");
+        paths.Select(path => path.Attribute("fill")!.Value).Count(fill => fill == "#C4530F").Should().Be(1);
         var transform = paths[0].Attribute("transform")!.Value;
-        paths[1].Attribute("transform")!.Value.Should().Be(transform);
+        paths.Select(path => path.Attribute("transform")!.Value).Should().OnlyContain(value => value == transform);
         transform.Should().MatchRegex(@"^translate\(-?[0-9.]+ -?[0-9.]+\) scale\([0-9.]+\)$");
         var values = transform.Replace("translate(", "").Replace(") scale(", " ").TrimEnd(')')
             .Split(' ').Select(value => double.Parse(value, CultureInfo.InvariantCulture)).ToArray();
         var (dx, dy, scale) = (values[0], values[1], values[2]);
         scale.Should().BeGreaterThan(0);
-        const double left = 226.5268556772084;
-        const double right = 797.8539362998753;
-        const double top = 358.6990440706325;
-        const double bottom = 665.613481824317;
+        const double left = -181.334;
+        const double right = 181.752;
+        const double top = -100;
+        const double bottom = 100;
         (dx + scale * (left + right) / 2).Should().BeApproximately(512, 0.01);
         (dy + scale * (top + bottom) / 2).Should().BeApproximately(512, 0.01);
         (scale * (right - left)).Should().BeApproximately(1024 * 0.6, 0.01);
