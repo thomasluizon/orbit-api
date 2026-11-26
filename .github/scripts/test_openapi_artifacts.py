@@ -200,10 +200,10 @@ class PublicationTests(unittest.TestCase):
 class GateDescriptionTests(unittest.TestCase):
     def test_readme_describes_the_gate_that_the_workflow_runs(self):
         readme = ' '.join((ROOT / 'src/Orbit.Api/OpenApi/README.md').read_text().split())
-        sources = (ROOT / '.github/workflows/test.yml').read_text() + (ROOT / '.github/scripts/openapi_artifacts.py').read_text()
+        sources = (ROOT / '.github/workflows/guards.yml').read_text() + (ROOT / '.github/scripts/openapi_artifacts.py').read_text()
         cases = [
             ('the workflow pins an oasdiff binary by checksum', 'OASDIFF_SHA256', True,
-             'runs the oasdiff release that `test.yml` pins by checksum'),
+             'runs the oasdiff release that `guards.yml` pins by checksum'),
             ('the workflow uses no oasdiff action', 'oasdiff/oasdiff-action', False,
              'pinned v1 action'),
             ('the gate has no dependent comparison job', 'needs: openapi-breaking-inventory', False,

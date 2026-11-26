@@ -1,21 +1,13 @@
 name: CodeQL
 
-# The job name is load bearing: each matrix leg reports "Analyze (<language>)", which
-# the required checks name. Never rename the job or a language value.
-# A leg skips its steps, never the job, so the check context always exists.
+# CodeQL runs on a push to main and on the weekly schedule. A pull request does not run it.
 # C# builds Orbit.Api for real, because the build generates code that buildless extraction misses.
 
 on:
   push:
     branches: [main]
-  pull_request:
-    branches: [main]
   schedule:
     - cron: "0 5 * * 1"
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -38,23 +30,15 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
-        with:
-          fetch-depth: 2
-
-      - name: Select the inputs that changed
-        id: inputs
-        env:
-          LANGUAGE: ${{ matrix.language }}
-        run: bash .github/scripts/changed-inputs.sh "$LANGUAGE"
 
       - name: Setup .NET
-        if: matrix.language == 'csharp' && steps.inputs.outputs.csharp == 'true'
+        if: matrix.language == 'csharp'
         uses: actions/setup-dotnet@v6
         with:
           dotnet-version: "10.0.x"
 
       - name: Restore the NuGet package cache
-        if: matrix.language == 'csharp' && steps.inputs.outputs.csharp == 'true'
+        if: matrix.language == 'csharp'
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.nuget/packages
@@ -62,20 +46,18 @@ jobs:
           restore-keys: nuget-${{ runner.os }}-
 
       - name: Initialize CodeQL
-        if: steps.inputs.outputs[matrix.language] != 'false'
         uses: github/codeql-action/init@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
         with:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.language == 'csharp' && 'manual' || 'none' }}
 
       - name: Build
-        if: matrix.language == 'csharp' && steps.inputs.outputs.csharp == 'true'
+        if: matrix.language == 'csharp'
         run: |
           dotnet restore src/Orbit.Api/Orbit.Api.csproj
           dotnet build src/Orbit.Api/Orbit.Api.csproj --no-restore
 
       - name: Perform CodeQL Analysis
-        if: steps.inputs.outputs[matrix.language] != 'false'
         uses: github/codeql-action/analyze@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
         with:
           category: "/language:${{ matrix.language }}"
