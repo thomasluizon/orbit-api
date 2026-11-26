@@ -651,6 +651,70 @@ public partial class ProcessUserChatCommandHandlerTests
     }
 
     /// <summary>
+    /// A person answers a choice over two same-titled habits. The model then reads other habits and asks a pickList over
+    /// them, with the references that it reads as the item ids. The repeated-decision guard reads each item id as a habit
+    /// GUID, so each reference resolves first, and the pickList reaches the person.
+    /// </summary>
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task ShortReference_APickListAfterAnAnsweredChoiceReachesThePersonWithFullItemIds(string language)
+    {
+        var portuguese = language == "pt-BR";
+        var user = User.Create("Reader", "reader@example.test").Value;
+        user.SetLanguage(language);
+        SetupUserAndPayGate(user);
+        _shortReferences = true;
+        EnableComposition();
+        _unitOfWork.PassThroughTransactions<Result<PreparedAiBlockAnswer>>();
+        var (walk, water, stretch) = portuguese ? ("Caminhada", "Água", "Alongar") : ("Walk", "Water", "Stretch");
+        Habit[] walks = [CreateHabit(walk), CreateHabit(walk)];
+        Habit[] others = [CreateHabit(water), CreateHabit(stretch)];
+        SetupSelectionHabits([.. walks, .. others]);
+        _mediator.Send(Arg.Any<CheckChatCommandQuery>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
+        var answered = StoreAnsweredBlock(new AiBlockDefinition(AiBlockKinds.Choice, portuguese ? "Qual caminhada?" : "Which walk?",
+            [.. walks.Select((habit, index) => new AiBlockOption(habit.Id.ToString(), $"{habit.Title} {index + 1}"))], []));
+        var issued = new List<IssuedAiBlock>();
+        _blockStore.AddAsync(Arg.Do<IssuedAiBlock>(issued.Add), Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
+        var results = CaptureModelResults(portuguese ? "Escolha." : "Choose.");
+        SetupAiResponse(new AiResponse
+        {
+            ConversationContext = TestConversationContext,
+            ToolCalls =
+            [
+                AskSelectionRead(),
+                new("ask", "pick", JsonSerializer.SerializeToElement(new
+                {
+                    input = new
+                    {
+                        form = "pickList",
+                        missing_input = "bulk_selection",
+                        title = portuguese ? "Escolha os hábitos" : "Choose habits",
+                        action = "log_habits",
+                        items = others.Select(habit => new
+                        {
+                            id = Reference(habit.Id),
+                            label = habit.Title,
+                            arguments = new { habit_id = Reference(habit.Id), date = Today.ToString("yyyy-MM-dd") }
+                        })
+                    }
+                }))
+            ]
+        });
+        var query = new QueryHabitsTool(_habitRepo, _userRepo, _userDateService, _scheduleLogReader);
+        var handler = CreateHandler(RealAskTool(), query);
+        UseProductionReadExecutor(query);
+
+        var result = await handler.Handle(new(UserId, "Answer", BlockAnswer: new(answered.Id, [walks[0].Id.ToString()]),
+            ClientContext: new(SupportsParts: true, PartKinds: ["choice", "pickList"], Locale: language)), default);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        results.SelectMany(round => round).Should().NotContain(item => item.Error != null && item.Error.Contains("already answered"));
+        issued.Should().ContainSingle("the pickList reached the person").Subject.ReadDefinition().Items.Select(item => item.Id)
+            .Should().Equal(others.Select(habit => habit.Id.ToString()));
+    }
+
+    /// <summary>
     /// A choice over records of a type other than habit holds the full GUID of each record as its option id. The id names
     /// no habit of the person, and the card is no record selection, so no ask guard reads it as a habit. The card reaches
     /// the person with the same option ids, with the setting on and with the setting off.

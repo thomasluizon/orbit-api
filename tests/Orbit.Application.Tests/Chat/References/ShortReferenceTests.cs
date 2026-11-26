@@ -220,8 +220,8 @@ public class ShortReferenceTests
 
     /// <summary>
     /// The option ids of an ask card stand for the habits that they name, so a reference among them resolves as a habit.
-    /// A full GUID that names no habit of the person, a free option id, a date option id that names no habit, a question
-    /// id and a pickList item id stay. The ask guard owns the refusal of a record selection with a guessed GUID.
+    /// A full GUID that names no habit of the person, a free option id, a date option id that names no habit and a
+    /// question id stay. A pickList item id resolves as an option id does. The ask guard owns the refusal of a record selection with a guessed GUID.
     /// </summary>
     [Fact]
     public async Task Normalizer_ResolvesTheRecordIdsOfAnAskCardAndKeepsItsFreeIds()
@@ -239,7 +239,7 @@ public class ShortReferenceTests
                 {
                     new { id = "abcdef12", options = new[] { new { id = "dab2ad98" }, new { id = guess }, new { id = "yes" }, new { id = "2026-11-18" } } }
                 },
-                items = new[] { new { id = "4c1e7f20", arguments = "{}" } }
+                items = new[] { new { id = "dab2ad98", arguments = "{}" }, new { id = "draft", arguments = "{}" } }
             }
         };
 
@@ -252,7 +252,8 @@ public class ShortReferenceTests
         question.GetProperty("id").GetString().Should().Be("abcdef12", "a question id names no record");
         question.GetProperty("options").EnumerateArray().Select(option => option.GetProperty("id").GetString())
             .Should().Equal(Water.Id.ToString(), "deadbeef", "yes", "2026-11-18");
-        input.GetProperty("items")[0].GetProperty("id").GetString().Should().Be("4c1e7f20", "no guard reads a pickList item id");
+        input.GetProperty("items").EnumerateArray().Select(item => item.GetProperty("id").GetString())
+            .Should().Equal([Water.Id.ToString(), "draft"], "a pickList item id that names a habit resolves and a free one stays");
         guessed.IsResolved.Should().BeTrue(guessed.IsResolved ? null : guessed.Error());
         guessed.Call.Args.GetProperty("input").GetProperty("questions")[0].GetProperty("options").EnumerateArray()
             .Select(option => option.GetProperty("id").GetString())

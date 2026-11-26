@@ -63,7 +63,7 @@ public sealed partial class ToolCallReferenceNormalizer(ReferenceBook book,
 
     /// <summary>
     /// Resolves each typed ID argument under the node. <paramref name="container"/> is the name of the argument that
-    /// holds the node, so the option ids of an ask card resolve as habits and its question and item ids stay.
+    /// holds the node, so the option ids and the pickList item ids of an ask card resolve as habits and its question ids stay.
     /// </summary>
     private async Task<bool> WalkAsync(JsonNode? node, bool ask, List<ReferenceFailure> failures, CancellationToken ct,
         string? container = null)
