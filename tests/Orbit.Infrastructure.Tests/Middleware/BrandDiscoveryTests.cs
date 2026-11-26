@@ -72,6 +72,38 @@ public class BrandDiscoveryTests(ITestOutputHelper output)
     }
 
     [Theory]
+    [InlineData("/favicon.ico", "8cb06c7aad887c9d8eb7bb62675c143737da7b2dc57652bb2feaabd4820c8e0a")]
+    [InlineData("/apple-touch-icon.png", "091d8d1fde24baddb3c328260a1c7fe49dd6cf1b08846110d3c2798e7351b7a0")]
+    [InlineData("/orbit-icon-512.png", "f2e00a9f1f43c555ddf6812cb3236999a1623d9b624d6f25029e29807e3ca8c1")]
+    public async Task BinaryIcon_IsTheByteCopyOfTheOrbitUiMobileMascotExport(string path, string expectedSha256)
+    {
+        await using var app = await CreateApplication();
+        var context = CreateRequest(app, path);
+
+        await ((IApplicationBuilder)app).Build()(context);
+
+        var bytes = ((MemoryStream)context.Response.Body).ToArray();
+        Convert.ToHexStringLower(SHA256.HashData(bytes)).Should().Be(expectedSha256);
+    }
+
+    [Fact]
+    public async Task FaviconSvg_DrawsTheMascotAndNotThePlanetMark()
+    {
+        await using var app = await CreateApplication();
+        var context = CreateRequest(app, "/favicon.svg");
+
+        await ((IApplicationBuilder)app).Build()(context);
+
+        var svg = XDocument.Parse(Encoding.UTF8.GetString(((MemoryStream)context.Response.Body).ToArray()));
+        var markup = svg.ToString(SaveOptions.DisableFormatting);
+        markup.Should().Contain("orbit-small-title");
+        markup.Should().Contain("orbit-s24-planet");
+        markup.Should().NotContain("M498.347 358.729");
+        var style = svg.Descendants(XName.Get("style", "http://www.w3.org/2000/svg")).Single().Value;
+        style.Should().Contain("--bg").And.Contain("--orbit-surface").And.Contain("--primary");
+    }
+
+    [Theory]
     [InlineData("/favicon.ico")]
     [InlineData("/favicon.svg")]
     [InlineData("/apple-touch-icon.png")]
