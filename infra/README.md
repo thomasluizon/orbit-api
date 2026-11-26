@@ -158,7 +158,7 @@ Before you release a `Stripe.net` update that changes the major release, change 
 
 Google Play and App Store review sign in to production with a dedicated account that has no mailbox and no personal data. Production reads its address from `/orbit/production/api/REVIEW_ACCOUNT_EMAIL` and its code from `/orbit/production/api/REVIEW_ACCOUNT_CODE`. Only the production API group receives them.
 
-When the address matches and the code is exactly six ASCII digits, send-code seeds that code and queues no email. For the same pair, SES skips each message to the address, so nothing bounces. A value that is absent or malformed seeds nothing, and the address receives a normal emailed code. The reviewer still passes Turnstile in the app.
+When the address matches and the code is exactly six ASCII digits, send-code seeds that code and queues no email. For the same pair, SES skips each message to the address, so nothing bounces. A value that is absent or malformed seeds nothing, and the address receives a normal emailed code. The reviewer passes the invisible Turnstile check in the app without any action.
 
 Generate the code once with `LC_ALL=C tr -dc '0-9' < /dev/urandom | head -c 6`. After you change a parameter, apply a plan targeted to `render_env_group.production_api`. Then update the login details in the store consoles.
 

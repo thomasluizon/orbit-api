@@ -111,7 +111,7 @@ resource "cloudflare_dns_record" "staging" {
 resource "cloudflare_turnstile_widget" "orbit" {
   account_id = "29945c90bc934c629c8e5a11cbfd146b"
   name       = "Orbit"
-  mode       = "managed"
+  mode       = "invisible"
   domains = [
     "app.useorbit.org",
     "app-staging.useorbit.org",
