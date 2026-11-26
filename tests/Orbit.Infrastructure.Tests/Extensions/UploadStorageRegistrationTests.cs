@@ -10,17 +10,13 @@ namespace Orbit.Infrastructure.Tests.Extensions;
 
 public class UploadStorageRegistrationTests
 {
-    [Theory]
-    [InlineData(null)]
-    [InlineData("S3")]
-    [InlineData("Supabase")]
-    public void AddEmailAndStorageServices_RegistersOnlyS3ForUploadsReadsAndErasure(string? provider)
+    [Fact]
+    public void AddEmailAndStorageServices_RegistersOnlyS3ForUploadsReadsAndErasure()
     {
         var builder = WebApplication.CreateBuilder();
         builder.Configuration.Sources.Clear();
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
         {
-            ["Storage:Provider"] = provider,
             ["Storage:S3:Bucket"] = "uploads-test",
             ["Storage:S3:PublicBaseUrl"] = "https://api.example.com",
             ["Storage:S3:Region"] = "us-east-2",
