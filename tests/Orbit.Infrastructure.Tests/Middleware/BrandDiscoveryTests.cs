@@ -72,9 +72,9 @@ public class BrandDiscoveryTests(ITestOutputHelper output)
     }
 
     [Theory]
-    [InlineData("/favicon.ico", "8cb06c7aad887c9d8eb7bb62675c143737da7b2dc57652bb2feaabd4820c8e0a")]
-    [InlineData("/apple-touch-icon.png", "091d8d1fde24baddb3c328260a1c7fe49dd6cf1b08846110d3c2798e7351b7a0")]
-    [InlineData("/orbit-icon-512.png", "f2e00a9f1f43c555ddf6812cb3236999a1623d9b624d6f25029e29807e3ca8c1")]
+    [InlineData("/favicon.ico", BrandIconHashes.FaviconIco)]
+    [InlineData("/apple-touch-icon.png", BrandIconHashes.AppleTouchIcon)]
+    [InlineData("/orbit-icon-512.png", BrandIconHashes.Icon512)]
     public async Task BinaryIcon_IsTheByteCopyOfTheOrbitUiMobileMascotExport(string path, string expectedSha256)
     {
         await using var app = await CreateApplication();

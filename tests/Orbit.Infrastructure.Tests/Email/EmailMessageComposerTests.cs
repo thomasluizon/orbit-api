@@ -6,6 +6,7 @@ using FluentAssertions;
 using FluentAssertions.Execution;
 using Orbit.Api.Branding;
 using Orbit.Infrastructure.Email;
+using Orbit.Infrastructure.Tests.Middleware;
 
 namespace Orbit.Infrastructure.Tests.Email;
 
@@ -137,7 +138,7 @@ public sealed class EmailMessageComposerTests
         var asset = BrandAssets.TryRead("/orbit-icon-512.png");
         asset.Should().NotBeNull();
         Convert.ToHexStringLower(SHA256.HashData(asset!.Value.Content)).Should()
-            .Be("7e581e38545f8b1d9bdeb7a78bbf7a066c0e5c7ac05b72ad0dab85056a06ab54");
+            .Be(BrandIconHashes.Icon512);
     }
 
     [Theory]
