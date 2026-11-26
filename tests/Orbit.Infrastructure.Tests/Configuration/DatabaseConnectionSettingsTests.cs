@@ -18,7 +18,7 @@ public class DatabaseConnectionSettingsTests
     }
 
     [Fact]
-    public void Defaults_KeepTwoInstanceSessionOverlapUnderSupabaseUsableBackends()
+    public void Defaults_KeepTwoInstanceSessionOverlapUnderPostgresUsableBackends()
     {
         var settings = new DatabaseConnectionSettings();
 

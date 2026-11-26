@@ -22,8 +22,8 @@ public class SignUploadCommandHandlerTests
             .CreateSignedUploadAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(call => new SignedUpload(
                 call.ArgAt<string>(0),
-                $"https://project.supabase.co/storage/v1/object/upload/sign/uploads/{call.ArgAt<string>(0)}?token=jwt",
-                $"https://project.supabase.co/storage/v1/object/public/uploads/{call.ArgAt<string>(0)}"));
+                $"https://uploads-test.s3.us-east-2.amazonaws.com/uploads/{call.ArgAt<string>(0)}?X-Amz-Signature=sig",
+                $"https://api.example.com/uploads/{call.ArgAt<string>(0)}"));
     }
 
     [Fact]
@@ -36,8 +36,8 @@ public class SignUploadCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.Key.Should().StartWith($"{UserId}/");
         result.Value.Key.Should().EndWith(".png");
-        result.Value.SignedUrl.Should().Contain("/object/upload/sign/uploads/");
-        result.Value.PublicUrl.Should().Contain("/object/public/uploads/");
+        result.Value.SignedUrl.Should().Contain("X-Amz-Signature");
+        result.Value.PublicUrl.Should().Contain("/uploads/");
     }
 
     [Fact]
