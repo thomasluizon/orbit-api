@@ -128,14 +128,52 @@ public class OAuthLoginPageTests : IDisposable
     }
 
     [Fact]
-    public void Page_DrawsTheOrbitalMarkWithTheAccentOnItsMoon()
+    public void Page_DrawsTheOrbitMascotWithTheAccentOnItsMoon()
     {
         var page = RenderPage();
 
-        page.Should().Contain("data-orbit-mark=\"accent\"");
+        page.Should().Contain("data-orbit-mark=\"mascot\"");
+        page.Should().Contain("viewBox=\"-210 -150 420 300\"");
         page.Should().Contain("fill=\"var(--primary, currentColor)\"");
         page.Should().Contain("<title id=\"orbit-mark-title\">Orbit</title>");
         page.Should().NotContain("<div class=\"logo\">O</div>");
+    }
+
+    [Fact]
+    public void Page_DrawsNoPlanetOfTheOldMark()
+    {
+        OAuthPageStyles.Mark.Should().NotContain("M498.347 358.729");
+        RenderPage().Should().NotContain("M498.347 358.729");
+    }
+
+    [Theory]
+    [InlineData("en", "Sign in with Apple")]
+    [InlineData("pt-BR", "Iniciar sessão com a Apple")]
+    public void AppleButton_DrawsTheAppleLogoBeforeTheLabel(string language, string label)
+    {
+        var html = OAuthLoginPage.Render("https://claude.ai/oauth/mcp-oauth-client-metadata", "https://claude.ai/api/mcp/auth_callback",
+            "client-state", "challenge", "S256", language: language, appleSignInEnabled: true);
+
+        var apple = Regex.Match(html, "<a class=\"btn btn-provider btn-apple\" id=\"apple\"[^>]*>(.*?)</a>", RegexOptions.Singleline);
+        apple.Success.Should().BeTrue();
+        apple.Groups[1].Value.Should().StartWith("<svg").And.Contain("viewBox=\"0 0 31 44\"")
+            .And.Contain("fill=\"currentColor\"").And.Contain("aria-hidden=\"true\"").And.Contain("focusable=\"false\"")
+            .And.Contain("M15.7099491,14.8846154").And.EndWith("</svg>" + label);
+    }
+
+    [Fact]
+    public void AppleButton_SharesTheProviderButtonHeightAndFollowsTheAppleColours()
+    {
+        var css = RenderedCss(RenderPage());
+
+        CssRule(css, ".providers").Should().Contain("gap: var(--s-2);");
+        CssRule(css, ".btn-provider").Should().Contain("height: var(--btn-h-provider);")
+            .And.Contain("font-size: var(--fs-provider);");
+        CssRule(css, ".btn-google").Should().Contain("padding-inline: var(--s-3);").And.Contain("gap: 10px;");
+        CssRule(css, ".btn-apple").Should().Contain("padding-inline: var(--apple-pad);").And.Contain("gap: 0;")
+            .And.Contain("background: var(--apple-fill);").And.Contain("color: var(--apple-ink);");
+        CssRule(css, ".mark").Should().Contain("width: var(--mark-size);").And.Contain("align-self: center;");
+        CssRule(css, ".divider span[data-label]").Should().Contain("color: var(--fg-3);");
     }
 
     [Fact]
