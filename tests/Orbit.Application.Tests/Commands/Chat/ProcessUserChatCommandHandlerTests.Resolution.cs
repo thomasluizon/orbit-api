@@ -321,6 +321,31 @@ public partial class ProcessUserChatCommandHandlerTests
     }
 
     /// <summary>
+    /// A creation that matches a waiting creation preview of an earlier turn holds no second preview, with the flag on
+    /// and with the flag off. The resent create changes an argument that the store fingerprint does not dedup.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Replay_WaitingCreationPreview_HoldsNoSecondPreviewOnEachPath(bool changePlan)
+    {
+        SetupResolutionAccount();
+        if (changePlan) EnableChangePlan();
+        var bulk = new BulkCreateHabitsTool(_mediator);
+        var handler = CreateHandler(bulk);
+        var held = HoldReplayWrites(bulk);
+        _pendingOperationStore.GetPendingHabitCreations(UserId).Returns([new PendingHabitCreation("Novo")]);
+        _aiIntentService.SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(ReplayCall("bulk_create_habits", JsonSerializer.Serialize(new { habits = new[] { new { title = "Novo", emoji = "🆕" } } })));
+        ReplyToReplay("Revise a prévia.");
+
+        var result = await handler.Handle(new(UserId, "Crie o hábito.", History: [new ChatHistoryMessage("user", "Crie o hábito da prévia.")]), default);
+
+        held.Should().BeEmpty();
+        result.Value.PendingOperations.Should().BeEmpty();
+    }
+
+    /// <summary>
     /// A creation binds to the existing habit with its own title of only emoji or only punctuation, never to a habit with
     /// another such title.
     /// </summary>

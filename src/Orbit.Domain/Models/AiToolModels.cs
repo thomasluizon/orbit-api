@@ -20,6 +20,12 @@ public sealed record AiToolRequest(
     IReadOnlyList<ChatHistoryMessage>? History = null)
 {
     public string Purpose { get; init; } = "chat";
+
+    /// <summary>
+    /// True when the turn runs on the <c>ai_change_plan</c> path. A chat call on that path takes the configured chat
+    /// effort and its own prompt cache key; each other call ignores it.
+    /// </summary>
+    public bool ChangePlan { get; init; }
     public string? AccountContext { get; init; }
     public string? DynamicContext { get; init; }
     public AiTurnTelemetry Telemetry { get; init; } = new();

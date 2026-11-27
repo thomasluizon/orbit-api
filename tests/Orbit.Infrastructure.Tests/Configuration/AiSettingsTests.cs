@@ -92,6 +92,26 @@ public class AiSettingsTests
     }
 
     [Fact]
+    public void ChatReasoningEffort_DefaultsToLowAndOnlyStagingNamesIt()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "Orbit.slnx")))
+            directory = directory.Parent;
+        directory.Should().NotBeNull();
+        var terraform = File.ReadAllText(Path.Combine(directory!.FullName, "infra", "configuration.tf"));
+
+        new AiSettings().ChatReasoningEffort.Should().Be("low");
+
+        var production = Regex.Match(terraform, @"(?ms)^  production_api_values\s*=\s*\{(?<values>.*?)^  \}");
+        production.Success.Should().BeTrue();
+        production.Groups["values"].Value.Should().NotContain("AI__ChatReasoningEffort");
+
+        var staging = Regex.Match(terraform, @"(?ms)^  staging_api_values\s*=\s*merge\(local\.production_api_values,\s*\{(?<overrides>.*?)^  \}\)");
+        staging.Success.Should().BeTrue();
+        staging.Groups["overrides"].Value.Should().MatchRegex("(?m)^\\s*AI__ChatReasoningEffort\\s*=\\s*\"low\"\\s*$");
+    }
+
+    [Fact]
     public void ConfiguredAndDefaultModels_HavePricingRows()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

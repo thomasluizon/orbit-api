@@ -14,7 +14,8 @@ public partial class ProcessUserChatCommandHandler
     private async Task<bool> EndsWithAskAsync(AiResponse response, IReadOnlyList<AiToolCall> calls,
         IReadOnlyDictionary<string, ToolCallOutcome> outcomes, ProcessUserChatCommand request, ChatContext context,
         ToolExecutionAccumulator results, CancellationToken ct) =>
-        results.AskBlock is not null || await TryIssueSelectionPickListAsync(response, calls, outcomes, request, context, results, ct);
+        results.AskBlock is not null
+        || await results.Policy.TryIssueSelectionPickListAsync(this, response, calls, outcomes, request, context, results, ct);
 
     /// <summary>
     /// A round that holds only <c>query_habits(for_selection=true)</c> for a log or skip selection already has

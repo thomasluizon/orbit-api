@@ -10,6 +10,7 @@ public class SystemPromptBuilder : ISystemPromptBuilder
 {
     private readonly IReadOnlyList<IPromptSection> _staticSections;
     private readonly IReadOnlyList<IPromptSection> _accountSections;
+    private readonly IReadOnlyList<IPromptSection> _changePlanSections;
 
     public SystemPromptBuilder()
     {
@@ -24,6 +25,14 @@ public class SystemPromptBuilder : ISystemPromptBuilder
             new ClarificationGuidanceSection(),
             new ToolFailureSection(),
         ];
+        _changePlanSections =
+        [
+            new ChangePlanRulesSection(),
+            new EncouragingToneSection(),
+            new CrisisResponseSection(),
+            new ToolFailureSection(),
+            new DateInterpretationSection(),
+        ];
         _accountSections =
         [
             new ActiveHabitsSection(),
@@ -34,8 +43,9 @@ public class SystemPromptBuilder : ISystemPromptBuilder
         ];
     }
 
-    public string BuildStatic(PromptBuildRequest request) =>
-        Render(_staticSections, ToContext(request)) + Environment.NewLine + GlobalRulesSection.BuildFormat(ToContext(request));
+    public string BuildStatic(PromptBuildRequest request) => request.ChangePlan
+        ? Render(_changePlanSections, ToContext(request))
+        : Render(_staticSections, ToContext(request)) + Environment.NewLine + GlobalRulesSection.BuildFormat(ToContext(request));
 
     public string BuildDynamic(PromptBuildRequest request) => BuildAccountContext(request) + BuildTurnContext(request);
 

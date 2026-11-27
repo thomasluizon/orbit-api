@@ -24,7 +24,7 @@ public class BoundedReadIndexMigrationTests(Xunit.Abstractions.ITestOutputHelper
             "20261102153013_PersistOAuthClients",
             "20261102193912_CompleteBoundedReadIndexes");
         var initializer = db.GetService<IModelRuntimeInitializer>();
-        var target = initializer.Initialize(new AddPhraseReaderAndMascotMotion().TargetModel, designTime: true);
+        var target = initializer.Initialize(new AddAiChangePlanFlag().TargetModel, designTime: true);
         var snapshot = initializer.Initialize(new OrbitDbContextModelSnapshot().Model, designTime: true);
 
         target.FindEntityType("Orbit.Domain.Entities.OAuthClient").Should().NotBeNull();

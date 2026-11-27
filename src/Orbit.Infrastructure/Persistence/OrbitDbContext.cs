@@ -803,7 +803,8 @@ public class OrbitDbContext : DbContext
                 new { Key = "notion_integration", Enabled = false, PlanRequirement = (string?)"Pro", Description = (string?)"Notion task integration", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
                 new { Key = "api_keys", Enabled = true, PlanRequirement = (string?)"Pro", Description = (string?)"Personal API keys", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
                 new { Key = "phrase_reader_ai_disabled", Enabled = false, PlanRequirement = (string?)null, Description = (string?)"Kill switch for the AI read of a habit phrase; the clients ask every question instead", UpdatedAtUtc = new DateTime(2026, 11, 12, 0, 0, 0, DateTimeKind.Utc) },
-                new { Key = "orbit_guided_flows", Enabled = false, PlanRequirement = (string?)null, Description = (string?)"Roll out the guided create, edit and onboarding flows", UpdatedAtUtc = new DateTime(2026, 11, 12, 0, 0, 0, DateTimeKind.Utc) });
+                new { Key = "orbit_guided_flows", Enabled = false, PlanRequirement = (string?)null, Description = (string?)"Roll out the guided create, edit and onboarding flows", UpdatedAtUtc = new DateTime(2026, 11, 12, 0, 0, 0, DateTimeKind.Utc) },
+                new { Key = "ai_change_plan", Enabled = false, PlanRequirement = (string?)null, Description = (string?)"The model is the only owner of the act-or-ask decision on the short-prompt chat path", UpdatedAtUtc = new DateTime(2026, 11, 18, 0, 0, 0, DateTimeKind.Utc) });
         });
     }
 

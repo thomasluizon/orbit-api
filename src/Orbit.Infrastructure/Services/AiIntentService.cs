@@ -67,7 +67,8 @@ public sealed partial class AiIntentService(
         }
 
         var usageUserId = userId == Guid.Empty ? (Guid?)null : userId;
-        var options = aiClient.Inner.CreateOptions(maxOutputTokens: AiOutputTokenLimits.ForPurpose(request.Purpose), userId: usageUserId);
+        var options = aiClient.Inner.CreateOptions(maxOutputTokens: AiOutputTokenLimits.ForPurpose(request.Purpose), userId: usageUserId,
+            changePlanChat: request.ChangePlan && request.Purpose == "chat");
 
         var tools = BuildToolCatalog(toolDeclarations);
         foreach (var tool in tools.OrderBy(pair => pair.Key, StringComparer.Ordinal))

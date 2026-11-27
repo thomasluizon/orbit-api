@@ -187,6 +187,51 @@ public sealed class AskTool(
         return schema;
     }
 
+    /// <summary>
+    /// The schema of the <c>ai_change_plan</c> path: every current form, a choice about records that holds
+    /// <c>about</c> in place of record options, and the draft binding fields on each form. It has no read-before-ask
+    /// gate, so it never changes during a turn.
+    /// </summary>
+    public object GetChangePlanParameterSchema()
+    {
+        var schema = (JsonObject)GetCacheableParameterSchema();
+        var forms = schema["properties"]!["input"]!["anyOf"]!.AsArray();
+        foreach (var form in forms)
+        {
+            var fields = form!["properties"]!.AsObject();
+            fields["missing_input"]!["description"] = ChangePlanMissingInputDescription;
+            if (fields["options"] is { } options)
+                options["items"]!["properties"]!.AsObject().Remove("target_ids");
+        }
+        var choice = forms.Single(form => form!["properties"]!["form"]!["enum"]![0]!.GetValue<string>() == AiBlockKinds.Choice)!;
+        var choiceFields = choice["properties"]!;
+        forms.Add(new JsonObject
+        {
+            ["type"] = "object",
+            ["properties"] = new JsonObject
+            {
+                ["form"] = choiceFields["form"]!.DeepClone(),
+                ["missing_input"] = choiceFields["missing_input"]!.DeepClone(),
+                ["question"] = choiceFields["question"]!.DeepClone(),
+                [AboutArgument] = new JsonObject
+                {
+                    ["type"] = "array",
+                    ["minItems"] = 2,
+                    ["description"] = "The IDs of the existing habits that fit equally. The server builds one option for each of them.",
+                    ["items"] = new JsonObject { ["type"] = "string" }
+                },
+                [SeveralArgument] = new JsonObject { ["type"] = "boolean", ["description"] = "True when the person can pick more than one record. Null means false." },
+                ["allowFreeText"] = choiceFields["allowFreeText"]!.DeepClone()
+            },
+            ["required"] = new JsonArray("form", "missing_input", "question", AboutArgument)
+        });
+        return schema;
+    }
+
+    public const string AboutArgument = "about";
+    public const string SeveralArgument = "several";
+    private const string ChangePlanMissingInputDescription = "A label for the kind of input you ask for: habit_setup, preference, check_in, record_selection or bulk_selection.";
+
     public object GetParameterSchema(bool hasAccountRead, IReadOnlyList<HabitSetupDraft>? drafts = null)
     {
         var schema = (JsonObject)GetParameterSchema();

@@ -97,6 +97,7 @@ public class WireNameTests
             "astra_follow_ups_disabled", "astra_period_blocks_disabled", "astra_goal_projections_disabled",
             "astra_status_blocks_disabled", "astra_record_lists_disabled", "astra_account_rows_disabled");
         ConstantValues(typeof(FeatureFlagKeys), "orbit_").Should().Equal("orbit_guided_flows");
+        ConstantValues(typeof(FeatureFlagKeys), "ai_").Should().Equal("ai_change_plan");
         ConstantValues(typeof(FeatureFlagKeys), "phrase_").Should().Equal("phrase_reader_ai_disabled");
         ConstantValues(typeof(AppConfigKeys), "Astra").Should().Equal("AstraGroundingEnforce");
     }

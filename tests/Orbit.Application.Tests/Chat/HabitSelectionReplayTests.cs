@@ -741,6 +741,39 @@ public partial class ProcessUserChatCommandHandlerTests
             Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
     }
 
+    /// <summary>
+    /// A read page holds 4 of 6 same-titled records. The delete targets a read record and an unread record, so the
+    /// duplicate guard refuses it. A refused write makes no change, so it covers no part of a split: the rename of
+    /// the other 3 read records leaves one candidate uncovered and waits for the answer.
+    /// </summary>
+    [Theory]
+    [InlineData("delete two of the Water habits and rename three of them to Water - 1.18L", "en")]
+    [InlineData("apague dois dos hábitos Water e renomeie três deles para Water - 1.18L", "pt-BR")]
+    public async Task SelectionReplay_RefusedUnreadDuplicateWriteCoversNoPartOfASplit(string message, string language)
+    {
+        var habits = Enumerable.Range(0, 6).Select(_ => CreateHabit("Water")).ToArray();
+        var ordered = habits.OrderBy(habit => habit.Position).ThenBy(habit => habit.Id).ToArray();
+        var read = new AiToolCall("query_habits", "lookup", JsonSerializer.SerializeToElement(new
+        {
+            for_selection = true,
+            orbit_read_complete = false,
+            limit = 4
+        }));
+
+        var run = await RunSelectionTurnAsync(message, read, language, habits,
+            [DeleteCall(ordered[3..5]), RenameCall(ordered[..3])]);
+
+        run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
+        run.Held.Should().BeEmpty("the reply was: " + run.Result.Value.AiMessage);
+        run.Result.Value.PendingOperations.Should().BeNullOrEmpty();
+        await _aiIntentService.Received().ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
+            Arg.Is<IReadOnlyList<AiToolCallResult>>(results => results.Any(outcome => outcome.Id == "delete" && !outcome.Success
+                    && outcome.Error!.StartsWith("Several targets share a title", StringComparison.Ordinal))
+                && results.Any(outcome => outcome.Id == "rename" && !outcome.Success
+                    && outcome.Error!.StartsWith("Selection is unanswered.", StringComparison.Ordinal))),
+            Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
+    }
+
     private void SetupSelectionHabits(params Habit[] habits) => _habitRepo.FindAsync(
         Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
         Arg.Any<CancellationToken>()).Returns(call => habits.Where(call.ArgAt<Expression<Func<Habit, bool>>>(0).Compile()).ToArray());

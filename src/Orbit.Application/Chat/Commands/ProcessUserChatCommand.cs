@@ -517,47 +517,34 @@ public partial class ProcessUserChatCommandHandler(
             ? null
             : aiStreamFilter.HandleAsync;
 
-        var faqMatch = ChatFaqCache.TryMatchFaqKey(request.Message);
+        var faqMatch = context.Policy.MatchFaq(request);
         var cachedFaqAnswer = await GetGroundedCachedFaqAnswerAsync(faqMatch, groundingTurn, request, composition);
         if (cachedFaqAnswer is not null)
             return Result.Success(ComposeCachedFaq(cachedFaqAnswer, request, composition));
 
-        if (await TryHandlePlacementTurnAsync(request, cancellationToken) is { } placementReply)
-            return placementReply;
-
-        if (await TryHandlePendingParentTurnAsync(request, context, cancellationToken) is { } pendingReply)
-            return pendingReply;
+        if (await context.Policy.RouteMessageAsync(this, request, context, cancellationToken) is { } routeReply)
+            return routeReply;
 
         var aiStopwatch = System.Diagnostics.Stopwatch.StartNew();
         var response = await RequestInitialAiResponseAsync(request, context, aiStreamSink, telemetry, recording, cancellationToken);
         aiStopwatch.Stop();
         LogAiIntentServiceCompleted(logger, aiStopwatch.ElapsedMilliseconds);
 
-        if (await RecoverExplicitHeadingsAsync(request, context, response, null, cancellationToken) is { } recoveredHeadings)
+        if (await context.Policy.RecoverExplicitHeadingsAsync(this, request, context, response, null, cancellationToken) is { } recoveredHeadings)
             return recoveredHeadings;
 
         if (response.IsFailure)
             return response.PropagateError<ChatResponse>();
 
         recording.UsedModel = true;
-        var executionResults = new ToolExecutionAccumulator(recording.OpenPreviewIds)
-        {
-            AnsweredAtUtc = answeredAtUtc,
-            Recording = recording,
-            EvalTrace = evalTrace,
-            Habits = context.ActiveHabits,
-            AllHabits = context.UserHabits,
-            IsTaggingIntent = IsTagOnlyIntent(request.Message),
-            RequiresExistingParent = RequestsExistingParent(request.Message, context.UserHabits),
-            ParentHeadings = HabitHeadingParents.Read(request.Message, context.UserHabits)
-        };
+        var executionResults = NewTurnAccumulator(request, context, recording, evalTrace, answeredAtUtc);
         return await executionResults.Previews.SettleOnExitAsync(AnswerWithToolsAsync, request.UserId,
             execution.PendingOperationStore, execution.UnitOfWork);
 
         async Task<Result<ChatResponse>> AnswerWithToolsAsync()
         {
             SeedAnsweredChoice(recording.ChoiceSelection, context.UserHabits, request.UserId, executionResults);
-            SeedProposedHabitNames(request, executionResults);
+            context.Policy.SeedProposedNames(this, request, executionResults);
             var actionsStopwatch = System.Diagnostics.Stopwatch.StartNew();
             var toolLoopResult = await RunToolCallLoopAsync(
                 response.Value,
@@ -641,6 +628,25 @@ public partial class ProcessUserChatCommandHandler(
                 FollowUpContext: BuildFollowUpContext(request, context, executionResults, followUps))
             { GroundingFacts = facts });
         }
+    }
+
+    /// <summary>The tool accumulator of a turn. The policy of the turn reads the intent of the message.</summary>
+    private static ToolExecutionAccumulator NewTurnAccumulator(ProcessUserChatCommand request, ChatContext context,
+        ChatTurnState recording, ChatEvalTraceCollector? evalTrace, DateTime? answeredAtUtc)
+    {
+        var intent = context.Policy.ReadIntent(request, context);
+        return new ToolExecutionAccumulator(recording.OpenPreviewIds)
+        {
+            AnsweredAtUtc = answeredAtUtc,
+            Recording = recording,
+            EvalTrace = evalTrace,
+            Habits = context.ActiveHabits,
+            AllHabits = context.UserHabits,
+            Policy = context.Policy,
+            IsTaggingIntent = intent.IsTaggingIntent,
+            RequiresExistingParent = intent.RequiresExistingParent,
+            ParentHeadings = intent.ParentHeadings
+        };
     }
 
     private void CaptureMessageAnalytics(Guid userId, string? plan, AiTurnTelemetry telemetry)

@@ -34,6 +34,9 @@ public partial class ProcessUserChatCommandHandler
         public TurnPreviewLedger Previews { get; }
 
         public ChatTurnState? Recording { get; init; }
+
+        /// <summary>The path of the turn (<see cref="ChatContext.Policy"/>).</summary>
+        public TurnPolicy Policy { get; init; } = TurnPolicy.Legacy;
         public SemaphoreSlim PlanGate => _toolStepGate;
         public IReadOnlyList<Orbit.Domain.Entities.Habit> Habits { get; set; } = [];
         public IReadOnlyList<Orbit.Domain.Entities.Habit> AllHabits { get; set; } = [];
