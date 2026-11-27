@@ -1,5 +1,11 @@
 # API memory budget
 
+## Contents
+
+- [Measured owners](#measured-owners)
+- [Selected configuration](#selected-configuration)
+- [Guards](#guards)
+
 The production API has one Render Starter instance with a 512 MiB memory limit and
 half a CPU. The kernel kills the container when the memory that it cannot reclaim
 fills the limit. That memory is the anonymous memory plus the shmem of the process.

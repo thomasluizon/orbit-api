@@ -31,7 +31,7 @@ Each API group receives its own `Ses__TransactionalConfigurationSet`, `Ses__Mark
 
 Each SNS HTTPS subscription keeps failed deliveries for up to 14 days in its own SQS dead-letter queue. The queues are `orbit-ses-events-dead-letter` and `orbit-ses-events-staging-dead-letter`. A CloudWatch alarm on each queue enters ALARM when `ApproximateNumberOfMessagesVisible` reaches one. The alarm publishes to the topic of the same environment, `orbit-ses-dead-letter-alerts` or `orbit-ses-dead-letter-alerts-staging`.
 
-Set `production_ses_dlq_alert_email` and `staging_ses_dlq_alert_email` in the ignored `infra/local.tfvars`. An empty value creates the alarm and the topic without an email recipient. Confirm each subscription from the email that SNS sends. Then check in the SNS console in `us-east-2` that no subscription has the state `PendingConfirmation`.
+Set `production_ses_dlq_alert_email` and `staging_ses_dlq_alert_email` in the ignored `local.tfvars` file in the `infra` folder. An empty value creates the alarm and the topic without an email recipient. Confirm each subscription from the email that SNS sends. Then check in the SNS console in `us-east-2` that no subscription has the state `PendingConfirmation`.
 
 To recover messages, wait until the webhook and the database are healthy. Then do these steps in the same environment as the queue:
 

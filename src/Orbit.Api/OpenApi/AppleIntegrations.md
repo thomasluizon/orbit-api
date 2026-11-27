@@ -1,5 +1,10 @@
 # Apple integrations
 
+## Contents
+
+- [Configuration](#configuration)
+- [Sign-in transport](#sign-in-transport)
+
 All capabilities default to disabled. No Apple credentials are included in the repository.
 
 ## Configuration

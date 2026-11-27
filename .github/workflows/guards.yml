@@ -72,6 +72,10 @@ jobs:
               | xargs -0 --no-run-if-empty node tools/check-dashes.mjs --files
           fi
 
+      - name: Instruction budgets
+        if: ${{ !cancelled() }}
+        run: node tools/check-instructions.mjs
+
       - name: Tool tests
         if: ${{ !cancelled() }}
         run: node --test tools/__tests__/*.test.mjs
