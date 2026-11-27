@@ -29,8 +29,8 @@ public sealed class AccountChangeSetService(IPendingAgentOperationStore store,
         if (members.Length < 2 || members.Any(member => member.RequiresReproposal)) return null;
         if (requireAllMembers && members.Length != operations.Count) return null;
         var arguments = AccountChangeSet.BuildArguments(members);
-        var preview = await AccountChangeSet.PreviewAsync(userId, arguments, previewer, ct, clientContext);
-        if (preview is null) return null;
+        var previewed = await previewer.PreviewAsync(userId, AccountChangeSet.OperationName, arguments, ct, clientContext);
+        if (previewed.IsFailure || previewed.Value is not { Items: { Count: > 0 } } preview) return null;
         var capability = catalog.GetCapability(AccountChangeSet.CapabilityId)
             ?? throw new InvalidOperationException("The account changes capability is missing.");
         capability = capability with

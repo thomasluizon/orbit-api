@@ -15,7 +15,7 @@ public sealed partial class AiApprovalPathTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task Plan_ApprovalReportsActualExecutionOrStalePreviewFailure(bool stale)
+    public async Task Plan_ApprovalReportsActualExecutionAndAStalePreviewLeavesThePlanStep(bool stale)
     {
         var linked = AddHabit("Read");
         var unit = new UnitOfWork(_db, new DatabaseConnectionSettings());
@@ -40,8 +40,8 @@ public sealed partial class AiApprovalPathTests
         var result = await executor.ExecuteAsync(new(_userId, tool.Name, pending.Arguments, AgentExecutionSurface.Chat,
             AgentAuthMethod.Jwt, ConfirmationToken: confirmed.ConfirmationToken));
         result.Operation.Status.Should().Be(stale ? AgentOperationStatus.Denied : AgentOperationStatus.Succeeded);
-        result.Plan.Should().Be(plan);
-        await plans.Received(1).ChangeAsync(_userId, id, status, Arg.Any<CancellationToken>());
+        result.Plan.Should().Be(stale ? null : plan);
+        await plans.Received(stale ? 0 : 1).ChangeAsync(_userId, id, Arg.Any<string>(), Arg.Any<CancellationToken>());
         _db.Goals.Count().Should().Be(stale ? 0 : 1);
     }
 }

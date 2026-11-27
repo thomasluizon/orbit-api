@@ -27,9 +27,15 @@ public sealed class PreviewHabitSuggestionCommandHandler(HabitSuggestionService 
         var result = await executor.ExecuteAsync(new(request.UserId,
             draft.ExistingHabitId.HasValue ? "update_habit" : "create_habit", arguments,
             AgentExecutionSurface.Chat, request.AuthMethod, request.GrantedScopes, request.IsReadOnlyCredential,
-            IncludeChangePreview: true, PreviewOnly: true), ct);
+            IncludeChangePreview: true, PreviewOnly: true, ClientContext: ClientContext(request.Language)), ct);
         return Result.Success(result);
     }
+
+    /// <summary>
+    /// The client context of a habit suggestion preview: the request holds a language and no other client context, so
+    /// the preview values follow that language. A suggestion never creates under a parent, so placement never applies.
+    /// </summary>
+    internal static AgentClientContext ClientContext(string language) => new(Locale: language);
 
     internal static JsonElement Arguments(HabitSuggestionDraft draft, Habit? target)
     {

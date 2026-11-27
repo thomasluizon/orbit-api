@@ -25,6 +25,7 @@ public partial class AgentOperationExecutor(
     ILogger<AgentOperationExecutor> logger, ReadBlockFactory? readBlocks = null, IConversationPlanStore? plans = null) : IAgentOperationExecutor, Orbit.Application.Chat.Commands.IAgentMutationRunner
 {
     private const string UnknownOperationCapabilityId = "unknown";
+    private const string StalePreviewReason = AgentPolicyReasons.StalePreview;
     private static readonly JsonElement EmptyArguments = JsonDocument.Parse("{}").RootElement.Clone();
 
     public async Task<AgentExecuteOperationResponse> ExecuteAsync(
@@ -36,10 +37,11 @@ public partial class AgentOperationExecutor(
         var pending = request.ConfirmationToken is { } token && operation is { IsMutation: true }
             ? pendingOperationStore.GetConfirmedExecution(request.UserId, operation.CapabilityId,
                 AgentOperationFingerprint.Compute(operation.Id, arguments.GetRawText()), token) : null;
-        var response = await ExecuteCoreAsync(request, cancellationToken);
-        if (pending is not null)
-            RecordExecution(request.UserId, pending.PendingOperationId, response.Operation);
-        if (pending is not null && plans is not null)
+        var response = await ExecuteCoreAsync(request, pending is not null, cancellationToken);
+        if (pending is null || AgentPolicyReasons.IsStalePreview(response.Operation))
+            return response;
+        RecordExecution(request.UserId, pending.PendingOperationId, response.Operation);
+        if (plans is not null)
         {
             var succeeded = response.Operation.Status == AgentOperationStatus.Succeeded && !IsPartialMutation(response.Operation.Payload);
             await TryAuditAsync(new AuditContext(request with { OperationId = ConversationPlanUpdates.ExecutionAuditSource },
@@ -70,6 +72,7 @@ public partial class AgentOperationExecutor(
 
     private async Task<AgentExecuteOperationResponse> ExecuteCoreAsync(
         AgentExecuteOperationRequest request,
+        bool confirmsStoredOperation,
         CancellationToken cancellationToken)
     {
         var arguments = request.Arguments.ValueKind == JsonValueKind.Undefined
@@ -80,12 +83,16 @@ public partial class AgentOperationExecutor(
         if (operation is null)
             return await DenyUnknownOperationAsync(request, arguments);
 
-        var offerArguments = await PrepareOfferArgumentsAsync(request, operation, arguments, cancellationToken);
+        var offerArguments = await PrepareOfferArgumentsAsync(request, operation, arguments, confirmsStoredOperation, cancellationToken);
         if (offerArguments.IsFailure)
             return new RepairableArgumentResponse(new(new(operation.Id, operation.Id, operation.RiskClass,
                 operation.ConfirmationRequirement, AgentOperationStatus.Failed, PolicyReason: offerArguments.Error,
                 ErrorCode: offerArguments.ErrorCode, Access: "write")));
-        arguments = offerArguments.Value;
+        var offerChangedStoredArguments = confirmsStoredOperation
+            && AgentOperationFingerprint.Compute(operation.Id, offerArguments.Value.GetRawText())
+                != AgentOperationFingerprint.Compute(operation.Id, arguments.GetRawText());
+        if (!offerChangedStoredArguments)
+            arguments = offerArguments.Value;
 
         var declaredCapability = catalogService.GetCapability(operation.CapabilityId)
             ?? throw new InvalidOperationException($"Operation '{operation.Id}' is mapped to an unknown capability '{operation.CapabilityId}'.");
@@ -131,33 +138,46 @@ public partial class AgentOperationExecutor(
             return await DenyByPolicyAsync(execution, new AgentPolicyDecision(
                 AgentPolicyDecisionStatus.Denied, capability, "placement_not_supported"));
 
-        if (operation.IsMutation && request.ConfirmationToken is { } token)
-        {
-            var confirmed = pendingOperationStore.GetConfirmedExecution(request.UserId, capability.Id,
-                AgentOperationFingerprint.Compute(operation.Id, arguments.GetRawText()), token);
-            if (confirmed?.RequiresReproposal == true)
-                return await DenyByPolicyAsync(execution, new AgentPolicyDecision(
-                    AgentPolicyDecisionStatus.Denied, capability, "pending_operation_schema_changed"));
-            if (confirmed is not null && request.Surface == AgentExecutionSurface.Chat)
-            {
-                var current = await changePreviewer.TryPreviewAsync(request.UserId, operation.Id,
-                    arguments, logger, cancellationToken, request.ClientContext);
-                if (string.IsNullOrWhiteSpace(confirmed.PreviewFingerprint) || current.IsFailure
-                    || current.Value?.Items is not { Count: > 0 }
-                    || current.Value.PreviewFingerprint != confirmed.PreviewFingerprint)
-                    return await DenyByPolicyAsync(execution, new AgentPolicyDecision(
-                        AgentPolicyDecisionStatus.Denied, capability, "stale_preview"));
-            }
-        }
+        if (operation.IsMutation && request.ConfirmationToken is { } token
+            && await ConfirmationDenialAsync(execution, token, offerChangedStoredArguments, cancellationToken) is { } denial)
+            return await DenyByPolicyAsync(execution, new AgentPolicyDecision(AgentPolicyDecisionStatus.Denied, capability, denial));
         return await ExecuteWithPolicyAsync(execution, cancellationToken);
     }
 
+    /// <summary>
+    /// Checks the operation that a confirmation token confirms. An approval is stale when the offer refresh changed the
+    /// stored arguments, when the execute route sends a token that confirms no stored operation, or when the preview
+    /// that the person approved is no longer current.
+    /// </summary>
+    private async Task<string?> ConfirmationDenialAsync(OperationExecutionContext execution, string token,
+        bool offerChangedStoredArguments, CancellationToken cancellationToken)
+    {
+        var request = execution.Request;
+        var confirmed = pendingOperationStore.GetConfirmedExecution(request.UserId, execution.Capability.Id,
+            AgentOperationFingerprint.Compute(execution.Operation.Id, execution.Arguments.GetRawText()), token);
+        if (offerChangedStoredArguments || confirmed is null && request.RequiresConfirmedOperation)
+            return StalePreviewReason;
+        if (confirmed?.RequiresReproposal == true)
+            return "pending_operation_schema_changed";
+        if (confirmed is null || request.Surface != AgentExecutionSurface.Chat)
+            return null;
+        var current = await changePreviewer.TryPreviewAsync(request.UserId, execution.Operation.Id,
+            execution.Arguments, logger, cancellationToken, request.ClientContext);
+        return string.IsNullOrWhiteSpace(confirmed.PreviewFingerprint) || current.IsFailure
+            || current.Value?.Items is not { Count: > 0 }
+            || current.Value.PreviewFingerprint != confirmed.PreviewFingerprint ? StalePreviewReason : null;
+    }
+
+    /// <summary>
+    /// Prepares the offer data of the arguments. A bind captures the requested fields of a create; an approval of a
+    /// stored operation captures nothing, and the caller turns it down when the offer refresh changes its arguments.
+    /// </summary>
     private async Task<Result<JsonElement>> PrepareOfferArgumentsAsync(AgentExecuteOperationRequest request,
-        AgentOperation operation, JsonElement arguments, CancellationToken ct)
+        AgentOperation operation, JsonElement arguments, bool confirmsStoredOperation, CancellationToken ct)
     {
         var createsDraft = operation.Id is "create_habit" or "bulk_create_habits" or "create_sub_habit"
             or "create_goal" or "create_checklist_template";
-        var captureRequestedFields = createsDraft && ProactiveProposal.Enabled(request.ClientContext);
+        var captureRequestedFields = createsDraft && !confirmsStoredOperation && ProactiveProposal.Enabled(request.ClientContext);
         if (!operation.IsMutation || (!ProactiveProposal.Contains(arguments) && !captureRequestedFields)) return Result.Success(arguments);
         var offered = await changePreviewer.PreviewAsync(request.UserId, operation.Id, arguments, ct, request.ClientContext);
         if (offered.IsFailure)

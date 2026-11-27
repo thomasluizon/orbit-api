@@ -66,7 +66,7 @@ public partial class ProcessUserChatCommandHandlerTests
         var handler = CreateHandler(create, RealAskTool());
         var title = language == "en" ? "Walking habit" : "Hábito de caminhada";
         _pendingClarificationStore.CreateAsync(UserId, create.Name, Arg.Any<string>(), Arg.Any<string>(),
-            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(Guid.NewGuid());
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>(), Arg.Any<AgentClientContext?>()).Returns(Guid.NewGuid());
         SetupAiResponse(ToolResponse(create.Name, "new-draft", JsonSerializer.Serialize(new { title })) with { ConversationContext = new() });
         var rounds = 0;
         _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
@@ -150,7 +150,7 @@ public partial class ProcessUserChatCommandHandlerTests
         var clarificationId = Guid.NewGuid();
         PendingClarificationData? pending = null;
         _pendingClarificationStore.CreateAsync(UserId, "create_habit", Arg.Any<string>(), "frequency_unit",
-                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>(), Arg.Any<AgentClientContext?>())
             .Returns(call =>
             {
                 var actions = JsonSerializer.Deserialize<QuickAction[]>(call.ArgAt<string>(5))!;

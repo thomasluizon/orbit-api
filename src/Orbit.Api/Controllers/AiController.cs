@@ -352,7 +352,16 @@ public class AiController(
             HttpContext.User.GetGrantedAgentScopes(),
             HttpContext.User.IsReadOnlyCredential(),
             request.ConfirmationToken,
-            HttpContext.TraceIdentifier, ClientContext: request.ClientContext), cancellationToken);
+            HttpContext.TraceIdentifier, ClientContext: request.ClientContext)
+        {
+            RequiresConfirmedOperation = true
+        }, cancellationToken);
+
+        if (AgentPolicyReasons.IsStalePreview(result.Operation))
+        {
+            LogPendingRejection(id, pendingExecution.OperationId, AgentPolicyReasons.StalePreview);
+            return Conflict(new { error = AgentPolicyReasons.StalePreview });
+        }
 
         return Ok(result);
     }
@@ -495,7 +504,8 @@ public class AiController(
             HttpContext.User.IsReadOnlyCredential(),
             ConfirmationToken: null,
             HttpContext.TraceIdentifier,
-            IncludeChangePreview: true), cancellationToken);
+            IncludeChangePreview: true,
+            ClientContext: pending.ClientContext), cancellationToken);
 
         await RecordResolveAuditAsync(
             userId,

@@ -3556,7 +3556,8 @@ public partial class ProcessUserChatCommandHandlerTests
                 "frequency_unit",
                 clarification.Question,
                 Arg.Any<string>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<AgentClientContext?>())
             .Returns(clarificationId);
         SetupAiResponse(ToolResponse("create_habit", "call_1", """{"title":"Hábito de correr"}"""));
         _aiIntentService.ContinueWithToolResultsAsync(

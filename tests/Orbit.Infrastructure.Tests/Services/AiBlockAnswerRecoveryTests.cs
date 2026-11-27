@@ -247,6 +247,9 @@ public class AiBlockAnswerRecoveryTests
         await quota.DidNotReceiveWithAnyArgs().TryConsumeAiMessage(default, default!, default);
         await executor.DidNotReceiveWithAnyArgs().ExecuteAsync(default!, default);
 
+        executor.ExecuteAsync(Arg.Any<AgentExecuteOperationRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new AgentExecuteOperationResponse(new AgentOperationResult(execution.OperationId, execution.OperationId,
+                AgentRiskClass.Low, AgentConfirmationRequirement.FreshConfirmation, AgentOperationStatus.Succeeded)));
         var controller = new AiController(new AgentCatalogService(), Substitute.For<IAgentPolicyEvaluator>(),
             new AgentPendingStores(pending, Substitute.For<IPendingClarificationStore>()),
             Substitute.For<IAgentStepUpService>(), Substitute.For<IAgentAuditService>(), executor, revisions,

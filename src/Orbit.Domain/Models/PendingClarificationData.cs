@@ -5,4 +5,5 @@ public record PendingClarificationData(
     string PartialArgumentsJson,
     string MissingArgumentKey,
     IReadOnlyList<string> AllowedValues,
-    DateTime ExpiresAtUtc);
+    DateTime ExpiresAtUtc,
+    AgentClientContext? ClientContext = null);

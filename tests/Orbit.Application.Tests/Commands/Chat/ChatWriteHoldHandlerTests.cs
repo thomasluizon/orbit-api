@@ -533,15 +533,19 @@ public sealed partial class ChatWriteHoldHandlerTests : IDisposable
     {
         ScriptToolCall("""{"title":"Rotina da manha"}""");
 
+        var clientContext = new AgentClientContext(SupportsPendingOperationChanges: true, Locale: "pt-BR");
+
         var result = await CreateHandler().Handle(new ProcessUserChatCommand(
-            _userId, "Crie a rotina da manha", ClientContext: new AgentClientContext(
-                SupportsPendingOperationChanges: true)), CancellationToken.None);
+            _userId, "Crie a rotina da manha", ClientContext: clientContext), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.PendingOperations.Should().BeNullOrEmpty();
         await _clarificationStore.Received(1).CreateAsync(_userId, "create_habit",
             Arg.Any<string>(), "frequency_unit", Arg.Any<string>(), Arg.Any<string>(),
-            Arg.Any<CancellationToken>());
+            Arg.Any<CancellationToken>(),
+            Arg.Is<AgentClientContext?>(stashed => stashed != null
+                && stashed.Locale == clientContext.Locale
+                && stashed.SupportsPendingOperationChanges == true));
         await _habitRepo.DidNotReceiveWithAnyArgs().AddAsync(default!, default);
     }
 
