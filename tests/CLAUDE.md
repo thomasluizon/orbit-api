@@ -2,7 +2,6 @@
 
 ## Rules
 
-- A handler test uses the real Application and Domain code. It mocks only the Infrastructure ports with NSubstitute.
 - A relational query-shape test builds its context with `SqliteOrbitDbContextFactory`.
 - A test that needs Postgres behavior uses `Orbit.Infrastructure.Tests/Persistence/PostgresTestDatabase.cs`.
 - `Orbit.Infrastructure.Tests/Persistence/QueryRoundTripCountTests.cs` guards against N+1 queries. It builds the context with `SqliteOrbitDbContextFactory` and a `CountingDbCommandInterceptor`. It seeds a small and a large row set. It asserts that the command count does not change with the row count. Copy this pattern for a new query-shape test.
