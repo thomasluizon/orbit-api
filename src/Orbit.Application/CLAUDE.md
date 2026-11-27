@@ -14,7 +14,6 @@ Each handler returns `Result<T>` from `Orbit.Domain/Common/`. Do not throw for a
 
 - Put each FluentValidation validator in the `Validators/` folder of its feature. The MediatR pipeline runs it.
 - Put a rule that Create and Update share in a shared rule class, for example `Habits/Validators/SharedHabitRules.cs`.
-- Validate each edge case: date and time ranges, numeric bounds, required fields, and fields that exclude each other. A frontend check does not count.
 
 ## Schedule
 
