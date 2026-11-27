@@ -1,8 +1,11 @@
 using Orbit.Application.Chat;
 using Orbit.Application.Chat.FeatureExplanations;
+using Orbit.Application.Chat.References;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Application.Goals.Services;
+using Microsoft.Extensions.Options;
+using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.AI;
 using Orbit.Infrastructure.Configuration;
@@ -26,6 +29,11 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<BudgetedAiCompletionClient>();
         builder.Services.AddScoped<IAudioTranscriptionService, AudioTranscriptionService>();
         builder.Services.AddScoped<IAiIntentService, AiIntentService>();
+        builder.Services.AddScoped(sp => new ChatReferenceDependencies(
+            sp.GetRequiredService<IOptions<AiSettings>>().Value.ShortReferences,
+            sp.GetRequiredService<IGenericRepository<Notification>>(),
+            sp.GetRequiredService<IGenericRepository<ApiKey>>(),
+            sp.GetRequiredService<IGenericRepository<HabitSkipUndo>>()));
         builder.Services.AddScoped<IHabitEmojiInferenceService, AiHabitEmojiInferenceService>();
         builder.Services.AddScoped<ISummaryService, AiSummaryService>();
         builder.Services.AddScoped<IRescheduleSuggestionService, AiRescheduleSuggestionService>();

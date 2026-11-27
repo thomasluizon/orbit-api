@@ -10,6 +10,7 @@ using Orbit.Application.Common;
 using Orbit.Application.Tests.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 
@@ -32,9 +33,14 @@ public partial class ProcessUserChatCommandHandlerTests
         return $"{text[..8]}-{text[9..12]}-{text[14..18]}-{text[19..23]}-{text[24..27]}";
     }
 
+    /// <summary>
+    /// The rename of run 4. The cut id of run 4 now resolves by its first 8 digits at the chat boundary (#2154), so the
+    /// second id is the one character off in its first group: it names no record of the person, the boundary turns the
+    /// rename down with <c>unknown_reference</c>, and it is still a copy of exactly one habit.
+    /// </summary>
     private static AiToolCall Run4Rename(Habit[] children) => new("bulk_update_habits", "rename", JsonSerializer.SerializeToElement(new
     {
-        filter = new { all = false, habit_ids = new[] { children[0].Id.ToString(), CutShort(children[1].Id) }, is_completed = false },
+        filter = new { all = false, habit_ids = new[] { children[0].Id.ToString(), OneCharacterOff(children[1].Id) }, is_completed = false },
         updates = new { title = RenameTitle }
     }));
 
@@ -98,7 +104,7 @@ public partial class ProcessUserChatCommandHandlerTests
     /// </summary>
     private async Task<DeniedWriteRun> RunDeniedAnswerTurnAsync(string language, Func<Habit[], AiResponse[]> continuations,
         Action<Habit[]>? arrange = null, Func<Habit[], AiResponse>? first = null, Task<Result<AiResponse>>? lastReply = null,
-        IAiTool[]? tools = null)
+        IAiTool[]? tools = null, bool denyUnowned = true)
     {
         var user = User.Create("Reader", "reader@example.test").Value;
         user.SetLanguage(language);
@@ -109,7 +115,8 @@ public partial class ProcessUserChatCommandHandlerTests
         var update = new BulkUpdateHabitsTool(_mediator);
         var handler = CreateHandler([delete, update, .. tools ?? []]);
         var held = HoldReplayWrites([delete, update, .. (tools ?? []).Where(tool => !tool.IsReadOnly)]);
-        DenyUnownedHabitTargets([parent, .. children]);
+        if (denyUnowned)
+            DenyUnownedHabitTargets([parent, .. children]);
         var block = RetryBlock(RecordQuestion(children, language == "en"
             ? "There are 6 Water - 710ml, not 7. Which two do you want to delete?"
             : "Há 6 Water - 710ml, não 7. Quais dois você quer excluir?"));
@@ -146,7 +153,7 @@ public partial class ProcessUserChatCommandHandlerTests
         run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
         var denied = run.ToolResults.Should().NotBeEmpty().And.Subject.First().Should().ContainSingle(result => result.Id == "rename").Subject;
         denied.Success.Should().BeFalse();
-        denied.Error.Should().Contain(CutShort(run.Children[1].Id)).And.Contain("validated choice selection")
+        denied.Error.Should().Contain(OneCharacterOff(run.Children[1].Id)).And.Contain("unknown_reference")
             .And.NotBe("Policy denied: target_not_owned:bulk_update_habits:habit");
         JsonSerializer.Serialize(denied.Payload).Should().Contain("correction_allowed");
         var items = run.Result.Value.PendingOperations.Should().NotBeNullOrEmpty().And.Subject
@@ -251,15 +258,19 @@ public partial class ProcessUserChatCommandHandlerTests
     /// </summary>
     private async Task<DeniedWriteRun> RunRequestTurnAsync(string language, string message, Func<Habit[], AiResponse> first,
         Func<Habit[], AiResponse[]> continuations, Action<Habit[]>? arrange = null, string? confirmationToken = null,
-        Task<Result<AiResponse>>? lastReply = null)
+        Task<Result<AiResponse>>? lastReply = null, Habit[]? foreign = null, Guid[]? childIds = null, Guid? parentId = null)
     {
         var user = User.Create("Reader", "reader@example.test").Value;
         user.SetLanguage(language);
         SetupUserAndPayGate(user);
         var parent = CreateHabit("Water");
         var children = Enumerable.Range(1, 6).Select(index => CreateHabit($"Water {index}")).ToArray();
+        if (parentId is { } fixedParent)
+            WithFixedId(parent, fixedParent);
         foreach (var child in children) child.SetParentHabitId(parent.Id);
-        SetupSelectionHabits([parent, .. children]);
+        for (var index = 0; index < (childIds?.Length ?? 0); index++)
+            WithFixedId(children[index], childIds![index]);
+        SetupSelectionHabits([parent, .. children, .. foreign ?? []]);
         var delete = new BulkDeleteHabitsTool(_mediator, _habitRepo);
         var update = new BulkUpdateHabitsTool(_mediator);
         var updateOne = new UpdateHabitTool(_habitRepo, _userDateService, _mediator);
@@ -307,7 +318,7 @@ public partial class ProcessUserChatCommandHandlerTests
 
         corrected.Result.IsSuccess.Should().BeTrue(corrected.Result.Error);
         corrected.ToolResults[0].Should().ContainSingle(result => !result.Success).Which.Error
-            .Should().Contain(form == "bulk" ? CutShort(corrected.Children[1].Id) : OneCharacterOff(corrected.Children[1].Id));
+            .Should().Contain(OneCharacterOff(corrected.Children[1].Id));
         corrected.Result.Value.PendingOperations!.SelectMany(operation => operation.Items!).Select(item => item.EntityId)
             .Should().BeEquivalentTo(corrected.Children.Select(child => child.Id));
 
@@ -367,19 +378,24 @@ public partial class ProcessUserChatCommandHandlerTests
     [InlineData("pt-BR")]
     public async Task DeniedWrite_AForeignIdGetsTheSameTextAsAnIdThatDoesNotExist(string language)
     {
-        var foreign = Guid.NewGuid();
-        var missing = Guid.NewGuid();
+        var foreign = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, Guid.NewGuid(), "Water 7", null, null,
+            DueDate: Today)).Value;
         string ErrorFor(DeniedWriteRun run) => run.ToolResults[0].Single(result => !result.Success).Error!;
         AiToolCall Rename(Guid id) => new("update_habit", "rename-one",
             JsonSerializer.SerializeToElement(new { habit_id = id, title = RenameTitle }));
+        AiResponse First(Habit[] children) => Calls(Run4Delete(children), Rename(foreign.Id));
+        Guid[] ids = [.. Enumerable.Range(0, 6).Select(_ => Guid.NewGuid())];
+        var parentId = Guid.NewGuid();
 
-        var foreignRun = await RunDeniedRequestTurnAsync(language, _ => Rename(foreign), _ => [Text(language), Text(language)]);
-        var missingRun = await RunDeniedRequestTurnAsync(language, _ => Rename(missing), _ => [Text(language), Text(language)]);
+        var foreignRun = await RunRequestTurnAsync(language, RequestMessage(language), First, _ => [Text(language), Text(language)],
+            foreign: [foreign], childIds: ids, parentId: parentId);
+        var missingRun = await RunRequestTurnAsync(language, RequestMessage(language), First, _ => [Text(language), Text(language)],
+            childIds: ids, parentId: parentId);
 
-        ErrorFor(foreignRun).Replace(foreign.ToString(), "ID").Should().Be(ErrorFor(missingRun).Replace(missing.ToString(), "ID"));
-        ErrorFor(foreignRun).Should().Contain(foreign.ToString()).And.Contain("not IDs of this person's records");
+        ErrorFor(foreignRun).Should().Be(ErrorFor(missingRun), "the record of another account changes nothing in the text");
+        ErrorFor(foreignRun).Should().Contain(foreign.Id.ToString()).And.Contain("unknown_reference").And.NotContain(foreign.Title);
         foreignRun.Result.Value.Operations.Should().ContainSingle(operation => operation.Status == AgentOperationStatus.Denied)
-            .Which.PolicyReason.Should().Be("target_not_owned:update_habit:habit");
+            .Which.PolicyReason.Should().Be("unknown_reference:update_habit:habit");
     }
 
     /// <summary>
@@ -871,11 +887,14 @@ public partial class ProcessUserChatCommandHandlerTests
         updates = new { title = RenameTitle }
     }));
 
-    /// <summary>The id with one hex digit changed, the way a copy goes one character off.</summary>
+    /// <summary>
+    /// The id with one hex digit of its first group changed, the way a copy goes one character off. A digit after the
+    /// first group would resolve at the chat boundary (#2154), so the changed digit is in the first group.
+    /// </summary>
     private static string OneCharacterOff(Guid id)
     {
         var text = id.ToString();
-        return text[..10] + (text[10] == 'a' ? 'b' : 'a') + text[11..];
+        return text[..3] + (text[3] == 'a' ? 'b' : 'a') + text[4..];
     }
 
     /// <summary>
@@ -927,7 +946,7 @@ public partial class ProcessUserChatCommandHandlerTests
     {
         var run = await RunRequestTurnAsync(language, SameRenameMessage(language),
             children => Calls(BulkRename("rename-one", CutShort(children[0].Id))),
-            children => [Calls(Rename("rename-two", children[1].Id.ToString())), Text(language), Text(language)]);
+            children => [Calls(Rename("rename-two", children[1].Id.ToString())), Text(language), Text(language)], childIds: CollidingIds());
 
         run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
         run.Result.Value.PendingOperations.Should().BeNullOrEmpty("a preview with only Water 2 holds half of the request");
@@ -947,7 +966,7 @@ public partial class ProcessUserChatCommandHandlerTests
     {
         var run = await RunRequestTurnAsync(language, RenameOneMessage(language),
             children => Calls(BulkRename("rename-one", copy == "cut" ? CutShort(children[0].Id) : OneCharacterOff(children[0].Id))),
-            children => [Calls(RenameFirst(children)), Text(language)]);
+            children => [Calls(RenameFirst(children)), Text(language)], childIds: copy == "cut" ? CollidingIds() : null);
 
         run.Result.IsSuccess.Should().BeTrue(run.Result.Error);
         run.Result.Value.AiMessage.Should().NotBe(ToolFailureFor(language)).And.NotBe(NotPreparedFor(language));

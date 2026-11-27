@@ -207,7 +207,7 @@ public partial class ProcessUserChatCommandHandlerTests
         var handler = CreateHandler(tool);
         UseProductionReadExecutor(tool);
         SetupAiResponse(ToolResponse(tool.Name, "history", JsonSerializer.Serialize(new
-        { habit_id = Guid.NewGuid(), date_from = day.ToString("yyyy-MM-dd"), date_to = Today.ToString("yyyy-MM-dd") })));
+        { habit_id = OwnedHabitId(), date_from = day.ToString("yyyy-MM-dd"), date_to = Today.ToString("yyyy-MM-dd") })));
         ContinueWithReadDirective("[[orbit:read:history]]");
 
         var result = await handler.Handle(new(UserId, "Show history", ClientContext: new(

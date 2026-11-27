@@ -34,7 +34,7 @@ public partial class ProcessUserChatCommandHandler
         if (conversation is null)
             return new ToolRoundResult(MessageResponse(language));
         ct.ThrowIfCancellationRequested();
-        var continued = await ai.IntentService.ContinueWithToolResultsAsync(conversation, plans, streamSink, ct);
+        var continued = await Model.ContinueWithToolResultsAsync(conversation, plans, streamSink, ct);
         if (continued.IsSuccess)
             return new ToolRoundResult(continued.Value);
         LogContinueWithToolResultsFailed(logger, continued.Error);

@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using System.Text.Json;
 using FluentAssertions;
 using NSubstitute;
@@ -10,6 +11,7 @@ using Orbit.Application.ChecklistTemplates.Commands;
 using Orbit.Application.Common;
 using Orbit.Application.Profile.Commands;
 using Orbit.Domain.Common;
+using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 
@@ -80,10 +82,13 @@ public partial class ProcessUserChatCommandHandlerTests
         _mediator.Send(Arg.Any<UpdateChecklistTemplateCommand>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
         _mediator.Send(Arg.Any<SetNameCommand>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
         _mediator.Send(Arg.Any<SetSelectedCalendarsCommand>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
+        var template = ChecklistTemplate.Create(UserId, "Travel", ["Passport"]).Value;
+        _checklistTemplateRepo.FindAsync(Arg.Any<Expression<Func<ChecklistTemplate, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns([template]);
         (IAiTool tool, JsonElement arguments) = toolName switch
         {
             "update_checklist_template" => ((IAiTool)new UpdateChecklistTemplateTool(_mediator),
-                JsonSerializer.SerializeToElement(new { template_id = Guid.NewGuid(), name = "Packing", items = new[] { "Passport" } })),
+                JsonSerializer.SerializeToElement(new { template_id = template.Id, name = "Packing", items = new[] { "Passport" } })),
             "update_profile_preferences" => ((IAiTool)new UpdateProfilePreferencesTool(_mediator),
                 JsonSerializer.SerializeToElement(new { action = "set_name", name = "Eval Account" })),
             _ => ((IAiTool)new ManageCalendarSyncTool(_mediator),

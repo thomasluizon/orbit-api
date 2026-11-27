@@ -10,6 +10,7 @@ using Orbit.Application.Calendar.Queries;
 using Orbit.Application.Chat;
 using Orbit.Application.Chat.Commands;
 using Orbit.Application.Chat.Models;
+using Orbit.Application.Chat.References;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Tools.Implementations;
 using System.Text.RegularExpressions;
@@ -38,6 +39,12 @@ public partial class ProcessUserChatCommandHandlerTests
     private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
     private readonly IGenericRepository<Tag> _tagRepo = Substitute.For<IGenericRepository<Tag>>();
     private readonly IGenericRepository<ChecklistTemplate> _checklistTemplateRepo = Substitute.For<IGenericRepository<ChecklistTemplate>>();
+    private readonly IGenericRepository<Notification> _notificationRepo = Substitute.For<IGenericRepository<Notification>>();
+    private readonly IGenericRepository<ApiKey> _apiKeyRepo = Substitute.For<IGenericRepository<ApiKey>>();
+    private readonly IGenericRepository<HabitSkipUndo> _skipRepo = Substitute.For<IGenericRepository<HabitSkipUndo>>();
+
+    /// <summary>The setting <c>AI:ShortReferences</c> of the handler that <see cref="CreateHandler(IAiTool[])"/> builds.</summary>
+    private bool _shortReferences;
     private readonly IFeatureFlagService _featureFlagService = Substitute.For<IFeatureFlagService>();
     private readonly IAiIntentService _aiIntentService = Substitute.For<IAiIntentService>();
     private readonly ISystemPromptBuilder _promptBuilder = Substitute.For<ISystemPromptBuilder>();
@@ -202,7 +209,8 @@ public partial class ProcessUserChatCommandHandlerTests
             _scheduleLogReader, _blockStore, _pendingOperationStore);
 
         return new ProcessUserChatCommandHandler(
-            dataDeps, aiDeps, executionDeps, _logger, _appConfig, _moderation, _conversationRecorder, timeProvider: _turnClock, offerStore: _offers);
+            dataDeps, aiDeps, executionDeps, _logger, _appConfig, _moderation, _conversationRecorder, timeProvider: _turnClock, offerStore: _offers,
+            references: new ChatReferenceDependencies(_shortReferences, _notificationRepo, _apiKeyRepo, _skipRepo));
     }
 
     public ProcessUserChatCommandHandlerTests()
@@ -3913,7 +3921,9 @@ public partial class ProcessUserChatCommandHandlerTests
         updateTool.IsReadOnly.Returns(false);
         updateTool.GetParameterSchema().Returns(new { type = "object" });
         var handler = CreateHandler(updateTool);
-        var args = ParseArguments("""{"habit_id":"00000000-0000-0000-0000-000000000001"}""");
+        var habit = CreateHabit("Water");
+        SetupSelectionHabits(habit);
+        var args = JsonSerializer.SerializeToElement(new { habit_id = habit.Id });
         SetupAiResponse(new AiResponse
         {
             ToolCalls =

@@ -24,6 +24,13 @@ The equivalence test applies these steps before it compares the schemas:
 
 The unbounded provider schema admits deeper shapes. The server check rejects them. The command handlers also check the configured depth against the existing parents.
 
+The short references of thomasluizon/orbit-tickets#2154 change the description of each typed ID
+argument in the chat declarations: the word `ID` or `GUID` becomes `reference`, and `IDs` or
+`GUIDs` becomes `references`. The amendment applies that same rule (`ReferenceArguments.NameReferences`)
+at 114 existing description sites of the legacy, composition and offer streams. The `source/`
+entries keep their descriptions, because MCP reads the tool classes. Every type, constraint,
+enum, required entry and inlined structure is retained.
+
 ## Regenerate the inlined fixture
 
 Run this from the repository root. The exporter does not depend on the compactor, so the command copies it into the pinned source tree. The temporary tree is an offline build checkout. It does not start a server.

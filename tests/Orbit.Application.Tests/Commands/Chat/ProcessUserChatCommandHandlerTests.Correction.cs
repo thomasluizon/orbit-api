@@ -1,3 +1,4 @@
+using Orbit.Application.Chat.References;
 using System.Text.Json;
 using FluentAssertions;
 using FluentAssertions.Execution;
@@ -107,6 +108,7 @@ public partial class ProcessUserChatCommandHandlerTests
         using var context = new HeldWriteTestContext();
         var notification = Notification.Create(UserId, "First", "Body");
         context.Records.Add(notification);
+        OwnRecords(_notificationRepo, record => new ReferenceRecord(record.Id, record.Title), notification);
         original = original.Replace(RecoveryNotificationId, notification.Id.ToString(), StringComparison.Ordinal);
         var name = ((IAiTool)System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(toolType)).Name;
         var real = (IPreparedIntentTool)context.Tool(name);
@@ -134,6 +136,7 @@ public partial class ProcessUserChatCommandHandlerTests
         var first = Notification.Create(UserId, "First", "Body");
         var second = Notification.Create(UserId, "Second", "Body");
         context.Records.AddRange([first, second]);
+        OwnRecords(_notificationRepo, record => new ReferenceRecord(record.Id, record.Title), first, second);
         await AssertCertifiedCandidateRefused((IPreparedIntentTool)context.Tool("update_notifications"),
             JsonSerializer.Serialize(new { action = "mark_read", notification_id = first.Id }),
             JsonSerializer.Serialize(new { action = "mark_read", notification_id = second.Id }));
@@ -296,6 +299,7 @@ public partial class ProcessUserChatCommandHandlerTests
         var first = Notification.Create(UserId, "First", "Body");
         var second = Notification.Create(UserId, "Second", "Body");
         context.Records.AddRange([first, second]);
+        OwnRecords(_notificationRepo, record => new ReferenceRecord(record.Id, record.Title), first, second);
         var owner = new DeleteNotificationCommandHandler(context.Repository<Notification>(), context.UnitOfWork);
         context.Mediator.Send(Arg.Any<DeleteNotificationCommand>(), Arg.Any<CancellationToken>()).Returns(async call =>
         {

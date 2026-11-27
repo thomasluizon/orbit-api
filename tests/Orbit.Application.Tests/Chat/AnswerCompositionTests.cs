@@ -53,7 +53,7 @@ public partial class ProcessUserChatCommandHandlerTests
             var handler = CreateHandler(tool);
             UseProductionReadExecutor(tool);
             SetupAiResponse(ToolResponse(toolName, "family", JsonSerializer.Serialize(new
-            { orbit_read_complete = true, habit_id = Guid.NewGuid(), date_from = Today.AddDays(-6).ToString("yyyy-MM-dd"), date_to = Today.ToString("yyyy-MM-dd") })));
+            { orbit_read_complete = true, habit_id = OwnedHabitId(), date_from = Today.AddDays(-6).ToString("yyyy-MM-dd"), date_to = Today.ToString("yyyy-MM-dd") })));
             ContinueWithReadDirective("Model prose before the answer.\n[[orbit:read:family]]");
             var client = new AgentClientContext(SupportsParts: mode != "legacy",
                 PartKinds: mode == "missing" ? ["unknown"] : [kind],
@@ -325,8 +325,7 @@ public partial class ProcessUserChatCommandHandlerTests
     {
         SetupUserAndPayGate();
         EnableComposition();
-        var first = Guid.NewGuid();
-        var second = Guid.NewGuid();
+        var (first, second) = OwnedHabitIds();
         var tool = ScopedCompositionTool(toolName);
         var handler = CreateHandler(tool);
         UseProductionReadExecutor(tool);
@@ -405,7 +404,7 @@ public partial class ProcessUserChatCommandHandlerTests
     {
         SetupUserAndPayGate();
         EnableComposition();
-        var id = Guid.NewGuid();
+        var id = OwnedHabitId();
         var tool = ScopedCompositionTool(toolName);
         var handler = CreateHandler(tool);
         UseProductionReadExecutor(tool);
@@ -576,6 +575,21 @@ public partial class ProcessUserChatCommandHandlerTests
         events.Add(ChatStreamEvent.Final(result));
         events.Last().Response!.Parts![0].Should().BeOfType<ChatBlockPart>();
         _ = _conversationRecorder.Received(1).RecordAsync(Arg.Is<ConversationTurnCapture>(turn => turn.AssistantContent == result.AiMessage));
+    }
+
+    /// <summary>A habit of the person, so its id resolves at the chat boundary.</summary>
+    private Guid OwnedHabitId()
+    {
+        var habit = CreateHabit("Reading");
+        SetupSelectionHabits(habit);
+        return habit.Id;
+    }
+
+    private (Guid First, Guid Second) OwnedHabitIds()
+    {
+        var (first, second) = (CreateHabit("Reading"), CreateHabit("Running"));
+        SetupSelectionHabits(first, second);
+        return (first.Id, second.Id);
     }
 
     private async Task<ChatResponse> ComposeHabitAnswer(string reply, List<ChatStreamEvent>? events = null, bool context = false)
