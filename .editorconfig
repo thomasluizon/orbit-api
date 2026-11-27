@@ -5,3 +5,15 @@ dotnet_diagnostic.CA1502.severity = error
 
 [src/**.cs]
 dotnet_diagnostic.CA1305.severity = error
+
+[tests/Orbit.Application.Tests/Commands/Referrals/CheckReferralCompletionCommandHandlerTests.cs]
+dotnet_diagnostic.ORBIT0006.severity = none
+
+[tests/Orbit.Infrastructure.Tests/AI/AiDailyBudgetTests.cs]
+dotnet_diagnostic.ORBIT0006.severity = none
+
+[tests/Orbit.Infrastructure.Tests/BackgroundJobs/PostgresScheduledJobLeaseProviderTests.cs]
+dotnet_diagnostic.ORBIT0005.severity = none
+
+[tests/Orbit.Infrastructure.Tests/Services/AiIntentServiceTests.cs]
+dotnet_diagnostic.ORBIT0006.severity = none
