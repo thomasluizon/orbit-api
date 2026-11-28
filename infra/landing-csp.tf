@@ -1,9 +1,4 @@
 locals {
-  landing_script_hashes = [
-    "'sha256-k1e/+bWIdT8Uk71F22RZrxB9jhVXHo0aDeugvXsMOoI='",
-    "'sha256-MgAZSqwvMKKaCDkH6zMaQJGXaZgYMd62+D1j4/g/xGg='",
-    "'sha256-VXGu3ijBQHccnEJv6/iI2EPmSvKz/3To4GNktGgsfVM='",
-  ]
   landing_style_hashes = [
     "'sha256-ToGJyZnmvAQTDp5OmZMZhqM1qqRRZ0q3GF58fxTZeGA='",
     "'sha256-rjo/oE/zlFf1WPLat5zh4mfQfZuW1LJJoVIsPjvFDZU='",
@@ -21,7 +16,7 @@ locals {
   landing_csp = {
     for environment, origin in { production = local.production_web_values.API_BASE, staging = local.staging_web_values.API_BASE } : environment => join("; ", [
       "default-src 'self'",
-      "script-src 'self' https://challenges.cloudflare.com ${join(" ", local.landing_script_hashes)}",
+      "script-src 'self' https://challenges.cloudflare.com",
       "frame-src https://challenges.cloudflare.com",
       "connect-src 'self' ${origin} https://challenges.cloudflare.com",
       "img-src 'self' data:",

@@ -6,7 +6,7 @@ const read = path => readFileSync(new URL(path, import.meta.url), 'utf8')
 const snapshot = JSON.parse(read('fixtures/landing-inline-blocks.json'))
 const policy = read('landing-csp.tf')
 test('every captured inline block and style attribute has its exact sha256 source', () => {
-  assert.equal(snapshot.sourceCommit, 'bb7a3a846e64a64e8310010b1eff00e76fe3435b')
+  assert.equal(snapshot.sourceCommit, '1b8c00b7b22b4267cebebe6df28df3f063bb50c4')
   for (const block of [...snapshot.blocks, ...snapshot.styleAttributes]) {
     assert.equal(block.hash, `sha256-${createHash('sha256').update(block.body).digest('base64')}`)
     assert.ok(policy.includes(`'${block.hash}'`), `Missing ${block.tag ?? 'style attribute'} hash ${block.hash}`)

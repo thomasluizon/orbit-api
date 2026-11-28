@@ -1,10 +1,9 @@
 {
-  "sourceCommit": "bb7a3a846e64a64e8310010b1eff00e76fe3435b",
+  "sourceCommit": "1b8c00b7b22b4267cebebe6df28df3f063bb50c4",
   "pages": [
     {
       "url": "https://useorbit.org/",
       "hashes": [
-        "sha256-k1e/+bWIdT8Uk71F22RZrxB9jhVXHo0aDeugvXsMOoI=",
         "sha256-ToGJyZnmvAQTDp5OmZMZhqM1qqRRZ0q3GF58fxTZeGA=",
         "sha256-rjo/oE/zlFf1WPLat5zh4mfQfZuW1LJJoVIsPjvFDZU=",
         "sha256-hZbgQ3xSIhIik3d8jPnzSZjpKVRyVkUefFOcVHzxpVw="
@@ -13,7 +12,6 @@
     {
       "url": "https://useorbit.org/waitlist-confirmed",
       "hashes": [
-        "sha256-MgAZSqwvMKKaCDkH6zMaQJGXaZgYMd62+D1j4/g/xGg=",
         "sha256-ToGJyZnmvAQTDp5OmZMZhqM1qqRRZ0q3GF58fxTZeGA=",
         "sha256-rjo/oE/zlFf1WPLat5zh4mfQfZuW1LJJoVIsPjvFDZU=",
         "sha256-hZbgQ3xSIhIik3d8jPnzSZjpKVRyVkUefFOcVHzxpVw="
@@ -22,7 +20,6 @@
     {
       "url": "https://useorbit.org/404",
       "hashes": [
-        "sha256-MgAZSqwvMKKaCDkH6zMaQJGXaZgYMd62+D1j4/g/xGg=",
         "sha256-ToGJyZnmvAQTDp5OmZMZhqM1qqRRZ0q3GF58fxTZeGA=",
         "sha256-rjo/oE/zlFf1WPLat5zh4mfQfZuW1LJJoVIsPjvFDZU=",
         "sha256-hZbgQ3xSIhIik3d8jPnzSZjpKVRyVkUefFOcVHzxpVw="
@@ -31,7 +28,6 @@
     {
       "url": "https://orbit-landing-staging.onrender.com/",
       "hashes": [
-        "sha256-VXGu3ijBQHccnEJv6/iI2EPmSvKz/3To4GNktGgsfVM=",
         "sha256-ToGJyZnmvAQTDp5OmZMZhqM1qqRRZ0q3GF58fxTZeGA=",
         "sha256-rjo/oE/zlFf1WPLat5zh4mfQfZuW1LJJoVIsPjvFDZU=",
         "sha256-hZbgQ3xSIhIik3d8jPnzSZjpKVRyVkUefFOcVHzxpVw="
@@ -40,7 +36,6 @@
     {
       "url": "https://orbit-landing-staging.onrender.com/waitlist-confirmed",
       "hashes": [
-        "sha256-MgAZSqwvMKKaCDkH6zMaQJGXaZgYMd62+D1j4/g/xGg=",
         "sha256-ToGJyZnmvAQTDp5OmZMZhqM1qqRRZ0q3GF58fxTZeGA=",
         "sha256-rjo/oE/zlFf1WPLat5zh4mfQfZuW1LJJoVIsPjvFDZU=",
         "sha256-hZbgQ3xSIhIik3d8jPnzSZjpKVRyVkUefFOcVHzxpVw="
@@ -49,7 +44,6 @@
     {
       "url": "https://orbit-landing-staging.onrender.com/404",
       "hashes": [
-        "sha256-MgAZSqwvMKKaCDkH6zMaQJGXaZgYMd62+D1j4/g/xGg=",
         "sha256-ToGJyZnmvAQTDp5OmZMZhqM1qqRRZ0q3GF58fxTZeGA=",
         "sha256-rjo/oE/zlFf1WPLat5zh4mfQfZuW1LJJoVIsPjvFDZU=",
         "sha256-hZbgQ3xSIhIik3d8jPnzSZjpKVRyVkUefFOcVHzxpVw="
@@ -57,12 +51,6 @@
     }
   ],
   "blocks": [
-    {
-      "tag": "script",
-      "type": "application/ld+json",
-      "body": "{\"@context\":\"https://schema.org\",\"@graph\":[{\"@type\":\"Organization\",\"name\":\"Orbit\",\"url\":\"https://useorbit.org\",\"logo\":\"https://useorbit.org/logo.png\"},{\"@type\":\"WebSite\",\"name\":\"Orbit\",\"url\":\"https://useorbit.org\"},{\"@type\":\"SoftwareApplication\",\"name\":\"Orbit\",\"applicationCategory\":\"LifestyleApplication\",\"operatingSystem\":\"Web\",\"offers\":[{\"@type\":\"Offer\",\"name\":\"Orbit Free\",\"price\":0,\"priceCurrency\":\"USD\"},{\"@type\":\"Offer\",\"name\":\"Orbit Pro monthly\",\"price\":9.99,\"priceCurrency\":\"USD\",\"priceSpecification\":{\"@type\":\"UnitPriceSpecification\",\"price\":9.99,\"priceCurrency\":\"USD\",\"billingDuration\":\"P1M\"}},{\"@type\":\"Offer\",\"name\":\"Orbit Pro yearly\",\"price\":69.99,\"priceCurrency\":\"USD\",\"priceSpecification\":{\"@type\":\"UnitPriceSpecification\",\"price\":69.99,\"priceCurrency\":\"USD\",\"billingDuration\":\"P1Y\"}}],\"description\":\"Tell Astra what you want to do, and she turns it into habits for your day. Nothing changes until you approve it.\"},{\"@type\":\"MobileApplication\",\"name\":\"Orbit\",\"applicationCategory\":\"LifestyleApplication\",\"operatingSystem\":\"Android\",\"offers\":[{\"@type\":\"Offer\",\"name\":\"Orbit Free\",\"price\":0,\"priceCurrency\":\"USD\"},{\"@type\":\"Offer\",\"name\":\"Orbit Pro monthly\",\"price\":9.99,\"priceCurrency\":\"USD\",\"priceSpecification\":{\"@type\":\"UnitPriceSpecification\",\"price\":9.99,\"priceCurrency\":\"USD\",\"billingDuration\":\"P1M\"}},{\"@type\":\"Offer\",\"name\":\"Orbit Pro yearly\",\"price\":69.99,\"priceCurrency\":\"USD\",\"priceSpecification\":{\"@type\":\"UnitPriceSpecification\",\"price\":69.99,\"priceCurrency\":\"USD\",\"billingDuration\":\"P1Y\"}}],\"installUrl\":\"https://play.google.com/store/apps/details?id=org.useorbit.app\",\"description\":\"Tell Astra what you want to do, and she turns it into habits for your day. Nothing changes until you approve it.\"}]}",
-      "hash": "sha256-k1e/+bWIdT8Uk71F22RZrxB9jhVXHo0aDeugvXsMOoI="
-    },
     {
       "tag": "style",
       "type": "",
@@ -80,18 +68,6 @@
       "type": "",
       "body": "@font-face{font-family:\"Geist Mono-d9e4763fa767d8ed\";src:url(\"/_astro/fonts/181a29443484632f.woff2\") format(\"woff2\");font-display:swap;unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;font-weight:400;font-style:normal;}@font-face{font-family:\"Geist Mono-d9e4763fa767d8ed\";src:url(\"/_astro/fonts/181a29443484632f.woff2\") format(\"woff2\");font-display:swap;unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;font-weight:500;font-style:normal;}@font-face{font-family:\"Geist Mono-d9e4763fa767d8ed fallback: Courier New\";src:local(\"Courier New\");font-display:swap;font-weight:400;font-style:normal;size-adjust:99.9837%;ascent-override:100.5164%;descent-override:29.5048%;}@font-face{font-family:\"Geist Mono-d9e4763fa767d8ed fallback: Courier New\";src:local(\"Courier New\");font-display:swap;font-weight:500;font-style:normal;size-adjust:99.9837%;ascent-override:100.5164%;descent-override:29.5048%;}:root{--font-geist-mono:\"Geist Mono-d9e4763fa767d8ed\",\"Geist Mono-d9e4763fa767d8ed fallback: Courier New\",ui-monospace,monospace;}",
       "hash": "sha256-hZbgQ3xSIhIik3d8jPnzSZjpKVRyVkUefFOcVHzxpVw="
-    },
-    {
-      "tag": "script",
-      "type": "application/ld+json",
-      "body": "{\"@context\":\"https://schema.org\",\"@graph\":[{\"@type\":\"Organization\",\"name\":\"Orbit\",\"url\":\"https://useorbit.org\",\"logo\":\"https://useorbit.org/logo.png\"},{\"@type\":\"WebSite\",\"name\":\"Orbit\",\"url\":\"https://useorbit.org\"}]}",
-      "hash": "sha256-MgAZSqwvMKKaCDkH6zMaQJGXaZgYMd62+D1j4/g/xGg="
-    },
-    {
-      "tag": "script",
-      "type": "application/ld+json",
-      "body": "{\"@context\":\"https://schema.org\",\"@graph\":[{\"@type\":\"Organization\",\"name\":\"Orbit\",\"url\":\"https://useorbit.org\",\"logo\":\"https://useorbit.org/logo.png\"},{\"@type\":\"WebSite\",\"name\":\"Orbit\",\"url\":\"https://useorbit.org\"},{\"@type\":\"SoftwareApplication\",\"name\":\"Orbit\",\"applicationCategory\":\"LifestyleApplication\",\"operatingSystem\":\"Web\",\"offers\":[{\"@type\":\"Offer\",\"name\":\"Orbit Free\",\"price\":0,\"priceCurrency\":\"USD\"},{\"@type\":\"Offer\",\"name\":\"Orbit Pro monthly\",\"price\":9.99,\"priceCurrency\":\"USD\",\"priceSpecification\":{\"@type\":\"UnitPriceSpecification\",\"price\":9.99,\"priceCurrency\":\"USD\",\"billingDuration\":\"P1M\"}},{\"@type\":\"Offer\",\"name\":\"Orbit Pro yearly\",\"price\":69.99,\"priceCurrency\":\"USD\",\"priceSpecification\":{\"@type\":\"UnitPriceSpecification\",\"price\":69.99,\"priceCurrency\":\"USD\",\"billingDuration\":\"P1Y\"}}],\"description\":\"Tell Astra what you want to do, and she turns it into habits for your day. Nothing changes until you approve it.\"},{\"@type\":\"MobileApplication\",\"name\":\"Orbit\",\"applicationCategory\":\"LifestyleApplication\",\"operatingSystem\":\"Android\",\"offers\":[{\"@type\":\"Offer\",\"name\":\"Orbit Free\",\"price\":0,\"priceCurrency\":\"USD\"},{\"@type\":\"Offer\",\"name\":\"Orbit Pro monthly\",\"price\":9.99,\"priceCurrency\":\"USD\",\"priceSpecification\":{\"@type\":\"UnitPriceSpecification\",\"price\":9.99,\"priceCurrency\":\"USD\",\"billingDuration\":\"P1M\"}},{\"@type\":\"Offer\",\"name\":\"Orbit Pro yearly\",\"price\":69.99,\"priceCurrency\":\"USD\",\"priceSpecification\":{\"@type\":\"UnitPriceSpecification\",\"price\":69.99,\"priceCurrency\":\"USD\",\"billingDuration\":\"P1Y\"}}],\"installUrl\":\"https://play.google.com/store/apps/details?id=org.useorbit.app.staging\",\"description\":\"Tell Astra what you want to do, and she turns it into habits for your day. Nothing changes until you approve it.\"}]}",
-      "hash": "sha256-VXGu3ijBQHccnEJv6/iI2EPmSvKz/3To4GNktGgsfVM="
     }
   ],
   "styleAttributes": [
