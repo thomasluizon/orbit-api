@@ -6,6 +6,7 @@
 - [Staging reseed](#staging-reseed)
 - [Staging database access](#staging-database-access)
 - [Staging pinger](#staging-pinger)
+- [Staging App Links Worker](#staging-app-links-worker)
 
 ## Staging web hosts
 
@@ -58,3 +59,13 @@ The Worker sends `manual`, because Cloudflare accepts only `follow` and `manual`
 Use a targeted plan to deploy the Worker. The plan must change only `cloudflare_workers_script.staging_pinger` and `cloudflare_workers_cron_trigger.staging_pinger`. Stop if it includes another resource. The token in `CLOUDFLARE_API_TOKEN` needs the account permission Workers Scripts Write.
 
 The Worker writes a persisted log line for each invocation, with a sampling rate of 100 percent. Open **Workers & Pages > orbit-staging-pinger > Observability** and search for `staging-health-ping`. Each line has `scheduledAt`, `startedAt`, `outcome`, `status`, and `durationMs`. The outcome is `healthy`, `failed`, or `skipped-outside-window`. A failed line has an `error` string. A new cron schedule can need up to 15 minutes to take effect.
+
+## Staging App Links Worker
+
+The Cloudflare Worker `orbit-staging-assetlinks` answers `https://app-staging.useorbit.org/.well-known/assetlinks.json`. Its files are `infra/staging-assetlinks.tf` and `infra/workers/staging-assetlinks.mjs`. The route matches only that path.
+
+The reason is ticket #1367. The staging origin sleeps, so it can fail the Android App Link check. The Worker answers from the Cloudflare edge and never calls the origin. It sets the header `X-Orbit-Association-Source: static-edge`.
+
+The Worker needs the proxy on the DNS record `app-staging`. Terraform sets `proxied = true` on that record only. Do not turn the proxy off, because the route then stops.
+
+The Worker holds a copy of `apps/web/public/.well-known/assetlinks.json` of orbit-ui-mobile. When that file changes, change the Worker in the same week. The production host `app.useorbit.org` serves the file from Render and needs no Worker.
