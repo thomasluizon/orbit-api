@@ -3,13 +3,13 @@ set -euo pipefail
 
 action="$1"
 : "${RENDER_API_KEY:?}"
-: "${STAGING_POSTGRES_ID:?}"
-database_url="https://api.render.com/v1/postgres/${STAGING_POSTGRES_ID}"
+: "${POSTGRES_ID:?}"
+database_url="https://api.render.com/v1/postgres/${POSTGRES_ID}"
 
 read_allow_list() {
   curl --fail-with-body --silent --show-error --max-time 30 \
     --header "Authorization: Bearer ${RENDER_API_KEY}" "$database_url" \
-    | jq -ce --arg id "$STAGING_POSTGRES_ID" \
+    | jq -ce --arg id "$POSTGRES_ID" \
       'select(.id == $id) | .ipAllowList | select(type == "array") | sort_by(.cidrBlock, .description)'
 }
 
@@ -20,7 +20,7 @@ remove_temporary_access() {
   if [[ "$current" != "$desired" ]]; then
     set_allow_list "$desired"
   fi
-  echo "Kept staging database operator entries: $desired"
+  echo "Kept database operator entries: $desired"
 }
 
 set_allow_list() {
@@ -34,12 +34,12 @@ set_allow_list() {
     --data "$payload" "$database_url" > /dev/null
   for ((attempt=1; attempt<=12; attempt++)); do
     if [[ "$(read_allow_list)" == "$desired" ]]; then
-      echo "Staging database allow list matches the requested addresses"
+      echo "Database allow list matches the requested addresses"
       return 0
     fi
     sleep 5
   done
-  echo 'Staging database allow list did not converge' >&2
+  echo 'Database allow list did not converge' >&2
   return 1
 }
 
@@ -54,7 +54,7 @@ case "$action" in
   open)
     current="$(read_allow_list)"
     operator_list="$(jq -ce 'map(select(.description != "github-actions-staging-reseed"))' <<< "$current")"
-    echo "Kept staging database operator entries: $operator_list"
+    echo "Kept database operator entries: $operator_list"
     runner_ip="$(read_current_ipv4)"
     runner_cidr="${runner_ip}/32"
     temporary_list="$(jq -cn --argjson operators "$operator_list" --arg cidr "$runner_cidr" '
@@ -74,11 +74,11 @@ case "$action" in
     : "${STAGING_ACCESS_MARKER:?}"
     remove_temporary_access
     rm -f "$STAGING_ACCESS_MARKER"
-    echo "Restored staging database allow list: $(read_allow_list)"
+    echo "Restored database allow list: $(read_allow_list)"
     ;;
   reconcile)
     remove_temporary_access
-    echo "Reconciled staging database allow list: $(read_allow_list)"
+    echo "Reconciled database allow list: $(read_allow_list)"
     ;;
   operator-mac)
     operator_ip="$(read_current_ipv4)"
@@ -89,7 +89,7 @@ case "$action" in
     if [[ "$desired" != "$current" ]]; then
       set_allow_list "$desired"
     fi
-    echo "Staging database operator mac access: ${operator_ip}/32"
+    echo "Database operator mac access: ${operator_ip}/32"
     ;;
   *)
     echo "Unsupported allow list action: $action" >&2

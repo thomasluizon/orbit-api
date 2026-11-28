@@ -81,9 +81,9 @@ jobs:
         if: steps.age.outputs.replace == 'true'
         env:
           STAGING_RESEED_STEP: Allow runner access for the data backup
-          STAGING_POSTGRES_ID: ${{ steps.age.outputs.database_id }}
+          POSTGRES_ID: ${{ steps.age.outputs.database_id }}
           STAGING_ACCESS_MARKER: ${{ runner.temp }}/staging-backup-access
-        run: bash .github/scripts/staging-postgres-access.sh open
+        run: bash .github/scripts/postgres-access.sh open
       - name: Back up staging data
         if: steps.age.outputs.replace == 'true'
         env:
@@ -97,9 +97,9 @@ jobs:
         if: always() && steps.age.outputs.replace == 'true'
         env:
           STAGING_RESEED_STEP: Restore operator access after the data backup
-          STAGING_POSTGRES_ID: ${{ steps.age.outputs.database_id }}
+          POSTGRES_ID: ${{ steps.age.outputs.database_id }}
           STAGING_ACCESS_MARKER: ${{ runner.temp }}/staging-backup-access
-        run: bash .github/scripts/staging-postgres-access.sh restore
+        run: bash .github/scripts/postgres-access.sh restore
       - name: Replace staging database and refresh its API connection
         id: replace
         if: steps.age.outputs.replace == 'true'
@@ -134,9 +134,9 @@ jobs:
         if: steps.age.outputs.replace == 'true'
         env:
           STAGING_RESEED_STEP: Allow runner access for migrations
-          STAGING_POSTGRES_ID: ${{ steps.replace.outputs.database_id }}
+          POSTGRES_ID: ${{ steps.replace.outputs.database_id }}
           STAGING_ACCESS_MARKER: ${{ runner.temp }}/staging-migration-access
-        run: bash .github/scripts/staging-postgres-access.sh open
+        run: bash .github/scripts/postgres-access.sh open
       - name: Restore and verify staging data
         if: steps.age.outputs.replace == 'true'
         env:
@@ -162,9 +162,9 @@ jobs:
         if: always() && steps.replace.outputs.database_id != ''
         env:
           STAGING_RESEED_STEP: Restore operator access after migrations
-          STAGING_POSTGRES_ID: ${{ steps.replace.outputs.database_id }}
+          POSTGRES_ID: ${{ steps.replace.outputs.database_id }}
           STAGING_ACCESS_MARKER: ${{ runner.temp }}/staging-migration-access
-        run: bash .github/scripts/staging-postgres-access.sh restore
+        run: bash .github/scripts/postgres-access.sh restore
       - name: Deploy the staging API and wait for that deploy
         if: steps.age.outputs.replace == 'true'
         env:
@@ -215,9 +215,9 @@ jobs:
         if: steps.age.outputs.replace == 'true'
         env:
           STAGING_RESEED_STEP: Allow runner access for the owner seed
-          STAGING_POSTGRES_ID: ${{ steps.replace.outputs.database_id }}
+          POSTGRES_ID: ${{ steps.replace.outputs.database_id }}
           STAGING_ACCESS_MARKER: ${{ runner.temp }}/staging-seed-access
-        run: bash .github/scripts/staging-postgres-access.sh open
+        run: bash .github/scripts/postgres-access.sh open
       - name: Seed the owner account
         if: steps.age.outputs.replace == 'true'
         env:
@@ -233,9 +233,9 @@ jobs:
         if: always() && steps.replace.outputs.database_id != ''
         env:
           STAGING_RESEED_STEP: Restore operator access after the owner seed
-          STAGING_POSTGRES_ID: ${{ steps.replace.outputs.database_id }}
+          POSTGRES_ID: ${{ steps.replace.outputs.database_id }}
           STAGING_ACCESS_MARKER: ${{ runner.temp }}/staging-seed-access
-        run: bash .github/scripts/staging-postgres-access.sh restore
+        run: bash .github/scripts/postgres-access.sh restore
       - name: Delete local staging data
         if: always()
         env:

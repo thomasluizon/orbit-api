@@ -11,7 +11,7 @@ on:
       - .github/workflows/release.yml
       - .github/scripts/render-release.sh
       - .github/scripts/staging-reseed*
-      - .github/scripts/*staging-postgres-access*
+      - .github/scripts/*postgres-access*
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
@@ -41,4 +41,4 @@ jobs:
       - run: npm ci --prefix infra --ignore-scripts
       - run: npm test --prefix infra
       - run: node --test .github/scripts/staging-reseed.test.mjs .github/scripts/staging-reseed-image.test.mjs
-      - run: bash .github/scripts/test-staging-postgres-access.sh
+      - run: bash .github/scripts/test-postgres-access.sh

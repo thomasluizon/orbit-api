@@ -102,3 +102,7 @@ test('production database keeps plan version HA and non-empty allow-list', () =>
   assert.match(database, /ip_allow_list\s*=\s*var.production_postgres_ip_allow_list/)
   assert.match(database, /length\(var.production_postgres_ip_allow_list\) > 0/)
 })
+test('production database ignores later allow-list changes', () => {
+  const database = production.split('resource "render_postgres" "production" {')[1].split('\nresource ')[0]
+  assert.match(database, /ignore_changes\s*=\s*\[[^\]]*\bip_allow_list\b/)
+})

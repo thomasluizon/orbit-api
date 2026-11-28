@@ -11,6 +11,7 @@
 - [Startup migrations and long migrations](#startup-migrations-and-long-migrations)
 - [SSM parameters](#ssm-parameters)
 - [Plan and apply](#plan-and-apply)
+- [Production database access](#production-database-access)
 - [Production web routing](#production-web-routing)
 - [API release admission](#api-release-admission)
 - [Stripe webhook endpoint version](#stripe-webhook-endpoint-version)
@@ -96,9 +97,9 @@ Generate each staging secret for staging alone. The staging Stripe secrets hold 
 
 ## Plan and apply
 
-Set `RENDER_API_KEY` and `CLOUDFLARE_API_TOKEN` in the shell, and provide the AWS credentials through the default chain. Make a local `infra/local.tfvars` with the image digests and the approved domain and database network settings. `example.tfvars` shows its shape. Copy the production Postgres IP allow list from the Render Networking screen into `production_postgres_ip_allow_list`. The default `[]` removes the external access of production.
+Set `RENDER_API_KEY` and `CLOUDFLARE_API_TOKEN` in the shell, and provide the AWS credentials through the default chain. Make a local `infra/local.tfvars` with the image digests and the approved domain and database network settings. `example.tfvars` shows its shape. Copy the production Postgres IP allow list from the Render Networking screen into `production_postgres_ip_allow_list`. Terraform uses it only when it creates the production database. The default `[]` fails the precondition of the database.
 
-Check both database resources in each plan. Neither may be replaced, and no operator address may be removed. Terraform ignores later changes to `database_name` and `database_user`.
+Check both database resources in each plan. Neither may be replaced. Terraform ignores later changes to `database_name` and `database_user`. It also ignores later changes to `ip_allow_list` of production, so an apply never writes an old operator address back.
 
 The manual Release workflow of `orbit-ui-mobile` deploys the web images. Terraform ignores digest changes after the first apply.
 
@@ -116,6 +117,18 @@ terraform -chdir=infra plan -var-file=local.tfvars -out=local.tfplan
 terraform -chdir=infra show -json local.tfplan | node infra/check-web-plan.mjs
 terraform -chdir=infra apply local.tfplan
 ```
+
+## Production database access
+
+The production allow list lives in the Render API, and Terraform ignores it after the create. The entry `operator mac` holds the home address of the operator. `.github/scripts/postgres-access.sh` replaces only that entry with the current public IPv4 `/32`. It keeps every other entry. The hosted Render MCP server connects from addresses that no allow list can name, so it never reads production. Use the local command instead.
+
+Set `RENDER_API_KEY`. Set `POSTGRES_ID` to the `dpg-` id of `orbit-production` from the Render dashboard. Run this command from the repository root:
+
+```sh
+bash .github/scripts/postgres-access.sh operator-mac && render psql "$POSTGRES_ID" -c 'SELECT 1;' -o text
+```
+
+Replace the query after `-c`. Add `-- <psql flags>` to pass flags to `psql`. The script needs `curl`, `jq`, and `python3`. The Render CLI needs `psql` from `libpq` on `PATH`. Run the command again after each address change. Do not run it while a staging workflow runs, because a Render allow list update replaces the whole list.
 
 ## Production web routing
 

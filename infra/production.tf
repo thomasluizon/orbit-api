@@ -43,7 +43,7 @@ resource "render_postgres" "production" {
   high_availability_enabled = false
 
   lifecycle {
-    ignore_changes = [database_name, database_user]
+    ignore_changes = [database_name, database_user, ip_allow_list]
     precondition {
       condition     = length(var.production_postgres_ip_allow_list) > 0
       error_message = "Production Postgres requires a non-empty operator IP allow-list."
