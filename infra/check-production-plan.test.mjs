@@ -5,8 +5,19 @@ import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { checkProductionPlan } from './check-production-plan.mjs'
 const generated = JSON.parse(readFileSync(new URL('./fixtures/production-plan.json', import.meta.url), 'utf8'))
+const extraAddresses = [
+  'render_static_site.landing', 'render_static_site.staging_landing', 'cloudflare_turnstile_widget.orbit',
+  'cloudflare_workers_script.staging_assetlinks', 'cloudflare_workers_route.staging_assetlinks',
+  'cloudflare_dns_record.existing["apex_cname"]', 'cloudflare_dns_record.staging["app_staging"]',
+  'cloudflare_dns_record.ses_dkim["transactional-0"]', 'cloudflare_dns_record.ses_mail_from_mx["workspace"]',
+  'cloudflare_dns_record.ses_mail_from_spf["workspace"]',
+]
+const withExtras = plan => {
+  for (const address of extraAddresses) plan.resource_changes.push({ address, change: { actions: ['no-op'], before: { proxied: false }, after: { proxied: false } } })
+  return plan
+}
 const clean = () => {
-  const plan = structuredClone(generated)
+  const plan = withExtras(structuredClone(generated))
   for (const resource of plan.resource_changes) {
     resource.change.actions = ['no-op']
     resource.change.before = structuredClone(resource.change.after)
@@ -16,7 +27,7 @@ const clean = () => {
 test('accepts unchanged production resources with reviewed sender and shutdown values', () => {
   assert.deepEqual(checkProductionPlan(clean()), [])
 })
-for (const address of generated.resource_changes.map(item => item.address)) {
+for (const address of [...generated.resource_changes.map(item => item.address), ...extraAddresses]) {
   test(`rejects a seeded update replacement and drift on ${address}`, () => {
     for (const actions of [['update'], ['delete', 'create'], ['delete'], ['create']]) {
       const plan = clean()
@@ -81,6 +92,30 @@ test('rejects image-only drift on the guarded env group', () => {
   const plan = imageDrift('render_web_service.production_api')
   plan.resource_drift[0].address = 'render_env_group.production_api'
   assert.ok(checkProductionPlan(plan).some(issue => issue.includes('drift detected on render_env_group.production_api')))
+})
+test('rejects a landing headers change and an app_staging proxied change', () => {
+  const headers = clean()
+  Object.assign(headers.resource_changes.find(item => item.address === 'render_static_site.landing').change, { actions: ['update'], after: { headers: [{ name: 'Content-Security-Policy' }] } })
+  assert.ok(checkProductionPlan(headers).some(issue => issue.includes('render_static_site.landing')))
+  const proxied = clean()
+  Object.assign(proxied.resource_changes.find(item => item.address === 'cloudflare_dns_record.staging["app_staging"]').change, { actions: ['update'], after: { proxied: false } })
+  assert.ok(checkProductionPlan(proxied).some(issue => issue.includes('cloudflare_dns_record.staging["app_staging"]')))
+})
+test('guards a new for_each key and live drift of a DNS record by prefix', () => {
+  const created = clean()
+  created.resource_changes.push({ address: 'cloudflare_dns_record.existing["new_key"]', change: { actions: ['create'], before: null, after: {} } })
+  assert.ok(checkProductionPlan(created).some(issue => issue.includes('existing["new_key"]')))
+  const drift = clean()
+  drift.resource_drift = [{ address: 'cloudflare_dns_record.staging["app_staging"]', change: { actions: ['update'], before: { proxied: true }, after: { proxied: false } } }]
+  assert.ok(checkProductionPlan(drift).some(issue => issue.includes('drift detected on cloudflare_dns_record.staging["app_staging"]')))
+})
+test('ignores an address outside the guarded set and rejects a plan with no record of a guarded prefix', () => {
+  const other = clean()
+  other.resource_changes.push({ address: 'cloudflare_dns_record.unrelated["x"]', change: { actions: ['update'], before: {}, after: {} } })
+  assert.deepEqual(checkProductionPlan(other), [])
+  const missing = clean()
+  missing.resource_changes = missing.resource_changes.filter(item => !item.address.startsWith('cloudflare_dns_record.ses_dkim'))
+  assert.ok(checkProductionPlan(missing).some(issue => issue.includes('Missing guarded resource cloudflare_dns_record.ses_dkim')))
 })
 test('rejects missing resources and changed shutdown or sender even on a no-op plan', () => {
   const missing = clean()

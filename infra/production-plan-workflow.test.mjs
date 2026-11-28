@@ -12,7 +12,12 @@ test('production plan waits for credential provisioning and runs only on main wi
   assert.match(workflow, /environment: render-operations/)
   assert.match(workflow, /role-to-assume: arn:aws:iam::713285551626:role\/orbit-production-plan/)
   assert.match(workflow, /-lock=false/)
-  for (const address of ['render_web_service.production_api', 'render_web_service.production_web', 'render_env_group.production_api']) assert.ok(workflow.includes(`-target=${address}`))
+  for (const address of [
+    'render_web_service.production_api', 'render_web_service.production_web', 'render_env_group.production_api',
+    'render_static_site.landing', 'render_static_site.staging_landing', 'cloudflare_dns_record.existing', 'cloudflare_dns_record.staging',
+    'cloudflare_dns_record.ses_dkim', 'cloudflare_dns_record.ses_mail_from_mx', 'cloudflare_dns_record.ses_mail_from_spf',
+    'cloudflare_turnstile_widget.orbit', 'cloudflare_workers_script.staging_assetlinks', 'cloudflare_workers_route.staging_assetlinks',
+  ]) assert.ok(workflow.includes(`-target=${address}`))
   assert.match(workflow, /show -json .*\| node infra\/check-web-plan.mjs/)
   assert.match(workflow, /show -json .*\| node infra\/check-production-plan.mjs/)
   assert.doesNotMatch(workflow, /upload-artifact|terraform .* apply|tee |cat .*plan/)
