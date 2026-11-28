@@ -38,5 +38,5 @@ jobs:
       - name: Remove stale runner access and preserve live operator entries
         run: |
           terraform -chdir=infra/staging-database init -input=false
-          STAGING_POSTGRES_ID="$(terraform -chdir=infra/staging-database output -raw staging_postgres_id)" \
-            bash .github/scripts/staging-postgres-access.sh reconcile
+          POSTGRES_ID="$(terraform -chdir=infra/staging-database output -raw staging_postgres_id)" \
+            bash .github/scripts/postgres-access.sh reconcile
