@@ -49,6 +49,16 @@ with no heading contains one scale:
 one interactive block. Asking never authorizes a write. Question text, including scale
 labels and slider units, uses the person's language.
 
+## Close without an answer
+
+`POST /api/chat/blocks/{blockId}/close` closes one open block. It takes no body, starts no model turn and uses no message
+allowance. It returns 204, also for a block that is closed. An unknown or foreign ID returns 404 with
+`ASTRA_BLOCK_NOT_FOUND`. An answered block, or a block with an answer in progress, returns 409 with
+`ASTRA_BLOCK_ANSWERED`. A later answer returns 410 with `ASTRA_BLOCK_INVALIDATED`.
+
+The conversation history adds `closedAtUtc` (UTC) to a `question`, `choice` or `pickList` block that is closed and has
+no answer. A normal message closes open blocks too. An open block omits the field.
+
 ## Answer on the next turn
 
 Both chat endpoints retain multipart transport. Set the existing `blockAnswer`

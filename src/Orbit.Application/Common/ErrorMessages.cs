@@ -44,6 +44,8 @@ public static class ErrorMessages
     public static readonly AppError ClarificationValueTooLong = From(ErrorCodes.ClarificationValueTooLong);
     public static readonly AppError ClarificationValueNotJsonObject = From(ErrorCodes.ClarificationValueNotJsonObject);
     public static readonly AppError ClarificationValueNotOffered = From(ErrorCodes.ClarificationValueNotOffered);
+    public static readonly AppError AiBlockNotFound = From(ErrorCodes.AiBlockNotFound);
+    public static readonly AppError AiBlockAnswered = From(ErrorCodes.AiBlockAnswered);
     public static readonly AppError ClarificationNotFound = From(ErrorCodes.ClarificationNotFound);
     public static readonly AppError ClarificationAlreadyResolved = From(ErrorCodes.ClarificationAlreadyResolved);
     public static readonly AppError PendingOperationNotFound = From(ErrorCodes.PendingOperationNotFound);
