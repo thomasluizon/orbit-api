@@ -28,7 +28,8 @@ public sealed record AiQuestionAnswer(
 public sealed record AiQuestionBlock(Guid BlockId, IReadOnlyList<AiQuestion> Questions, DateTime ExpiresAtUtc,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Title = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Intro = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] AiQuestionProgress? Progress = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] AiQuestionProgress? Progress = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DateTime? ClosedAtUtc = null);
 
 public static class AiQuestionRules
 {

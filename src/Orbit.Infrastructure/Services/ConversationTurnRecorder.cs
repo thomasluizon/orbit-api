@@ -200,8 +200,9 @@ public sealed partial class ConversationTurnRecorder(
         await ReconcilePlansAsync(userId, rows, cancellationToken);
         var hasMore = rows.Count > pageSize;
         var selected = rows.Take(pageSize).Reverse().ToArray();
+        var closed = await ReadResponsesWithClosedBlocksAsync(userId, selected, cancellationToken);
         return new(conversationId.Value, selected.Select(row => new ConversationDisplayTurn(row.TurnId, row.TurnOrder!.Value,
-            row.Role, row.CreatedAtUtc, row.Content, row.ResponseJson, row.PreviewOutcomesJson,
+            row.Role, row.CreatedAtUtc, row.Content, closed.GetValueOrDefault(row.Id, row.ResponseJson), row.PreviewOutcomesJson,
             row.ImageObjectKey is null ? null : new($"{row.TurnId}{Path.GetExtension(row.ImageObjectKey)}", row.ImageContentType!, row.ImageSha256!, $"/api/chat/conversations/{conversationId}/images/{row.TurnId}"), AiPlan.Read(row.ResponseJson))).ToArray(),
             hasMore ? selected[0].TurnOrder : null);
     }

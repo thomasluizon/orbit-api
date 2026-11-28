@@ -20,7 +20,8 @@ public class QuestionBlockContractTests
         var schemas = document.RootElement.GetProperty("components").GetProperty("schemas");
         schemas.TryGetProperty("AstraQuestionBlock", out var block).Should().BeTrue();
         block.GetProperty("properties").TryGetProperty("questions", out _).Should().BeTrue();
-        block.GetProperty("required").EnumerateArray().Select(value => value.GetString()).Should().NotContain("title");
+        block.GetProperty("properties").TryGetProperty("closedAtUtc", out _).Should().BeTrue();
+        block.GetProperty("required").EnumerateArray().Select(value => value.GetString()).Should().NotContain(["title", "closedAtUtc"]);
         schemas.GetProperty("AstraBlockAnswer").GetProperty("properties").TryGetProperty("answers", out _).Should().BeTrue();
         schemas.GetProperty("AstraQuestionAnswer").GetProperty("properties").TryGetProperty("boolean", out _).Should().BeTrue();
         schemas.GetProperty("AstraQuestion").GetProperty("properties").GetProperty("type").GetProperty("enum")

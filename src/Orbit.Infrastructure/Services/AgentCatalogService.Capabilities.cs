@@ -75,6 +75,7 @@ public partial class AgentCatalogService
                     "ChatController.GetLatestConversation",
                     "ChatController.GetConversationImage",
                     "ChatController.DeleteConversation",
+                    "ChatController.CloseBlock",
                     "ChatController.DismissOffers",
                     "ChatController.RefineHabitSuggestion",
                     "ChatController.PreviewHabitSuggestion",
