@@ -1,8 +1,8 @@
 name: API Tests
 
-# Every job reports its context on every pull request. A job skips only the steps whose inputs
-# the pull request did not change (.github/scripts/changed-inputs.sh), so a required context is
-# never missing. A push to main or a dispatch runs every step: release admission reads that run.
+# A pull request runs one job: Unit Tests. It skips the steps whose inputs the pull request did
+# not change (.github/scripts/changed-inputs.sh). A push to main or a dispatch also runs the
+# Docker migration bundle and every step: release admission reads that run.
 
 on:
   workflow_dispatch:
@@ -23,22 +23,14 @@ jobs:
     name: Docker migration bundle
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    if: github.event_name != 'pull_request'
     steps:
       - uses: actions/checkout@v7
-        with:
-          fetch-depth: 2
-
-      - name: Select the inputs that changed
-        id: inputs
-        run: bash .github/scripts/changed-inputs.sh docker
 
       - name: Set up Docker Buildx
-        if: steps.inputs.outputs.docker == 'true'
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
-      # Pull request runs read the layer cache that main writes and never write one.
       - name: Build the API image
-        if: steps.inputs.outputs.docker == 'true'
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
@@ -47,24 +39,20 @@ jobs:
           provenance: false
           tags: orbit-api-bundle-test
           cache-from: type=gha,scope=api-image
-          cache-to: ${{ github.event_name != 'pull_request' && 'type=gha,scope=api-image,mode=max' || '' }}
+          cache-to: type=gha,scope=api-image,mode=max
 
       - name: Run the migration bundle
-        if: steps.inputs.outputs.docker == 'true'
         run: docker run --rm --platform linux/amd64 --entrypoint /app/efbundle orbit-api-bundle-test --help
 
       - name: Guard API container memory at 512 MiB
-        if: steps.inputs.outputs.docker == 'true'
         run: bash .github/scripts/api-memory-container.sh orbit-api-bundle-test
 
       - name: Setup .NET
-        if: steps.inputs.outputs.docker == 'true'
         uses: actions/setup-dotnet@v6
         with:
           dotnet-version: "10.0.x"
 
       - name: Restore the NuGet package cache
-        if: steps.inputs.outputs.docker == 'true'
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.nuget/packages
@@ -72,11 +60,9 @@ jobs:
           restore-keys: nuget-${{ runner.os }}-
 
       - name: Build API memory workload
-        if: steps.inputs.outputs.docker == 'true'
         run: dotnet build tests/Orbit.Memory.Tests
 
       - name: Guard API memory headroom
-        if: steps.inputs.outputs.docker == 'true'
         env:
           ORBIT_MEMORY_GUARD: "1"
           DOTNET_gcServer: "0"
@@ -104,8 +90,8 @@ jobs:
           --health-retries 5
 
     steps:
-      # The full history serves RollingMigrationGateTests (it reads the default remote branch)
-      # and the SonarCloud new-code blame.
+      # The full history serves RollingMigrationGateTests (it reads the base branch) and the
+      # SonarCloud new-code blame. It also holds origin/<base> for the migration guards.
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
@@ -113,6 +99,29 @@ jobs:
       - name: Select the inputs that changed
         id: inputs
         run: bash .github/scripts/changed-inputs.sh tests
+
+      - name: Fail on edits to applied migrations
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          violations=$(git diff --name-status --diff-filter=MDR "origin/$BASE_REF...HEAD" -- ':(glob)**/Migrations/**' ':(glob,exclude)**/*ModelSnapshot.cs')
+          if [ -n "$violations" ]; then
+            echo "::error::An already-applied EF migration was modified, deleted, or renamed. Migrations are append-only: add a NEW migration instead of editing an existing one (the ModelSnapshot is the only file EF regenerates)."
+            echo "$violations"
+            exit 1
+          fi
+          echo "OK: no applied migration was edited."
+
+      - name: Fail on non-idempotent raw index SQL in new migrations
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          echo "Changed migration files:"
+          git diff --name-only --diff-filter=d "origin/$BASE_REF...HEAD" -- ':(glob)**/Migrations/*.cs'
+          git diff --name-only -z --diff-filter=d "origin/$BASE_REF...HEAD" -- ':(glob)**/Migrations/*.cs' \
+            | xargs -0 --no-run-if-empty python3 .github/scripts/check_migration_idempotency.py
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
@@ -188,6 +197,8 @@ jobs:
         if: steps.inputs.outputs.tests == 'true'
         env:
           ORBIT_POSTGRES_TEST_CONNECTION: Host=localhost;Port=5432;Database=postgres;Username=orbit_test
+          # RollingMigrationGateTests returns early without a base, so a pull request run sets it.
+          ORBIT_MIGRATION_GUARD_BASE: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || '' }}
         run: |
           set -uo pipefail
           coverage=(--no-build --collect:"XPlat Code Coverage" --settings coverlet.runsettings --results-directory ./TestResults)
@@ -238,135 +249,3 @@ jobs:
         with:
           path: ~/.sonar/cache
           key: ${{ steps.sonar-cache.outputs.cache-primary-key }}
-
-  migration-guard:
-    name: Guard Migrations
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    # Diffs HEAD against github.base_ref, which is empty on a push event.
-    if: github.event_name == 'pull_request'
-
-    steps:
-      # fetch-depth 0 fetches every branch, so origin/<base> is present.
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
-      - name: Fail on edits to applied migrations
-        env:
-          BASE_REF: ${{ github.base_ref }}
-        run: |
-          violations=$(git diff --name-status --diff-filter=MDR "origin/$BASE_REF...HEAD" -- ':(glob)**/Migrations/**' ':(glob,exclude)**/*ModelSnapshot.cs')
-          if [ -n "$violations" ]; then
-            echo "::error::An already-applied EF migration was modified, deleted, or renamed. Migrations are append-only: add a NEW migration instead of editing an existing one (the ModelSnapshot is the only file EF regenerates)."
-            echo "$violations"
-            exit 1
-          fi
-          echo "OK: no applied migration was edited."
-
-      - name: Fail on non-idempotent raw index SQL in new migrations
-        env:
-          BASE_REF: ${{ github.base_ref }}
-        run: |
-          echo "Changed migration files:"
-          git diff --name-only --diff-filter=d "origin/$BASE_REF...HEAD" -- ':(glob)**/Migrations/*.cs'
-          git diff --name-only -z --diff-filter=d "origin/$BASE_REF...HEAD" -- ':(glob)**/Migrations/*.cs' \
-            | xargs -0 --no-run-if-empty python3 .github/scripts/check_migration_idempotency.py
-
-      - name: Detect rolling migration contract inputs
-        id: contract-inputs
-        env:
-          BASE_REF: ${{ github.base_ref }}
-        run: |
-          if git diff --name-only --diff-filter=d "origin/$BASE_REF...HEAD" -- \
-            ':(glob)**/Migrations/*.cs' \
-            .github/migration-contracts.json \
-            .github/migration-locks.json \
-            tests/Orbit.Infrastructure.Tests/Persistence/MigrationLockGate.cs \
-            tests/Orbit.Infrastructure.Tests/Persistence/MigrationLockGateTests.cs \
-            tests/Orbit.Infrastructure.Tests/Persistence/RollingMigrationGate.cs \
-            tests/Orbit.Infrastructure.Tests/Persistence/RollingMigrationGateTests.cs | grep -q .; then
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "No migration or deployment barrier changed; the rolling contract gate has nothing to check."
-          fi
-
-      - name: Setup .NET for rolling migration contracts
-        if: steps.contract-inputs.outputs.changed == 'true'
-        uses: actions/setup-dotnet@v6
-        with:
-          dotnet-version: "10.0.x"
-
-      - name: Restore the NuGet package cache
-        if: steps.contract-inputs.outputs.changed == 'true'
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.nuget/packages
-          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.Packages.props', 'Directory.Build.props', 'global.json', '.config/dotnet-tools.json') }}
-          restore-keys: nuget-${{ runner.os }}-
-
-      - name: Require deployment barriers for schema contractions
-        if: steps.contract-inputs.outputs.changed == 'true'
-        env:
-          ORBIT_MIGRATION_GUARD_BASE: origin/${{ github.base_ref }}
-        run: dotnet test tests/Orbit.Infrastructure.Tests --filter "FullyQualifiedName~RollingMigrationGateTests|FullyQualifiedName~MigrationLockGateTests" --nologo
-
-  openapi-breaking:
-    name: OpenAPI Breaking-Change Gate
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    # Compares the candidate with github.base_ref, which is empty on a push event.
-    if: github.event_name == 'pull_request'
-
-    steps:
-      # fetch-depth 0 fetches every branch, so origin/<base> is present.
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
-      - name: Select the inputs that changed
-        id: inputs
-        run: bash .github/scripts/changed-inputs.sh openapi
-
-      # The same oasdiff release as the oasdiff-action image, pinned by its published checksum.
-      - name: Install oasdiff
-        if: steps.inputs.outputs.openapi == 'true'
-        env:
-          OASDIFF_VERSION: 1.36.0
-          OASDIFF_SHA256: dba65661f6d0f178a3e4884c309f19527a849388bb9df0e81545db76dbb697d6
-        run: |
-          set -euo pipefail
-          archive="$RUNNER_TEMP/oasdiff.tar.gz"
-          curl --proto '=https' --tlsv1.2 -fsSL "https://github.com/oasdiff/oasdiff/releases/download/v${OASDIFF_VERSION}/oasdiff_${OASDIFF_VERSION}_linux_amd64.tar.gz" -o "$archive"
-          echo "$OASDIFF_SHA256  $archive" | sha256sum --check --strict
-          mkdir -p "$RUNNER_TEMP/oasdiff"
-          tar -xzf "$archive" -C "$RUNNER_TEMP/oasdiff" oasdiff
-          echo "$RUNNER_TEMP/oasdiff" >> "$GITHUB_PATH"
-
-      # openapi_artifacts.py validates every published stream and plans one comparison for each
-      # stream with a prior same-stream artifact; the v1 document is compared on its own path.
-      - name: Detect breaking changes in every published stream
-        if: steps.inputs.outputs.openapi == 'true'
-        env:
-          BASE_REF: origin/${{ github.base_ref }}
-        run: |
-          set -euo pipefail
-          plan=$(python3 .github/scripts/openapi_artifacts.py plan --base "$BASE_REF")
-          git cat-file -e "$BASE_REF:src/Orbit.Api/openapi.json"
-          comparisons=$(jq -r --arg base "$BASE_REF:src/Orbit.Api/openapi.json" \
-            '[{id: "orbit-http-v1-r1", base: $base, revision: "src/Orbit.Api/openapi.json"}] + .include | .[] | [.id, .base, .revision] | @tsv' <<< "$plan")
-          failed=0
-          while IFS=$'\t' read -r id base revision; do
-            echo "::group::$id: $base against $revision"
-            status=0
-            oasdiff breaking "$base" "$revision" --allow-external-refs=false --composed=false --fail-on ERR || status=$?
-            if [ "$status" -eq 1 ]; then
-              oasdiff breaking "$base" "$revision" --allow-external-refs=false --composed=false --format githubactions --template= || true
-            fi
-            echo "::endgroup::"
-            if [ "$status" -ne 0 ]; then
-              echo "::error::$id: oasdiff exited $status (1 is a breaking change at level ERR)"
-              failed=1
-            fi
-          done <<< "$comparisons"
-          exit "$failed"

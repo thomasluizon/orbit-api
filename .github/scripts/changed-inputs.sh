@@ -2,13 +2,13 @@
 # Usage: changed-inputs.sh <group>...
 #
 # Writes "<group>=true" or "<group>=false" to GITHUB_OUTPUT for each group. A group is true when
-# the pull request changes a file that the group's steps read. Each job reports its required
-# context whatever the diff holds, and skips only the steps whose inputs did not change.
+# the pull request changes a file that the group's steps read. A job skips only the steps whose
+# inputs did not change, so each job still reports its context.
 #
-# Every event other than pull_request sets every group to true: release admission reads the push
-# results at the release SHA, and the weekly CodeQL run analyzes everything. A pull request is
-# compared through its merge commit (HEAD) with the base tip (HEAD^1), so the checkout needs
-# fetch-depth 2 or more. Renames count both paths.
+# Every event other than pull_request sets every group to true, so a push to main or a dispatch
+# runs every step that the event allows. A pull request is compared through its merge commit
+# (HEAD) with the base tip (HEAD^1), so the checkout needs fetch-depth 2 or more. Renames count
+# both paths.
 set -euo pipefail
 
 pattern() {
@@ -18,13 +18,12 @@ pattern() {
     # migration contracts. LegacyNameGuardTests reads every path in the repository, so a path
     # that carries the retired product name is an input as well.
     tests) echo '^(src|tests|bench|infra|evals)/|^(Orbit\.slnx|Directory\.Build\.(props|targets)|global\.json|CodeMetricsConfig\.txt|coverlet\.runsettings)$|^\.config/dotnet-tools\.json$|^\.github/(migration-(contracts|locks)\.json|scripts/(api-memory-container\.sh|check_coverage\.py|openapi_artifacts\.py|changed-inputs\.sh)|workflows/test\.yml)$|Astra|ASTRA|(^|[^A-Za-z])astra' ;;
-    # Docker migration bundle: the image copies only src/; Orbit.Memory.Tests links files from
-    # tests/Shared and tests/Orbit.Infrastructure.Tests.
-    docker) echo '^(src|tests/(Shared|Orbit\.Memory\.Tests|Orbit\.Infrastructure\.Tests))/|^(Dockerfile|\.dockerignore|Directory\.Build\.(props|targets)|global\.json|CodeMetricsConfig\.txt)$|^\.github/(scripts/(api-memory-[^/]+|changed-inputs\.sh)|workflows/test\.yml)$' ;;
-    openapi) echo '^src/Orbit\.Api/(openapi[^/]*\.json|OpenApi/artifacts\.json)$|^(\.oasdiff\.yaml|\.github/oasdiff-levels\.txt)$|^\.github/(scripts/(openapi_artifacts\.py|changed-inputs\.sh)|workflows/test\.yml)$' ;;
-    # CodeQL legs, named after the matrix language.
-    csharp) echo '^src/|^(Directory\.Build\.(props|targets)|global\.json)$|^\.github/(scripts/changed-inputs\.sh|workflows/codeql\.yml)$' ;;
-    actions) echo '^\.github/(workflows|actions)/|^\.github/scripts/changed-inputs\.sh$' ;;
+    # OpenAPI Breaking-Change Gate steps of Guards.
+    openapi) echo '^src/Orbit\.Api/(openapi[^/]*\.json|OpenApi/artifacts\.json)$|^(\.oasdiff\.yaml|\.github/oasdiff-levels\.txt)$|^\.github/(scripts/(openapi_artifacts\.py|changed-inputs\.sh)|workflows/guards\.yml)$' ;;
+    # Dependency Review step of Guards: a project file, a lock file or a workflow.
+    deps) echo '(^|/)[^/]+\.(csproj|slnx)$|(^|/)Directory\.(Packages|Build)\.(props|targets)$|(^|/)(packages\.lock\.json|package(-lock)?\.json)$|^(global\.json|\.config/dotnet-tools\.json)$|^\.github/(workflows/|dependabot\.yml$|scripts/changed-inputs\.sh$)' ;;
+    # Render infrastructure steps of Guards.
+    infra) echo '^infra/|^\.github/workflows/(guards|release|staging-reseed|staging-postgres-access-reconcile)\.yml$|^\.github/scripts/(render-release\.sh|staging-reseed[^/]*|[^/]*postgres-access[^/]*|changed-inputs\.sh)$' ;;
     *)
       echo "changed-inputs.sh: unknown input group: $1" >&2
       exit 2

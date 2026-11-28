@@ -1,6 +1,6 @@
 # Rolling schema migrations
 
-`RollingMigrationGate.cs` is enforced by the existing **Guard Migrations** CI job.
+`RollingMigrationGate.cs` is enforced by the **Unit Tests** CI job on a pull request.
 It evaluates compiled PostgreSQL `UpOperations` for migrations the PR adds
 or changes relative to its base, plus every recorded deployment contract.
 Designer changes select the same migration;
@@ -14,7 +14,7 @@ ORBIT_MIGRATION_GUARD_BASE=origin/main dotnet test tests/Orbit.Infrastructure.Te
 ```
 
 Without that variable, the unit cases still run, but the repository ancestry case is
-inactive. Guard Migrations sets it explicitly and checks every recorded contract
+inactive. Unit Tests sets it explicitly and checks every recorded contract
 against real Git ancestry using its full-history checkout. A missing base or
 unrecognized migration fails the repository case instead of silently skipping inspection.
 

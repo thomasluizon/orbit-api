@@ -7,7 +7,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const script = fileURLToPath(new URL('./changed-inputs.sh', import.meta.url))
-const groups = ['tests', 'docker', 'openapi', 'csharp', 'actions']
+const groups = ['tests', 'openapi', 'deps', 'infra']
 
 function write(root, path, text = 'content\n') {
   mkdirSync(dirname(join(root, path)), { recursive: true })
@@ -61,16 +61,11 @@ test('a docs change selects no input group', t => {
 test('a change on main after the branch point is not a change of the pull request', t => {
   const { flags } = run(pullRequest(t, root => write(root, 'docs/notes.md'), 'src/Orbit.Domain/Entities/Moved.cs'), 'pull_request')
   assert.equal(flags.tests, 'false')
-  assert.equal(flags.csharp, 'false')
 })
 
-test('an API source change selects the tests, the image and the C# analysis', t => {
+test('an API source change selects only the tests', t => {
   const flags = changedOnly(t, 'src/Orbit.Api/Controllers/NewController.cs')
-  assert.equal(flags.tests, 'true')
-  assert.equal(flags.docker, 'true')
-  assert.equal(flags.csharp, 'true')
-  assert.equal(flags.openapi, 'false')
-  assert.equal(flags.actions, 'false')
+  assert.deepEqual(flags, { tests: 'true', openapi: 'false', deps: 'false', infra: 'false' })
 })
 
 test('a published OpenAPI document selects the breaking-change gate', t => {
@@ -91,18 +86,31 @@ test('a path that carries the retired product name is an input of the legacy nam
 })
 
 for (const path of ['Directory.Build.props', 'Directory.Build.targets']) {
-  test(`${path} is an input of every C# build`, t => {
+  test(`${path} is an input of the tests and the dependency review`, t => {
     const flags = changedOnly(t, path)
     assert.equal(flags.tests, 'true')
-    assert.equal(flags.docker, 'true')
-    assert.equal(flags.csharp, 'true')
+    assert.equal(flags.deps, 'true')
   })
 }
 
-test('a memory guard script selects the image job but not the C# analysis', t => {
-  const flags = changedOnly(t, '.github/scripts/api-memory-container.sh')
-  assert.equal(flags.docker, 'true')
-  assert.equal(flags.csharp, 'false')
+for (const path of ['src/Orbit.Api/Orbit.Api.csproj', 'tests/Orbit.Analyzers.Tests/Directory.Packages.props', 'infra/package-lock.json', '.config/dotnet-tools.json', '.github/workflows/test.yml', '.github/dependabot.yml']) {
+  test(`${path} is an input of the dependency review`, t => {
+    assert.equal(changedOnly(t, path).deps, 'true')
+  })
+}
+
+test('a source file that is not a project file is not an input of the dependency review', t => {
+  assert.equal(changedOnly(t, 'src/Orbit.Api/Controllers/NewController.cs').deps, 'false')
+})
+
+for (const path of ['infra/configuration.tf', '.github/scripts/render-release.sh', '.github/scripts/staging-reseed-data.py', '.github/scripts/test-postgres-access.sh', '.github/workflows/release.yml']) {
+  test(`${path} is an input of the Render infrastructure validation`, t => {
+    assert.equal(changedOnly(t, path).infra, 'true')
+  })
+}
+
+test('a source change is not an input of the Render infrastructure validation', t => {
+  assert.equal(changedOnly(t, 'src/Orbit.Api/Controllers/NewController.cs').infra, 'false')
 })
 
 test('a rename out of src counts the old path', t => {
@@ -111,13 +119,11 @@ test('a rename out of src counts the old path', t => {
     renameSync(join(root, 'src/Orbit.Api/Controllers/HabitsController.cs'), join(root, 'docs/HabitsController.cs'))
   }), 'pull_request').flags
   assert.equal(flags.tests, 'true')
-  assert.equal(flags.csharp, 'true')
 })
 
-test('a workflow change selects the actions analysis', t => {
+test('a Guards workflow change selects the dependency review, the OpenAPI gate and the infrastructure validation', t => {
   const flags = changedOnly(t, '.github/workflows/guards.yml')
-  assert.equal(flags.actions, 'true')
-  assert.equal(flags.tests, 'false')
+  assert.deepEqual(flags, { tests: 'false', openapi: 'true', deps: 'true', infra: 'true' })
 })
 
 test('the filter script is an input of every group', t => {

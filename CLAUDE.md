@@ -21,7 +21,7 @@ These rules override a project rule that conflicts with them.
 - **Authorization:** A fallback policy requires an authenticated user on each endpoint. Mark a public endpoint with `[AllowAnonymous]` or `.AllowAnonymous()`.
 - **Validation:** Add a validator in `Orbit.Application/<Feature>/Validators/` and a guard in the entity factory or update method. The backend is the source of truth.
 - **Comments:** `ORBIT0001` fails CI on a narration comment. Keep only XML documentation and a WHY note with a URL. `dotnet format` fixes the rest.
-- **Migrations:** A migration is append-only and idempotent. A raw `CREATE INDEX` needs `IF NOT EXISTS`. A raw `DROP INDEX` needs `IF EXISTS`. The Guard Migrations job enforces this. The rolling migration rules are in `tests/Orbit.Infrastructure.Tests/Persistence/RollingMigrations.md`.
+- **Migrations:** A migration is append-only and idempotent. A raw `CREATE INDEX` needs `IF NOT EXISTS`. A raw `DROP INDEX` needs `IF EXISTS`. The Unit Tests job enforces this. The rolling migration rules are in `tests/Orbit.Infrastructure.Tests/Persistence/RollingMigrations.md`.
 
 ## Cross-repo parity
 
@@ -48,4 +48,6 @@ Make a DTO change append-only and deploy the API first. A breaking change uses e
 
 - Use xUnit and FluentAssertions. Each new feature needs unit tests for its commands, queries, validators and domain logic.
 - A handler test mocks at the ports. A relational query-shape test uses `SqliteOrbitDbContextFactory`. A test that needs Postgres behavior uses `tests/Orbit.Infrastructure.Tests/Persistence/PostgresTestDatabase.cs`.
+- A pull request that changes `src/` runs two jobs: Unit Tests and Guards. The push to `main` also runs the Docker migration bundle and CodeQL.
+- After a deterministic test failure, rerun only the failed job with `gh run rerun <run-id> --failed`.
 - `tests/Orbit.Infrastructure.Tests/Persistence/QueryRoundTripCountTests.cs` guards against N+1 queries. Read `tests/CLAUDE.md` for the test accounts and the run commands.

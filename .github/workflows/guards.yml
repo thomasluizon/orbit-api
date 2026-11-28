@@ -1,7 +1,9 @@
 name: Guards
 
 # These repository gates apply to every contributor through CI. Each step runs even when an
-# earlier one fails, so one run reports every broken gate.
+# earlier one fails, so one run reports every broken gate. The OpenAPI breaking-change gate, the
+# dependency review and the Render infrastructure validation run on pull requests only, and only
+# when the pull request changes an input of the step (.github/scripts/changed-inputs.sh).
 
 on:
   workflow_dispatch:
@@ -22,7 +24,7 @@ jobs:
   guards:
     name: Guards
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     defaults:
       run:
         shell: bash
@@ -37,6 +39,10 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 22
+
+      - name: Select the inputs that changed
+        id: inputs
+        run: bash .github/scripts/changed-inputs.sh openapi deps infra
 
       # Pull request runs read the binary that main saves and never save one.
       - name: Restore actionlint
@@ -120,6 +126,81 @@ jobs:
             exit 1
           fi
           echo "OK: no TODO/FIXME/HACK markers in source."
+
+      # The same oasdiff release as the oasdiff-action image, pinned by its published checksum.
+      - name: Install oasdiff
+        if: ${{ !cancelled() && github.event_name == 'pull_request' && steps.inputs.outputs.openapi == 'true' }}
+        env:
+          OASDIFF_VERSION: 1.36.0
+          OASDIFF_SHA256: dba65661f6d0f178a3e4884c309f19527a849388bb9df0e81545db76dbb697d6
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/oasdiff.tar.gz"
+          curl --proto '=https' --tlsv1.2 -fsSL "https://github.com/oasdiff/oasdiff/releases/download/v${OASDIFF_VERSION}/oasdiff_${OASDIFF_VERSION}_linux_amd64.tar.gz" -o "$archive"
+          echo "$OASDIFF_SHA256  $archive" | sha256sum --check --strict
+          mkdir -p "$RUNNER_TEMP/oasdiff"
+          tar -xzf "$archive" -C "$RUNNER_TEMP/oasdiff" oasdiff
+          echo "$RUNNER_TEMP/oasdiff" >> "$GITHUB_PATH"
+
+      # openapi_artifacts.py validates every published stream and plans one comparison for each
+      # stream with a prior same-stream artifact; the v1 document is compared on its own path.
+      - name: OpenAPI Breaking-Change Gate
+        if: ${{ !cancelled() && github.event_name == 'pull_request' && steps.inputs.outputs.openapi == 'true' }}
+        env:
+          BASE_REF: origin/${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          plan=$(python3 .github/scripts/openapi_artifacts.py plan --base "$BASE_REF")
+          git cat-file -e "$BASE_REF:src/Orbit.Api/openapi.json"
+          comparisons=$(jq -r --arg base "$BASE_REF:src/Orbit.Api/openapi.json" \
+            '[{id: "orbit-http-v1-r1", base: $base, revision: "src/Orbit.Api/openapi.json"}] + .include | .[] | [.id, .base, .revision] | @tsv' <<< "$plan")
+          failed=0
+          while IFS=$'\t' read -r id base revision; do
+            echo "::group::$id: $base against $revision"
+            status=0
+            oasdiff breaking "$base" "$revision" --allow-external-refs=false --composed=false --fail-on ERR || status=$?
+            if [ "$status" -eq 1 ]; then
+              oasdiff breaking "$base" "$revision" --allow-external-refs=false --composed=false --format githubactions --template= || true
+            fi
+            echo "::endgroup::"
+            if [ "$status" -ne 0 ]; then
+              echo "::error::$id: oasdiff exited $status (1 is a breaking change at level ERR)"
+              failed=1
+            fi
+          done <<< "$comparisons"
+          exit "$failed"
+
+      - name: Dependency Review
+        if: ${{ !cancelled() && github.event_name == 'pull_request' && steps.inputs.outputs.deps == 'true' }}
+        uses: actions/dependency-review-action@v5
+        with:
+          fail-on-severity: high
+
+      - name: Setup Node for Render infrastructure
+        if: ${{ !cancelled() && github.event_name == 'pull_request' && steps.inputs.outputs.infra == 'true' }}
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: infra/package-lock.json
+
+      - name: Setup Terraform
+        if: ${{ !cancelled() && github.event_name == 'pull_request' && steps.inputs.outputs.infra == 'true' }}
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e
+        with:
+          terraform_version: 1.16.4
+
+      - name: Validate Render infrastructure
+        if: ${{ !cancelled() && github.event_name == 'pull_request' && steps.inputs.outputs.infra == 'true' }}
+        run: |
+          set -euo pipefail
+          terraform fmt -check -recursive infra
+          terraform -chdir=infra init -backend=false -input=false
+          terraform -chdir=infra validate
+          npm ci --prefix infra --ignore-scripts
+          npm test --prefix infra
+          node --test .github/scripts/staging-reseed.test.mjs .github/scripts/staging-reseed-image.test.mjs
+          bash .github/scripts/test-postgres-access.sh
 
       - name: Save actionlint
         if: github.event_name != 'pull_request' && steps.actionlint-cache.outputs.cache-hit != 'true'

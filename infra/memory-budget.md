@@ -61,7 +61,7 @@ its cost do not change.
 ## Guards
 
 `.github/scripts/api-memory-container.sh` runs in the `Docker migration bundle` job
-on the image that the job builds. It does these steps:
+on a push to `main`, on the image that the job builds. It does these steps:
 
 1. It starts `postgres:17` with TLS and applies the migrations with the image's `efbundle` in a separate process.
 2. It starts the API with `--memory=512m --memory-swap=512m --cpus=0.5`.

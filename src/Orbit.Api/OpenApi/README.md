@@ -47,8 +47,8 @@ planner reads the target commit and its catalog. A published identity or path ca
 removed, renamed or substituted. An artifact that is absent from the target is a first
 publication with no prior comparison.
 
-When an OpenAPI input changes, the required `OpenAPI Breaking-Change Gate` runs the oasdiff
-release that `test.yml` pins by checksum, with the ERR failure threshold. It validates the
+When an OpenAPI input changes, the `OpenAPI Breaking-Change Gate` step of the `Guards` job runs
+the oasdiff release that `guards.yml` pins by checksum, with the ERR failure threshold. It validates the
 inventory, then compares the v1 document and each additional stream. One failed comparison
 fails the gate. When no OpenAPI input changes, the gate passes without a comparison.
 
