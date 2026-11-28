@@ -103,7 +103,7 @@ test('a source file that is not a project file is not an input of the dependency
   assert.equal(changedOnly(t, 'src/Orbit.Api/Controllers/NewController.cs').deps, 'false')
 })
 
-for (const path of ['infra/configuration.tf', '.github/scripts/render-release.sh', '.github/scripts/staging-reseed-data.py', '.github/scripts/test-staging-postgres-access.sh', '.github/workflows/release.yml']) {
+for (const path of ['infra/configuration.tf', '.github/scripts/render-release.sh', '.github/scripts/staging-reseed-data.py', '.github/scripts/test-postgres-access.sh', '.github/workflows/release.yml']) {
   test(`${path} is an input of the Render infrastructure validation`, t => {
     assert.equal(changedOnly(t, path).infra, 'true')
   })

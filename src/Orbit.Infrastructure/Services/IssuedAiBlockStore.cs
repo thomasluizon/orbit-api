@@ -29,6 +29,12 @@ public sealed class IssuedAiBlockStore(OrbitDbContext dbContext) : IIssuedAiBloc
             .ExecuteUpdateAsync(setters => setters.SetProperty(block => block.InvalidatedAtUtc,
                 TimeProvider.System.GetUtcNow().UtcDateTime), cancellationToken);
 
+    public async Task<bool> CloseAsync(Guid blockId, Guid userId, DateTime closedAtUtc, CancellationToken cancellationToken) =>
+        await dbContext.IssuedAiBlocks
+            .Where(block => block.Id == blockId && block.UserId == userId
+                && block.AnsweredAtUtc == null && block.ResponseJson == null && block.InvalidatedAtUtc == null)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(block => block.InvalidatedAtUtc, closedAtUtc), cancellationToken) == 1;
+
     public async Task RecordAnswerAsync(Guid blockId, Guid userId, DateTime answeredAtUtc, string answerJson,
         DateOnly? reservedAllowanceDate, string? responseJson, CancellationToken cancellationToken)
     {

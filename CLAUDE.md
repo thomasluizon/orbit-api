@@ -20,20 +20,8 @@ These rules override a project rule that conflicts with them.
 - **Timezone:** Get each user-facing date from `IUserDateService.GetUserTodayAsync(userId)`. The analyzer `ORBIT0004` fails CI on `DateOnly.FromDateTime(DateTime.UtcNow...)`.
 - **Authorization:** A fallback policy requires an authenticated user on each endpoint. Mark a public endpoint with `[AllowAnonymous]` or `.AllowAnonymous()`.
 - **Validation:** Add a validator in `Orbit.Application/<Feature>/Validators/` and a guard in the entity factory or update method. The backend is the source of truth.
-- **Logging:** Inject `ILogger<T>`. Write the message in English with PascalCase properties. Use Debug for routine success and AI call detail. Use Information only for a rare business event. Use Warning for a recoverable fault. Use Error for a fault that needs action. Do not add a `LogError` that repeats an exception that Sentry captures.
-- **No workaround:** Find the root cause of each bug. Do not commit `TODO`, `FIXME`, `HACK`, an empty `catch`, or an unjustified `null!`.
-- **No dead code:** Delete a method, a type, a parameter or a branch when your change leaves it unused.
 - **Comments:** `ORBIT0001` fails CI on a narration comment. Keep only XML documentation and a WHY note with a URL. `dotnet format` fixes the rest.
 - **Migrations:** A migration is append-only and idempotent. A raw `CREATE INDEX` needs `IF NOT EXISTS`. A raw `DROP INDEX` needs `IF EXISTS`. The Unit Tests job enforces this. The rolling migration rules are in `tests/Orbit.Infrastructure.Tests/Persistence/RollingMigrations.md`.
-
-## Defects that no gate catches
-
-Check these four defects before you open a pull request.
-
-1. A DTO field that you rename, remove or retype while a shipped client still reads it. Also `MinSupportedVersion` that you raise before the carrying build is live.
-2. A user-facing date that the code computes from a UTC instant.
-3. A background job that assumes the server-local "today".
-4. A field, a flag, an exit code or a response shape from an external interface, with no evidence in the pull request body. Confirm it against a real response or the installed source.
 
 ## Cross-repo parity
 

@@ -48,6 +48,20 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
         return result.ToPayGateAwareResult(v => Ok(ReadBlockRefreshResponse.From(v)));
     }
 
+    [HttpPost("blocks/{blockId:guid}/close")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> CloseBlock(Guid blockId, CancellationToken cancellationToken)
+    {
+        if (!CanAccessChat() || HttpContext.User.IsReadOnlyCredential()) return Forbid();
+        var result = await mediator.Send(new CloseChatBlockCommand(HttpContext.GetUserId(), blockId), cancellationToken);
+        return result.ToPayGateAwareResult(() => NoContent());
+    }
+
     [HttpGet("records/{kind}")]
     [ProducesResponseType<RecordListCard>(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]

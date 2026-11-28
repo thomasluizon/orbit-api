@@ -5,6 +5,7 @@ using Orbit.Application.Chat.Commands;
 using Orbit.Application.Chat.Queries;
 using Orbit.Application.Chat.Validators;
 using Orbit.Application.Common;
+using Orbit.Domain.Common;
 using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Tests.Chat;
@@ -45,6 +46,26 @@ public class ConversationEndpointHandlersTests
         result.IsSuccess.Should().Be(exists);
         if (!exists) result.ErrorCode.Should().Be(ConversationErrors.NotFoundCode);
         await store.Received(1).DeleteAsync(user, conversation, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CloseBlock_TakesTheBlockLockBeforeTheStoreCloses()
+    {
+        var user = Guid.NewGuid();
+        var block = Guid.NewGuid();
+        var store = Substitute.For<IIssuedAiBlockStore>();
+        var work = Substitute.For<IUnitOfWork>();
+        work.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task<Result>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.Arg<Func<CancellationToken, Task<Result>>>()(default));
+        store.CloseAsync(block, user, Arg.Any<DateTime>(), Arg.Any<CancellationToken>()).Returns(true);
+        (await new CloseChatBlockCommandHandler(store, work).Handle(new(user, block), default)).IsSuccess.Should().BeTrue();
+        Received.InOrder(() =>
+        {
+            work.AcquireAdvisoryLockAsync($"astra-blocks:{user}", Arg.Any<CancellationToken>());
+            store.CloseAsync(block, user, Arg.Any<DateTime>(), Arg.Any<CancellationToken>());
+        });
+        new CloseChatBlockCommandValidator().Validate(new CloseChatBlockCommand(user, Guid.Empty)).IsValid.Should().BeFalse();
+        new CloseChatBlockCommandValidator().Validate(new CloseChatBlockCommand(Guid.Empty, block)).IsValid.Should().BeFalse();
     }
 
     [Theory]

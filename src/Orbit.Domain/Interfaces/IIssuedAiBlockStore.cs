@@ -15,4 +15,5 @@ public interface IIssuedAiBlockStore
         CancellationToken cancellationToken);
     Task<bool> ReleaseAnswerAsync(Guid blockId, Guid userId, DateTime answeredAtUtc, CancellationToken cancellationToken);
     Task InvalidateOpenAsync(Guid userId, CancellationToken cancellationToken);
+    Task<bool> CloseAsync(Guid blockId, Guid userId, DateTime closedAtUtc, CancellationToken cancellationToken);
 }

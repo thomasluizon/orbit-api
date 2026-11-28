@@ -23,7 +23,7 @@ pattern() {
     # Dependency Review step of Guards: a project file, a lock file or a workflow.
     deps) echo '(^|/)[^/]+\.(csproj|slnx)$|(^|/)Directory\.(Packages|Build)\.(props|targets)$|(^|/)(packages\.lock\.json|package(-lock)?\.json)$|^(global\.json|\.config/dotnet-tools\.json)$|^\.github/(workflows/|dependabot\.yml$|scripts/changed-inputs\.sh$)' ;;
     # Render infrastructure steps of Guards.
-    infra) echo '^infra/|^\.github/workflows/(guards|release|staging-reseed|staging-postgres-access-reconcile)\.yml$|^\.github/scripts/(render-release\.sh|staging-reseed[^/]*|[^/]*staging-postgres-access[^/]*|changed-inputs\.sh)$' ;;
+    infra) echo '^infra/|^\.github/workflows/(guards|release|staging-reseed|staging-postgres-access-reconcile)\.yml$|^\.github/scripts/(render-release\.sh|staging-reseed[^/]*|[^/]*postgres-access[^/]*|changed-inputs\.sh)$' ;;
     *)
       echo "changed-inputs.sh: unknown input group: $1" >&2
       exit 2

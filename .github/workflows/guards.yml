@@ -200,7 +200,7 @@ jobs:
           npm ci --prefix infra --ignore-scripts
           npm test --prefix infra
           node --test .github/scripts/staging-reseed.test.mjs .github/scripts/staging-reseed-image.test.mjs
-          bash .github/scripts/test-staging-postgres-access.sh
+          bash .github/scripts/test-postgres-access.sh
 
       - name: Save actionlint
         if: github.event_name != 'pull_request' && steps.actionlint-cache.outputs.cache-hit != 'true'

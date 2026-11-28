@@ -2,7 +2,7 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "$0")/../.." && pwd)"
-script="${SCRIPT_UNDER_TEST:-$repo_root/.github/scripts/staging-postgres-access.sh}"
+script="${SCRIPT_UNDER_TEST:-$repo_root/.github/scripts/postgres-access.sh}"
 test_dir="$(mktemp -d)"
 trap 'rm -rf "$test_dir"' EXIT
 
@@ -54,7 +54,7 @@ export MOCK_PATCHES="$test_dir/patches"
 export MOCK_FAIL_AFTER_PATCH="$test_dir/fail-after-patch"
 export MOCK_FAIL_VERIFICATION="$test_dir/fail-verification"
 export RENDER_API_KEY=test
-export STAGING_POSTGRES_ID=dpg-test
+export POSTGRES_ID=dpg-test
 export TF_VAR_staging_postgres_ip_allow_list='[{"cidr_block":"192.0.2.5/32","description":"operator"}]'
 export STAGING_ACCESS_MARKER="$test_dir/access-marker"
 
@@ -157,6 +157,12 @@ bash "$script" operator-mac > /dev/null
 bash "$script" reconcile > /dev/null
 assert_list '[{"cidrBlock":"203.0.113.10/32","description":"operator mac"},
   {"cidrBlock":"198.51.100.8/32","description":"other operator"}]'
+
+set_state "$drift"
+bash "$script" operator-mac > /dev/null
+assert_list '[{"cidrBlock":"203.0.113.10/32","description":"operator mac"},
+  {"cidrBlock":"198.51.100.8/32","description":"other operator"}]'
+[[ "$(wc -l < "$MOCK_PATCHES" | tr -d ' ')" == 1 ]]
 
 set_state '[]'
 bash "$script" operator-mac > /dev/null

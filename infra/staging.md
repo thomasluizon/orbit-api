@@ -41,11 +41,11 @@ The reseed workflow adds the public IPv4 `/32` of the runner to the allow list f
 To open local `psql` access, set `RENDER_API_KEY` and run this command from the repository root:
 
 ```sh
-STAGING_POSTGRES_ID="$(terraform -chdir=infra/staging-database output -raw staging_postgres_id)" \
-  bash .github/scripts/staging-postgres-access.sh operator-mac
+POSTGRES_ID="$(terraform -chdir=infra/staging-database output -raw staging_postgres_id)" \
+  bash .github/scripts/postgres-access.sh operator-mac
 ```
 
-The script needs `curl`, `jq`, and `python3`. It reads the public IPv4 address with `curl -4 https://api.ipify.org`. It replaces each entry that has the description `operator mac` with the new `/32`. It keeps the other entries and reads the list back from Render. Run it again after the address changes. Do not run it while a staging workflow runs, because a Render allow list update replaces the whole list.
+[README.md](README.md#production-database-access) uses the same script for production. The script needs `curl`, `jq`, and `python3`. It reads the public IPv4 address with `curl -4 https://api.ipify.org`. It replaces each entry that has the description `operator mac` with the new `/32`. It keeps the other entries and reads the list back from Render. Run it again after the address changes. Do not run it while a staging workflow runs, because a Render allow list update replaces the whole list.
 
 ## Staging pinger
 
