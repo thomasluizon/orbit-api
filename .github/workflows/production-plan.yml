@@ -61,7 +61,17 @@ jobs:
             -var-file="$plan_dir/inputs.tfvars.json" -out="$plan_dir/production.plan" \
             -target=render_web_service.production_api \
             -target=render_web_service.production_web \
-            -target=render_env_group.production_api > "$plan_dir/plan.log" 2>&1; then
+            -target=render_env_group.production_api \
+            -target=render_static_site.landing \
+            -target=render_static_site.staging_landing \
+            -target=cloudflare_dns_record.existing \
+            -target=cloudflare_dns_record.staging \
+            -target=cloudflare_dns_record.ses_dkim \
+            -target=cloudflare_dns_record.ses_mail_from_mx \
+            -target=cloudflare_dns_record.ses_mail_from_spf \
+            -target=cloudflare_turnstile_widget.orbit \
+            -target=cloudflare_workers_script.staging_assetlinks \
+            -target=cloudflare_workers_route.staging_assetlinks > "$plan_dir/plan.log" 2>&1; then
             echo '::error::Production plan failed; verify scoped provider reads and reviewed input values'
             exit 1
           fi

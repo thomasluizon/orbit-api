@@ -202,4 +202,4 @@ The environment `render-operations` needs the secrets `RENDER_API_KEY`, `CLOUDFL
 
 ## Landing content security policy
 
-Both static sites send a Terraform CSP header that enforces the policy by default. The variable `staging_landing_csp_report_only` in `infra/landing-csp.tf` switches the staging site to the report-only header. `infra/landing-csp.tf` hashes the inline font styles, the exact style attributes, and the inline structured-data scripts. `infra/fixtures/landing-inline-blocks.json` holds the bytes that the hashes come from. Compute the hashes again when the inline bytes change. Never add `unsafe-inline`.
+Both static sites send a Terraform CSP header that enforces the policy by default. The variable `staging_landing_csp_report_only` in `infra/landing-csp.tf` switches the staging site to the report-only header. `infra/landing-csp.tf` hashes the inline font styles and the exact style attributes. A data block such as `application/ld+json` needs no hash. `infra/fixtures/landing-inline-blocks.json` holds the bytes that the hashes come from. Compute the hashes again when the inline bytes change. Never add `unsafe-inline`.

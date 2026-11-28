@@ -115,6 +115,10 @@ data "aws_iam_policy_document" "production_plan" {
     resources = [for stream in ["transactional", "marketing"] : "arn:aws:ses:us-east-2:713285551626:configuration-set/orbit-${stream}"]
   }
   statement {
+    actions   = ["ses:GetEmailIdentity"]
+    resources = [for identity in aws_sesv2_email_identity.orbit : identity.arn]
+  }
+  statement {
     actions   = ["sns:GetTopicAttributes", "sns:ListTagsForResource"]
     resources = ["arn:aws:sns:us-east-2:713285551626:orbit-ses-events"]
   }

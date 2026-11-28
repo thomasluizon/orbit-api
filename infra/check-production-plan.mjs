@@ -3,7 +3,17 @@ import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { checkPlan as checkWebPlan } from './check-web-plan.mjs'
 
-const guarded = new Set(['render_web_service.production_api', 'render_web_service.production_web', 'render_env_group.production_api'])
+const guarded = new Set([
+  'render_web_service.production_api', 'render_web_service.production_web', 'render_env_group.production_api',
+  'render_static_site.landing', 'render_static_site.staging_landing', 'cloudflare_turnstile_widget.orbit',
+  'cloudflare_workers_script.staging_assetlinks', 'cloudflare_workers_route.staging_assetlinks',
+])
+/** Each prefix covers the resource and every `for_each` key, so a new key is guarded without a code change. */
+const guardedPrefixes = [
+  'cloudflare_dns_record.existing', 'cloudflare_dns_record.staging', 'cloudflare_dns_record.ses_dkim',
+  'cloudflare_dns_record.ses_mail_from_mx', 'cloudflare_dns_record.ses_mail_from_spf',
+]
+const isGuarded = address => guarded.has(address) || guardedPrefixes.some(prefix => address.startsWith(`${prefix}[`))
 /**
  * Release workflows deploy image digests outside Terraform, so Render reports them as refresh drift.
  * Paths come from the render-oss/render 1.9.1 schema, where `runtime_source.image` is single-nested.
@@ -26,21 +36,29 @@ function checkValues(address, change) {
     return change?.before?.max_shutdown_delay_seconds === 300 && change?.after?.max_shutdown_delay_seconds === 300
       ? [] : [`Shutdown delay must remain 300 seconds on ${address}`]
   }
+  if (address !== 'render_env_group.production_api') return []
   return ['before', 'after']
     .filter(side => change?.[side]?.env_vars?.Ses__FromEmail?.value !== 'Orbit <contact@useorbit.org>')
     .map(side => `Production Ses__FromEmail differs from the reviewed sender (${side})`)
+}
+function checkResource({ address, change }) {
+  const issues = JSON.stringify(change?.actions) === '["no-op"]' ? [] : [`Unexpected production change to ${address}`]
+  return [...issues, ...checkValues(address, change)]
 }
 export function checkProductionPlan(plan) {
   const issues = checkWebPlan(plan)
   for (const address of guarded) {
     const resource = plan.resource_changes.find(item => item.address === address)
     if (!resource) { issues.push(`Missing guarded resource ${address}`); continue }
-    const change = resource.change
-    if (JSON.stringify(change?.actions) !== '["no-op"]') issues.push(`Unexpected production change to ${address}`)
-    issues.push(...checkValues(address, change))
+    issues.push(...checkResource(resource))
+  }
+  for (const prefix of guardedPrefixes) {
+    const matches = plan.resource_changes.filter(item => item.address.startsWith(`${prefix}[`))
+    if (matches.length === 0) issues.push(`Missing guarded resource ${prefix}`)
+    for (const resource of matches) issues.push(...checkResource(resource))
   }
   for (const resource of plan.resource_drift ?? []) {
-    if (guarded.has(resource.address) && JSON.stringify(resource.change?.actions) !== '["no-op"]' && !isReleaseImageDrift(resource))
+    if (isGuarded(resource.address) && JSON.stringify(resource.change?.actions) !== '["no-op"]' && !isReleaseImageDrift(resource))
       issues.push(`Production drift detected on ${resource.address}`)
   }
   return issues

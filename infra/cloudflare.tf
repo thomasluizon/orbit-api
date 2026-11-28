@@ -72,6 +72,7 @@ locals {
     app_staging = {
       name    = "app-staging.useorbit.org"
       content = split("/", render_web_service.staging_web.url)[2]
+      proxied = true
     }
     staging = {
       name    = "staging.useorbit.org"
@@ -105,7 +106,7 @@ resource "cloudflare_dns_record" "staging" {
   type    = "CNAME"
   content = each.value.content
   ttl     = 1
-  proxied = false
+  proxied = try(each.value.proxied, false)
 }
 
 resource "cloudflare_turnstile_widget" "orbit" {

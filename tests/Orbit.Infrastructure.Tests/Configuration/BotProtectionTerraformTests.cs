@@ -93,6 +93,31 @@ public class BotProtectionTerraformTests
         values.Should().Equal("true", "true");
     }
 
+    [Fact]
+    public void EveryFixtureThatPinsSourceHashes_MatchesTheFilesItPins()
+    {
+        var root = RepositoryRoot();
+        var stale = new List<string>();
+        var pinned = 0;
+        foreach (var path in Directory.EnumerateFiles(Path.Combine(root, "tests"), "*.json", SearchOption.AllDirectories)
+                     .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}")
+                                    && !path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")))
+        {
+            using var document = JsonDocument.Parse(File.ReadAllText(path));
+            if (document.RootElement.ValueKind != JsonValueKind.Object
+                || !document.RootElement.TryGetProperty("sourceHashes", out var hashes)) continue;
+            foreach (var source in hashes.EnumerateObject())
+            {
+                pinned++;
+                var actual = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(Path.Combine(root, source.Name))));
+                if (actual != source.Value.GetString())
+                    stale.Add($"{Path.GetRelativePath(root, path)} pins a stale hash of {source.Name}");
+            }
+        }
+        pinned.Should().BeGreaterThan(0);
+        stale.Should().BeEmpty("regenerate each fixture that pins a source file after you change that file");
+    }
+
     private static string RepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
